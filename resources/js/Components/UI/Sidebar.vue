@@ -33,7 +33,7 @@ function isActive(item) {
         ]"
     >
         <!-- Logo area -->
-        <div class="flex items-center h-16 px-4 border-b border-primary-800/50">
+        <div :class="['flex items-center h-16 border-b border-primary-800/50', collapsed ? 'justify-center px-0' : 'px-4']">
             <Link href="/" class="flex items-center gap-3 text-white no-underline hover:text-white">
                 <div class="h-8 w-8 rounded-md bg-accent-600 flex items-center justify-center shrink-0">
                     <span class="text-white font-semibold text-label">{{ (page.props.settings?.hotel_name || 'Hotel').charAt(0) }}</span>
@@ -48,7 +48,8 @@ function isActive(item) {
                 <Link
                     :href="item.href"
                     :class="[
-                        'flex items-center gap-3 rounded-md px-3 py-2.5 text-body-sm transition-colors duration-150 no-underline',
+                        'flex items-center rounded-md px-3 py-2.5 text-body-sm transition-colors duration-150 no-underline',
+                        collapsed ? 'justify-center' : 'gap-3',
                         isActive(item)
                             ? 'bg-accent-600/15 text-accent-400 font-medium'
                             : 'text-neutral-400 hover:bg-primary-800/60 hover:text-neutral-200',
@@ -65,11 +66,17 @@ function isActive(item) {
         <!-- Collapse toggle -->
         <div class="border-t border-primary-800/50 px-3 py-3">
             <button
-                class="flex items-center justify-center w-full rounded-md py-2 text-neutral-500 hover:text-neutral-300 hover:bg-primary-800/60 transition-colors duration-150"
+                :class="[
+                    'flex items-center w-full rounded-md py-2 px-2 text-neutral-400 hover:text-neutral-100 hover:bg-primary-800/60 transition-colors duration-150',
+                    collapsed ? 'justify-center' : 'justify-between',
+                ]"
+                :title="collapsed ? 'Hap menun' : 'Mbyll menun'"
+                :aria-label="collapsed ? 'Hap menun' : 'Mbyll menun'"
                 @click="emit('toggle')"
             >
+                <span v-if="!collapsed" class="text-body-sm whitespace-nowrap">Mbyll menun</span>
                 <svg
-                    class="h-5 w-5 transition-transform duration-250"
+                    class="h-5 w-5 shrink-0 transition-transform duration-250"
                     :class="collapsed && 'rotate-180'"
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 20 20"

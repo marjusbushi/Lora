@@ -1,11 +1,20 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import Sidebar from '@/Components/UI/Sidebar.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 
-const sidebarCollapsed = ref(false);
+// Persist the collapsed state so it survives Inertia navigations
+// (AppLayout re-mounts per page, so we restore from localStorage).
+const sidebarCollapsed = ref(
+    typeof window !== 'undefined' && localStorage.getItem('sidebarCollapsed') === '1'
+);
+watch(sidebarCollapsed, (v) => {
+    if (typeof window !== 'undefined') {
+        localStorage.setItem('sidebarCollapsed', v ? '1' : '0');
+    }
+});
 const mobileMenuOpen = ref(false);
 
 const page = usePage();
