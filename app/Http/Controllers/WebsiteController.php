@@ -19,7 +19,7 @@ class WebsiteController extends Controller
 {
     public function home(): Response
     {
-        $roomTypes = RoomType::select('id', 'name', 'description', 'base_price', 'max_occupancy', 'amenities')
+        $roomTypes = RoomType::select('id', 'name', 'description', 'base_price', 'max_occupancy', 'amenities', 'breakfast_included')
             ->withCount('rooms')
             ->with('images')
             ->get();
@@ -32,7 +32,7 @@ class WebsiteController extends Controller
 
     public function rooms(): Response
     {
-        $roomTypes = RoomType::select('id', 'name', 'description', 'base_price', 'max_occupancy', 'amenities')
+        $roomTypes = RoomType::select('id', 'name', 'description', 'base_price', 'max_occupancy', 'amenities', 'breakfast_included')
             ->withCount(['rooms', 'rooms as available_count' => fn($q) => $q->where('status', 'available')])
             ->with('images')
             ->get();

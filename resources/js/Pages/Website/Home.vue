@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { Waves, UtensilsCrossed, Wifi, SquareParking, ArrowRight } from 'lucide-vue-next';
+import { Waves, UtensilsCrossed, Wifi, SquareParking, ArrowRight, Coffee } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { amenityIcon } from '@/Components/Website/amenities';
@@ -116,6 +116,9 @@ const features = [
                                 <component :is="amenityIcon(a)" class="h-4 w-4 text-ionian" :stroke-width="1.5" /> {{ a }}
                             </span>
                         </div>
+                        <div v-if="featured.breakfast_included" class="mt-5 inline-flex items-center gap-2 self-start px-3 py-1.5 bg-ionian/10 text-ionian text-body-sm">
+                            <Coffee class="h-4 w-4" :stroke-width="1.5" /> Mengjesi i perfshire
+                        </div>
                         <div class="flex items-center justify-between mt-8 pt-6 border-t border-driftwood/15">
                             <p class="text-body-sm text-ink/55">Nga <span class="text-brass text-lg">€{{ featured.base_price }}</span> / nate</p>
                             <Link :href="`/book?room_type=${featured.id}`" class="btn-reserve">Rezervo</Link>
@@ -134,6 +137,9 @@ const features = [
                             </div>
                             <p class="text-body-sm text-ink/55 mt-2 line-clamp-2">{{ room.description }}</p>
                             <p class="eyebrow text-driftwood mt-4">{{ specRow(room) }}</p>
+                            <p v-if="room.breakfast_included" class="mt-3 inline-flex items-center gap-1.5 text-tiny text-ionian">
+                                <Coffee class="h-3.5 w-3.5" :stroke-width="1.5" /> Mengjesi i perfshire
+                            </p>
                             <Link :href="`/book?room_type=${room.id}`" class="group/lnk mt-5 inline-flex items-center gap-1.5 text-body-sm text-ionian no-underline">
                                 Shiko Dhomen <ArrowRight class="h-4 w-4 transition-transform group-hover/lnk:translate-x-1" :stroke-width="1.5" />
                             </Link>

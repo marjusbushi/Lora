@@ -8,6 +8,7 @@ import Modal from '@/Components/UI/Modal.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import Textarea from '@/Components/UI/Textarea.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
+import Checkbox from '@/Components/UI/Checkbox.vue';
 
 const props = defineProps({ roomTypes: Array, amenities: { type: Array, default: () => [] }, toasts: Object });
 
@@ -17,7 +18,7 @@ const editingType = ref(null);
 const selectedType = ref(null);
 
 const form = useForm({
-    name: '', description: '', base_price: '', max_occupancy: 2, amenities: [],
+    name: '', description: '', base_price: '', max_occupancy: 2, amenities: [], breakfast_included: false,
 });
 
 const amenityInput = ref('');
@@ -36,6 +37,7 @@ function openEdit(type) {
     form.base_price = type.base_price;
     form.max_occupancy = type.max_occupancy;
     form.amenities = type.amenities || [];
+    form.breakfast_included = !!type.breakfast_included;
     showModal.value = true;
 }
 
@@ -183,6 +185,9 @@ function setAsFeatured(type, imageId) {
             <FormGroup label="Pershkrim" :error="form.errors.description">
                 <Textarea v-model="form.description" :rows="2" placeholder="Pershkrim i shkurter..." />
             </FormGroup>
+            <div class="py-1">
+                <Checkbox v-model="form.breakfast_included" label="Mengjesi i perfshire ne cmim" />
+            </div>
             <FormGroup label="Pajisjet (amenities)">
                 <div v-if="allChips.length" class="flex flex-wrap gap-1.5 mb-2">
                     <button

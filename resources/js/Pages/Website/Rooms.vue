@@ -1,6 +1,6 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
-import { Users, BedDouble } from 'lucide-vue-next';
+import { Users, BedDouble, Coffee } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { amenityIcon } from '@/Components/Website/amenities';
@@ -45,6 +45,10 @@ defineProps({ roomTypes: Array });
                                         <span class="inline-flex items-center gap-1.5"><Users class="h-4 w-4 text-ionian" :stroke-width="1.5" /> Max {{ room.max_occupancy }} persona</span>
                                         <span class="inline-flex items-center gap-1.5"><BedDouble class="h-4 w-4 text-ionian" :stroke-width="1.5" /> {{ room.rooms_count }} dhoma</span>
                                         <span class="text-ionian font-medium">{{ room.available_count }} te lira</span>
+                                    </div>
+
+                                    <div v-if="room.breakfast_included" class="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-ionian/10 text-ionian text-body-sm">
+                                        <Coffee class="h-4 w-4" :stroke-width="1.5" /> Mengjesi i perfshire
                                     </div>
 
                                     <!-- Amenity ledger -->

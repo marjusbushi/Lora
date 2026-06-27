@@ -16,6 +16,7 @@ class RoomType extends Model
         'base_price',
         'max_occupancy',
         'amenities',
+        'breakfast_included',
     ];
 
     protected function casts(): array
@@ -23,6 +24,7 @@ class RoomType extends Model
         return [
             'base_price' => 'decimal:2',
             'amenities' => 'array',
+            'breakfast_included' => 'boolean',
         ];
     }
 

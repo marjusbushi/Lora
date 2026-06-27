@@ -175,6 +175,7 @@ class SettingsController extends Controller
             'max_occupancy' => ['required', 'integer', 'min:1', 'max:20'],
             'amenities' => ['nullable', 'array'],
             'amenities.*' => ['string', 'max:100'],
+            'breakfast_included' => ['boolean'],
         ]);
 
         RoomType::create($data);
@@ -191,6 +192,7 @@ class SettingsController extends Controller
             'max_occupancy' => ['required', 'integer', 'min:1', 'max:20'],
             'amenities' => ['nullable', 'array'],
             'amenities.*' => ['string', 'max:100'],
+            'breakfast_included' => ['boolean'],
         ]);
 
         $roomType->update($data);
