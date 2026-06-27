@@ -1,0 +1,16 @@
+{
+  "nav": {
+    "home": "Home",
+    "rooms": "Dhomat",
+    "book": "Rezervo",
+    "about": "Rreth Nesh",
+    "contact": "Kontakt",
+    "reserve": "Rezervo Tani"
+  },
+  "footer": {
+    "blurb": "Nje shtepi e madhe mbi detin Jon. Qetesi, gur i bardhe dhe mikpritje e vertete ne Ksamil.",
+    "nav": "Navigim",
+    "contact": "Kontakt",
+    "rights": "Te gjitha te drejtat e rezervuara."
+  }
+}

@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import Sidebar from '@/Components/UI/Sidebar.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
+import LanguageSwitcher from '@/Components/LanguageSwitcher.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 
 // Persist the collapsed state so it survives Inertia navigations
@@ -108,6 +109,7 @@ const navItems = computed(() =>
 
                 <!-- User dropdown -->
                 <div class="flex items-center gap-4">
+                    <LanguageSwitcher class="text-neutral-500" />
                     <Dropdown align="right" width="48">
                         <template #trigger>
                             <button class="flex items-center gap-2 rounded-md px-3 py-2 text-body-sm text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 transition-colors duration-150">

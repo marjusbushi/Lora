@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { MapPin, Phone, Mail, Instagram, Facebook } from 'lucide-vue-next';
+import LanguageSwitcher from '@/Components/LanguageSwitcher.vue';
 
 const props = defineProps({
     // When true the header floats transparent over a full-bleed hero and
@@ -42,11 +43,11 @@ onMounted(() => {
 onUnmounted(() => window.removeEventListener('scroll', onScroll));
 
 const navLinks = [
-    { label: 'Home', href: '/' },
-    { label: 'Dhomat', href: '/rooms' },
-    { label: 'Rezervo', href: '/book' },
-    { label: 'Rreth Nesh', href: '/about' },
-    { label: 'Kontakt', href: '/contact' },
+    { key: 'home', href: '/' },
+    { key: 'rooms', href: '/rooms' },
+    { key: 'book', href: '/book' },
+    { key: 'about', href: '/about' },
+    { key: 'contact', href: '/contact' },
 ];
 
 function isActive(href) {
@@ -95,11 +96,12 @@ function isActive(href) {
                                     : (isActive(link.href) ? 'text-bone' : 'text-bone/80 hover:text-bone'),
                             ]"
                         >
-                            {{ link.label }}
+                            {{ $t('nav.' + link.key) }}
                         </Link>
                         <Link href="/book" class="ml-3 px-5 py-2 rounded-none bg-ink text-bone text-body-sm font-medium tracking-wide hover:bg-brass transition-colors duration-200 no-underline">
-                            Rezervo Tani
+                            {{ $t('nav.reserve') }}
                         </Link>
+                        <LanguageSwitcher :class="['ml-3', solid ? 'text-ink' : 'text-bone']" />
                     </nav>
 
                     <!-- Mobile hamburger -->
@@ -123,11 +125,12 @@ function isActive(href) {
                         ]"
                         @click="mobileMenu = false"
                     >
-                        {{ link.label }}
+                        {{ $t('nav.' + link.key) }}
                     </Link>
                     <Link href="/book" class="block mt-3 mx-3 px-4 py-3 rounded-none bg-ink text-bone text-body-sm font-medium tracking-wide text-center hover:bg-brass transition-colors no-underline" @click="mobileMenu = false">
-                        Rezervo Tani
+                        {{ $t('nav.reserve') }}
                     </Link>
+                    <div class="mt-4 px-3 text-ink"><LanguageSwitcher /></div>
                 </div>
             </div>
         </header>
@@ -150,21 +153,21 @@ function isActive(href) {
                             <span class="font-serif text-lg tracking-wide text-bone">{{ hotelName }}</span>
                         </div>
                         <p class="text-body-sm leading-relaxed text-bone/55 max-w-xs">
-                            Nje shtepi e madhe mbi detin Jon. Qetesi, gur i bardhe dhe mikpritje e vertete ne Ksamil.
+                            {{ $t('footer.blurb') }}
                         </p>
                     </div>
                     <!-- Links -->
                     <div>
-                        <span class="eyebrow text-bone/40 mb-4">Navigim</span>
+                        <span class="eyebrow text-bone/40 mb-4">{{ $t('footer.nav') }}</span>
                         <div class="mt-4 space-y-2.5">
                             <Link v-for="link in navLinks" :key="link.href" :href="link.href" class="block text-body-sm text-bone/60 hover:text-brass no-underline transition-colors">
-                                {{ link.label }}
+                                {{ $t('nav.' + link.key) }}
                             </Link>
                         </div>
                     </div>
                     <!-- Contact -->
                     <div>
-                        <span class="eyebrow text-bone/40 mb-4">Kontakt</span>
+                        <span class="eyebrow text-bone/40 mb-4">{{ $t('footer.contact') }}</span>
                         <div class="mt-4 space-y-2.5 text-body-sm text-bone/60">
                             <p class="text-bone/80">{{ hotelName }}</p>
                             <a :href="directionsHref" target="_blank" rel="noopener" class="flex items-center gap-2.5 text-bone/60 hover:text-brass transition-colors no-underline">
@@ -188,7 +191,7 @@ function isActive(href) {
                     </div>
                 </div>
                 <div class="border-t border-bone/10 mt-12 pt-8 text-center text-small text-bone/40">
-                    © {{ new Date().getFullYear() }} {{ hotelName }}. Te gjitha te drejtat e rezervuara.
+                    © {{ new Date().getFullYear() }} {{ hotelName }}. {{ $t('footer.rights') }}
                 </div>
             </div>
         </footer>
