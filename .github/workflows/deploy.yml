@@ -17,6 +17,11 @@ jobs:
           script: |
             set -e
             cd /var/www/villamucho
+            # Maintenance mode during the deploy: in-flight requests get a clean 503
+            # instead of a mid-migration 500 (new code querying a table the migration
+            # has not created yet). The trap guarantees the site comes back even on failure.
+            php artisan down --retry=15 || true
+            trap 'cd /var/www/villamucho && php artisan up || true' EXIT
             git fetch origin main --quiet
             git reset --hard origin/main
             export COMPOSER_ALLOW_SUPERUSER=1
@@ -28,4 +33,6 @@ jobs:
             php artisan route:cache
             php artisan view:cache
             chown -R www-data:www-data storage bootstrap/cache
+            php artisan up
+            trap - EXIT
             echo "Deployed at $(date)"
