@@ -133,7 +133,7 @@ const features = computed(() => [
                         <h3 class="text-display-sm text-ink mt-3">{{ featured.name }}</h3>
                         <p class="text-body text-ink/60 mt-4 leading-relaxed">{{ featured.description }}</p>
                         <div class="flex flex-wrap gap-x-5 gap-y-2 mt-6">
-                            <span v-for="a in (featured.amenities || []).slice(0, 5)" :key="a" class="inline-flex items-center gap-1.5 text-body-sm text-ink/65">
+                            <span v-for="a in (featured.amenities || [])" :key="a" class="inline-flex items-center gap-1.5 text-body-sm text-ink/65">
                                 <component :is="amenityIcon(a)" class="h-4 w-4 text-ionian" :stroke-width="1.5" /> {{ a }}
                             </span>
                         </div>
@@ -149,19 +149,28 @@ const features = computed(() => [
 
                 <!-- Standard rooms -->
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div v-for="room in standardRooms" :key="room.id" class="group border border-driftwood/20 bg-bone">
+                    <div v-for="room in standardRooms" :key="room.id" class="group border border-driftwood/20 bg-bone flex flex-col">
                         <RoomGallery :images="room.images" :alt="room.name" />
-                        <div class="p-6">
+                        <div class="p-6 flex flex-col flex-1">
                             <div class="flex items-baseline justify-between gap-3">
                                 <h3 class="text-2xl text-ink">{{ room.name }}</h3>
                                 <p class="text-body-sm text-ink/55 whitespace-nowrap">{{ $t('home.rooms.priceFrom') }} <span class="text-brass">€{{ room.base_price }}</span></p>
                             </div>
                             <p class="text-body-sm text-ink/55 mt-2 line-clamp-2">{{ room.description }}</p>
-                            <p class="eyebrow text-driftwood mt-4">{{ specRow(room) }}</p>
-                            <div v-if="room.breakfast_included" class="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-ionian text-bone text-body-sm font-medium tracking-wide">
+                            <p class="eyebrow text-driftwood mt-4">{{ $t('home.rooms.maxOccupancy', { count: room.max_occupancy }) }}</p>
+
+                            <!-- All amenities -->
+                            <div v-if="(room.amenities || []).length" class="flex flex-wrap gap-1.5 mt-3">
+                                <span v-for="a in room.amenities" :key="a" class="inline-flex items-center gap-1 px-2.5 py-1 border border-driftwood/20 text-tiny text-ink/65">
+                                    <component :is="amenityIcon(a)" class="h-3.5 w-3.5 text-ionian" :stroke-width="1.5" /> {{ a }}
+                                </span>
+                            </div>
+
+                            <div v-if="room.breakfast_included" class="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-ionian text-bone text-body-sm font-medium tracking-wide self-start">
                                 <Coffee class="h-4 w-4" :stroke-width="1.75" /> {{ $t('home.rooms.breakfastIncluded') }}
                             </div>
-                            <div class="mt-5 pt-5 border-t border-driftwood/15">
+
+                            <div class="mt-auto pt-5 border-t border-driftwood/15">
                                 <Link :href="`/book?room_type=${room.id}`" class="btn-reserve w-full">
                                     {{ $t('home.rooms.reserve') }}
                                 </Link>
