@@ -76,14 +76,14 @@ function applyFilters() {
     if (filterStatus.value) params.status = filterStatus.value;
     if (filterFloor.value) params.floor = filterFloor.value;
     if (filterType.value) params.room_type_id = filterType.value;
-    router.get('/rooms', params, { preserveState: true });
+    router.get(route('rooms.index'), params, { preserveState: true });
 }
 
 function clearFilters() {
     filterStatus.value = '';
     filterFloor.value = '';
     filterType.value = '';
-    router.get('/rooms', {}, { preserveState: true });
+    router.get(route('rooms.index'), {}, { preserveState: true });
 }
 
 function openEdit(room) {

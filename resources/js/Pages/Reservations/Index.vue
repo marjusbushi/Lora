@@ -63,13 +63,13 @@ function applyFilters() {
     const params = {};
     if (filterStatus.value) params.status = filterStatus.value;
     if (searchQuery.value) params.search = searchQuery.value;
-    router.get('/reservations', params, { preserveState: true });
+    router.get(route('reservations.index'), params, { preserveState: true });
 }
 
 function clearFilters() {
     filterStatus.value = '';
     searchQuery.value = '';
-    router.get('/reservations', {}, { preserveState: true });
+    router.get(route('reservations.index'), {}, { preserveState: true });
 }
 
 // Forms

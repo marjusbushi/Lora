@@ -98,7 +98,7 @@ function doCheckOut() {
     <AppLayout>
         <PageHeader
             :title="`Rezervimi #${reservation.id}`"
-            :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Rezervimet', href: '/reservations' }, { label: `#${reservation.id}` }]"
+            :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Rezervimet', href: route('reservations.index') }, { label: `#${reservation.id}` }]"
         >
             <template #actions>
                 <Badge :variant="statusBadge[reservation.status]?.variant" dot>

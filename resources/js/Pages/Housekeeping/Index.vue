@@ -62,13 +62,13 @@ function applyFilters() {
     const params = {};
     if (filterStatus.value) params.status = filterStatus.value;
     if (filterFloor.value) params.floor = filterFloor.value;
-    router.get('/housekeeping', params, { preserveState: true });
+    router.get(route('housekeeping.index'), params, { preserveState: true });
 }
 
 function clearFilters() {
     filterStatus.value = '';
     filterFloor.value = '';
-    router.get('/housekeeping', {}, { preserveState: true });
+    router.get(route('housekeeping.index'), {}, { preserveState: true });
 }
 
 function changeStatus(task, status) {

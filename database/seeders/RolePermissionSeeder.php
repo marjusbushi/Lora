@@ -55,7 +55,7 @@ class RolePermissionSeeder extends Seeder
             'view_rooms', 'update_rooms',
             'view_reservations', 'create_reservations', 'update_reservations', 'delete_reservations',
             'view_guests', 'create_guests', 'update_guests',
-            'view_pos_orders', 'create_pos_orders',
+            'view_pos_orders', 'create_pos_orders', 'update_pos_orders',
             'view_reports',
         ]);
 

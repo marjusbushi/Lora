@@ -33,10 +33,10 @@ function formatDate(d) {
     <AppLayout>
         <PageHeader
             :title="`${guest.first_name} ${guest.last_name}`"
-            :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Mysafiret', href: '/guests' }, { label: `${guest.first_name} ${guest.last_name}` }]"
+            :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Mysafiret', href: route('guests.index') }, { label: `${guest.first_name} ${guest.last_name}` }]"
         >
             <template #actions>
-                <Link href="/guests" class="no-underline">
+                <Link :href="route('guests.index')" class="no-underline">
                     <Button variant="outline">← Mysafiret</Button>
                 </Link>
             </template>

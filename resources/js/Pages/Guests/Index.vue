@@ -46,7 +46,7 @@ let searchTimeout = null;
 watch(searchQuery, (val) => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
-        router.get('/guests', { search: val || undefined }, { preserveState: true, preserveScroll: true });
+        router.get(route('guests.index'), { search: val || undefined }, { preserveState: true, preserveScroll: true });
     }, 300);
 });
 
