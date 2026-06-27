@@ -126,30 +126,32 @@ class SettingsController extends Controller
     // --- Room Types CRUD ---
     public function storeRoomType(Request $request): RedirectResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:room_types,name'],
             'description' => ['nullable', 'string', 'max:500'],
             'base_price' => ['required', 'numeric', 'min:0'],
             'max_occupancy' => ['required', 'integer', 'min:1', 'max:20'],
             'amenities' => ['nullable', 'array'],
+            'amenities.*' => ['string', 'max:100'],
         ]);
 
-        RoomType::create($request->validated());
+        RoomType::create($data);
 
         return back()->with('success', 'Tipi i dhomes u shtua.');
     }
 
     public function updateRoomType(Request $request, RoomType $roomType): RedirectResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:room_types,name,' . $roomType->id],
             'description' => ['nullable', 'string', 'max:500'],
             'base_price' => ['required', 'numeric', 'min:0'],
             'max_occupancy' => ['required', 'integer', 'min:1', 'max:20'],
             'amenities' => ['nullable', 'array'],
+            'amenities.*' => ['string', 'max:100'],
         ]);
 
-        $roomType->update($request->validated());
+        $roomType->update($data);
 
         return back()->with('success', 'Tipi i dhomes u perditesua.');
     }
