@@ -12,6 +12,7 @@ use App\Models\Reservation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -93,7 +94,12 @@ class PosController extends Controller
     {
         $request->validate([
             'payment_method' => ['required', 'in:cash,card,room_charge'],
-            'reservation_id' => ['nullable', 'exists:reservations,id', 'required_if:payment_method,room_charge'],
+            // Only a currently checked-in reservation can be charged — never an arbitrary id (IDOR guard).
+            'reservation_id' => [
+                'nullable',
+                'required_if:payment_method,room_charge',
+                Rule::exists('reservations', 'id')->where(fn ($q) => $q->where('status', 'checked_in')),
+            ],
         ]);
 
         if ($posOrder->status !== 'open') {
@@ -130,6 +136,7 @@ class PosController extends Controller
         AuditLog::record('pos.complete', $posOrder, [
             'amount' => $posOrder->total_amount,
             'payment_method' => $request->payment_method,
+            'reservation_id' => $posOrder->reservation_id,
         ]);
 
         return back()->with('success', 'Porosia u perfundua.');
