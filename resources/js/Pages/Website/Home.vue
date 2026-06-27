@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
-import { Waves, UtensilsCrossed, Wifi, SquareParking, ArrowRight, Coffee } from 'lucide-vue-next';
+import { Waves, UtensilsCrossed, Wifi, SquareParking, Coffee } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { amenityIcon } from '@/Components/Website/amenities';
