@@ -15,8 +15,10 @@ jobs:
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             cd /var/www/villamucho
-            git pull origin main
+            git fetch origin main --quiet
+            git reset --hard origin/main
             export COMPOSER_ALLOW_SUPERUSER=1
             composer install --no-dev --optimize-autoloader -q
             npm install
