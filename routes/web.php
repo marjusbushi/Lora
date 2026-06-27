@@ -7,6 +7,7 @@ use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosShiftController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\GuestController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\RoomController;
@@ -46,6 +47,9 @@ Route::middleware('auth')->prefix('pms')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // Notifications (new-reservation bell) — any authenticated staff
+    Route::get('/notifications/reservations', [NotificationController::class, 'reservations'])->name('notifications.reservations');
 
     // Room Management
     Route::middleware('permission:view_rooms')->group(function () {
