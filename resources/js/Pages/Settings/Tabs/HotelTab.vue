@@ -17,6 +17,12 @@ const form = useForm({
     currency: props.settings.currency || 'EUR',
     check_in_time: props.settings.check_in_time || '14:00',
     check_out_time: props.settings.check_out_time || '11:00',
+    hero_eyebrow_sq: props.settings.hero_eyebrow_sq || '',
+    hero_eyebrow_en: props.settings.hero_eyebrow_en || '',
+    hero_title_sq: props.settings.hero_title_sq || '',
+    hero_title_en: props.settings.hero_title_en || '',
+    hero_subtitle_sq: props.settings.hero_subtitle_sq || '',
+    hero_subtitle_en: props.settings.hero_subtitle_en || '',
     logo: null,
 });
 
@@ -77,6 +83,40 @@ function submit() {
                 <FormGroup label="Ora check-out" :error="form.errors.check_out_time" required>
                     <TextInput type="time" v-model="form.check_out_time" :error="form.errors.check_out_time" />
                 </FormGroup>
+            </div>
+
+            <hr class="border-neutral-100" />
+
+            <!-- Hero text (per language) — shown at the top of the public Home page -->
+            <div>
+                <p class="text-label text-neutral-700 mb-1">Teksti i hero-s (faqja Home)</p>
+                <p class="text-tiny text-neutral-400 mb-3">Mbititulli, titulli i madh dhe nëntitulli në krye të faqes. Shkruaji në të dyja gjuhët — vizitori i sheh sipas gjuhës (SQ/EN). Bosh = teksti i parazgjedhur.</p>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <FormGroup label="Mbititull — Shqip">
+                            <TextInput v-model="form.hero_eyebrow_sq" placeholder="Ksamil · Bregu Jon" />
+                        </FormGroup>
+                        <FormGroup label="Eyebrow — English">
+                            <TextInput v-model="form.hero_eyebrow_en" placeholder="Ksamil · Ionian Shore" />
+                        </FormGroup>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <FormGroup label="Titulli i madh — Shqip">
+                            <TextInput v-model="form.hero_title_sq" placeholder="Nje shtepi e madhe mbi detin Jon" />
+                        </FormGroup>
+                        <FormGroup label="Big title — English">
+                            <TextInput v-model="form.hero_title_en" placeholder="A grand house above the Ionian Sea" />
+                        </FormGroup>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <FormGroup label="Nëntitulli — Shqip">
+                            <TextInput v-model="form.hero_subtitle_sq" placeholder="Qetesi, gur i bardhe dhe mikpritje..." />
+                        </FormGroup>
+                        <FormGroup label="Subtitle — English">
+                            <TextInput v-model="form.hero_subtitle_en" placeholder="Calm, white stone and true hospitality..." />
+                        </FormGroup>
+                    </div>
+                </div>
             </div>
 
             <div class="flex justify-end pt-2">

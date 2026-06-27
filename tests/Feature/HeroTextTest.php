@@ -18,7 +18,14 @@ class HeroTextTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
-        $this->actingAs($admin)->post(route('settings.website'), [
+        // Hero text now lives on the Hotel Info form (settings.hotel, PUT), so the
+        // required hotel fields must accompany the hero fields.
+        $this->actingAs($admin)->put(route('settings.hotel'), [
+            'name' => 'Villa Mucho',
+            'timezone' => 'Europe/Tirane',
+            'currency' => 'EUR',
+            'check_in_time' => '14:00',
+            'check_out_time' => '11:00',
             'hero_eyebrow_sq' => 'Ksamil', 'hero_eyebrow_en' => 'Ksamil EN',
             'hero_title_sq' => 'Titulli im', 'hero_title_en' => 'My title',
             'hero_subtitle_sq' => 'Nentitulli', 'hero_subtitle_en' => 'Subtitle',

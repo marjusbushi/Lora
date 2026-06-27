@@ -12,12 +12,6 @@ const form = useForm({
     instagram: props.settings.instagram || '',
     facebook: props.settings.facebook || '',
     maps_url: props.settings.maps_url || '',
-    hero_eyebrow_sq: props.settings.hero_eyebrow_sq || '',
-    hero_eyebrow_en: props.settings.hero_eyebrow_en || '',
-    hero_title_sq: props.settings.hero_title_sq || '',
-    hero_title_en: props.settings.hero_title_en || '',
-    hero_subtitle_sq: props.settings.hero_subtitle_sq || '',
-    hero_subtitle_en: props.settings.hero_subtitle_en || '',
     logo: null,
     hero_image: null,
 });
@@ -118,40 +112,6 @@ const fileInputClass = 'block w-full text-small text-neutral-500 file:mr-3 file:
                 <TextInput v-model="form.maps_url" placeholder="psh. Villa Mucho, Ksamil  ose  Rruga Mitat Hoxha, Ksamil" :error="form.errors.maps_url" />
                 <p class="text-tiny text-neutral-400 mt-1.5">Shkruaj adresën ose emrin e vendit — harta ndërtohet vetë dhe shfaqet te faqja Kontakt. (Mund të ngjisësh edhe një URL 'embed' nga Google Maps nëse do saktësi më të madhe.)</p>
             </FormGroup>
-
-            <hr class="border-neutral-100" />
-
-            <!-- Hero text (per language) -->
-            <div>
-                <p class="text-label text-neutral-700 mb-1">Teksti i hero-s (faqja Home)</p>
-                <p class="text-tiny text-neutral-400 mb-3">Mbititulli, titulli i madh dhe nëntitulli në krye të faqes. Shkruaji në të dyja gjuhët — vizitori i sheh sipas gjuhës (SQ/EN). Bosh = teksti i parazgjedhur.</p>
-                <div class="space-y-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <FormGroup label="Mbititull — Shqip">
-                            <TextInput v-model="form.hero_eyebrow_sq" placeholder="Ksamil · Bregu Jon" />
-                        </FormGroup>
-                        <FormGroup label="Eyebrow — English">
-                            <TextInput v-model="form.hero_eyebrow_en" placeholder="Ksamil · Ionian Shore" />
-                        </FormGroup>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <FormGroup label="Titulli i madh — Shqip">
-                            <TextInput v-model="form.hero_title_sq" placeholder="Nje shtepi e madhe mbi detin Jon" />
-                        </FormGroup>
-                        <FormGroup label="Big title — English">
-                            <TextInput v-model="form.hero_title_en" placeholder="A grand house above the Ionian Sea" />
-                        </FormGroup>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <FormGroup label="Nëntitulli — Shqip">
-                            <TextInput v-model="form.hero_subtitle_sq" placeholder="Qetesi, gur i bardhe dhe mikpritje..." />
-                        </FormGroup>
-                        <FormGroup label="Subtitle — English">
-                            <TextInput v-model="form.hero_subtitle_en" placeholder="Calm, white stone and true hospitality..." />
-                        </FormGroup>
-                    </div>
-                </div>
-            </div>
 
             <div class="flex justify-end pt-2">
                 <Button type="submit" variant="primary" :loading="form.processing">Ruaj ndryshimet</Button>
