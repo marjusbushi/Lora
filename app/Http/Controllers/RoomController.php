@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\RoomStoreRequest;
 use App\Http\Requests\RoomUpdateRequest;
+use App\Models\Floor;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
@@ -35,6 +36,7 @@ class RoomController extends Controller
         return Inertia::render('Rooms/Index', [
             'rooms' => $query->paginate(20),
             'roomTypes' => RoomType::select('id', 'name', 'base_price', 'max_occupancy')->get(),
+            'floors' => Floor::orderBy('number')->get(['number', 'name']),
             'filters' => $request->only('status', 'floor', 'room_type_id'),
             'stats' => [
                 'total' => Room::count(),

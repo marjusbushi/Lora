@@ -16,6 +16,7 @@ import ToastContainer from '@/Components/UI/ToastContainer.vue';
 const props = defineProps({
     rooms: Object,
     roomTypes: Array,
+    floors: { type: Array, default: () => [] },
     filters: Object,
     stats: Object,
 });
@@ -40,7 +41,12 @@ const statusOptions = [
     { value: 'cleaning', label: 'Pastrim' },
     { value: 'maintenance', label: 'Mirembajtje' },
 ];
-const floorOptions = [1, 2, 3, 4, 5].map((f) => ({ value: f, label: `Kati ${f}` }));
+// Floors come from Settings → Katet; fall back to 1-5 if none configured yet.
+const floorOptions = (props.floors && props.floors.length)
+    ? props.floors.map((f) => ({ value: f.number, label: f.name }))
+    : [1, 2, 3, 4, 5].map((f) => ({ value: f, label: `Kati ${f}` }));
+const floorNameMap = Object.fromEntries((props.floors || []).map((f) => [f.number, f.name]));
+const floorName = (number) => floorNameMap[number] || `Kati ${number}`;
 
 // Hotel-standard room-rack colour code: green=vacant clean, yellow=vacant dirty,
 // red=occupied, grey=out of order. (Cloudbeds / Oracle Opera convention.)
@@ -186,7 +192,7 @@ function quickStatus(room, status) {
         <div v-if="viewMode === 'grid'" class="mt-6 space-y-8">
             <section v-for="group in roomsByFloor" :key="group.floor">
                 <div class="flex items-center gap-3 mb-3">
-                    <h3 class="text-label text-neutral-600 uppercase tracking-wider">Kati {{ group.floor }}</h3>
+                    <h3 class="text-label text-neutral-600 uppercase tracking-wider">{{ floorName(group.floor) }}</h3>
                     <span class="h-px flex-1 bg-neutral-200"></span>
                     <span class="text-tiny text-neutral-400">{{ group.rooms.length }} dhoma</span>
                 </div>
@@ -253,7 +259,7 @@ function quickStatus(room, status) {
                             <tr v-for="room in rooms.data" :key="room.id" class="hover:bg-neutral-50">
                                 <td class="px-5 py-3 text-body-sm text-primary-900 font-medium">{{ room.room_number }}</td>
                                 <td class="px-5 py-3 text-body-sm text-neutral-600">{{ room.room_type?.name }}</td>
-                                <td class="px-5 py-3 text-body-sm text-neutral-600">Kati {{ room.floor }}</td>
+                                <td class="px-5 py-3 text-body-sm text-neutral-600">{{ floorName(room.floor) }}</td>
                                 <td class="px-5 py-3"><Badge :variant="statusBadge[room.status]?.variant" dot>{{ statusBadge[room.status]?.label }}</Badge></td>
                                 <td class="px-5 py-3 text-right text-body-sm text-neutral-500">€{{ room.room_type?.base_price }}</td>
                                 <td class="px-5 py-3 text-right">
