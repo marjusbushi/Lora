@@ -38,6 +38,7 @@ defineProps({ roomTypes: Array });
                                     <div class="flex items-start justify-between gap-4">
                                         <h2 class="text-display-sm text-ink">{{ room.name }}</h2>
                                         <div class="text-right shrink-0">
+                                            <p class="text-tiny text-ink/40 uppercase tracking-wider">{{ $t('rooms.card.priceFrom') }}</p>
                                             <p class="text-2xl text-brass leading-none">€{{ room.base_price }}</p>
                                             <p class="text-tiny text-ink/40 uppercase tracking-wider mt-1">{{ $t('rooms.card.perNight') }}</p>
                                         </div>

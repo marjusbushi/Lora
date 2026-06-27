@@ -8,6 +8,7 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\RoomPricing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,9 @@ class WebsiteController extends Controller
             ->with('images')
             ->get();
 
+        // Public "Nga €X" = the lowest price a guest could pay (base or any season rate).
+        $roomTypes->each(fn ($rt) => $rt->base_price = RoomPricing::fromPrice($rt));
+
         return Inertia::render('Website/Home', [
             'roomTypes' => $roomTypes,
             'hotel' => Setting::getGroup('hotel'),
@@ -37,6 +41,8 @@ class WebsiteController extends Controller
             ->with('images')
             ->get();
 
+        $roomTypes->each(fn ($rt) => $rt->base_price = RoomPricing::fromPrice($rt));
+
         return Inertia::render('Website/Rooms', [
             'roomTypes' => $roomTypes,
         ]);
@@ -46,6 +52,11 @@ class WebsiteController extends Controller
     {
         $roomTypes = RoomType::select('id', 'name', 'base_price', 'max_occupancy')
             ->get();
+
+        // Show the same lowest "Nga €X" figure the homepage/rooms cards show, so a room
+        // type never shows two different headline prices across pages. The binding price
+        // is still computed per-night by checkAvailability (RoomPricing::total).
+        $roomTypes->each(fn ($rt) => $rt->base_price = RoomPricing::fromPrice($rt));
 
         return Inertia::render('Website/Book', [
             'roomTypes' => $roomTypes,
@@ -77,16 +88,20 @@ class WebsiteController extends Controller
         $nights = now()->parse($request->check_in)->diffInDays($request->check_out);
 
         return response()->json([
-            'rooms' => $rooms->map(fn($r) => [
-                'id' => $r->id,
-                'room_number' => $r->room_number,
-                'floor' => $r->floor,
-                'room_type' => $r->roomType->name,
-                'price_per_night' => $r->roomType->base_price,
-                'total_price' => $r->roomType->base_price * $nights,
-                'max_occupancy' => $r->roomType->max_occupancy,
-                'amenities' => $r->roomType->amenities,
-            ]),
+            'rooms' => $rooms->map(function ($r) use ($request, $nights) {
+                $total = RoomPricing::total($r->roomType, $request->check_in, $request->check_out);
+
+                return [
+                    'id' => $r->id,
+                    'room_number' => $r->room_number,
+                    'floor' => $r->floor,
+                    'room_type' => $r->roomType->name,
+                    'price_per_night' => $nights > 0 ? round($total / $nights, 2) : (float) $r->roomType->base_price,
+                    'total_price' => $total,
+                    'max_occupancy' => $r->roomType->max_occupancy,
+                    'amenities' => $r->roomType->amenities,
+                ];
+            }),
             'nights' => $nights,
         ]);
     }
@@ -152,7 +167,7 @@ class WebsiteController extends Controller
                     'check_in_date' => $request->check_in,
                     'check_out_date' => $request->check_out,
                     'status' => 'pending',
-                    'total_amount' => $room->roomType->base_price * $nights,
+                    'total_amount' => RoomPricing::total($room->roomType, $request->check_in, $request->check_out),
                     'adults' => $request->adults,
                     'notes' => $request->notes,
                     'created_by' => $creator->id,

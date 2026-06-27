@@ -72,6 +72,7 @@
       "subtitle": "Cdo dhome eshte projektuar per qetesine dhe pamjen nga deti."
     },
     "card": {
+      "priceFrom": "Nga",
       "perNight": "/ nate",
       "maxOccupancy": "Max {count} persona",
       "roomsCount": "{count} dhoma",

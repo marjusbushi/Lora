@@ -72,6 +72,7 @@
       "subtitle": "Every room is designed for tranquility and sea views."
     },
     "card": {
+      "priceFrom": "From",
       "perNight": "/ night",
       "maxOccupancy": "Up to {count} guests",
       "roomsCount": "{count} rooms",

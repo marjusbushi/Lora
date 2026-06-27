@@ -37,6 +37,7 @@ const icons = {
     reports: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path d="M15.5 2a1.5 1.5 0 00-1.5 1.5v13a1.5 1.5 0 001.5 1.5h1a1.5 1.5 0 001.5-1.5v-13A1.5 1.5 0 0016.5 2h-1zM9.5 6A1.5 1.5 0 008 7.5v9A1.5 1.5 0 009.5 18h1a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0010.5 6h-1zM3.5 10A1.5 1.5 0 002 11.5v5A1.5 1.5 0 003.5 18h1A1.5 1.5 0 006 16.5v-5A1.5 1.5 0 004.5 10h-1z" /></svg>',
     users: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" /></svg>',
     settings: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>',
+    pricing: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.94 6.94a.75.75 0 00-1.06-1.06A5.733 5.733 0 006.2 9.25H5.5a.75.75 0 000 1.5h.531a5.78 5.78 0 000 .5H5.5a.75.75 0 000 1.5h.7a5.733 5.733 0 001.68 3.37.75.75 0 101.06-1.06A4.235 4.235 0 017.733 13H10.5a.75.75 0 000-1.5H7.531a4.282 4.282 0 010-.5H10.5a.75.75 0 000-1.5H7.733a4.235 4.235 0 011.207-2.06z" clip-rule="evenodd" /></svg>',
 };
 
 // All possible nav items with permission requirements
@@ -49,6 +50,7 @@ const allNavItems = [
     { label: 'POS Bar/Restaurant', href: '/pms/pos', icon: icons.pos, permission: 'view_pos_orders' },
     { label: 'Raporte', href: '/pms/reports', icon: icons.reports, permission: 'view_reports' },
     { label: 'Perdoruesit', href: '/pms/users', icon: icons.users, permission: 'view_users' },
+    { label: 'Cmimet', href: '/pms/pricing', icon: icons.pricing, permission: 'view_settings' },
     { label: 'Settings', href: '/pms/settings', icon: icons.settings, permission: 'view_settings' },
 ];
 

@@ -41,7 +41,7 @@ const guestForm = useForm({
 const nights = ref(0);
 const flashError = computed(() => usePage().props.flash?.error);
 
-const typeOptions = computed(() => props.roomTypes.map(rt => ({ value: rt.id, label: `${rt.name} (€${rt.base_price}/${t('book.search.perNight')})` })));
+const typeOptions = computed(() => props.roomTypes.map(rt => ({ value: rt.id, label: `${rt.name} (${t('home.rooms.priceFrom')} €${rt.base_price}/${t('book.search.perNight')})` })));
 
 async function checkAvailability() {
     loading.value = true;
@@ -120,7 +120,7 @@ function goBack(toStep) {
                             <label class="block text-label text-neutral-700 mb-1.5">{{ $t('book.search.roomType') }}</label>
                             <select v-model="searchForm.room_type_id" class="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-body-sm focus:border-ionian focus:ring-2 focus:ring-ionian/30">
                                 <option value="">{{ $t('book.search.allTypes') }}</option>
-                                <option v-for="t in roomTypes" :key="t.id" :value="t.id">{{ t.name }} (€{{ t.base_price }})</option>
+                                <option v-for="t in roomTypes" :key="t.id" :value="t.id">{{ t.name }} ({{ $t('home.rooms.priceFrom') }} €{{ t.base_price }})</option>
                             </select>
                         </div>
                         <div>

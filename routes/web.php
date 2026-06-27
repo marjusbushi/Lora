@@ -8,6 +8,7 @@ use App\Http\Controllers\PosShiftController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\GuestController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PricingController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\RoomController;
@@ -119,6 +120,13 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::post('/users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
 
         // Settings
+        // Pricing (Cmimet) — seasons + per-type rate matrix
+        Route::get('/pricing', [PricingController::class, 'index'])->name('pricing.index');
+        Route::post('/pricing/seasons', [PricingController::class, 'storeSeason'])->name('pricing.seasons.store');
+        Route::put('/pricing/seasons/{season}', [PricingController::class, 'updateSeason'])->name('pricing.seasons.update');
+        Route::delete('/pricing/seasons/{season}', [PricingController::class, 'destroySeason'])->name('pricing.seasons.destroy');
+        Route::post('/pricing/rates', [PricingController::class, 'saveRates'])->name('pricing.rates.save');
+
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
         Route::put('/settings/hotel', [SettingsController::class, 'updateHotel'])->name('settings.hotel');
         Route::post('/settings/website', [SettingsController::class, 'updateWebsite'])->name('settings.website');
