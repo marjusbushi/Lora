@@ -119,6 +119,10 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
         Route::post('/users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
 
+        // Roles & per-module CRUD permissions
+        Route::post('/users/roles', [UserController::class, 'storeRole'])->name('users.roles.store');
+        Route::put('/users/roles/{role}/permissions', [UserController::class, 'updateRolePermissions'])->name('users.roles.permissions');
+
         // Settings
         // Pricing (Cmimet) — seasons + per-type rate matrix
         Route::get('/pricing', [PricingController::class, 'index'])->name('pricing.index');

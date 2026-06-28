@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
@@ -16,6 +16,8 @@ import ToastContainer from '@/Components/UI/ToastContainer.vue';
 const props = defineProps({
     users: Object,
     roles: Array,
+    permissionModules: { type: Array, default: () => [] },
+    rolesDetailed: { type: Array, default: () => [] },
 });
 
 const toasts = ref(null);
@@ -95,6 +97,51 @@ function restoreUser(id) {
         onSuccess: () => toasts.value?.success('Perdoruesi u riaktivizua.'),
     });
 }
+
+// ===== Roles & per-module CRUD permissions =====
+const ALL_ACTIONS = ['view', 'create', 'update', 'delete', 'open', 'close', 'close_any'];
+const actionLabel = { view: 'Shiko', create: 'Krijo', update: 'Edito', delete: 'Fshi', open: 'Hap', close: 'Mbyll', close_any: 'Mbyll çdo' };
+
+const selectedRoleId = ref(props.rolesDetailed[0]?.id ?? null);
+const selectedRole = computed(() => props.rolesDetailed.find((r) => r.id === selectedRoleId.value) || null);
+const checked = ref({});
+const savingPerms = ref(false);
+const showRoleModal = ref(false);
+const roleForm = useForm({ name: '' });
+
+function loadRolePerms(role) {
+    const map = {};
+    (role?.permissions || []).forEach((p) => { map[p] = true; });
+    checked.value = map;
+}
+watch(selectedRole, (r) => loadRolePerms(r), { immediate: true });
+
+const permName = (moduleKey, action) => `${action}_${moduleKey}`;
+function isChecked(moduleKey, action) {
+    if (selectedRole.value && !selectedRole.value.editable) return true; // admin = full access
+    return !!checked.value[permName(moduleKey, action)];
+}
+function toggle(moduleKey, action) {
+    const k = permName(moduleKey, action);
+    checked.value = { ...checked.value, [k]: !checked.value[k] };
+}
+function saveRolePerms() {
+    if (!selectedRole.value?.editable) return;
+    savingPerms.value = true;
+    const perms = Object.keys(checked.value).filter((k) => checked.value[k]);
+    router.put(route('users.roles.permissions', selectedRole.value.id), { permissions: perms }, {
+        preserveScroll: true,
+        onSuccess: () => toasts.value?.success('Lejet u ruajten.'),
+        onError: () => toasts.value?.error('Ruajtja deshtoi.'),
+        onFinish: () => { savingPerms.value = false; },
+    });
+}
+function submitRole() {
+    roleForm.post(route('users.roles.store'), {
+        preserveScroll: true,
+        onSuccess: () => { showRoleModal.value = false; roleForm.reset(); toasts.value?.success('Roli u krijua.'); },
+    });
+}
 </script>
 
 <template>
@@ -161,6 +208,67 @@ function restoreUser(id) {
             </Card>
         </div>
 
+        <!-- Roles & Permissions matrix -->
+        <div class="mt-8">
+            <Card :padding="false">
+                <div class="px-5 py-4 border-b border-neutral-200 flex items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-label text-neutral-600 uppercase tracking-wider">Rolet &amp; Lejet</h3>
+                        <p class="text-small text-neutral-500 mt-0.5">Çfarë mund të bëjë çdo rol për çdo modul. Përdoruesit i jep një rol këtu lart.</p>
+                    </div>
+                    <Button size="sm" variant="outline" @click="showRoleModal = true">+ Krijo rol</Button>
+                </div>
+
+                <!-- Role selector -->
+                <div class="px-5 pt-4 flex flex-wrap gap-2">
+                    <button
+                        v-for="r in rolesDetailed"
+                        :key="r.id"
+                        type="button"
+                        :class="['px-3 py-1.5 rounded-lg text-body-sm font-medium transition-colors', selectedRoleId === r.id ? 'bg-accent-600 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200']"
+                        @click="selectedRoleId = r.id"
+                    >
+                        {{ r.name }}<span v-if="!r.editable" class="ml-1 opacity-80">🔒</span>
+                    </button>
+                </div>
+
+                <!-- Matrix -->
+                <div class="p-5 overflow-x-auto">
+                    <p v-if="selectedRole && !selectedRole.editable" class="mb-3 text-small text-neutral-600 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2">
+                        🔒 Roli <b>admin</b> ka gjithmonë akses të plotë dhe nuk kufizohet (që të mos mbetesh vetë jashtë sistemit).
+                    </p>
+                    <table class="min-w-full text-body-sm">
+                        <thead>
+                            <tr class="text-label text-neutral-500 border-b border-neutral-100">
+                                <th class="text-left py-2 pr-4">Moduli</th>
+                                <th v-for="a in ALL_ACTIONS" :key="a" class="px-2 py-2 text-center font-medium">{{ actionLabel[a] }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-neutral-100">
+                            <tr v-for="m in permissionModules" :key="m.key">
+                                <td class="py-2.5 pr-4 text-primary-900 font-medium whitespace-nowrap">{{ m.label }}</td>
+                                <td v-for="a in ALL_ACTIONS" :key="a" class="px-2 py-2.5 text-center">
+                                    <input
+                                        v-if="m.actions.includes(a)"
+                                        type="checkbox"
+                                        class="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500 cursor-pointer disabled:opacity-50"
+                                        :checked="isChecked(m.key, a)"
+                                        :disabled="selectedRole && !selectedRole.editable"
+                                        @change="toggle(m.key, a)"
+                                    />
+                                    <span v-else class="text-neutral-300">—</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div v-if="selectedRole && selectedRole.editable" class="px-5 py-4 border-t border-neutral-200 flex justify-end">
+                    <Button variant="primary" :loading="savingPerms" @click="saveRolePerms">Ruaj lejet e rolit "{{ selectedRole.name }}"</Button>
+                </div>
+            </Card>
+        </div>
+
         <!-- Create Modal -->
         <Modal :show="showCreateModal" title="Shto perdorues te ri" @close="showCreateModal = false">
             <form @submit.prevent="submitCreate" class="space-y-4">
@@ -213,6 +321,18 @@ function restoreUser(id) {
             <template #footer>
                 <Button variant="outline" @click="showDeleteModal = false">Anulo</Button>
                 <Button variant="danger" @click="submitDelete">Deaktivizo</Button>
+            </template>
+        </Modal>
+
+        <!-- Create Role Modal -->
+        <Modal :show="showRoleModal" title="Krijo rol të ri" max-width="sm" @close="showRoleModal = false">
+            <FormGroup label="Emri i rolit" :error="roleForm.errors.name" required>
+                <TextInput v-model="roleForm.name" placeholder="psh. kontabilist" :error="roleForm.errors.name" />
+            </FormGroup>
+            <p class="text-tiny text-neutral-400 mt-2">Vetëm shkronja të vogla, pa hapësira (p.sh. <code>kontabilist</code>). Pasi ta krijosh, zgjidhe te skedat lart dhe vendos lejet.</p>
+            <template #footer>
+                <Button variant="outline" @click="showRoleModal = false">Anulo</Button>
+                <Button variant="primary" :loading="roleForm.processing" @click="submitRole">Krijo</Button>
             </template>
         </Modal>
 
