@@ -1,159 +1,104 @@
 <script setup>
-import { ref } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { Link } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
-import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import { ArrowRight, FileBarChart } from 'lucide-vue-next';
 
-const props = defineProps({
-    filters: Object,
-    summary: Object,
-    byStatus: Array,
-    shifts: { type: Array, default: () => [] },
-    currency: { type: String, default: '€' },
-});
+defineProps({ currency: { type: String, default: '€' } });
 
-const from = ref(props.filters.from);
-const to = ref(props.filters.to);
-
-const statusBadge = {
-    pending: { variant: 'warning', label: 'Ne pritje' },
-    confirmed: { variant: 'info', label: 'Konfirmuar' },
-    checked_in: { variant: 'success', label: 'Brenda' },
-    checked_out: { variant: 'neutral', label: 'Larguar' },
-};
-
-function apply() {
-    router.get('/pms/reports', { from: from.value, to: to.value }, { preserveState: true });
-}
-
-function money(v) {
-    return `${props.currency}${Number(v ?? 0).toFixed(2)}`;
-}
-
-function overShortVariant(v) {
-    return Math.abs(Number(v)) < 0.01 ? 'success' : (Number(v) < 0 ? 'error' : 'warning');
-}
-function overShortLabel(v) {
-    const n = Number(v);
-    if (Math.abs(n) < 0.01) return 'Përputhet';
-    return n < 0 ? `Mungesë ${money(Math.abs(n))}` : `Tepricë ${money(n)}`;
-}
-
-const cards = [
-    { label: 'Rezervime', value: () => props.summary.reservation_count },
-    { label: 'Nete te shitura', value: () => props.summary.nights_sold },
-    { label: 'Te ardhura dhomash', value: () => money(props.summary.room_revenue) },
-    { label: 'Porosi POS', value: () => props.summary.pos_count },
-    { label: 'Te ardhura POS', value: () => money(props.summary.pos_revenue) },
-    { label: 'Total', value: () => money(props.summary.total_revenue), accent: true },
+// The full board-approved catalog. `to` = route name for built reports; null = coming soon.
+const groups = [
+    {
+        name: 'Të ardhura & Prodhim',
+        reports: [
+            { name: 'Pasqyra Ekzekutive', desc: 'Të ardhura dhoma+bar, mbushja, ADR, RevPAR, TVSH, komisioni — gjithçka në një faqe.', to: 'reports.executive' },
+            { name: 'ADR / RevPAR / Mbushja', desc: 'Tre treguesit mbretër me krahasim periudhe, sipas tipit të dhomës.', to: null },
+            { name: 'Tempo & Pickup', desc: 'Sa netë/të ardhura janë rezervuar për ditët në vijim (7/14/30/60/90).', to: null },
+        ],
+    },
+    {
+        name: 'Kanalet',
+        reports: [
+            { name: 'Prodhimi sipas Kanaleve', desc: 'Nga vijnë rezervimet dhe sa kushton secili kanal në komision.', to: 'reports.channels' },
+            { name: 'Anulime & No-Show', desc: 'Rrjedhja e rezervimeve: % anulimesh dhe no-show të mundshëm.', to: null },
+        ],
+    },
+    {
+        name: 'Klientët',
+        reports: [
+            { name: 'Direktoria e Mysafirëve', desc: 'Lista kryesore e çdo mysafiri me statistika gjatë jetës (CRM).', to: null },
+            { name: 'Kthyes & Top sipas Vlerës', desc: 'Mysafirë që kanë qëndruar 2+ herë dhe top sipas shpenzimit.', to: null },
+            { name: 'Përbërja sipas Kombësisë', desc: 'Nga vijnë mysafirët — numra, netë, të ardhura sipas vendit.', to: null },
+            { name: 'Sjellja e Rezervimit', desc: 'Sa para rezervojnë dhe sa gjatë qëndrojnë, sipas kanalit.', to: null },
+        ],
+    },
+    {
+        name: 'Bar & Restorant',
+        reports: [
+            { name: 'Shitjet POS sipas Kategorisë & Artikullit', desc: 'Të ardhura Bar vs Restorant dhe sipas artikullit, me numër porosish.', to: null },
+            { name: 'Shitjet sipas Orës & Ditës', desc: 'Oraret dhe ditët më të ngarkuara për F&B.', to: null },
+            { name: 'Mix i Pagesave POS', desc: 'Si u paguan shitjet — kesh, kartë, folio.', to: null },
+            { name: 'Anulime & Voids POS', desc: 'Porosi të anulluara me vlerë — kontroll humbjesh.', to: null },
+        ],
+    },
+    {
+        name: 'Operacione',
+        reports: [
+            { name: 'Manifesti i Mbërritjeve', desc: 'Fletë pune e çdo mysafiri që mbërrin në një periudhë.', to: null },
+            { name: 'Manifesti i Nisjeve', desc: 'Çdo nisje me balancë të papaguar dhe porosi POS të hapura.', to: null },
+            { name: 'Statusi i Dhomave', desc: 'Foto e çastit e çdo dhome dhe statusit të saj.', to: null },
+            { name: 'Raporti i Pastrimit', desc: 'Ngarkesa dhe përfundimi i pastrimit sipas stafit/dhomës.', to: null },
+            { name: 'Mysafirë në Shtëpi', desc: 'Lista e çdo mysafiri aktualisht brenda.', to: null },
+        ],
+    },
+    {
+        name: 'Financë & Arka',
+        reports: [
+            { name: 'Bilance të Papaguara', desc: 'Çdo qëndrim që ende ka borxh (folio − pagesa) — debitorët.', to: 'reports.outstanding' },
+            { name: 'Z-Report / Mbyllje Turni', desc: 'Pajtimi i arkës për çdo turn: kesh/kartë/folio, pritur vs numëruar.', to: 'reports.shifts' },
+            { name: 'Arkëtime & Cash', desc: 'Paratë e mbledhura (jo të faturuara) sipas metodës/ditës/stafit.', to: null },
+            { name: 'Raport TVSH', desc: 'Ndarja periodike e TVSH-së për deklarim tatimor.', to: null },
+            { name: 'Zbritje të Dhëna', desc: 'Çdo zbritje/falje e dhënë — sa të ardhura janë lëshuar.', to: null },
+        ],
+    },
 ];
 </script>
 
 <template>
     <AppLayout>
-        <PageHeader
-            title="Raporte"
-            :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Raporte' }]"
-        />
+        <PageHeader title="Raporte" :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Raporte' }]" />
 
-        <!-- Date range -->
-        <div class="mt-6 flex flex-wrap items-end gap-3">
-            <div>
-                <label class="block text-label text-neutral-600 mb-1.5">Nga</label>
-                <input type="date" v-model="from" class="rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
-            </div>
-            <div>
-                <label class="block text-label text-neutral-600 mb-1.5">Deri</label>
-                <input type="date" v-model="to" class="rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
-            </div>
-            <Button variant="primary" @click="apply">Apliko</Button>
-        </div>
-
-        <!-- Summary cards -->
-        <div class="mt-6 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-            <Card v-for="c in cards" :key="c.label">
-                <div class="text-center">
-                    <p :class="['text-h3', c.accent ? 'text-accent-600' : 'text-primary-900']">{{ c.value() }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">{{ c.label }}</p>
+        <div class="mt-6 space-y-8">
+            <section v-for="g in groups" :key="g.name">
+                <h3 class="text-label text-neutral-600 uppercase tracking-wider mb-3">{{ g.name }}</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    <component
+                        :is="r.to ? Link : 'div'"
+                        v-for="r in g.reports"
+                        :key="r.name"
+                        :href="r.to ? route(r.to) : null"
+                        class="no-underline"
+                    >
+                        <Card :class="r.to ? 'h-full transition-shadow hover:shadow-md cursor-pointer' : 'h-full opacity-60'">
+                            <div class="flex items-start gap-3">
+                                <div class="h-9 w-9 rounded-lg flex items-center justify-center shrink-0" :class="r.to ? 'bg-accent-50' : 'bg-neutral-100'">
+                                    <FileBarChart class="h-4.5 w-4.5" :class="r.to ? 'text-accent-600' : 'text-neutral-400'" :stroke-width="1.75" />
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="text-body-sm font-medium text-primary-900">{{ r.name }}</p>
+                                        <Badge v-if="!r.to" variant="neutral" size="sm">Së shpejti</Badge>
+                                        <ArrowRight v-else class="h-4 w-4 text-neutral-300 shrink-0" />
+                                    </div>
+                                    <p class="text-tiny text-neutral-500 mt-1 leading-relaxed">{{ r.desc }}</p>
+                                </div>
+                            </div>
+                        </Card>
+                    </component>
                 </div>
-            </Card>
-        </div>
-
-        <!-- Breakdown by status -->
-        <div class="mt-6">
-            <Card :padding="false">
-                <div class="px-5 py-4 border-b border-neutral-200">
-                    <h3 class="text-label text-neutral-600 uppercase tracking-wider">Sipas statusit (hyrje ne periudhe)</h3>
-                </div>
-                <table class="min-w-full divide-y divide-neutral-200">
-                    <thead class="bg-neutral-50">
-                        <tr>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th>
-                            <th class="px-5 py-3 text-right text-label text-neutral-600">Rezervime</th>
-                            <th class="px-5 py-3 text-right text-label text-neutral-600">Te ardhura</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-neutral-100">
-                        <tr v-for="row in byStatus" :key="row.status" class="hover:bg-neutral-50">
-                            <td class="px-5 py-3">
-                                <Badge :variant="statusBadge[row.status]?.variant || 'neutral'">{{ statusBadge[row.status]?.label || row.status }}</Badge>
-                            </td>
-                            <td class="px-5 py-3 text-right text-body-sm text-neutral-700">{{ row.count }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm text-primary-900">{{ money(row.revenue) }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div v-if="!byStatus.length" class="px-6 py-10 text-center text-body-sm text-neutral-500">
-                    Asnje rezervim ne kete periudhe.
-                </div>
-            </Card>
-        </div>
-
-        <!-- Shifts (Z-Report) -->
-        <div class="mt-6">
-            <Card :padding="false">
-                <div class="px-5 py-4 border-b border-neutral-200">
-                    <h3 class="text-label text-neutral-600 uppercase tracking-wider">Turnet (Z-Report)</h3>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-neutral-200">
-                        <thead class="bg-neutral-50">
-                            <tr>
-                                <th class="px-4 py-3 text-left text-label text-neutral-600">Përdoruesi</th>
-                                <th class="px-4 py-3 text-left text-label text-neutral-600">Hapur → Mbyllur</th>
-                                <th class="px-4 py-3 text-right text-label text-neutral-600">Fondi</th>
-                                <th class="px-4 py-3 text-right text-label text-neutral-600">💶 Kesh</th>
-                                <th class="px-4 py-3 text-right text-label text-neutral-600">💳 Kartë</th>
-                                <th class="px-4 py-3 text-right text-label text-neutral-600">🏨 Folio</th>
-                                <th class="px-4 py-3 text-right text-label text-neutral-600">Pritur</th>
-                                <th class="px-4 py-3 text-right text-label text-neutral-600">Numëruar</th>
-                                <th class="px-4 py-3 text-right text-label text-neutral-600">Diferenca</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-neutral-100">
-                            <tr v-for="s in shifts" :key="s.id" class="hover:bg-neutral-50">
-                                <td class="px-4 py-3 text-body-sm text-primary-900 font-medium whitespace-nowrap">{{ s.user || '—' }}</td>
-                                <td class="px-4 py-3 text-body-sm text-neutral-500 whitespace-nowrap">{{ s.opened_at }} → {{ s.closed_at }}</td>
-                                <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ money(s.opening_float) }}</td>
-                                <td class="px-4 py-3 text-right text-body-sm text-success-700">{{ money(s.cash_sales) }}</td>
-                                <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ money(s.card_sales) }}</td>
-                                <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ money(s.room_charge_sales) }}</td>
-                                <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ money(s.expected_cash) }}</td>
-                                <td class="px-4 py-3 text-right text-body-sm text-primary-900 font-medium">{{ money(s.counted_cash) }}</td>
-                                <td class="px-4 py-3 text-right whitespace-nowrap">
-                                    <Badge :variant="overShortVariant(s.over_short)" size="sm">{{ overShortLabel(s.over_short) }}</Badge>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div v-if="!shifts.length" class="px-6 py-10 text-center text-body-sm text-neutral-500">
-                    Asnjë turn i mbyllur në këtë periudhë.
-                </div>
-            </Card>
+            </section>
         </div>
     </AppLayout>
 </template>

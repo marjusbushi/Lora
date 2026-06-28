@@ -109,6 +109,10 @@ Route::middleware('auth')->prefix('pms')->group(function () {
     // Reports
     Route::middleware('permission:view_reports')->group(function () {
         Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
+        Route::get('/reports/executive', [ReportsController::class, 'executive'])->name('reports.executive');
+        Route::get('/reports/channels', [ReportsController::class, 'channels'])->name('reports.channels');
+        Route::get('/reports/outstanding', [ReportsController::class, 'outstanding'])->name('reports.outstanding');
+        Route::get('/reports/shifts', [ReportsController::class, 'shifts'])->name('reports.shifts');
     });
 
     // Admin-only: User Management + Settings
