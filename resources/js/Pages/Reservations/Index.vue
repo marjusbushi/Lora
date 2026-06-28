@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useForm, router, usePage, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
@@ -24,6 +24,7 @@ const props = defineProps({
     guests: Array,
     filters: Object,
     stats: Object,
+    channelFees: { type: Object, default: () => ({}) },
 });
 
 const toasts = ref(null);
@@ -80,12 +81,55 @@ function clearFilters() {
 // Forms
 const createForm = useForm({
     room_id: '', guest_id: '', check_in_date: '', check_out_date: '',
-    status: 'confirmed', adults: 1, children: 0, notes: '', channel: 'manual',
+    status: 'confirmed', adults: 1, children: 0, notes: '', channel: 'manual', total_amount: '',
 });
 
 const editForm = useForm({
     room_id: '', guest_id: '', check_in_date: '', check_out_date: '',
-    status: '', adults: 1, children: 0, notes: '', channel: 'manual',
+    status: '', adults: 1, children: 0, notes: '', channel: 'manual', total_amount: '',
+});
+
+// --- Price + channel commission (live preview; the server is authoritative) ---
+function basePriceOf(roomId) {
+    const r = props.rooms.find((x) => x.id === roomId);
+    return Number(r?.room_type?.base_price) || 0;
+}
+function nightsBetween(ci, co) {
+    if (!ci || !co) return 0;
+    const d = Math.round((new Date(co) - new Date(ci)) / 86400000);
+    return d > 0 ? d : 0;
+}
+function suggestedPrice(form) {
+    return basePriceOf(form.room_id) * nightsBetween(form.check_in_date, form.check_out_date);
+}
+function feePct(channel) {
+    return Number(props.channelFees?.[channel]) || 0;
+}
+function commissionOf(form) {
+    return Math.round((Number(form.total_amount) || 0) * feePct(form.channel)) / 100;
+}
+function netOf(form) {
+    return (Number(form.total_amount) || 0) - commissionOf(form);
+}
+
+// Auto-fill the price with room rate × nights, but stop overwriting once the
+// user types a custom amount (value-based: keep filling while it still matches
+// the last suggestion).
+let createLastSuggest = 0;
+let editLastSuggest = 0;
+watch(() => [createForm.room_id, createForm.check_in_date, createForm.check_out_date], () => {
+    const s = suggestedPrice(createForm);
+    if (!createForm.total_amount || Number(createForm.total_amount) === createLastSuggest) {
+        createForm.total_amount = s || '';
+    }
+    createLastSuggest = s;
+});
+watch(() => [editForm.room_id, editForm.check_in_date, editForm.check_out_date], () => {
+    const s = suggestedPrice(editForm);
+    if (!editForm.total_amount || Number(editForm.total_amount) === editLastSuggest) {
+        editForm.total_amount = s || '';
+    }
+    editLastSuggest = s;
 });
 
 function openEdit(res) {
@@ -99,6 +143,8 @@ function openEdit(res) {
     editForm.children = res.children;
     editForm.notes = res.notes || '';
     editForm.channel = res.channel || 'manual';
+    editForm.total_amount = res.total_amount ?? '';
+    editLastSuggest = suggestedPrice(editForm); // baseline so a custom (OTA) price isn't overwritten
     showEditModal.value = true;
 }
 
@@ -294,6 +340,13 @@ function formatDate(d) {
                     <FormGroup label="Burimi" :error="createForm.errors.channel">
                         <Select v-model="createForm.channel" :options="channelOptions" :error="createForm.errors.channel" />
                     </FormGroup>
+                    <FormGroup label="Cmimi (me fee)" :error="createForm.errors.total_amount">
+                        <TextInput type="number" v-model="createForm.total_amount" min="0" step="0.01" placeholder="0.00" :error="createForm.errors.total_amount" />
+                    </FormGroup>
+                </div>
+                <div class="rounded-lg bg-neutral-50 border border-neutral-100 px-4 py-2.5 flex items-center gap-x-6 gap-y-1 flex-wrap text-body-sm">
+                    <span class="text-neutral-500">Komisioni <span class="text-neutral-400">{{ feePct(createForm.channel) }}%</span>: <span class="text-neutral-900 font-medium">€{{ commissionOf(createForm).toFixed(2) }}</span></span>
+                    <span class="text-neutral-500">Neto: <span class="text-accent-700 font-semibold">€{{ netOf(createForm).toFixed(2) }}</span></span>
                 </div>
                 <FormGroup label="Shenime">
                     <Textarea v-model="createForm.notes" placeholder="Kerkesa speciale..." :rows="2" />
@@ -330,6 +383,13 @@ function formatDate(d) {
                     <FormGroup label="Burimi" :error="editForm.errors.channel">
                         <Select v-model="editForm.channel" :options="channelOptions" :error="editForm.errors.channel" />
                     </FormGroup>
+                    <FormGroup label="Cmimi (me fee)" :error="editForm.errors.total_amount">
+                        <TextInput type="number" v-model="editForm.total_amount" min="0" step="0.01" placeholder="0.00" :error="editForm.errors.total_amount" />
+                    </FormGroup>
+                </div>
+                <div class="rounded-lg bg-neutral-50 border border-neutral-100 px-4 py-2.5 flex items-center gap-x-6 gap-y-1 flex-wrap text-body-sm">
+                    <span class="text-neutral-500">Komisioni <span class="text-neutral-400">{{ feePct(editForm.channel) }}%</span>: <span class="text-neutral-900 font-medium">€{{ commissionOf(editForm).toFixed(2) }}</span></span>
+                    <span class="text-neutral-500">Neto: <span class="text-accent-700 font-semibold">€{{ netOf(editForm).toFixed(2) }}</span></span>
                 </div>
                 <FormGroup label="Shenime">
                     <Textarea v-model="editForm.notes" :rows="2" />

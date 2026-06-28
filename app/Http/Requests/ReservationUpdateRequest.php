@@ -26,6 +26,7 @@ class ReservationUpdateRequest extends FormRequest
             'children' => ['sometimes', 'integer', 'min:0', 'max:10'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'channel' => ['sometimes', 'nullable', Rule::in(Reservation::CHANNELS)],
+            'total_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
         ];
     }
 

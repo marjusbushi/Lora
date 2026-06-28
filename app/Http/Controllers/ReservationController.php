@@ -51,6 +51,7 @@ class ReservationController extends Controller
                 ->orderBy('last_name')
                 ->get(),
             'filters' => $request->only('status', 'search'),
+            'channelFees' => Setting::get('financial.channel_fees', []),
             'stats' => [
                 'total' => Reservation::count(),
                 'pending' => Reservation::where('status', 'pending')->count(),
@@ -243,10 +244,16 @@ class ReservationController extends Controller
         $checkOut = now()->parse($data['check_out_date']);
         $nights = $checkIn->diffInDays($checkOut);
 
-        $data['total_amount'] = $room->roomType->base_price * $nights;
+        // Price: staff may enter the gross amount (OTA price, fee included); else default to room rate × nights.
+        $entered = $data['total_amount'] ?? null;
+        $data['total_amount'] = is_numeric($entered) && (float) $entered > 0
+            ? round((float) $entered, 2)
+            : $room->roomType->base_price * $nights;
         $data['created_by'] = auth()->id();
         $data['status'] = $data['status'] ?? 'pending';
         $data['channel'] = $data['channel'] ?? 'manual';
+        // Commission is ALWAYS derived server-side from the channel's configured % (locked).
+        $data['commission_amount'] = $this->channelCommission($data['channel'], (float) $data['total_amount']);
 
         try {
             // The FormRequest already pre-checks availability; re-check under a row lock
@@ -275,11 +282,28 @@ class ReservationController extends Controller
         $checkIn = now()->parse($data['check_in_date']);
         $checkOut = now()->parse($data['check_out_date']);
         $nights = $checkIn->diffInDays($checkOut);
-        $data['total_amount'] = $room->roomType->base_price * $nights;
+        $entered = $data['total_amount'] ?? null;
+        $data['total_amount'] = is_numeric($entered) && (float) $entered > 0
+            ? round((float) $entered, 2)
+            : $room->roomType->base_price * $nights;
+        $data['channel'] = $data['channel'] ?? $reservation->channel ?? 'manual';
+        $data['commission_amount'] = $this->channelCommission($data['channel'], (float) $data['total_amount']);
 
         $reservation->update($data);
 
         return back()->with('success', 'Rezervimi u perditesua.');
+    }
+
+    /**
+     * Commission a channel keeps on a booking, from the configured % (settings
+     * financial.channel_fees). manual/direct or any unconfigured channel = 0.
+     */
+    private function channelCommission(?string $channel, float $total): float
+    {
+        $fees = (array) Setting::get('financial.channel_fees', []);
+        $pct = isset($fees[$channel]) && is_numeric($fees[$channel]) ? (float) $fees[$channel] : 0.0;
+
+        return round($total * $pct / 100, 2);
     }
 
     public function checkIn(Reservation $reservation): RedirectResponse

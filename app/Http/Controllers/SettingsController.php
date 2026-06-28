@@ -6,6 +6,7 @@ use App\Models\Amenity;
 use App\Models\Floor;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
+use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\RoomTypeImage;
@@ -208,11 +209,22 @@ class SettingsController extends Controller
             'payment_methods' => ['required', 'array', 'min:1'],
             'payment_methods.*' => ['in:cash,card,room_charge'],
             'currency_symbol' => ['required', 'string', 'max:5'],
+            'channel_fees' => ['nullable', 'array'],
+            'channel_fees.*' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         Setting::set('financial.tax_rate', $request->tax_rate, 'number');
         Setting::set('financial.payment_methods', $request->payment_methods, 'json');
         Setting::set('financial.default_currency_symbol', $request->currency_symbol);
+
+        // Per-channel commission % — keep only known channels with a real value.
+        $fees = [];
+        foreach ((array) $request->input('channel_fees', []) as $channel => $pct) {
+            if (in_array($channel, Reservation::CHANNELS, true) && is_numeric($pct)) {
+                $fees[$channel] = round((float) $pct, 2);
+            }
+        }
+        Setting::set('financial.channel_fees', $fees, 'json');
 
         return back()->with('success', 'Konfigurimet financiare u ruajten.');
     }

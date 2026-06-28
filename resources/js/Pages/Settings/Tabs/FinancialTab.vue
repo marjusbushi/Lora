@@ -5,13 +5,21 @@ import Button from '@/Components/UI/Button.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import Checkbox from '@/Components/UI/Checkbox.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
+import { CHANNELS } from '@/channels';
 
 const props = defineProps({ settings: Object, toasts: Object });
+
+// OTA channels that charge a commission (manual + direct are always 0%).
+const feeChannels = CHANNELS.filter((c) => !['manual', 'direct'].includes(c.id));
+const savedFees = props.settings.channel_fees || {};
+const initialFees = {};
+feeChannels.forEach((c) => { initialFees[c.id] = savedFees[c.id] ?? ''; });
 
 const form = useForm({
     tax_rate: props.settings.tax_rate ?? 20,
     payment_methods: props.settings.payment_methods || ['cash', 'card', 'room_charge'],
     currency_symbol: props.settings.default_currency_symbol || '€',
+    channel_fees: initialFees,
 });
 
 const allMethods = [
@@ -65,6 +73,23 @@ function submit() {
                     </label>
                 </div>
             </FormGroup>
+
+            <hr class="border-neutral-100" />
+
+            <!-- Channel commissions: feed the auto-filled fee on each reservation -->
+            <div>
+                <p class="text-label text-neutral-700 mb-1">Komisionet e Kanaleve (%)</p>
+                <p class="text-tiny text-neutral-400 mb-3">Komisioni qe mban secili kanal. Perdoret per te mbushur vete fee-ne te cdo rezervim (p.sh. Booking.com 12%). Lere bosh ose 0 nese nuk ka komision. Manual dhe Direkt jane gjithmone 0%.</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                    <div v-for="c in feeChannels" :key="c.id" class="flex items-center gap-3">
+                        <span class="inline-flex items-center gap-2 text-body-sm text-neutral-700 w-32 shrink-0">
+                            <span class="h-2.5 w-2.5 rounded-full shrink-0" :style="{ backgroundColor: c.color }" /> {{ c.label }}
+                        </span>
+                        <TextInput type="number" v-model="form.channel_fees[c.id]" min="0" max="100" step="0.5" placeholder="0" class="flex-1" />
+                        <span class="text-body-sm text-neutral-400">%</span>
+                    </div>
+                </div>
+            </div>
 
             <div class="flex justify-end pt-2">
                 <Button type="submit" variant="primary" :loading="form.processing">Ruaj ndryshimet</Button>
