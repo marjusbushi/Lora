@@ -121,6 +121,16 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::get('/reports/cancellations', [ReportsController::class, 'cancellations'])->name('reports.cancellations');
         Route::get('/reports/payments', [ReportsController::class, 'payments'])->name('reports.payments');
         Route::get('/reports/vat', [ReportsController::class, 'vat'])->name('reports.vat');
+        Route::get('/reports/performance', [ReportsController::class, 'performance'])->name('reports.performance');
+        Route::get('/reports/repeat-guests', [ReportsController::class, 'repeatGuests'])->name('reports.repeatGuests');
+        Route::get('/reports/nationality', [ReportsController::class, 'nationality'])->name('reports.nationality');
+        Route::get('/reports/booking-behavior', [ReportsController::class, 'bookingBehavior'])->name('reports.bookingBehavior');
+        Route::get('/reports/pos-hourly', [ReportsController::class, 'posHourly'])->name('reports.posHourly');
+        Route::get('/reports/pos-payment-mix', [ReportsController::class, 'posPaymentMix'])->name('reports.posPaymentMix');
+        Route::get('/reports/pos-voids', [ReportsController::class, 'posVoids'])->name('reports.posVoids');
+        Route::get('/reports/room-status', [ReportsController::class, 'roomStatus'])->name('reports.roomStatus');
+        Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->name('reports.housekeepingReport');
+        Route::get('/reports/in-house', [ReportsController::class, 'inHouse'])->name('reports.inHouse');
     });
 
     // Admin-only: User Management + Settings

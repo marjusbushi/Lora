@@ -10,6 +10,8 @@ use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Setting;
+use App\Models\CleaningTask;
+use App\Models\RoomType;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -730,6 +732,500 @@ class ReportsController extends Controller
             'currency' => $this->currency(),
         ]);
     }
+
+    /** ADR / RevPAR / Mbushja: per room type for a date range — nights, revenue, ADR, occupancy %, RevPAR. */
+    public function performance(Request $request): Response
+    {
+        [$from, $to, $days] = $this->range($request);
+
+        // Rooms inventory per room type (cross-DB safe: simple group by + count).
+        $roomsByType = Room::select('room_type_id', DB::raw('count(*) as rooms_count'))
+            ->groupBy('room_type_id')
+            ->pluck('rooms_count', 'room_type_id');
+
+        // Every room type (so types with inventory but no bookings still show up).
+        $types = RoomType::orderBy('name')->get(['id', 'name']);
+
+        // Non-cancelled reservations arriving in range, with their room + room type.
+        $reservations = Reservation::whereBetween('check_in_date', [$from, $to])
+            ->where('status', '!=', 'cancelled')
+            ->with(['room:id,room_type_id', 'room.roomType:id,name'])
+            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount']);
+
+        // Group reservation aggregates by room_type_id in PHP.
+        $aggByType = $reservations->groupBy(fn ($r) => $r->room?->room_type_id)
+            ->map(fn ($group) => [
+                'nights' => (int) $group->sum(fn ($r) => $r->nights),
+                'revenue' => (float) $group->sum('total_amount'),
+            ]);
+
+        $rows = $types->map(function ($t) use ($roomsByType, $aggByType, $days) {
+            $roomsCount = (int) ($roomsByType[$t->id] ?? 0);
+            $agg = $aggByType[$t->id] ?? ['nights' => 0, 'revenue' => 0.0];
+            $nights = (int) $agg['nights'];
+            $revenue = (float) $agg['revenue'];
+            $availableRoomNights = $roomsCount * $days;
+
+            return [
+                'type' => $t->name,
+                'rooms_count' => $roomsCount,
+                'nights' => $nights,
+                'revenue' => round($revenue, 2),
+                'adr' => $nights ? round($revenue / $nights, 2) : 0,
+                'available_room_nights' => $availableRoomNights,
+                'occupancy' => $availableRoomNights ? round($nights / $availableRoomNights * 100, 1) : 0,
+                'revpar' => $availableRoomNights ? round($revenue / $availableRoomNights, 2) : 0,
+            ];
+        })->values();
+
+        // Totals across all types.
+        $totalRooms = (int) $rows->sum('rooms_count');
+        $totalNights = (int) $rows->sum('nights');
+        $totalRevenue = (float) $rows->sum('revenue');
+        $totalAvailable = $totalRooms * $days;
+
+        return Inertia::render('Reports/Performance', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'rows' => $rows,
+            'totals' => [
+                'rooms_count' => $totalRooms,
+                'nights' => $totalNights,
+                'revenue' => round($totalRevenue, 2),
+                'adr' => $totalNights ? round($totalRevenue / $totalNights, 2) : 0,
+                'occupancy' => $totalAvailable ? round($totalNights / $totalAvailable * 100, 1) : 0,
+                'revpar' => $totalAvailable ? round($totalRevenue / $totalAvailable, 2) : 0,
+            ],
+            'currency' => $this->currency(),
+        ]);
+    }
+
+    /** Mysafirë Kthyes & Top: lifetime per-guest stays/nights/spend (non-cancelled), top spenders + repeat flag. */
+    public function repeatGuests(Request $request): Response
+    {
+        $guests = Guest::with(['reservations' => function ($q) {
+            $q->where('status', '!=', 'cancelled')
+                ->select('id', 'guest_id', 'check_in_date', 'check_out_date', 'total_amount');
+        }])->get(['id', 'first_name', 'last_name', 'email', 'phone']);
+
+        $all = $guests->map(function ($g) {
+            $res = $g->reservations;
+            $stays = $res->count();
+            $checkIns = $res->pluck('check_in_date')->filter();
+
+            return [
+                'id' => $g->id,
+                'guest' => trim("{$g->first_name} {$g->last_name}") ?: 'Mysafir',
+                'email' => $g->email,
+                'phone' => $g->phone,
+                'stays' => $stays,
+                'nights' => (int) $res->sum(fn ($r) => $r->nights),
+                'total_spent' => round((float) $res->sum('total_amount'), 2),
+                'last_visit' => $checkIns->isNotEmpty() ? $checkIns->max()?->toDateString() : null,
+                'is_repeat' => $stays >= 2,
+            ];
+        })->filter(fn ($r) => $r['stays'] >= 1)->values();
+
+        $totalGuests = $all->count();
+        $repeatGuests = $all->filter(fn ($r) => $r['is_repeat'])->count();
+
+        // Table: top 50 by lifetime spend (repeat badge shown inline).
+        $rows = $all->sortByDesc('total_spent')->take(50)->values();
+
+        return Inertia::render('Reports/RepeatGuests', [
+            'rows' => $rows,
+            'summary' => [
+                'total_guests' => $totalGuests,
+                'repeat_guests' => $repeatGuests,
+                'repeat_rate' => $totalGuests ? round($repeatGuests / $totalGuests * 100, 1) : 0,
+            ],
+            'currency' => $this->currency(),
+        ]);
+    }
+
+    /** Guest mix by nationality: distinct guests, stays, nights, revenue, ALOS. */
+    public function nationality(Request $request): Response
+    {
+        [$from, $to] = $this->range($request);
+
+        $reservations = Reservation::whereBetween('check_in_date', [$from, $to])
+            ->where('status', '!=', 'cancelled')
+            ->whereHas('guest')
+            ->with('guest:id,nationality')
+            ->get(['id', 'guest_id', 'check_in_date', 'check_out_date', 'total_amount']);
+
+        $rows = $reservations
+            ->groupBy(fn ($r) => ($r->guest && filled($r->guest->nationality)) ? $r->guest->nationality : 'E panjohur')
+            ->map(function ($group, $nationality) {
+                $stays = $group->count();
+                $nights = (int) $group->sum(fn ($r) => $r->nights);
+                $revenue = (float) $group->sum('total_amount');
+                $guests = $group->pluck('guest_id')->unique()->count();
+
+                return [
+                    'nationality' => $nationality,
+                    'guests' => $guests,
+                    'stays' => $stays,
+                    'nights' => $nights,
+                    'revenue' => round($revenue, 2),
+                    'alos' => $stays > 0 ? round($nights / $stays, 1) : 0,
+                ];
+            })
+            ->sortByDesc('revenue')
+            ->values();
+
+        $totalStays = (int) $rows->sum('stays');
+        $totalNights = (int) $rows->sum('nights');
+
+        return Inertia::render('Reports/Nationality', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'rows' => $rows,
+            'totals' => [
+                'guests' => (int) $rows->sum('guests'),
+                'stays' => $totalStays,
+                'nights' => $totalNights,
+                'revenue' => round((float) $rows->sum('revenue'), 2),
+                'alos' => $totalStays > 0 ? round($totalNights / $totalStays, 1) : 0,
+            ],
+            'currency' => $this->currency(),
+        ]);
+    }
+
+public function bookingBehavior(Request $request): Response
+{
+    [$from, $to, $days] = $this->range($request);
+
+    // Non-cancelled reservations whose check-in falls inside the selected range.
+    $reservations = Reservation::query()
+        ->whereDate('check_in_date', '>=', $from)
+        ->whereDate('check_in_date', '<=', $to)
+        ->where('status', '!=', 'cancelled')
+        ->get(['channel', 'check_in_date', 'check_out_date', 'created_at']);
+
+    // Group by channel (null/empty -> 'manual'). Diffs computed in PHP via Carbon
+    // so the query stays SQLite + MySQL safe.
+    $groups = [];
+    $totalLead = 0;
+    $totalLos = 0;
+    $totalCount = 0;
+
+    foreach ($reservations as $r) {
+        $channel = $r->channel ?: 'manual';
+
+        $createdDate = Carbon::parse($r->created_at)->startOfDay();
+        $checkInDate = Carbon::parse($r->check_in_date)->startOfDay();
+        // Lead time in days, never negative (same-day or back-dated -> 0).
+        $lead = max(0, $createdDate->diffInDays($checkInDate, false));
+
+        // Length of stay in nights.
+        $los = max(0, Carbon::parse($r->check_in_date)->startOfDay()
+            ->diffInDays(Carbon::parse($r->check_out_date)->startOfDay(), false));
+
+        if (!isset($groups[$channel])) {
+            $groups[$channel] = ['channel' => $channel, 'count' => 0, 'lead_sum' => 0, 'los_sum' => 0];
+        }
+        $groups[$channel]['count']++;
+        $groups[$channel]['lead_sum'] += $lead;
+        $groups[$channel]['los_sum'] += $los;
+
+        $totalLead += $lead;
+        $totalLos += $los;
+        $totalCount++;
+    }
+
+    $rows = collect($groups)
+        ->map(function ($g) {
+            return [
+                'channel' => $g['channel'],
+                'count' => $g['count'],
+                'avg_lead' => $g['count'] > 0 ? round($g['lead_sum'] / $g['count'], 1) : 0,
+                'avg_los' => $g['count'] > 0 ? round($g['los_sum'] / $g['count'], 1) : 0,
+            ];
+        })
+        ->sortByDesc('count')
+        ->values()
+        ->all();
+
+    $summary = [
+        'count' => $totalCount,
+        'avg_lead' => $totalCount > 0 ? round($totalLead / $totalCount, 1) : 0,
+        'avg_los' => $totalCount > 0 ? round($totalLos / $totalCount, 1) : 0,
+    ];
+
+    return Inertia::render('Reports/BookingBehavior', [
+        'filters' => ['from' => $from, 'to' => $to],
+        'rows' => $rows,
+        'summary' => $summary,
+        'currency' => $this->currency(),
+    ]);
+}
+
+    /**
+     * POS sales by hour-of-day and weekday over a date range.
+     * Cross-DB safe: we fetch completed POS orders then bucket hour/weekday in PHP via Carbon
+     * (no MySQL-only HOUR()/strftime). Hour = 0..23, weekday = ISO 1=Mon..7=Sun.
+     */
+    public function posHourly(Request $request): Response
+    {
+        [$from, $to, $days] = $this->range($request);
+
+        $orders = PosOrder::query()
+            ->where('status', 'completed')
+            ->whereDate('created_at', '>=', $from)
+            ->whereDate('created_at', '<=', $to)
+            ->get(['id', 'total_amount', 'created_at']);
+
+        // 24 hour buckets.
+        $byHour = [];
+        for ($h = 0; $h < 24; $h++) {
+            $byHour[$h] = ['hour' => $h, 'count' => 0, 'revenue' => 0.0];
+        }
+
+        // 7 weekday buckets (ISO 1=Mon .. 7=Sun).
+        $weekdayLabels = [1 => 'Hën', 2 => 'Mar', 3 => 'Mër', 4 => 'Enj', 5 => 'Pre', 6 => 'Sht', 7 => 'Die'];
+        $byWeekday = [];
+        foreach ($weekdayLabels as $iso => $label) {
+            $byWeekday[$iso] = ['weekday' => $label, 'count' => 0, 'revenue' => 0.0];
+        }
+
+        $totalRevenue = 0.0;
+        $orderCount = 0;
+
+        foreach ($orders as $o) {
+            $when = Carbon::parse($o->created_at);
+            $h = (int) $when->hour;             // 0..23
+            $iso = (int) $when->dayOfWeekIso;   // 1..7
+            $amount = (float) ($o->total_amount ?? 0);
+
+            $byHour[$h]['count']++;
+            $byHour[$h]['revenue'] += $amount;
+
+            $byWeekday[$iso]['count']++;
+            $byWeekday[$iso]['revenue'] += $amount;
+
+            $totalRevenue += $amount;
+            $orderCount++;
+        }
+
+        return Inertia::render('Reports/PosHourly', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'byHour' => array_values($byHour),
+            'byWeekday' => array_values($byWeekday),
+            'summary' => [
+                'total_revenue' => round($totalRevenue, 2),
+                'order_count' => $orderCount,
+                'days' => $days,
+            ],
+            'currency' => $this->currency(),
+        ]);
+    }
+
+    /** POS payment mix: completed POS orders grouped by payment method (cash, card, room_charge). */
+    public function posPaymentMix(Request $request): Response
+    {
+        [$from, $to] = $this->range($request);
+
+        $orders = PosOrder::where('status', 'completed')
+            ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
+            ->get(['payment_method', 'total_amount']);
+
+        $labels = [
+            'cash' => 'Kesh',
+            'card' => 'Kartë',
+            'room_charge' => 'Në dhomë (folio)',
+            '?' => 'E papërcaktuar',
+        ];
+
+        $grouped = $orders->groupBy(fn ($o) => $o->payment_method ?: '?')
+            ->map(fn ($group, $method) => [
+                'method' => $method,
+                'count' => $group->count(),
+                'total' => round((float) $group->sum('total_amount'), 2),
+            ]);
+
+        $grandTotal = round((float) $orders->sum('total_amount'), 2);
+        $orderCount = $orders->count();
+
+        // Stable ordering: cash, card, room_charge, then any leftover (e.g. '?')
+        $order = ['cash', 'card', 'room_charge', '?'];
+        $rows = collect($order)
+            ->filter(fn ($m) => $grouped->has($m))
+            ->map(fn ($m) => $grouped->get($m))
+            ->merge($grouped->reject(fn ($g, $m) => in_array($m, $order, true))->values())
+            ->map(fn ($r) => [
+                'method' => $r['method'],
+                'label' => $labels[$r['method']] ?? $r['method'],
+                'count' => $r['count'],
+                'total' => $r['total'],
+                'pct' => $grandTotal > 0 ? round($r['total'] / $grandTotal * 100, 1) : 0.0,
+            ])
+            ->values();
+
+        return Inertia::render('Reports/PosPaymentMix', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'rows' => $rows,
+            'summary' => [
+                'grand_total' => $grandTotal,
+                'order_count' => $orderCount,
+            ],
+            'currency' => $this->currency(),
+        ]);
+    }
+
+public function posVoids(Request $request): Response
+{
+    [$from, $to, $days] = $this->range($request);
+
+    $orders = PosOrder::with('createdBy')
+        ->where('status', 'cancelled')
+        ->whereDate('created_at', '>=', $from)
+        ->whereDate('created_at', '<=', $to)
+        ->orderByDesc('created_at')
+        ->get();
+
+    $rows = $orders->map(function ($o) {
+        return [
+            'id'           => $o->id,
+            'table_number' => $o->table_number,
+            'total_amount' => (float) ($o->total_amount ?? 0),
+            'created_at'   => $o->created_at ? Carbon::parse($o->created_at)->format('d/m H:i') : '—',
+            'created_by'   => $o->createdBy->name ?? '—',
+        ];
+    })->values();
+
+    $summary = [
+        'count' => $rows->count(),
+        'total' => round($orders->sum('total_amount'), 2),
+    ];
+
+    return Inertia::render('Reports/PosVoids', [
+        'filters'  => ['from' => $from, 'to' => $to],
+        'rows'     => $rows,
+        'summary'  => $summary,
+        'currency' => $this->currency(),
+    ]);
+}
+
+    /** Room status snapshot: all rooms with their type, grouped counts per status (point-in-time, no date range). */
+    public function roomStatus(Request $request): Response
+    {
+        $rooms = Room::with('roomType')
+            ->orderBy('floor')
+            ->orderBy('room_number')
+            ->get(['id', 'room_type_id', 'room_number', 'floor', 'status']);
+
+        $rows = $rooms->map(fn ($r) => [
+            'id' => $r->id,
+            'room_number' => $r->room_number,
+            'floor' => $r->floor,
+            'room_type' => $r->roomType?->name ?? '—',
+            'status' => $r->status,
+        ])->values();
+
+        $statuses = ['available', 'occupied', 'cleaning', 'maintenance'];
+        $counts = [];
+        foreach ($statuses as $s) {
+            $counts[$s] = (int) $rooms->where('status', $s)->count();
+        }
+        $counts['total'] = (int) $rooms->count();
+
+        return Inertia::render('Reports/RoomStatus', [
+            'rows' => $rows,
+            'counts' => $counts,
+            'currency' => $this->currency(),
+        ]);
+    }
+
+    /** Raporti i Pastrimit: cleaning tasks in range (by created_at) — per-staff productivity + recent task list. */
+    public function housekeepingReport(Request $request): Response
+    {
+        [$from, $to] = $this->range($request);
+
+        $tasks = CleaningTask::with(['room:id,room_number', 'assignedUser:id,name'])
+            ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
+            ->orderByDesc('created_at')
+            ->get(['id', 'room_id', 'assigned_to', 'type', 'status', 'priority', 'completed_at', 'created_at']);
+
+        $completedStatuses = ['completed', 'inspected'];
+        $pendingStatuses = ['pending', 'in_progress'];
+
+        // Per-staff productivity (group in PHP — cross-DB safe).
+        $byStaff = $tasks
+            ->groupBy(fn ($t) => $t->assignedUser?->name ?: 'Pa caktuar')
+            ->map(function ($group, $staff) use ($completedStatuses, $pendingStatuses) {
+                return [
+                    'staff' => $staff,
+                    'total' => $group->count(),
+                    'completed' => $group->whereIn('status', $completedStatuses)->count(),
+                    'pending' => $group->whereIn('status', $pendingStatuses)->count(),
+                ];
+            })
+            ->sortByDesc('total')
+            ->values();
+
+        // Recent task list (already ordered by created_at desc; cap to 50 rows).
+        $recent = $tasks->take(50)->map(fn ($t) => [
+            'id' => $t->id,
+            'room' => $t->room?->room_number ?? '—',
+            'type' => $t->type,
+            'status' => $t->status,
+            'priority' => $t->priority,
+            'assigned' => $t->assignedUser?->name ?: 'Pa caktuar',
+            'created' => $t->created_at?->toDateString(),
+        ])->values();
+
+        return Inertia::render('Reports/Housekeeping', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'byStaff' => $byStaff,
+            'recent' => $recent,
+            'summary' => [
+                'total' => $tasks->count(),
+                'completed' => $tasks->whereIn('status', $completedStatuses)->count(),
+                'pending' => $tasks->whereIn('status', $pendingStatuses)->count(),
+            ],
+            'currency' => $this->currency(),
+        ]);
+    }
+
+public function inHouse(Request $request): Response
+{
+    $reservations = Reservation::with(['room.roomType', 'guest'])
+        ->where('status', 'checked_in')
+        ->get()
+        ->sortBy(fn ($r) => $r->room?->room_number ?? '')
+        ->values();
+
+    $rows = $reservations->map(function ($r) {
+        $guest = $r->guest;
+        $name = $guest
+            ? trim(($guest->first_name ?? '') . ' ' . ($guest->last_name ?? ''))
+            : '';
+
+        return [
+            'id'         => $r->id,
+            'guest'      => $name !== '' ? $name : '—',
+            'phone'      => $guest?->phone,
+            'room'       => $r->room?->room_number,
+            'room_type'  => $r->room?->roomType?->name,
+            'check_in'   => optional($r->check_in_date)->toDateString(),
+            'check_out'  => optional($r->check_out_date)->toDateString(),
+            'nights'     => $r->nights,
+            'adults'     => (int) ($r->adults ?? 0),
+            'children'   => (int) ($r->children ?? 0),
+            'pax'        => (int) ($r->adults ?? 0) + (int) ($r->children ?? 0),
+        ];
+    })->values();
+
+    $summary = [
+        'count' => $rows->count(),
+        'pax'   => $rows->sum('pax'),
+    ];
+
+    return Inertia::render('Reports/InHouse', [
+        'rows'     => $rows,
+        'summary'  => $summary,
+        'currency' => $this->currency(),
+    ]);
+}
 
     /** from/to (default = current month) + inclusive day count. */
     private function range(Request $request): array

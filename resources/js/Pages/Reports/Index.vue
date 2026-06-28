@@ -14,7 +14,7 @@ const groups = [
         name: 'Të ardhura & Prodhim',
         reports: [
             { name: 'Pasqyra Ekzekutive', desc: 'Të ardhura dhoma+bar, mbushja, ADR, RevPAR, TVSH, komisioni — gjithçka në një faqe.', to: 'reports.executive' },
-            { name: 'ADR / RevPAR / Mbushja', desc: 'Tre treguesit mbretër me krahasim periudhe, sipas tipit të dhomës.', to: null },
+            { name: 'ADR / RevPAR / Mbushja', desc: 'Tre treguesit mbretër me krahasim periudhe, sipas tipit të dhomës.', to: 'reports.performance' },
             { name: 'Tempo & Pickup', desc: 'Sa netë/të ardhura janë rezervuar për ditët në vijim (7/14/30/60/90).', to: 'reports.pace' },
         ],
     },
@@ -29,18 +29,18 @@ const groups = [
         name: 'Klientët',
         reports: [
             { name: 'Direktoria e Mysafirëve', desc: 'Lista kryesore e çdo mysafiri me statistika gjatë jetës (CRM).', to: 'reports.guests' },
-            { name: 'Kthyes & Top sipas Vlerës', desc: 'Mysafirë që kanë qëndruar 2+ herë dhe top sipas shpenzimit.', to: null },
-            { name: 'Përbërja sipas Kombësisë', desc: 'Nga vijnë mysafirët — numra, netë, të ardhura sipas vendit.', to: null },
-            { name: 'Sjellja e Rezervimit', desc: 'Sa para rezervojnë dhe sa gjatë qëndrojnë, sipas kanalit.', to: null },
+            { name: 'Kthyes & Top sipas Vlerës', desc: 'Mysafirë që kanë qëndruar 2+ herë dhe top sipas shpenzimit.', to: 'reports.repeatGuests' },
+            { name: 'Përbërja sipas Kombësisë', desc: 'Nga vijnë mysafirët — numra, netë, të ardhura sipas vendit.', to: 'reports.nationality' },
+            { name: 'Sjellja e Rezervimit', desc: 'Sa para rezervojnë dhe sa gjatë qëndrojnë, sipas kanalit.', to: 'reports.bookingBehavior' },
         ],
     },
     {
         name: 'Bar & Restorant',
         reports: [
             { name: 'Shitjet POS sipas Kategorisë & Artikullit', desc: 'Të ardhura Bar vs Restorant dhe sipas artikullit, me numër porosish.', to: 'reports.posSales' },
-            { name: 'Shitjet sipas Orës & Ditës', desc: 'Oraret dhe ditët më të ngarkuara për F&B.', to: null },
-            { name: 'Mix i Pagesave POS', desc: 'Si u paguan shitjet — kesh, kartë, folio.', to: null },
-            { name: 'Anulime & Voids POS', desc: 'Porosi të anulluara me vlerë — kontroll humbjesh.', to: null },
+            { name: 'Shitjet sipas Orës & Ditës', desc: 'Oraret dhe ditët më të ngarkuara për F&B.', to: 'reports.posHourly' },
+            { name: 'Mix i Pagesave POS', desc: 'Si u paguan shitjet — kesh, kartë, folio.', to: 'reports.posPaymentMix' },
+            { name: 'Anulime & Voids POS', desc: 'Porosi të anulluara me vlerë — kontroll humbjesh.', to: 'reports.posVoids' },
         ],
     },
     {
@@ -48,9 +48,9 @@ const groups = [
         reports: [
             { name: 'Manifesti i Mbërritjeve', desc: 'Fletë pune e çdo mysafiri që mbërrin në një periudhë.', to: 'reports.arrivalsManifest' },
             { name: 'Manifesti i Nisjeve', desc: 'Çdo nisje me balancë të papaguar dhe porosi POS të hapura.', to: 'reports.departuresManifest' },
-            { name: 'Statusi i Dhomave', desc: 'Foto e çastit e çdo dhome dhe statusit të saj.', to: null },
-            { name: 'Raporti i Pastrimit', desc: 'Ngarkesa dhe përfundimi i pastrimit sipas stafit/dhomës.', to: null },
-            { name: 'Mysafirë në Shtëpi', desc: 'Lista e çdo mysafiri aktualisht brenda.', to: null },
+            { name: 'Statusi i Dhomave', desc: 'Foto e çastit e çdo dhome dhe statusit të saj.', to: 'reports.roomStatus' },
+            { name: 'Raporti i Pastrimit', desc: 'Ngarkesa dhe përfundimi i pastrimit sipas stafit/dhomës.', to: 'reports.housekeepingReport' },
+            { name: 'Mysafirë në Shtëpi', desc: 'Lista e çdo mysafiri aktualisht brenda.', to: 'reports.inHouse' },
         ],
     },
     {
