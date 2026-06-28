@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Models\Reservation;
 use App\Models\Room;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ReservationStoreRequest extends FormRequest
 {
@@ -24,6 +25,7 @@ class ReservationStoreRequest extends FormRequest
             'adults' => ['required', 'integer', 'min:1', 'max:10'],
             'children' => ['sometimes', 'integer', 'min:0', 'max:10'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            'channel' => ['sometimes', 'nullable', Rule::in(Reservation::CHANNELS)],
         ];
     }
 

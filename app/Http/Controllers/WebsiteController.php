@@ -170,6 +170,7 @@ class WebsiteController extends Controller
                     'total_amount' => RoomPricing::total($room->roomType, $request->check_in, $request->check_out),
                     'adults' => $request->adults,
                     'notes' => $request->notes,
+                    'channel' => 'direct', // booked on villamucho.com
                     'created_by' => $creator->id,
                 ]);
             });

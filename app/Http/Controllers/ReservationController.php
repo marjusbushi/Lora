@@ -24,7 +24,7 @@ class ReservationController extends Controller
     {
         $query = Reservation::select(
             'id', 'room_id', 'guest_id', 'check_in_date', 'check_out_date',
-            'status', 'total_amount', 'adults', 'children', 'created_at'
+            'status', 'total_amount', 'adults', 'children', 'channel', 'created_at'
         )
             ->with(['room:id,room_number', 'room.roomType:id,name', 'guest:id,first_name,last_name'])
             ->orderByDesc('check_in_date');
@@ -244,6 +244,7 @@ class ReservationController extends Controller
         $data['total_amount'] = $room->roomType->base_price * $nights;
         $data['created_by'] = auth()->id();
         $data['status'] = $data['status'] ?? 'pending';
+        $data['channel'] = $data['channel'] ?? 'manual';
 
         try {
             // The FormRequest already pre-checks availability; re-check under a row lock
