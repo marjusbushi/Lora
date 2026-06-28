@@ -14,6 +14,17 @@ class Reservation extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /**
+     * Booking channels (source of a reservation). Keep in sync with the frontend
+     * resources/js/channels.js. Lowercase/dotted ids match the channel-manager
+     * vocabulary (booking.com, airbnb, …). 'manual' = entered by staff, 'direct'
+     * = booked on villamucho.com.
+     */
+    public const CHANNELS = [
+        'manual', 'direct', 'booking.com', 'expedia', 'airbnb', 'agoda',
+        'hotels.com', 'vrbo', 'trip.com', 'hostelworld', 'google', 'tripadvisor',
+    ];
+
     protected $fillable = [
         'room_id',
         'guest_id',
