@@ -30,17 +30,17 @@
         "title": "By the Sea",
         "desc": "Just a 2-minute walk from Ksamil beach"
       },
-      "restaurant": {
-        "title": "Restaurant",
-        "desc": "Mediterranean cuisine with fresh local produce"
+      "breakfast": {
+        "title": "Breakfast Included",
+        "desc": "A rich and varied Mediterranean breakfast"
       },
       "wifi": {
         "title": "Free WiFi",
         "desc": "Fast internet throughout the property"
       },
-      "parking": {
-        "title": "Parking",
-        "desc": "Free private parking for all guests"
+      "bar": {
+        "title": "Bar",
+        "desc": "Refreshing drinks and cocktails by the sea"
       }
     },
     "rooms": {

@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
-import { Waves, UtensilsCrossed, Wifi, SquareParking, Coffee } from 'lucide-vue-next';
+import { Waves, Wifi, Coffee, Wine } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { amenityIcon } from '@/Components/Website/amenities';
@@ -58,9 +58,9 @@ const heroSubtitle = computed(() => heroText('subtitle'));
 
 const features = computed(() => [
     { icon: Waves, title: t('home.features.sea.title'), desc: t('home.features.sea.desc') },
-    { icon: UtensilsCrossed, title: t('home.features.restaurant.title'), desc: t('home.features.restaurant.desc') },
+    { icon: Coffee, title: t('home.features.breakfast.title'), desc: t('home.features.breakfast.desc') },
     { icon: Wifi, title: t('home.features.wifi.title'), desc: t('home.features.wifi.desc') },
-    { icon: SquareParking, title: t('home.features.parking.title'), desc: t('home.features.parking.desc') },
+    { icon: Wine, title: t('home.features.bar.title'), desc: t('home.features.bar.desc') },
 ]);
 </script>
 

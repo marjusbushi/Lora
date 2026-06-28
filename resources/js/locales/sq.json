@@ -30,17 +30,17 @@
         "title": "Afer Detit",
         "desc": "Vetem 2 minuta ne kembe nga plazhi i Ksamilit"
       },
-      "restaurant": {
-        "title": "Restorant",
-        "desc": "Kuzhine mesdhetare me produkte lokale te fresketa"
+      "breakfast": {
+        "title": "Mengjes i Perfshire",
+        "desc": "Mengjes i pasur dhe i larmishem mesdhetar"
       },
       "wifi": {
         "title": "WiFi Falas",
         "desc": "Internet i shpejte ne te gjitha ambientet"
       },
-      "parking": {
-        "title": "Parking",
-        "desc": "Parking privat falas per te gjithe mysafiret"
+      "bar": {
+        "title": "Bar",
+        "desc": "Pije freskuese dhe kokteje perballe detit"
       }
     },
     "rooms": {
