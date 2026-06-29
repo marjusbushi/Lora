@@ -9,6 +9,17 @@ import { i18n } from './i18n';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
+// App-like, stable mobile UX: block zoom. iOS Safari ignores the viewport
+// meta's user-scalable=no, so prevent the pinch gestures + multi-touch directly.
+// (Single-finger scroll and taps are untouched; double-tap zoom is handled by
+// `touch-action: manipulation` in app.css.)
+['gesturestart', 'gesturechange', 'gestureend'].forEach((evt) =>
+    document.addEventListener(evt, (e) => e.preventDefault()),
+);
+document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) e.preventDefault();
+}, { passive: false });
+
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
     resolve: (name) =>
