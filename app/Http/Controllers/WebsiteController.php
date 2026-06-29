@@ -174,6 +174,7 @@ class WebsiteController extends Controller
             'last_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
+            'nationality' => ['nullable', 'string', 'max:3'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'adults' => ['required', 'integer', 'min:1', 'max:10'],
             'children' => ['sometimes', 'integer', 'min:0', 'max:10'],
@@ -212,6 +213,7 @@ class WebsiteController extends Controller
                         'first_name' => $request->first_name,
                         'last_name' => $request->last_name,
                         'phone' => $request->phone,
+                        'nationality' => $request->nationality,
                     ]
                 );
 
