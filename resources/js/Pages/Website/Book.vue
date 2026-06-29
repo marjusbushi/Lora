@@ -25,6 +25,7 @@ const searchForm = ref({
     check_out: '',
     room_type_id: props.preselectedType || '',
     adults: 1,
+    children: 0,
 });
 
 const guestForm = useForm({
@@ -37,13 +38,24 @@ const guestForm = useForm({
     phone: '',
     notes: '',
     adults: 1,
+    children: 0,
     website: '', // honeypot — must stay empty
 });
 
 const nights = ref(0);
 const flashError = computed(() => usePage().props.flash?.error);
 
-const typeOptions = computed(() => props.roomTypes.map(rt => ({ value: rt.id, label: `${rt.name} (${t('home.rooms.priceFrom')} €${rt.base_price}/${t('book.search.perNight')})` })));
+// Selected room type → show its "from" price nicely + size the guest dropdowns.
+const selectedType = computed(() => props.roomTypes.find(rt => String(rt.id) === String(searchForm.value.room_type_id)) || null);
+const maxOcc = computed(() => selectedType.value?.max_occupancy || 8);
+const adultsOptions = computed(() => Array.from({ length: maxOcc.value }, (_, i) => i + 1));      // 1..max
+const childrenOptions = computed(() => Array.from({ length: maxOcc.value }, (_, i) => i));         // 0..max-1
+
+// Keep the guest counts within the chosen type's capacity when it changes.
+watch(selectedType, () => {
+    if (searchForm.value.adults > maxOcc.value) searchForm.value.adults = maxOcc.value;
+    if (searchForm.value.children > maxOcc.value - 1) searchForm.value.children = Math.max(0, maxOcc.value - 1);
+});
 
 // Run the real per-room availability check for the chosen range (does NOT advance
 // the step — it shows the live free-room count under the calendar).
@@ -86,6 +98,7 @@ function selectRoom(room) {
     guestForm.check_in = searchForm.value.check_in;
     guestForm.check_out = searchForm.value.check_out;
     guestForm.adults = searchForm.value.adults;
+    guestForm.children = searchForm.value.children;
     step.value = 3;
 }
 
@@ -127,17 +140,28 @@ function goBack(toStep) {
                 <!-- Step 1: Dates -->
                 <div v-if="step === 1" class="bg-white rounded-2xl border border-neutral-100 p-6 sm:p-8">
                     <h2 class="text-h3 text-primary-900 mb-6">{{ $t('book.search.heading') }}</h2>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                    <div class="space-y-4 mb-6">
                         <div>
                             <label class="block text-label text-neutral-700 mb-1.5">{{ $t('book.search.roomType') }}</label>
                             <select v-model="searchForm.room_type_id" class="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-body-sm focus:border-ionian focus:ring-2 focus:ring-ionian/30">
                                 <option value="">{{ $t('book.search.allTypes') }}</option>
-                                <option v-for="t in roomTypes" :key="t.id" :value="t.id">{{ t.name }} ({{ $t('home.rooms.priceFrom') }} €{{ t.base_price }})</option>
+                                <option v-for="t in roomTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
                             </select>
+                            <p v-if="selectedType" class="mt-1.5 text-body-sm text-ionian font-medium">{{ $t('home.rooms.priceFrom') }} €{{ selectedType.base_price }} / {{ $t('book.search.perNight') }}</p>
                         </div>
-                        <div>
-                            <label class="block text-label text-neutral-700 mb-1.5">{{ $t('book.search.guests') }}</label>
-                            <input type="number" v-model="searchForm.adults" min="1" max="10" class="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-body-sm focus:border-ionian focus:ring-2 focus:ring-ionian/30" />
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-label text-neutral-700 mb-1.5">Të rritur</label>
+                                <select v-model.number="searchForm.adults" class="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-body-sm focus:border-ionian focus:ring-2 focus:ring-ionian/30">
+                                    <option v-for="n in adultsOptions" :key="n" :value="n">{{ n }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-label text-neutral-700 mb-1.5">Fëmijë</label>
+                                <select v-model.number="searchForm.children" class="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-body-sm focus:border-ionian focus:ring-2 focus:ring-ionian/30">
+                                    <option v-for="n in childrenOptions" :key="n" :value="n">{{ n }}</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 

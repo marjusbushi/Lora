@@ -176,11 +176,12 @@ class WebsiteController extends Controller
             'phone' => ['required', 'string', 'max:30'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'adults' => ['required', 'integer', 'min:1', 'max:10'],
+            'children' => ['sometimes', 'integer', 'min:0', 'max:10'],
         ]);
 
         $room = Room::with('roomType')->findOrFail($request->room_id);
 
-        if ($room->roomType && $request->adults > $room->roomType->max_occupancy) {
+        if ($room->roomType && ((int) $request->adults + (int) $request->children) > $room->roomType->max_occupancy) {
             return back()->with('error', "Kjo dhome lejon maksimumi {$room->roomType->max_occupancy} persona.");
         }
 
@@ -222,6 +223,7 @@ class WebsiteController extends Controller
                     'status' => 'pending',
                     'total_amount' => RoomPricing::total($room->roomType, $request->check_in, $request->check_out),
                     'adults' => $request->adults,
+                    'children' => (int) $request->children,
                     'notes' => $request->notes,
                     'channel' => 'direct', // booked on villamucho.com
                     'created_by' => $creator->id,
