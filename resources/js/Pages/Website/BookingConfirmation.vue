@@ -25,7 +25,7 @@ const { t } = useI18n();
                         <span class="text-body-sm text-neutral-500">{{ $t('confirmation.labels.reference') }}</span>
                         <span class="text-body-sm text-primary-900 font-medium">{{ reservation.reference }}</span>
                     </div>
-                    <div class="flex justify-between">
+                    <div v-if="reservation.guest_name" class="flex justify-between">
                         <span class="text-body-sm text-neutral-500">{{ $t('confirmation.labels.guest') }}</span>
                         <span class="text-body-sm text-primary-900">{{ reservation.guest_name }}</span>
                     </div>
