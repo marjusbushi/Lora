@@ -106,6 +106,59 @@ class WebsiteController extends Controller
         ]);
     }
 
+    /**
+     * Per-day free-room count for the availability calendar on /book.
+     * free(day) = bookable rooms (of the type, excl. maintenance) minus the
+     * distinct rooms with a non-cancelled reservation covering that night.
+     */
+    public function availability(Request $request)
+    {
+        $request->validate([
+            'room_type_id' => ['nullable', 'exists:room_types,id'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+        ]);
+
+        $today = now()->startOfDay();
+        $from = $request->filled('from') ? now()->parse($request->from)->startOfDay() : $today->copy();
+        if ($from->lt($today)) {
+            $from = $today->copy();
+        }
+        $to = $request->filled('to') ? now()->parse($request->to)->startOfDay() : $from->copy()->addDays(60);
+        // Clamp the window so one request can't scan an unbounded range.
+        if ($to->lt($from)) {
+            $to = $from->copy();
+        }
+        if ($to->gt($from->copy()->addDays(120))) {
+            $to = $from->copy()->addDays(120);
+        }
+
+        $roomQuery = Room::where('status', '!=', 'maintenance');
+        if ($request->filled('room_type_id')) {
+            $roomQuery->where('room_type_id', $request->room_type_id);
+        }
+        $roomIds = $roomQuery->pluck('id');
+        $total = $roomIds->count();
+
+        // Exclude cancelled AND checked_out — must match Reservation::isRoomAvailable
+        // (the real booking engine) so the calendar never disagrees with /book/check.
+        $reservations = Reservation::whereIn('room_id', $roomIds)
+            ->whereNotIn('status', ['cancelled', 'checked_out'])
+            ->where('check_in_date', '<=', $to->toDateString())
+            ->where('check_out_date', '>', $from->toDateString())
+            ->get(['room_id', 'check_in_date', 'check_out_date']);
+
+        $days = [];
+        for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
+            $occupied = $reservations
+                ->filter(fn ($r) => $d->betweenIncluded($r->check_in_date, $r->check_out_date->copy()->subDay()))
+                ->pluck('room_id')->unique()->count();
+            $days[$d->toDateString()] = max(0, $total - $occupied);
+        }
+
+        return response()->json(['total' => $total, 'days' => $days]);
+    }
+
     public function submitBooking(Request $request): RedirectResponse
     {
         // Honeypot — bots fill this hidden field; real visitors never do.

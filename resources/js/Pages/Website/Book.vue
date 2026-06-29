@@ -1,10 +1,10 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Head, useForm, router, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 import { CalendarX2 } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
-import DatePicker from '@/Components/UI/DatePicker.vue';
+import AvailabilityCalendar from '@/Components/Website/AvailabilityCalendar.vue';
 
 const { t } = useI18n();
 
@@ -18,6 +18,7 @@ const step = ref(1);
 const availableRooms = ref([]);
 const selectedRoom = ref(null);
 const loading = ref(false);
+const searched = ref(false);
 
 const searchForm = ref({
     check_in: '',
@@ -44,8 +45,12 @@ const flashError = computed(() => usePage().props.flash?.error);
 
 const typeOptions = computed(() => props.roomTypes.map(rt => ({ value: rt.id, label: `${rt.name} (${t('home.rooms.priceFrom')} €${rt.base_price}/${t('book.search.perNight')})` })));
 
-async function checkAvailability() {
+// Run the real per-room availability check for the chosen range (does NOT advance
+// the step — it shows the live free-room count under the calendar).
+async function runCheck() {
+    if (!searchForm.value.check_in || !searchForm.value.check_out) return;
     loading.value = true;
+    searched.value = false;
     try {
         const response = await axios.post('/book/check', {
             check_in: searchForm.value.check_in,
@@ -54,12 +59,26 @@ async function checkAvailability() {
         });
         availableRooms.value = response.data.rooms;
         nights.value = response.data.nights;
-        step.value = 2;
+        searched.value = true;
     } catch (e) {
         alert(e.response?.data?.message || t('book.search.checkError'));
     }
     loading.value = false;
 }
+
+function proceed() {
+    if (availableRooms.value.length) step.value = 2;
+}
+
+// Re-check whenever the range or room type changes; reset prior results.
+watch(
+    () => [searchForm.value.check_in, searchForm.value.check_out, searchForm.value.room_type_id],
+    () => {
+        searched.value = false;
+        availableRooms.value = [];
+        if (searchForm.value.check_in && searchForm.value.check_out) runCheck();
+    }
+);
 
 function selectRoom(room) {
     selectedRoom.value = room;
@@ -108,15 +127,7 @@ function goBack(toStep) {
                 <!-- Step 1: Dates -->
                 <div v-if="step === 1" class="bg-white rounded-2xl border border-neutral-100 p-6 sm:p-8">
                     <h2 class="text-h3 text-primary-900 mb-6">{{ $t('book.search.heading') }}</h2>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-label text-neutral-700 mb-1.5">{{ $t('book.search.checkIn') }}</label>
-                            <DatePicker v-model="searchForm.check_in" :min="new Date().toISOString().split('T')[0]" />
-                        </div>
-                        <div>
-                            <label class="block text-label text-neutral-700 mb-1.5">{{ $t('book.search.checkOut') }}</label>
-                            <DatePicker v-model="searchForm.check_out" :min="searchForm.check_in || new Date().toISOString().split('T')[0]" />
-                        </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                         <div>
                             <label class="block text-label text-neutral-700 mb-1.5">{{ $t('book.search.roomType') }}</label>
                             <select v-model="searchForm.room_type_id" class="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-body-sm focus:border-ionian focus:ring-2 focus:ring-ionian/30">
@@ -129,12 +140,32 @@ function goBack(toStep) {
                             <input type="number" v-model="searchForm.adults" min="1" max="10" class="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-body-sm focus:border-ionian focus:ring-2 focus:ring-ionian/30" />
                         </div>
                     </div>
+
+                    <!-- Availability calendar: pick check-in → check-out, see which days are free -->
+                    <AvailabilityCalendar
+                        v-model:checkIn="searchForm.check_in"
+                        v-model:checkOut="searchForm.check_out"
+                        :room-type-id="searchForm.room_type_id"
+                    />
+
+                    <!-- Selected range + live free-room count -->
+                    <div v-if="searchForm.check_in" class="mt-5 text-body-sm text-neutral-600">
+                        <span class="font-medium text-primary-900">{{ searchForm.check_in }}</span>
+                        <span v-if="searchForm.check_out"> → <span class="font-medium text-primary-900">{{ searchForm.check_out }}</span></span>
+                        <span v-else class="text-neutral-400"> — zgjidh datën e daljes</span>
+                    </div>
+                    <div v-if="searchForm.check_in && searchForm.check_out" class="mt-2 text-body-sm">
+                        <span v-if="loading" class="text-neutral-500">Duke kontrolluar disponueshmërinë…</span>
+                        <span v-else-if="searched && availableRooms.length" class="text-success-700 font-medium">✓ {{ availableRooms.length }} dhoma të lira për {{ nights }} net</span>
+                        <span v-else-if="searched" class="text-error-600 font-medium">✗ Asnjë dhomë e lirë për këto data — provo data të tjera</span>
+                    </div>
+
                     <button
-                        :disabled="!searchForm.check_in || !searchForm.check_out || loading"
+                        :disabled="!searched || !availableRooms.length || loading"
                         class="btn-reserve w-full mt-6"
-                        @click="checkAvailability"
+                        @click="proceed"
                     >
-                        {{ loading ? $t('book.search.checking') : $t('book.search.checkButton') }}
+                        {{ loading ? $t('book.search.checking') : (searched && availableRooms.length ? `Vazhdo te dhomat (${availableRooms.length}) →` : $t('book.search.checkButton')) }}
                     </button>
                 </div>
 

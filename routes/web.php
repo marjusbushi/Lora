@@ -30,6 +30,7 @@ Route::get('/', function (Request $request) {
 Route::get('/rooms', [WebsiteController::class, 'rooms'])->name('website.rooms');
 Route::get('/book', [WebsiteController::class, 'bookingForm'])->name('website.book');
 Route::post('/book/check', [WebsiteController::class, 'checkAvailability'])->middleware('throttle:30,1')->name('website.book.check');
+Route::get('/book/availability', [WebsiteController::class, 'availability'])->middleware('throttle:60,1')->name('website.book.availability');
 Route::post('/book', [WebsiteController::class, 'submitBooking'])->middleware('throttle:10,1')->name('website.book.submit');
 Route::get('/book/confirmation/{token}', [WebsiteController::class, 'bookingConfirmation'])->name('website.booking.confirmation');
 Route::get('/about', [WebsiteController::class, 'about'])->name('website.about');
