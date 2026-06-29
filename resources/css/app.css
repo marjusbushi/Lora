@@ -8,6 +8,8 @@
     body {
         @apply font-sans text-neutral-800 bg-neutral-50 antialiased;
         font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+        /* Kill double-tap zoom (keeps scroll + normal taps) — app-like on mobile. */
+        touch-action: manipulation;
     }
 
     h1 { @apply text-h1 text-primary-900; }
