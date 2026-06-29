@@ -128,6 +128,8 @@
       "emailPlaceholder": "email{'@'}example.com",
       "phone": "Phone *",
       "phonePlaceholder": "+355 69...",
+      "nationality": "Nationality",
+      "nationalityPlaceholder": "Select country...",
       "specialRequests": "Special requests",
       "notesPlaceholder": "Additional notes...",
       "submitting": "Sending...",

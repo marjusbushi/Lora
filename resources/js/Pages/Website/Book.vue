@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { CalendarX2 } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import AvailabilityCalendar from '@/Components/Website/AvailabilityCalendar.vue';
+import { countryOptions } from '@/countries';
 
 const { t } = useI18n();
 
@@ -36,6 +37,7 @@ const guestForm = useForm({
     last_name: '',
     email: '',
     phone: '',
+    nationality: '',
     notes: '',
     adults: 1,
     children: 0,
@@ -276,6 +278,14 @@ watch(step, () => {
                                 <label class="block text-label text-neutral-700 mb-1.5">{{ $t('book.guest.phone') }}</label>
                                 <input v-model="guestForm.phone" type="tel" :placeholder="$t('book.guest.phonePlaceholder')" class="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-body-sm focus:border-ionian focus:ring-2 focus:ring-ionian/30" />
                                 <p v-if="guestForm.errors.phone" class="text-small text-error-600 mt-1">{{ guestForm.errors.phone }}</p>
+                            </div>
+                            <div>
+                                <label class="block text-label text-neutral-700 mb-1.5">{{ $t('book.guest.nationality') }}</label>
+                                <select v-model="guestForm.nationality" class="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-body-sm bg-white focus:border-ionian focus:ring-2 focus:ring-ionian/30">
+                                    <option value="">{{ $t('book.guest.nationalityPlaceholder') }}</option>
+                                    <option v-for="c in countryOptions" :key="c.value" :value="c.value">{{ c.label }}</option>
+                                </select>
+                                <p v-if="guestForm.errors.nationality" class="text-small text-error-600 mt-1">{{ guestForm.errors.nationality }}</p>
                             </div>
                         </div>
                         <div>
