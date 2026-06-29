@@ -237,7 +237,10 @@ class WebsiteController extends Controller
             return back()->with('error', 'Kjo dhome nuk eshte me e disponueshme per keto data.');
         }
 
-        return redirect()->route('website.booking.confirmation', $reservation->confirmation_token);
+        // Flash the name the booker just typed so the confirmation can greet THEM
+        // without reading the stored guest's name (which may belong to someone else).
+        return redirect()->route('website.booking.confirmation', $reservation->confirmation_token)
+            ->with('book_guest_name', trim("{$request->first_name} {$request->last_name}"));
     }
 
     public function bookingConfirmation(string $token): Response
@@ -252,7 +255,10 @@ class WebsiteController extends Controller
         return Inertia::render('Website/BookingConfirmation', [
             'reservation' => [
                 'reference' => strtoupper(substr($reservation->confirmation_token, 0, 8)),
-                'guest_name' => $reservation->guest?->full_name,
+                // The booker's submitted name (flashed) — NOT the stored guest's name,
+                // which could belong to a different person if the email already existed.
+                // Null on a later refresh (flash gone) -> the confirmation hides the row.
+                'guest_name' => session('book_guest_name'),
                 'room_number' => $reservation->room?->room_number,
                 'room_type' => $reservation->room?->roomType?->name,
                 'check_in_date' => $reservation->check_in_date?->toDateString(),
