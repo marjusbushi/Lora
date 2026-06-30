@@ -16,11 +16,60 @@ const props = defineProps({
     nextMonth: { type: String, default: '' },
     settings: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
+    aiConfigured: { type: Boolean, default: false },
 });
 
 const toasts = ref(null);
 const typeId = ref(props.selectedTypeId);
 const selected = ref(null);
+
+// ── AI Pricing Assistant ──
+const aiEvents = ref([]);
+const aiEventInput = ref('');
+const aiLoading = ref(false);
+const aiPlan = ref(null);      // { summary, recommendations: [...] }
+const aiError = ref('');
+const applied = ref({});       // index -> true once a recommendation is applied
+
+function addEvent() {
+    const v = aiEventInput.value.trim();
+    if (v) { aiEvents.value.push(v); aiEventInput.value = ''; }
+}
+function removeEvent(i) { aiEvents.value.splice(i, 1); }
+
+async function generatePlan() {
+    aiLoading.value = true; aiError.value = ''; aiPlan.value = null; applied.value = {};
+    try {
+        const { data } = await axios.post(route('pricing.smart.ai-plan'), { month: props.month, events: aiEvents.value });
+        aiPlan.value = data;
+    } catch (e) {
+        aiError.value = e.response?.data?.error || 'Asistenti AI s\'u përgjigj. Provoni përsëri.';
+    }
+    aiLoading.value = false;
+}
+
+function applyRec(rec, i) {
+    router.post(route('pricing.smart.apply-plan'), { date_from: rec.date_from, date_to: rec.date_to, prices: rec.prices }, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => { applied.value = { ...applied.value, [i]: true }; toasts.value?.success(`U aplikua: ${rec.label}.`); },
+        onError: () => toasts.value?.error('Diçka shkoi keq.'),
+    });
+}
+function applyAll() {
+    (aiPlan.value?.recommendations || []).forEach((rec, i) => { if (rec.action !== 'hold') applyRec(rec, i); });
+}
+
+const actionTone = {
+    raise: 'bg-success-50 text-success-700',
+    lower: 'bg-info-50 text-info-700',
+    hold: 'bg-neutral-100 text-neutral-500',
+};
+const recBorder = { raise: 'border-l-success-500', lower: 'border-l-info-500', hold: 'border-l-neutral-300' };
+function fmtRange(a, b) {
+    const f = (d) => new Date(d + 'T00:00:00').toLocaleDateString('sq-AL', { day: '2-digit', month: 'short' });
+    return a === b ? f(a) : `${f(a)} – ${f(b)}`;
+}
 
 const dows = ['Hë', 'Ma', 'Më', 'En', 'Pr', 'Sh', 'Di'];
 const whyText = {
@@ -82,11 +131,66 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
             </template>
         </PageHeader>
 
+        <!-- AI Pricing Assistant -->
         <Card class="mt-6">
-            <p class="text-body-sm text-neutral-600">
-                Mbushja e dhomave → çmimi i sugjeruar. <b>Zgjedh tipin e dhomës</b>, pastaj <b>kliko një ditë me ngjyrë</b>
-                për ta aplikuar. Vetëm ditët që duhen janë me ngjyrë — asgjë s'ndryshon vetë.
-            </p>
+            <div class="flex items-center gap-2.5 mb-3">
+                <span class="grid place-items-center w-9 h-9 rounded-xl text-white text-lg shrink-0" style="background:linear-gradient(135deg,#16734e,#0f766e)">✦</span>
+                <div>
+                    <h2 class="text-h4 text-primary-900 leading-tight">Asistent Çmimesh me AI</h2>
+                    <p class="text-tiny text-neutral-500">Lexon historikun tënd + eventet që di ti, dhe sugjeron çmimet me arsyetim.</p>
+                </div>
+            </div>
+
+            <div v-if="!aiConfigured" class="p-3 rounded-lg bg-warning-50 border border-warning-200 text-body-sm text-warning-800">
+                Asistenti AI s'është aktivizuar ende. Shto çelësin Anthropic te <b>Settings</b> që të punojë.
+            </div>
+
+            <template v-else>
+                <label class="block text-label text-neutral-600 mb-1.5">Evente që di ti (festa, festivale) — opsionale</label>
+                <div class="flex flex-wrap items-center gap-2 mb-3">
+                    <span v-for="(e, i) in aiEvents" :key="i" class="inline-flex items-center gap-1.5 bg-success-50 text-success-700 border border-success-100 text-small font-medium px-2.5 py-1 rounded-full">
+                        {{ e }} <button class="opacity-50 hover:opacity-100" @click="removeEvent(i)">✕</button>
+                    </span>
+                    <input v-model="aiEventInput" type="text" placeholder="p.sh. 15 Gush · Festa e Sarandës" class="rounded-lg border border-neutral-200 px-3 py-1.5 text-body-sm min-w-[220px] focus:border-ionian focus:ring-2 focus:ring-ionian/30" @keyup.enter="addEvent" />
+                    <Button size="sm" variant="outline" @click="addEvent">+ Shto</Button>
+                </div>
+                <Button variant="primary" :loading="aiLoading" @click="generatePlan">✦ Gjenero planin për {{ monthLabel }}</Button>
+
+                <p v-if="aiError" class="mt-3 text-body-sm text-error-600">{{ aiError }}</p>
+
+                <div v-if="aiPlan" class="mt-5">
+                    <p v-if="aiPlan.summary" class="text-body-sm text-neutral-700 mb-3"><span class="font-semibold text-primary-900">AI:</span> {{ aiPlan.summary }}</p>
+
+                    <div v-for="(rec, i) in aiPlan.recommendations" :key="i" :class="['border border-neutral-200 border-l-4 rounded-xl p-4 mb-3 bg-white', recBorder[rec.action] || 'border-l-neutral-300']">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="text-body-sm font-bold text-primary-900 capitalize">{{ fmtRange(rec.date_from, rec.date_to) }} · {{ rec.label }}</div>
+                            <span :class="['text-tiny font-bold px-2 py-0.5 rounded-lg whitespace-nowrap', actionTone[rec.action] || 'bg-neutral-100 text-neutral-500']">
+                                {{ rec.action === 'raise' ? '↑ Ngri' : rec.action === 'lower' ? '↓ Ul' : 'Mbaj' }}<span v-if="rec.adjustment_pct"> {{ rec.adjustment_pct > 0 ? '+' : '' }}{{ rec.adjustment_pct }}%</span>
+                            </span>
+                        </div>
+                        <div class="flex flex-wrap gap-x-5 gap-y-1 my-2.5">
+                            <span v-for="(p, j) in rec.prices" :key="j" class="text-body-sm text-neutral-700">
+                                {{ p.room_type_name }}
+                                <span v-if="p.current" class="text-neutral-400 line-through ml-1">{{ currency }}{{ p.current }}</span>
+                                <span class="font-bold text-primary-900 ml-1">{{ currency }}{{ p.suggested }}</span>
+                            </span>
+                        </div>
+                        <div class="flex gap-2 text-body-sm text-neutral-600 bg-neutral-50 border border-neutral-100 rounded-lg p-2.5">
+                            <span class="shrink-0">💡</span><span>{{ rec.reason }}<template v-if="rec.projected_extra"> <b class="text-success-700">{{ rec.projected_extra }}</b></template></span>
+                        </div>
+                        <div class="flex justify-end mt-3">
+                            <Button v-if="rec.action !== 'hold'" size="sm" :variant="applied[i] ? 'ghost' : 'primary'" :disabled="!!applied[i]" @click="applyRec(rec, i)">
+                                {{ applied[i] ? '✓ U aplikua' : 'Apliko' }}
+                            </Button>
+                            <span v-else class="text-tiny text-neutral-400 self-center">s'ka ndryshim</span>
+                        </div>
+                    </div>
+
+                    <div v-if="aiPlan.recommendations && aiPlan.recommendations.some(r => r.action !== 'hold')" class="flex justify-end">
+                        <Button variant="outline" @click="applyAll">Apliko të gjitha</Button>
+                    </div>
+                </div>
+            </template>
         </Card>
 
         <div class="mt-6">

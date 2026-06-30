@@ -56,4 +56,12 @@ return [
         'webhook_secret' => env('CHANNEX_WEBHOOK_SECRET'),
     ],
 
+    // Anthropic (Claude) — powers the AI Pricing Assistant. The key may be set in the UI
+    // (Setting 'ai.anthropic_key') or via env; AnthropicClient prefers the Setting.
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+        'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com/v1'),
+    ],
+
 ];

@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\RateOverride;
 use App\Models\RoomType;
 use App\Models\Setting;
+use App\Services\AiPricing;
 use App\Services\SmartPricing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ class SmartPricingController extends Controller
             'roomTypes' => $types->map(fn ($t) => ['id' => $t->id, 'name' => $t->name])->values(),
             'settings' => SmartPricing::settings(),
             'currency' => Setting::get('financial.default_currency_symbol', '€'),
+            'aiConfigured' => AiPricing::configured(),
         ];
 
         if ($types->isEmpty()) {
@@ -98,5 +100,72 @@ class SmartPricingController extends Controller
         PushRoomTypeAri::dispatch((int) $data['room_type_id']);
 
         return back()->with('success', 'Çmimi u rikthye te tarifa normale.');
+    }
+
+    /** AI Pricing Assistant: generate a reasoned plan for a month (returns JSON). */
+    public function aiPlan(Request $request)
+    {
+        if (!AiPricing::configured()) {
+            return response()->json(['error' => 'Asistenti AI nuk është konfiguruar. Shto çelësin Anthropic te Settings.'], 422);
+        }
+
+        $data = $request->validate([
+            'month' => ['required', 'date'],
+            'events' => ['array', 'max:20'],
+            'events.*' => ['string', 'max:200'],
+        ]);
+
+        $from = Carbon::parse($data['month'])->startOfMonth();
+        $to = $from->copy()->endOfMonth();
+
+        try {
+            $plan = AiPricing::plan($from, $to, $data['events'] ?? []);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['error' => "Asistenti AI s'u përgjigj. Provoni përsëri."], 502);
+        }
+
+        return response()->json($plan);
+    }
+
+    /** Apply one AI recommendation: write the suggested price for each date in the range × each room type. */
+    public function applyPlan(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'date_from' => ['required', 'date'],
+            'date_to' => ['required', 'date', 'after_or_equal:date_from'],
+            'prices' => ['required', 'array', 'min:1'],
+            'prices.*.room_type_id' => ['required', 'exists:room_types,id'],
+            'prices.*.suggested' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
+        ]);
+
+        $from = Carbon::parse($data['date_from'])->startOfDay();
+        $to = Carbon::parse($data['date_to'])->startOfDay();
+        if ($to->diffInDays($from) > 62) {
+            return back()->with('error', 'Intervali është shumë i gjatë.');
+        }
+
+        $typeIds = [];
+        for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
+            foreach ($data['prices'] as $p) {
+                $override = RateOverride::whereDate('date', $d->toDateString())
+                    ->where('room_type_id', $p['room_type_id'])->first()
+                    ?? new RateOverride(['date' => $d->toDateString(), 'room_type_id' => $p['room_type_id']]);
+                $override->price = $p['suggested'];
+                $override->created_by = auth()->id();
+                $override->save();
+                $typeIds[$p['room_type_id']] = true;
+            }
+        }
+
+        AuditLog::record('pricing.ai_apply', null, [
+            'from' => $data['date_from'], 'to' => $data['date_to'], 'types' => array_keys($typeIds),
+        ]);
+        foreach (array_keys($typeIds) as $tid) {
+            PushRoomTypeAri::dispatch((int) $tid);
+        }
+
+        return back()->with('success', 'Plani u aplikua për këto data.');
     }
 }
