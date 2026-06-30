@@ -41,6 +41,7 @@ class Reservation extends Model
         'channel_ref',
         'booking_group_id',
         'commission_amount',
+        'payment_collect',
         'no_show_at',
         'no_show_by',
         'eta',

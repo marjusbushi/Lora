@@ -319,4 +319,38 @@ class ChannexBookingImportTest extends TestCase
         $this->assertSame(1, Reservation::where('status', 'confirmed')->count());
         $this->assertSame($roomId, Reservation::where('status', 'confirmed')->first()->room_id);
     }
+
+    public function test_prepaid_ota_booking_records_a_payment_covering_the_room(): void
+    {
+        $this->studio();
+        app(ChannexBookingImporter::class)->importRevision($this->revision(['payment_collect' => 'ota']));
+
+        $res = Reservation::first();
+        $this->assertSame('ota', $res->payment_collect);
+        $payment = $res->payments()->where('method', 'ota')->first();
+        $this->assertNotNull($payment);
+        $this->assertEquals(200.0, (float) $payment->amount); // = the room amount
+        // folio: paid == room charge -> outstanding for the room is 0 (guest not double-charged)
+        $this->assertEquals((float) $res->total_amount, (float) $res->payments()->sum('amount'));
+    }
+
+    public function test_pay_at_property_booking_records_no_prepayment(): void
+    {
+        $this->studio();
+        app(ChannexBookingImporter::class)->importRevision($this->revision(['payment_collect' => 'property']));
+
+        $res = Reservation::first();
+        $this->assertSame('property', $res->payment_collect);
+        $this->assertSame(0, $res->payments()->count()); // guest pays at the hotel
+    }
+
+    public function test_ota_prepayment_is_idempotent_on_reimport(): void
+    {
+        $this->studio();
+        $importer = app(ChannexBookingImporter::class);
+        $importer->importRevision($this->revision(['payment_collect' => 'ota']));
+        $importer->importRevision($this->revision(['payment_collect' => 'ota', 'status' => 'modified']));
+
+        $this->assertSame(1, Reservation::first()->payments()->where('method', 'ota')->count()); // not duplicated
+    }
 }

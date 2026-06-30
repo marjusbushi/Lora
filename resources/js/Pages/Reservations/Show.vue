@@ -202,6 +202,15 @@ function settleAndCheckout(method) {
                             <span v-if="reservation.channel_ref" class="ml-2 text-tiny text-neutral-400">#{{ reservation.channel_ref }}</span>
                         </dd>
                     </div>
+                    <div v-if="reservation.payment_collect" class="flex justify-between items-center">
+                        <dt class="text-body-sm text-neutral-500">Pagesa</dt>
+                        <dd class="text-body-sm text-right">
+                            <Badge v-if="reservation.payment_collect === 'ota'" variant="success">
+                                ✓ Paguar online ({{ channelMeta(reservation.channel).label }})
+                            </Badge>
+                            <Badge v-else variant="warning">Paguhet në hotel</Badge>
+                        </dd>
+                    </div>
                     <div v-if="reservation.notes" class="border-t border-neutral-100 pt-3">
                         <dt class="text-body-sm text-neutral-500 mb-1">Shenime</dt>
                         <dd class="text-body-sm text-neutral-700">{{ reservation.notes }}</dd>

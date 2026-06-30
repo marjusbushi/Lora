@@ -81,6 +81,7 @@ class ChannexBookingImporter
             $taken = [];
             $kept = [];
             $firstRoom = true;
+            $paymentCollect = $rev['payment_collect'] ?? null; // 'ota' = prepaid online, 'property' = pay at hotel
 
             foreach ($rooms as $room) {
                 $channexRoomTypeId = $room['room_type_id'] ?? null;
@@ -115,12 +116,27 @@ class ChannexBookingImporter
                         'adults' => max(1, min(255, (int) ($room['occupancy']['adults'] ?? 1))),
                         'children' => max(0, min(255, (int) ($room['occupancy']['children'] ?? 0))),
                         'booking_group_id' => $groupId,
+                        'payment_collect' => $paymentCollect,
                         'notes' => trim(($rev['ota_name'] ?? 'OTA')." #{$ref}".($overbooked ? ' — MBI-BOOKIM (s\'ka dhomë të lirë)' : '')),
                     ],
                 );
                 $existed ? $summary['updated']++ : $summary['created']++;
                 $firstRoom = false;
                 $kept[] = $res->id;
+
+                // Prepaid online via the OTA -> record it as a folio payment so the guest
+                // is NOT asked to pay the room again at checkout (the balance then shows
+                // only on-site extras). Idempotent: one 'ota' payment per reservation.
+                if ($paymentCollect === 'ota') {
+                    $res->payments()->updateOrCreate(
+                        ['method' => 'ota'],
+                        ['amount' => (float) ($room['amount'] ?? 0), 'type' => 'payment', 'created_by' => $creator],
+                    );
+                } else {
+                    // Not prepaid (or a prior prepaid booking changed to pay-at-hotel) ->
+                    // never leave a stale OTA prepayment that would hide the real balance.
+                    $res->payments()->where('method', 'ota')->delete();
+                }
                 $this->log($channel, $ref, $revisionId, 'booking.'.($existed ? 'modified' : 'new'), $res->id, $roomTypeId);
             }
 

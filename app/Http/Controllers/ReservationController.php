@@ -164,6 +164,7 @@ class ReservationController extends Controller
                 'notes' => $reservation->notes,
                 'channel' => $reservation->channel,
                 'channel_ref' => $reservation->channel_ref,
+                'payment_collect' => $reservation->payment_collect,
                 'guest' => [
                     'name' => $reservation->guest?->full_name,
                     'email' => $reservation->guest?->email,
