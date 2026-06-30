@@ -182,6 +182,24 @@ function isInDrag(roomId, date) {
     return date >= lo && date <= hi;
 }
 
+// Event delegation on the grid: robust across fast drags, and it naturally stops
+// at a reservation block (those cells carry no data-date), keeping the range contiguous.
+function cellFrom(e) {
+    const td = e.target.closest('td[data-date]');
+    return td ? { roomId: Number(td.dataset.room), date: td.dataset.date } : null;
+}
+function onGridDown(e) {
+    const c = cellFrom(e);
+    if (!c) return;
+    e.preventDefault(); // avoid text selection while dragging
+    startDrag(c.roomId, c.date);
+}
+function onGridOver(e) {
+    if (dragRoom.value === null) return;
+    const c = cellFrom(e);
+    if (c) extendDrag(c.roomId, c.date);
+}
+
 // Finalize the selection even if the mouse is released off the grid.
 onMounted(() => window.addEventListener('mouseup', endDrag));
 onBeforeUnmount(() => window.removeEventListener('mouseup', endDrag));
@@ -292,7 +310,7 @@ function getRoomCalendarCells(room) {
                 </thead>
 
                 <!-- Room rows -->
-                <tbody>
+                <tbody @mousedown="onGridDown" @mouseover="onGridOver">
                     <tr v-for="room in rooms" :key="room.id" class="group">
                         <!-- Room label -->
                         <td class="sticky left-0 z-10 bg-white border-b border-r border-neutral-200 px-3 py-2 group-hover:bg-neutral-50 transition-colors">
@@ -323,14 +341,13 @@ function getRoomCalendarCells(room) {
                             <!-- Empty cell — click for 1 night, or drag across days for a range -->
                             <td
                                 v-else
+                                :data-date="cell.date"
+                                :data-room="cell.roomId"
                                 class="border-b border-r border-neutral-200 p-0.5 h-12 select-none"
                                 :class="[
                                     canCreate && 'cursor-pointer hover:bg-accent-50/50',
                                     isInDrag(cell.roomId, cell.date) && 'bg-accent-100',
                                 ]"
-                                @mousedown.prevent="startDrag(cell.roomId, cell.date)"
-                                @mouseenter="extendDrag(cell.roomId, cell.date)"
-                                @mouseup="endDrag"
                             >
                             </td>
                         </template>
