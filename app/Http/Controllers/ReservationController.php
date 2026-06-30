@@ -275,6 +275,106 @@ class ReservationController extends Controller
         return back()->with('success', 'Rezervimi u krijua me sukses.');
     }
 
+    /**
+     * Multi-room booking: one guest, N rooms, one reservation per room — all
+     * sharing dates/channel and (when >1 room) a common booking_group_id so the
+     * rooms can be managed together later. The guest is referenced once (not
+     * duplicated). All-or-nothing: any unavailable/over-capacity room rolls back.
+     */
+    public function storeMulti(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'guest_id' => ['required', 'exists:guests,id'],
+            'check_in_date' => ['required', 'date', 'after_or_equal:today'],
+            'check_out_date' => ['required', 'date', 'after:check_in_date'],
+            'status' => ['sometimes', 'in:pending,confirmed'],
+            'channel' => ['sometimes', 'nullable', \Illuminate\Validation\Rule::in(Reservation::CHANNELS)],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'rooms' => ['required', 'array', 'min:1'],
+            'rooms.*.room_id' => ['required', 'exists:rooms,id'],
+            'rooms.*.adults' => ['required', 'integer', 'min:1', 'max:20'],
+            'rooms.*.children' => ['sometimes', 'integer', 'min:0', 'max:20'],
+            'rooms.*.total_amount' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        // No duplicate room within the same booking.
+        $roomIds = array_column($data['rooms'], 'room_id');
+        if (count($roomIds) !== count(array_unique($roomIds))) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'rooms' => 'Nuk mund te zgjedhesh te njejten dhome dy here ne te njejtin rezervim.',
+            ]);
+        }
+
+        $nights = now()->parse($data['check_in_date'])->diffInDays(now()->parse($data['check_out_date']));
+        $channel = $data['channel'] ?? 'manual';
+        $status = $data['status'] ?? 'pending';
+        $multi = count($data['rooms']) > 1;
+
+        try {
+            DB::transaction(function () use ($data, $nights, $channel, $status, $multi) {
+                $groupId = $multi ? (string) \Illuminate\Support\Str::uuid() : null;
+
+                foreach ($data['rooms'] as $row) {
+                    $room = Room::with('roomType')->findOrFail($row['room_id']);
+
+                    // Capacity safety net (the UI also caps this).
+                    $maxOcc = $room->roomType?->max_occupancy;
+                    $persons = (int) $row['adults'] + (int) ($row['children'] ?? 0);
+                    if ($maxOcc && $persons > $maxOcc) {
+                        throw new \RuntimeException("over_capacity:{$room->room_number}:{$maxOcc}");
+                    }
+
+                    // Row lock + re-check availability inside the transaction (no double-book).
+                    Room::where('id', $room->id)->lockForUpdate()->first();
+                    if (!Reservation::isRoomAvailable($room->id, $data['check_in_date'], $data['check_out_date'])) {
+                        throw new \RuntimeException("room_unavailable:{$room->room_number}");
+                    }
+
+                    $entered = $row['total_amount'] ?? null;
+                    $total = is_numeric($entered) && (float) $entered > 0
+                        ? round((float) $entered, 2)
+                        : $room->roomType->base_price * $nights;
+
+                    Reservation::create([
+                        'room_id' => $room->id,
+                        'guest_id' => $data['guest_id'],
+                        'created_by' => auth()->id(),
+                        'check_in_date' => $data['check_in_date'],
+                        'check_out_date' => $data['check_out_date'],
+                        'status' => $status,
+                        'total_amount' => $total,
+                        'adults' => $row['adults'],
+                        'children' => $row['children'] ?? 0,
+                        'notes' => $data['notes'] ?? null,
+                        'channel' => $channel,
+                        'commission_amount' => $this->channelCommission($channel, (float) $total),
+                        'booking_group_id' => $groupId,
+                    ]);
+                }
+            });
+        } catch (\RuntimeException $e) {
+            // Business failures come back as a 422 validation error (keyed 'rooms')
+            // so Inertia fires onError — NOT onSuccess. Returning a redirect here
+            // would look like success to the client and falsely close the modal.
+            $msg = $e->getMessage();
+            if (str_starts_with($msg, 'over_capacity:')) {
+                [, $rn, $cap] = explode(':', $msg);
+                $err = "Dhoma {$rn} lejon maksimumi {$cap} persona.";
+            } elseif (str_starts_with($msg, 'room_unavailable:')) {
+                [, $rn] = explode(':', $msg);
+                $err = "Dhoma {$rn} nuk eshte e disponueshme per keto data.";
+            } else {
+                $err = 'Rezervimi nuk u krijua.';
+            }
+            throw \Illuminate\Validation\ValidationException::withMessages(['rooms' => $err]);
+        }
+
+        $count = count($data['rooms']);
+        return back()->with('success', $count > 1
+            ? "U krijuan {$count} rezervime per kete mysafir."
+            : 'Rezervimi u krijua me sukses.');
+    }
+
     public function update(ReservationUpdateRequest $request, Reservation $reservation): RedirectResponse
     {
         $data = $request->validated();

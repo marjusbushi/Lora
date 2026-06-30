@@ -82,6 +82,7 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         Route::get('/reservations/{reservation}', [ReservationController::class, 'show'])->name('reservations.show');
         Route::post('/reservations', [ReservationController::class, 'store'])->middleware('permission:create_reservations')->name('reservations.store');
+        Route::post('/reservations/store-multi', [ReservationController::class, 'storeMulti'])->middleware('permission:create_reservations')->name('reservations.store-multi');
         Route::put('/reservations/{reservation}', [ReservationController::class, 'update'])->middleware('permission:update_reservations')->name('reservations.update');
         Route::delete('/reservations/{reservation}', [ReservationController::class, 'destroy'])->middleware('permission:delete_reservations')->name('reservations.destroy');
         Route::post('/reservations/{reservation}/check-in', [ReservationController::class, 'checkIn'])->middleware('permission:update_reservations')->name('reservations.check-in');

@@ -10,10 +10,12 @@ import DatePicker from '@/Components/UI/DatePicker.vue';
 import Button from '@/Components/UI/Button.vue';
 import { channelOptions } from '@/channels';
 import { countryOptions } from '@/countries';
+import { Plus, X } from 'lucide-vue-next';
 
 // Shared "new reservation" popup — identical on the list AND the calendar.
-// The calendar passes `prefill` (room + dates from the clicked cell); the list
-// passes none. Persons (adults + children) are capped by the room's capacity.
+// One guest + dates + channel, then one or MORE rooms (a "+ Shto dhome"). Each
+// room becomes its own reservation; when >1 they share a booking_group_id so the
+// rooms can be managed together. The guest is registered once (not duplicated).
 const props = defineProps({
     show: { type: Boolean, default: false },
     rooms: { type: Array, default: () => [] },
@@ -33,7 +35,6 @@ const guestOptions = computed(() =>
         label: `${g.first_name} ${g.last_name}${g.phone ? ' · ' + g.phone : ''}`,
     }))
 );
-
 const roomOptions = computed(() =>
     props.rooms.map((r) => ({
         value: r.id,
@@ -41,88 +42,113 @@ const roomOptions = computed(() =>
     }))
 );
 
+let roomUid = 0;
+function emptyRoom() {
+    return { uid: roomUid++, room_id: '', adults: 1, children: 0, total_amount: '' };
+}
+
 const form = useForm({
-    room_id: '',
     guest_id: '',
     check_in_date: '',
     check_out_date: '',
     status: 'confirmed',
-    adults: 1,
-    children: 0,
-    notes: '',
     channel: 'manual',
-    total_amount: '',
+    notes: '',
+    rooms: [emptyRoom()],
 });
 
-// --- Capacity: cap adults + children by the chosen room's max_occupancy ---
-const selectedRoom = computed(() => {
-    const id = Number(form.room_id);
-    return id ? props.rooms.find((r) => Number(r.id) === id) || null : null;
-});
-const maxOccupancy = computed(() => selectedRoom.value?.room_type?.max_occupancy ?? null);
+// Per-row flag: once the user edits a price by hand, stop auto-filling it.
+let priceTouched = [false];
 
-const adultsOptions = computed(() => {
-    const cap = maxOccupancy.value || 10;
+// --- Capacity per room ---
+function roomById(id) {
+    const n = Number(id);
+    return n ? props.rooms.find((r) => Number(r.id) === n) || null : null;
+}
+function maxOccFor(id) {
+    return roomById(id)?.room_type?.max_occupancy ?? null;
+}
+function adultsOptionsFor(id) {
+    const cap = maxOccFor(id) || 10;
     return Array.from({ length: cap }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
-});
-const childrenOptions = computed(() => {
-    const cap = maxOccupancy.value || 10;
-    const remaining = Math.max(0, cap - (Number(form.adults) || 1));
+}
+function childrenOptionsFor(row) {
+    const cap = maxOccFor(row.room_id) || 10;
+    const remaining = Math.max(0, cap - (Number(row.adults) || 1));
     return Array.from({ length: remaining + 1 }, (_, i) => ({ value: i, label: String(i) }));
-});
-
-// Keep persons within capacity when the room or adults change.
-watch(
-    () => [form.room_id, form.adults],
-    () => {
-        const cap = maxOccupancy.value;
-        if (!cap) return;
-        if (Number(form.adults) > cap) form.adults = cap;
-        if (Number(form.adults) < 1) form.adults = 1;
-        if (Number(form.adults) + Number(form.children) > cap) {
-            form.children = Math.max(0, cap - Number(form.adults));
-        }
-    }
-);
+}
 
 // --- Price + channel commission (live preview; the server is authoritative) ---
-function basePriceOf(roomId) {
-    const r = props.rooms.find((x) => Number(x.id) === Number(roomId));
-    return Number(r?.room_type?.base_price) || 0;
+function basePriceOf(id) {
+    return Number(roomById(id)?.room_type?.base_price) || 0;
 }
-function nightsBetween(ci, co) {
+function nights() {
+    const ci = form.check_in_date;
+    const co = form.check_out_date;
     if (!ci || !co) return 0;
     const d = Math.round((new Date(co) - new Date(ci)) / 86400000);
     return d > 0 ? d : 0;
 }
-function suggestedPrice() {
-    return basePriceOf(form.room_id) * nightsBetween(form.check_in_date, form.check_out_date);
+function suggestedFor(id) {
+    return basePriceOf(id) * nights();
 }
 function feePct(channel) {
     return Number(props.channelFees?.[channel]) || 0;
 }
-const commission = computed(() => Math.round((Number(form.total_amount) || 0) * feePct(form.channel)) / 100);
-const net = computed(() => (Number(form.total_amount) || 0) - commission.value);
 
-// Auto-fill the price with room rate × nights, but stop overwriting once the
-// user types a custom amount (value-based: keep filling while it still matches
-// the last suggestion).
-let lastSuggest = 0;
-watch(
-    () => [form.room_id, form.check_in_date, form.check_out_date],
-    () => {
-        const s = suggestedPrice();
-        if (!form.total_amount || Number(form.total_amount) === lastSuggest) {
-            form.total_amount = s || '';
-        }
-        lastSuggest = s;
+const totalAmount = computed(() => form.rooms.reduce((s, r) => s + (Number(r.total_amount) || 0), 0));
+const commission = computed(() => Math.round(totalAmount.value * feePct(form.channel)) / 100);
+const net = computed(() => totalAmount.value - commission.value);
+
+function clampRow(i) {
+    const row = form.rooms[i];
+    const cap = maxOccFor(row.room_id);
+    if (!cap) return;
+    if (Number(row.adults) > cap) row.adults = cap;
+    if (Number(row.adults) < 1) row.adults = 1;
+    if (Number(row.adults) + Number(row.children) > cap) {
+        row.children = Math.max(0, cap - Number(row.adults));
     }
+}
+function priceRow(i) {
+    if (priceTouched[i]) return; // never clobber a manually-entered price
+    form.rooms[i].total_amount = suggestedFor(form.rooms[i].room_id) || '';
+}
+
+function onRoomChange(i, val) {
+    form.rooms[i].room_id = val;
+    clampRow(i);
+    priceTouched[i] = false; // a different room → re-suggest its price
+    priceRow(i);
+}
+function onAdultsChange(i, val) {
+    form.rooms[i].adults = val;
+    clampRow(i);
+}
+function onPriceInput(i, val) {
+    form.rooms[i].total_amount = val;
+    priceTouched[i] = true;
+}
+
+function addRoom() {
+    form.rooms.push(emptyRoom());
+    priceTouched.push(false);
+}
+function removeRoom(i) {
+    if (form.rooms.length <= 1) return;
+    form.rooms.splice(i, 1);
+    priceTouched.splice(i, 1);
+}
+
+// Recompute every row's suggested price when the (shared) dates change.
+watch(
+    () => [form.check_in_date, form.check_out_date],
+    () => form.rooms.forEach((_, i) => priceRow(i))
 );
 
 // --- Inline "new guest" (stays inside this modal) ---
 const showNewGuest = ref(false);
 const guestForm = useForm({ first_name: '', last_name: '', email: '', phone: '', nationality: '' });
-
 function saveNewGuest() {
     const existingIds = new Set(props.guests.map((g) => g.id));
     guestForm.post(route('guests.store'), {
@@ -149,29 +175,40 @@ watch(
         showNewGuest.value = false;
         guestForm.reset();
         guestForm.clearErrors();
-        lastSuggest = 0;
+        priceTouched = [false];
         if (props.prefill) {
-            form.room_id = props.prefill.room_id ?? '';
             form.check_in_date = props.prefill.check_in_date ?? '';
             form.check_out_date = props.prefill.check_out_date ?? '';
+            if (props.prefill.room_id) onRoomChange(0, props.prefill.room_id);
         }
     }
 );
 
 function submit() {
-    form.post(route('reservations.store'), {
-        onSuccess: () => {
-            emit('created');
-            emit('close');
-            form.reset();
-        },
-    });
+    form
+        .transform((d) => ({
+            ...d,
+            rooms: d.rooms.map((r) => ({
+                room_id: r.room_id,
+                adults: r.adults,
+                children: r.children,
+                total_amount: r.total_amount === '' ? null : r.total_amount,
+            })),
+        }))
+        .post(route('reservations.store-multi'), {
+            onSuccess: () => {
+                emit('created');
+                emit('close');
+                form.reset();
+            },
+        });
 }
 </script>
 
 <template>
     <Modal :show="show" title="Rezervim i ri" max-width="lg" @close="emit('close')">
         <form class="space-y-4" @submit.prevent="submit">
+            <!-- Shared: guest + dates + channel -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormGroup label="Mysafiri" :error="form.errors.guest_id" required>
                     <Select v-model="form.guest_id" :options="guestOptions" placeholder="Zgjidh mysafirin..." :error="form.errors.guest_id" />
@@ -179,8 +216,8 @@ function submit() {
                         {{ showNewGuest ? '− Mbyll' : '+ Mysafir i ri' }}
                     </button>
                 </FormGroup>
-                <FormGroup label="Dhoma" :error="form.errors.room_id" required>
-                    <Select v-model="form.room_id" :options="roomOptions" placeholder="Zgjidh dhomen..." :error="form.errors.room_id" />
+                <FormGroup label="Burimi" :error="form.errors.channel">
+                    <Select v-model="form.channel" :options="channelOptions" :error="form.errors.channel" />
                 </FormGroup>
                 <FormGroup label="Check-in" :error="form.errors.check_in_date" required>
                     <DatePicker v-model="form.check_in_date" :error="form.errors.check_in_date" />
@@ -188,23 +225,7 @@ function submit() {
                 <FormGroup label="Check-out" :error="form.errors.check_out_date" required>
                     <DatePicker v-model="form.check_out_date" :error="form.errors.check_out_date" />
                 </FormGroup>
-                <FormGroup label="Te rritur" :error="form.errors.adults">
-                    <Select v-model="form.adults" :options="adultsOptions" placeholder="" :error="form.errors.adults" />
-                </FormGroup>
-                <FormGroup label="Femije" :error="form.errors.children">
-                    <Select v-model="form.children" :options="childrenOptions" placeholder="" :error="form.errors.children" />
-                </FormGroup>
-                <FormGroup label="Burimi" :error="form.errors.channel">
-                    <Select v-model="form.channel" :options="channelOptions" :error="form.errors.channel" />
-                </FormGroup>
-                <FormGroup label="Cmimi (me fee)" :error="form.errors.total_amount">
-                    <TextInput type="number" v-model="form.total_amount" min="0" step="0.01" placeholder="0.00" :error="form.errors.total_amount" />
-                </FormGroup>
             </div>
-
-            <p v-if="maxOccupancy" class="text-small text-neutral-500 -mt-1">
-                Kapaciteti i kesaj dhome: <span class="font-medium text-neutral-700">{{ maxOccupancy }} persona</span> (te rritur + femije).
-            </p>
 
             <!-- Inline new-guest panel (stays inside this modal) -->
             <div v-if="showNewGuest" class="rounded-lg border border-accent-200 bg-accent-50/40 p-4 space-y-3">
@@ -232,10 +253,50 @@ function submit() {
                 </div>
             </div>
 
+            <!-- Rooms (one reservation each) -->
+            <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                    <p class="text-label text-neutral-700">Dhomat</p>
+                    <Button variant="outline" size="sm" type="button" @click="addRoom">
+                        <Plus class="h-4 w-4 mr-1" :stroke-width="2" /> Shto dhome
+                    </Button>
+                </div>
+
+                <div v-for="(row, i) in form.rooms" :key="row.uid" class="rounded-lg border border-neutral-200 p-3">
+                    <div class="flex items-start gap-3">
+                        <div class="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <FormGroup label="Dhoma" :error="form.errors[`rooms.${i}.room_id`]" required class="col-span-2">
+                                <Select :model-value="row.room_id" :options="roomOptions" placeholder="Zgjidh dhomen..." :error="form.errors[`rooms.${i}.room_id`]" @update:model-value="(v) => onRoomChange(i, v)" />
+                            </FormGroup>
+                            <FormGroup label="Te rritur">
+                                <Select :model-value="row.adults" :options="adultsOptionsFor(row.room_id)" placeholder="" @update:model-value="(v) => onAdultsChange(i, v)" />
+                            </FormGroup>
+                            <FormGroup label="Femije">
+                                <Select v-model="row.children" :options="childrenOptionsFor(row)" placeholder="" />
+                            </FormGroup>
+                            <FormGroup label="Cmimi (me fee)" :error="form.errors[`rooms.${i}.total_amount`]" class="col-span-2">
+                                <TextInput type="number" :model-value="row.total_amount" min="0" step="0.01" placeholder="0.00" @update:model-value="(v) => onPriceInput(i, v)" />
+                            </FormGroup>
+                            <p v-if="maxOccFor(row.room_id)" class="col-span-2 self-end pb-2 text-tiny text-neutral-500">
+                                Kapaciteti: {{ maxOccFor(row.room_id) }} persona
+                            </p>
+                        </div>
+                        <button v-if="form.rooms.length > 1" type="button" class="mt-7 text-neutral-400 hover:text-error-600" title="Hiq dhomen" @click="removeRoom(i)">
+                            <X class="h-4 w-4" :stroke-width="2" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <p v-if="form.errors.rooms" class="text-small text-error-600 -mt-1">{{ form.errors.rooms }}</p>
+
+            <!-- Totals -->
             <div class="rounded-lg bg-neutral-50 border border-neutral-100 px-4 py-2.5 flex items-center gap-x-6 gap-y-1 flex-wrap text-body-sm">
+                <span class="text-neutral-500">Total: <span class="text-neutral-900 font-medium">€{{ totalAmount.toFixed(2) }}</span></span>
                 <span class="text-neutral-500">Komisioni <span class="text-neutral-400">{{ feePct(form.channel) }}%</span>: <span class="text-neutral-900 font-medium">€{{ commission.toFixed(2) }}</span></span>
                 <span class="text-neutral-500">Neto: <span class="text-accent-700 font-semibold">€{{ net.toFixed(2) }}</span></span>
             </div>
+
             <FormGroup label="Shenime">
                 <Textarea v-model="form.notes" placeholder="Kerkesa speciale..." :rows="2" />
             </FormGroup>

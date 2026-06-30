@@ -39,6 +39,7 @@ class Reservation extends Model
         'notes',
         'channel',
         'channel_ref',
+        'booking_group_id',
         'commission_amount',
         'no_show_at',
         'no_show_by',
