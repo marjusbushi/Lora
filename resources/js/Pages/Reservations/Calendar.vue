@@ -1,16 +1,12 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { router, useForm, usePage } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import Modal from '@/Components/UI/Modal.vue';
-import TextInput from '@/Components/UI/TextInput.vue';
-import DatePicker from '@/Components/UI/DatePicker.vue';
-import Select from '@/Components/UI/Select.vue';
-import Textarea from '@/Components/UI/Textarea.vue';
-import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
+import ReservationCreateModal from '@/Components/Reservations/ReservationCreateModal.vue';
 import { Link } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -19,6 +15,7 @@ const props = defineProps({
     guests: Array,
     startDate: String,
     endDate: String,
+    channelFees: { type: Object, default: () => ({}) },
 });
 
 const toasts = ref(null);
@@ -104,36 +101,24 @@ function openDetail(reservation) {
     showDetailModal.value = true;
 }
 
-// Create form
-const prefillRoom = ref('');
-const prefillDate = ref('');
-
-const guestOptions = props.guests.map(g => ({ value: g.id, label: `${g.first_name} ${g.last_name}` }));
-const roomOptions = props.rooms.map(r => ({ value: r.id, label: `${r.room_number} — ${r.room_type?.name}` }));
-
-const createForm = useForm({
-    room_id: '', guest_id: '', check_in_date: '', check_out_date: '', status: 'confirmed', adults: 1, children: 0, notes: '',
-});
+// Create form — shared popup with the list view
+const prefill = ref(null);
 
 function openCreate(roomId, date) {
     if (!canCreate) return;
-    createForm.reset();
-    createForm.room_id = roomId || '';
-    createForm.check_in_date = date || '';
-    const checkout = new Date(date);
+    const start = date || new Date().toISOString().split('T')[0];
+    const checkout = new Date(start);
     checkout.setDate(checkout.getDate() + 1);
-    createForm.check_out_date = checkout.toISOString().split('T')[0];
+    prefill.value = {
+        room_id: roomId || '',
+        check_in_date: start,
+        check_out_date: checkout.toISOString().split('T')[0],
+    };
     showCreateModal.value = true;
 }
 
-function submitCreate() {
-    createForm.post(route('reservations.store'), {
-        onSuccess: () => {
-            showCreateModal.value = false;
-            createForm.reset();
-            toasts.value?.success('Rezervimi u krijua.');
-        },
-    });
+function onReservationCreated() {
+    toasts.value?.success('Rezervimi u krijua.');
 }
 
 function doCheckIn(res) {
@@ -337,38 +322,17 @@ function getRoomCalendarCells(room) {
             </template>
         </Modal>
 
-        <!-- Create Reservation Modal -->
-        <Modal :show="showCreateModal" title="Rezervim i ri" max-width="lg" @close="showCreateModal = false">
-            <form @submit.prevent="submitCreate" class="space-y-4">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormGroup label="Mysafiri" :error="createForm.errors.guest_id" required>
-                        <Select v-model="createForm.guest_id" :options="guestOptions" placeholder="Zgjidh mysafirin..." :error="createForm.errors.guest_id" />
-                    </FormGroup>
-                    <FormGroup label="Dhoma" :error="createForm.errors.room_id" required>
-                        <Select v-model="createForm.room_id" :options="roomOptions" placeholder="Zgjidh dhomen..." :error="createForm.errors.room_id" />
-                    </FormGroup>
-                    <FormGroup label="Check-in" :error="createForm.errors.check_in_date" required>
-                        <DatePicker v-model="createForm.check_in_date" :error="createForm.errors.check_in_date" />
-                    </FormGroup>
-                    <FormGroup label="Check-out" :error="createForm.errors.check_out_date" required>
-                        <DatePicker v-model="createForm.check_out_date" :error="createForm.errors.check_out_date" />
-                    </FormGroup>
-                    <FormGroup label="Te rritur">
-                        <TextInput type="number" v-model="createForm.adults" min="1" max="10" />
-                    </FormGroup>
-                    <FormGroup label="Femije">
-                        <TextInput type="number" v-model="createForm.children" min="0" max="10" />
-                    </FormGroup>
-                </div>
-                <FormGroup label="Shenime">
-                    <Textarea v-model="createForm.notes" placeholder="Kerkesa speciale..." :rows="2" />
-                </FormGroup>
-            </form>
-            <template #footer>
-                <Button variant="outline" @click="showCreateModal = false">Anulo</Button>
-                <Button variant="primary" :loading="createForm.processing" @click="submitCreate">Krijo rezervim</Button>
-            </template>
-        </Modal>
+        <!-- Create Reservation Modal — shared with the list view -->
+        <ReservationCreateModal
+            :show="showCreateModal"
+            :rooms="rooms"
+            :guests="guests"
+            :channel-fees="channelFees"
+            :prefill="prefill"
+            @close="showCreateModal = false"
+            @created="onReservationCreated"
+            @guest-created="toasts?.success('Mysafiri u shtua.')"
+        />
 
         <ToastContainer ref="toasts" />
     </AppLayout>

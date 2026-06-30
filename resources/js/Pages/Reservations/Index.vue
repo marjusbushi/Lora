@@ -15,7 +15,7 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ActionMenu from '@/Components/UI/ActionMenu.vue';
 import { channelOptions } from '@/channels';
-import { countryOptions } from '@/countries';
+import ReservationCreateModal from '@/Components/Reservations/ReservationCreateModal.vue';
 import { Eye, Pencil, Ban } from 'lucide-vue-next';
 
 const menuItemClass = 'flex w-full items-center gap-2.5 px-3 py-2 text-left text-body-sm text-neutral-700 transition-colors hover:bg-neutral-50 no-underline';
@@ -37,7 +37,6 @@ const selectedRes = ref(null);
 const perms = usePage().props.auth.user?.permissions || [];
 const canCreate = perms.includes('create_reservations');
 const canUpdate = perms.includes('update_reservations');
-const canCreateGuest = perms.includes('create_guests');
 
 const statusBadge = {
     pending: { variant: 'warning', label: 'Ne pritje' },
@@ -82,11 +81,6 @@ function clearFilters() {
 }
 
 // Forms
-const createForm = useForm({
-    room_id: '', guest_id: '', check_in_date: '', check_out_date: '',
-    status: 'confirmed', adults: 1, children: 0, notes: '', channel: 'manual', total_amount: '',
-});
-
 const editForm = useForm({
     room_id: '', guest_id: '', check_in_date: '', check_out_date: '',
     status: '', adults: 1, children: 0, notes: '', channel: 'manual', total_amount: '',
@@ -118,15 +112,7 @@ function netOf(form) {
 // Auto-fill the price with room rate × nights, but stop overwriting once the
 // user types a custom amount (value-based: keep filling while it still matches
 // the last suggestion).
-let createLastSuggest = 0;
 let editLastSuggest = 0;
-watch(() => [createForm.room_id, createForm.check_in_date, createForm.check_out_date], () => {
-    const s = suggestedPrice(createForm);
-    if (!createForm.total_amount || Number(createForm.total_amount) === createLastSuggest) {
-        createForm.total_amount = s || '';
-    }
-    createLastSuggest = s;
-});
 watch(() => [editForm.room_id, editForm.check_in_date, editForm.check_out_date], () => {
     const s = suggestedPrice(editForm);
     if (!editForm.total_amount || Number(editForm.total_amount) === editLastSuggest) {
@@ -151,14 +137,8 @@ function openEdit(res) {
     showEditModal.value = true;
 }
 
-function submitCreate() {
-    createForm.post(route('reservations.store'), {
-        onSuccess: () => {
-            showCreateModal.value = false;
-            createForm.reset();
-            toasts.value?.success('Rezervimi u krijua.');
-        },
-    });
+function onReservationCreated() {
+    toasts.value?.success('Rezervimi u krijua.');
 }
 
 function submitEdit() {
@@ -166,28 +146,6 @@ function submitEdit() {
         onSuccess: () => {
             showEditModal.value = false;
             toasts.value?.success('Rezervimi u perditesua.');
-        },
-    });
-}
-
-// Inline "new guest" inside the create modal: create via guests.store (which
-// returns back()), keep the reservation modal open (preserveState), then
-// auto-select the freshly created guest in the reservation.
-const showNewGuest = ref(false);
-const guestForm = useForm({ first_name: '', last_name: '', email: '', phone: '', nationality: '' });
-
-function saveNewGuest() {
-    const existingIds = new Set(props.guests.map((g) => g.id));
-    guestForm.post(route('guests.store'), {
-        preserveScroll: true,
-        preserveState: true,
-        only: ['guests'],
-        onSuccess: () => {
-            const created = props.guests.find((g) => !existingIds.has(g.id));
-            if (created) createForm.guest_id = created.id;
-            guestForm.reset();
-            showNewGuest.value = false;
-            toasts.value?.success('Mysafiri u shtua.');
         },
     });
 }
@@ -340,78 +298,16 @@ function formatDate(d) {
             </Card>
         </div>
 
-        <!-- Create Modal -->
-        <Modal :show="showCreateModal" title="Rezervim i ri" max-width="lg" @close="showCreateModal = false">
-            <form @submit.prevent="submitCreate" class="space-y-4">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormGroup label="Mysafiri" :error="createForm.errors.guest_id" required>
-                        <Select v-model="createForm.guest_id" :options="guestOptions" placeholder="Zgjidh mysafirin..." :error="createForm.errors.guest_id" />
-                        <button v-if="canCreateGuest" type="button" class="mt-1.5 text-tiny text-accent-700 hover:text-accent-800" @click="showNewGuest = !showNewGuest">
-                            {{ showNewGuest ? '− Mbyll' : '+ Mysafir i ri' }}
-                        </button>
-                    </FormGroup>
-                    <FormGroup label="Dhoma" :error="createForm.errors.room_id" required>
-                        <Select v-model="createForm.room_id" :options="roomOptions" placeholder="Zgjidh dhomen..." :error="createForm.errors.room_id" />
-                    </FormGroup>
-                    <FormGroup label="Check-in" :error="createForm.errors.check_in_date" required>
-                        <DatePicker v-model="createForm.check_in_date" :error="createForm.errors.check_in_date" />
-                    </FormGroup>
-                    <FormGroup label="Check-out" :error="createForm.errors.check_out_date" required>
-                        <DatePicker v-model="createForm.check_out_date" :error="createForm.errors.check_out_date" />
-                    </FormGroup>
-                    <FormGroup label="Te rritur" :error="createForm.errors.adults">
-                        <TextInput type="number" v-model="createForm.adults" min="1" max="10" />
-                    </FormGroup>
-                    <FormGroup label="Femije" :error="createForm.errors.children">
-                        <TextInput type="number" v-model="createForm.children" min="0" max="10" />
-                    </FormGroup>
-                    <FormGroup label="Burimi" :error="createForm.errors.channel">
-                        <Select v-model="createForm.channel" :options="channelOptions" :error="createForm.errors.channel" />
-                    </FormGroup>
-                    <FormGroup label="Cmimi (me fee)" :error="createForm.errors.total_amount">
-                        <TextInput type="number" v-model="createForm.total_amount" min="0" step="0.01" placeholder="0.00" :error="createForm.errors.total_amount" />
-                    </FormGroup>
-                </div>
-
-                <!-- Inline new-guest panel (stays inside this modal) -->
-                <div v-if="showNewGuest" class="rounded-lg border border-accent-200 bg-accent-50/40 p-4 space-y-3">
-                    <p class="text-label text-neutral-700">Shto nje mysafir te ri</p>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <FormGroup label="Emri" :error="guestForm.errors.first_name" required>
-                            <TextInput v-model="guestForm.first_name" placeholder="Emri" :error="guestForm.errors.first_name" />
-                        </FormGroup>
-                        <FormGroup label="Mbiemri" :error="guestForm.errors.last_name" required>
-                            <TextInput v-model="guestForm.last_name" placeholder="Mbiemri" :error="guestForm.errors.last_name" />
-                        </FormGroup>
-                        <FormGroup label="Email" :error="guestForm.errors.email">
-                            <TextInput type="email" v-model="guestForm.email" placeholder="email (opsional)" :error="guestForm.errors.email" />
-                        </FormGroup>
-                        <FormGroup label="Telefon" :error="guestForm.errors.phone">
-                            <TextInput v-model="guestForm.phone" placeholder="+355..." :error="guestForm.errors.phone" />
-                        </FormGroup>
-                        <FormGroup label="Kombesia" :error="guestForm.errors.nationality">
-                            <Select v-model="guestForm.nationality" :options="countryOptions" placeholder="Zgjidh shtetin..." :error="guestForm.errors.nationality" />
-                        </FormGroup>
-                    </div>
-                    <div class="flex justify-end gap-2">
-                        <Button variant="outline" type="button" @click="showNewGuest = false">Anulo</Button>
-                        <Button variant="primary" type="button" :loading="guestForm.processing" @click="saveNewGuest">Ruaj mysafirin</Button>
-                    </div>
-                </div>
-
-                <div class="rounded-lg bg-neutral-50 border border-neutral-100 px-4 py-2.5 flex items-center gap-x-6 gap-y-1 flex-wrap text-body-sm">
-                    <span class="text-neutral-500">Komisioni <span class="text-neutral-400">{{ feePct(createForm.channel) }}%</span>: <span class="text-neutral-900 font-medium">€{{ commissionOf(createForm).toFixed(2) }}</span></span>
-                    <span class="text-neutral-500">Neto: <span class="text-accent-700 font-semibold">€{{ netOf(createForm).toFixed(2) }}</span></span>
-                </div>
-                <FormGroup label="Shenime">
-                    <Textarea v-model="createForm.notes" placeholder="Kerkesa speciale..." :rows="2" />
-                </FormGroup>
-            </form>
-            <template #footer>
-                <Button variant="outline" @click="showCreateModal = false">Anulo</Button>
-                <Button variant="primary" :loading="createForm.processing" @click="submitCreate">Krijo rezervim</Button>
-            </template>
-        </Modal>
+        <!-- Create Modal — shared with the calendar view -->
+        <ReservationCreateModal
+            :show="showCreateModal"
+            :rooms="rooms"
+            :guests="guests"
+            :channel-fees="channelFees"
+            @close="showCreateModal = false"
+            @created="onReservationCreated"
+            @guest-created="toasts?.success('Mysafiri u shtua.')"
+        />
 
         <!-- Edit Modal -->
         <Modal :show="showEditModal" title="Edito rezervimin" max-width="lg" @close="showEditModal = false">

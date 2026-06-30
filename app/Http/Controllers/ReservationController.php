@@ -44,7 +44,7 @@ class ReservationController extends Controller
         return Inertia::render('Reservations/Index', [
             'reservations' => $query->paginate(15),
             'rooms' => Room::select('id', 'room_number', 'room_type_id')
-                ->with('roomType:id,name,base_price')
+                ->with('roomType:id,name,base_price,max_occupancy')
                 ->orderBy('room_number')
                 ->get(),
             'guests' => Guest::select('id', 'first_name', 'last_name', 'email', 'phone')
@@ -67,7 +67,7 @@ class ReservationController extends Controller
         $endDate = now()->parse($startDate)->addDays(13)->toDateString();
 
         $rooms = Room::select('id', 'room_number', 'room_type_id', 'floor', 'status')
-            ->with('roomType:id,name,base_price')
+            ->with('roomType:id,name,base_price,max_occupancy')
             ->orderBy('floor')
             ->orderBy('room_number')
             ->get();
@@ -107,6 +107,7 @@ class ReservationController extends Controller
             'guests' => $guests,
             'startDate' => $startDate,
             'endDate' => $endDate,
+            'channelFees' => Setting::get('financial.channel_fees', []),
         ]);
     }
 
