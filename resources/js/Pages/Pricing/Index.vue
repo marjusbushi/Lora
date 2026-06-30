@@ -131,12 +131,9 @@ function fmtRange(s) {
             <!-- Price matrix -->
             <Card>
                 <template #header>
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h3 class="text-h4 text-primary-900">Cmimet sipas tipit dhe sezonit</h3>
-                            <p class="text-small text-neutral-500 mt-0.5">Bosh = perdoret cmimi bazё. Cmimi llogaritet natё-pёr-natё sipas datave.</p>
-                        </div>
-                        <Button variant="primary" :loading="savingRates" @click="saveRates">Ruaj cmimet</Button>
+                    <div>
+                        <h3 class="text-h4 text-primary-900">Cmimet sipas tipit dhe sezonit</h3>
+                        <p class="text-small text-neutral-500 mt-0.5">Bosh = perdoret cmimi bazё. Cmimi llogaritet natё-pёr-natё sipas datave.</p>
                     </div>
                 </template>
 
