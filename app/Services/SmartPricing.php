@@ -195,6 +195,8 @@ class SmartPricing
             $days[] = [
                 'date' => $dateStr,
                 'dow' => (int) $d->dayOfWeekIso, // 1=Mon .. 7=Sun
+                'is_weekend' => in_array((int) $d->dayOfWeekIso, [5, 6], true), // Fri + Sat nights = weekend
+                'holiday' => Holidays::for($d), // name or null
                 'occupancy_pct' => $occ,
                 'booked' => $booked,
                 'total' => $total,

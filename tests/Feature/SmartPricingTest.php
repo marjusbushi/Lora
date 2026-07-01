@@ -248,4 +248,17 @@ class SmartPricingTest extends TestCase
 
         $this->assertEquals(0, RateOverride::count());
     }
+
+    public function test_calendar_flags_weekends_and_holidays(): void
+    {
+        $type = $this->type(100);
+        // Aug 2026: 14=Fri, 15=Sat (Ferragosto), 17=Mon.
+        $days = collect(SmartPricing::calendar($type, \Carbon\Carbon::parse('2026-08-01'), \Carbon\Carbon::parse('2026-08-31')));
+
+        $this->assertTrue($days->firstWhere('date', '2026-08-14')['is_weekend']);            // Friday night
+        $this->assertTrue($days->firstWhere('date', '2026-08-15')['is_weekend']);            // Saturday night
+        $this->assertStringContainsString('Ferragosto', $days->firstWhere('date', '2026-08-15')['holiday']);
+        $this->assertFalse($days->firstWhere('date', '2026-08-17')['is_weekend']);           // Monday
+        $this->assertNull($days->firstWhere('date', '2026-08-17')['holiday']);
+    }
 }

@@ -106,22 +106,50 @@ function longDate(date) {
     return new Date(date + 'T00:00:00').toLocaleDateString('sq-AL', { weekday: 'long', day: '2-digit', month: 'long' });
 }
 
-const tint = {
-    peak: 'bg-error-50 border-error-200 hover:border-error-300',
-    high: 'bg-warning-50 border-warning-200 hover:border-warning-300',
-    low: 'bg-info-50 border-info-100 hover:border-info-200',
-};
-const occTone = { peak: 'text-error-700', high: 'text-warning-700', low: 'text-info-700' };
-const barTone = { peak: 'bg-error-500', high: 'bg-warning-500', low: 'bg-info-500' };
-const tagTone = { peak: 'bg-error-600', high: 'bg-warning-600', low: 'bg-info-600' };
+const manualPrice = ref('');
 
-function pick(d) { if (d.actionable) selected.value = d; }
+// date -> AI-suggested { price, label, reason } for the SELECTED room type, built from the
+// generated plan above, so the calendar can overlay the AI's price (✦) on the days it covers.
+const aiByDate = computed(() => {
+    const map = {};
+    const tid = Number(typeId.value);
+    const fmt = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    for (const rec of (aiPlan.value?.recommendations || [])) {
+        const p = (rec.prices || []).find((x) => Number(x.room_type_id) === tid);
+        if (!p || !rec.date_from || !rec.date_to) continue;
+        const [ys, ms, ds] = rec.date_from.split('-').map(Number);
+        const [ye, me, de] = rec.date_to.split('-').map(Number);
+        let cur = new Date(ys, ms - 1, ds);              // local date, no UTC drift
+        const last = new Date(ye, me - 1, de);
+        while (cur <= last) { map[fmt(cur)] = { price: p.suggested, label: rec.label, reason: rec.reason }; cur.setDate(cur.getDate() + 1); }
+    }
+    return map;
+});
 
-function apply(d) {
-    router.post(route('pricing.smart.apply'), { date: d.date, room_type_id: typeId.value, price: d.suggested_price }, {
+const selAi = computed(() => (selected.value ? aiByDate.value[selected.value.date] : null) || null);
+const selSuggested = computed(() => {
+    if (selAi.value) return selAi.value.price;               // AI plan wins
+    if (selected.value?.actionable) return selected.value.suggested_price; // else occupancy hint
+    return null;
+});
+
+function fmtPrice(v) { const n = Number(v) || 0; return n % 1 === 0 ? String(n) : n.toFixed(2); }
+function cellTone(d) {
+    if (d.holiday) return 'bg-error-50 border-error-100 hover:border-error-200';
+    if (d.is_weekend) return 'bg-warning-50 border-warning-100 hover:border-warning-200';
+    return 'bg-white border-neutral-100 hover:border-neutral-200';
+}
+
+// Any non-past day is clickable now (it's a price calendar — the owner can price any night).
+function pick(d) { if (!d.is_past) { selected.value = d; manualPrice.value = ''; } }
+
+function apply(d, price) {
+    const p = Number(price);
+    if (!p || p <= 0) { toasts.value?.error('Vendos një çmim të vlefshëm.'); return; }
+    router.post(route('pricing.smart.apply'), { date: d.date, room_type_id: typeId.value, price: p }, {
         preserveScroll: true,
-        onSuccess: () => { toasts.value?.success(`Çmimi u vendos ${props.currency}${d.suggested_price} për ${longDate(d.date)}.`); selected.value = null; },
-        onError: () => toasts.value?.error('Diçka shkoi keq. Provoni përsëri.'),
+        onSuccess: () => { toasts.value?.success(`Çmimi u vendos ${props.currency}${fmtPrice(p)} për ${longDate(d.date)}.`); selected.value = null; },
+        onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Diçka shkoi keq. Provoni përsëri.'),
     });
 }
 function remove(d) {
@@ -240,63 +268,89 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                         <span v-for="d in dows" :key="d" class="text-tiny font-bold uppercase tracking-wide text-neutral-400 text-center">{{ d }}</span>
                     </div>
 
-                    <!-- calendar grid -->
+                    <!-- calendar grid (price-first) -->
                     <div class="grid grid-cols-7 gap-2">
                         <div v-for="b in leadingBlanks" :key="'b' + b" />
                         <div
                             v-for="d in days"
                             :key="d.date"
                             :class="[
-                                'min-h-[78px] rounded-xl border p-2 relative transition',
-                                d.actionable ? [tint[d.kind], 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md'] : 'bg-white border-neutral-100',
+                                'min-h-[92px] rounded-xl border p-2 relative transition',
+                                cellTone(d),
+                                d.is_past ? 'opacity-45 pointer-events-none' : 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md',
                                 selected && selected.date === d.date ? 'ring-2 ring-ionian ring-offset-1' : '',
-                                d.is_past ? 'opacity-50' : '',
                             ]"
                             @click="pick(d)"
                         >
-                            <div class="text-body-sm font-bold text-primary-900">{{ dayNum(d) }}</div>
-                            <template v-if="!d.is_past && d.total">
-                                <div :class="['mt-1.5 text-tiny font-bold', d.kind ? occTone[d.kind] : 'text-neutral-400']">{{ d.occupancy_pct }}%</div>
-                                <div class="mt-1 h-1 rounded-full bg-neutral-100 overflow-hidden">
-                                    <i class="block h-full rounded-full" :class="d.kind ? barTone[d.kind] : 'bg-neutral-300'" :style="{ width: Math.max(d.occupancy_pct, 4) + '%' }" />
-                                </div>
-                            </template>
-                            <span v-if="d.actionable" :class="['absolute top-2 right-2 text-tiny font-extrabold text-white px-1.5 rounded', tagTone[d.kind]]">
-                                {{ d.adjustment_pct > 0 ? '↑' : '↓' }}
-                            </span>
-                            <span v-if="d.has_override" class="absolute bottom-1.5 right-2 text-tiny text-neutral-400" title="Çmim i vendosur">●</span>
+                            <div class="flex items-start justify-between">
+                                <span :class="['text-tiny font-bold', d.holiday ? 'text-error-600' : 'text-neutral-400']">{{ dayNum(d) }}</span>
+                                <span v-if="d.holiday" class="text-error-600 text-tiny leading-none" :title="d.holiday">⚑</span>
+                            </div>
+
+                            <div class="mt-1 text-h4 font-bold text-primary-900 tabular-nums leading-none">{{ currency }}{{ fmtPrice(d.current_price) }}</div>
+
+                            <div v-if="aiByDate[d.date]" class="mt-1 text-tiny font-bold text-accent-600 tabular-nums leading-none">✦ {{ currency }}{{ fmtPrice(aiByDate[d.date].price) }}</div>
+                            <div v-else-if="d.holiday" class="mt-1 text-tiny font-semibold text-error-700 truncate leading-none">{{ d.holiday }}</div>
+
+                            <span v-if="d.total > 0 && d.booked >= d.total" class="absolute bottom-1.5 left-2 text-[10px] font-bold text-white bg-primary-900 rounded px-1.5 py-0.5 leading-none">plot</span>
+                            <span v-if="d.has_override" class="absolute bottom-2 right-2 w-2 h-2 rounded-full bg-info-500" title="Çmim i vendosur nga ti" />
                         </div>
                     </div>
 
                     <!-- legend -->
                     <div class="flex flex-wrap gap-x-5 gap-y-2 mt-5 text-tiny text-neutral-500">
-                        <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-error-500 mr-1.5 align-[-1px]" /><b class="text-primary-900">Plot</b> → ngri çmimin</span>
-                        <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-warning-500 mr-1.5 align-[-1px]" /><b class="text-primary-900">Po mbushet</b> → ngri pak</span>
-                        <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-info-500 mr-1.5 align-[-1px]" /><b class="text-primary-900">Bosh &amp; afër</b> → ul çmimin</span>
-                        <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-neutral-300 mr-1.5 align-[-1px]" />Normale → pa veprim</span>
+                        <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-warning-100 border border-warning-200 mr-1.5 align-[-1px]" />Fundjavë</span>
+                        <span><span class="text-error-600 font-bold mr-1">⚑</span>Festë (p.sh. Ferragosto)</span>
+                        <span><span class="text-accent-600 font-bold mr-1">✦</span>Sugjerim i AI-së</span>
+                        <span><span class="inline-block text-white bg-primary-900 rounded px-1 text-[9px] font-bold mr-1 align-[1px]">plot</span>Dhomat e zëna</span>
+                        <span><i class="inline-block w-2 h-2 rounded-full bg-info-500 mr-1.5 align-[0px]" />Çmim i vendosur nga ti</span>
                     </div>
 
                     <!-- selected day detail -->
                     <div v-if="selected" class="mt-5 border border-neutral-200 rounded-2xl overflow-hidden">
-                        <div class="flex items-center justify-between px-4 py-3 bg-neutral-50 border-b border-neutral-200">
-                            <span class="text-body-sm font-semibold text-primary-900 capitalize">{{ longDate(selected.date) }}</span>
-                            <span class="text-tiny text-neutral-500">Mbushja {{ selected.booked }}/{{ selected.total }} · {{ selected.occupancy_pct }}%</span>
+                        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-200" :class="selected.holiday ? 'bg-error-50' : 'bg-neutral-50'">
+                            <span class="text-body-sm font-semibold text-primary-900 capitalize flex items-center gap-2">
+                                <span v-if="selected.holiday" class="text-error-600">⚑</span>
+                                {{ longDate(selected.date) }}
+                                <span v-if="selected.holiday" class="text-tiny font-semibold text-error-700 bg-error-100 rounded-full px-2 py-0.5">{{ selected.holiday }}</span>
+                                <span v-else-if="selected.is_weekend" class="text-tiny font-semibold text-warning-700 bg-warning-100 rounded-full px-2 py-0.5">Fundjavë</span>
+                            </span>
+                            <span class="text-tiny text-neutral-500">
+                                {{ selected.booked }}/{{ selected.total }} dhoma<template v-if="selected.total > 0 && selected.booked >= selected.total"> · <b class="text-primary-900">Plot</b></template>
+                            </span>
                         </div>
-                        <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-4">
-                            <div>
-                                <div class="flex items-baseline gap-3">
-                                    <span class="text-body-sm text-neutral-400 line-through">{{ currency }}{{ selected.current_price }}</span>
-                                    <span class="text-neutral-400">→</span>
-                                    <span class="text-h3 font-extrabold text-primary-900">{{ currency }}{{ selected.suggested_price }}</span>
-                                    <span :class="['text-small font-bold px-2 py-0.5 rounded-lg', selected.adjustment_pct > 0 ? 'bg-success-50 text-success-700' : 'bg-info-50 text-info-700']">
-                                        {{ selected.adjustment_pct > 0 ? '+' : '' }}{{ selected.adjustment_pct }}%
-                                    </span>
+
+                        <div class="px-4 py-4 space-y-4">
+                            <!-- current price → suggestion (AI wins, else occupancy) -->
+                            <div class="flex flex-wrap items-center justify-between gap-4">
+                                <div>
+                                    <div class="flex items-baseline gap-3">
+                                        <span class="text-body-sm text-neutral-400 tabular-nums" :class="selSuggested ? 'line-through' : ''">{{ currency }}{{ fmtPrice(selected.current_price) }}</span>
+                                        <template v-if="selSuggested">
+                                            <span class="text-neutral-400">→</span>
+                                            <span class="text-h3 font-extrabold text-primary-900 tabular-nums">{{ currency }}{{ fmtPrice(selSuggested) }}</span>
+                                            <span v-if="selAi" class="text-small font-bold px-2 py-0.5 rounded-lg bg-accent-50 text-accent-700">✦ AI</span>
+                                        </template>
+                                    </div>
+                                    <p v-if="selAi" class="text-tiny text-neutral-500 mt-1">{{ selAi.reason || selAi.label }}</p>
+                                    <p v-else-if="selected.actionable" class="text-tiny text-neutral-500 mt-1">{{ whyText[selected.kind] }}</p>
+                                    <p v-else class="text-tiny text-neutral-400 mt-1">Çmimi aktual për këtë natë.</p>
                                 </div>
-                                <p class="text-tiny text-neutral-500 mt-1">{{ whyText[selected.kind] }}</p>
+                                <div class="flex gap-2.5">
+                                    <Button v-if="selSuggested" variant="primary" @click="apply(selected, selSuggested)">Apliko {{ currency }}{{ fmtPrice(selSuggested) }}</Button>
+                                    <Button v-if="selected.has_override" variant="ghost" @click="remove(selected)">Hiq</Button>
+                                </div>
                             </div>
-                            <div class="flex gap-2.5">
-                                <Button variant="primary" @click="apply(selected)">Apliko {{ currency }}{{ selected.suggested_price }}</Button>
-                                <Button v-if="selected.has_override" variant="ghost" @click="remove(selected)">Hiq</Button>
+
+                            <!-- manual price — full control on any night -->
+                            <div class="flex flex-wrap items-center gap-2.5 pt-3 border-t border-neutral-100">
+                                <label class="text-tiny text-neutral-500 shrink-0">Ose vendos çmimin tënd:</label>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-body-sm text-neutral-400">{{ currency }}</span>
+                                    <input v-model="manualPrice" type="number" min="1" step="1" :placeholder="String(fmtPrice(selected.current_price))"
+                                        class="w-28 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-body-sm tabular-nums focus:border-ionian focus:ring-2 focus:ring-ionian/30" />
+                                    <Button size="sm" variant="outline" @click="apply(selected, manualPrice)">Vendos</Button>
+                                </div>
                             </div>
                         </div>
                     </div>
