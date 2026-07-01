@@ -8,6 +8,7 @@ import Modal from '@/Components/UI/Modal.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ReservationCreateModal from '@/Components/Reservations/ReservationCreateModal.vue';
 import MoveRoomModal from '@/Components/Reservations/MoveRoomModal.vue';
+import ReservationEditModal from '@/Components/Reservations/ReservationEditModal.vue';
 import { channelMeta } from '@/channels';
 import { Link } from '@inertiajs/vue3';
 
@@ -24,6 +25,7 @@ const toasts = ref(null);
 const showCreateModal = ref(false);
 const showDetailModal = ref(false);
 const showMoveModal = ref(false);
+const showEditModal = ref(false);
 const selectedReservation = ref(null);
 
 const perms = usePage().props.auth.user?.permissions || [];
@@ -218,6 +220,33 @@ function onRoomMoved() {
     toasts.value?.success('Mysafiri u zhvendos.');
 }
 
+function openEdit() {
+    showDetailModal.value = false;
+    showEditModal.value = true;
+}
+function onReservationUpdated() {
+    toasts.value?.success('Rezervimi u perditesua.');
+}
+function doCancel(res) {
+    if (!res) return;
+    const room = roomOf(res)?.room_number;
+    const extra = groupSiblings(res).length ? ' (anulon vetëm këtë dhomë, jo gjithë booking-un)' : '';
+    if (!confirm(`Anulo rezervimin e ${res.guest?.first_name} ${res.guest?.last_name} — dhoma ${room}?${extra}`)) return;
+    router.post(route('reservations.cancel', res.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => { showDetailModal.value = false; toasts.value?.success('Rezervimi u anulua.'); },
+    });
+}
+
+// Net after channel commission — for the Total line in the detail popup.
+function feePctOf(res) {
+    return Number(props.channelFees?.[res?.channel]) || 0;
+}
+function netOfRes(res) {
+    const total = Number(res?.total_amount) || 0;
+    return total - Math.round(total * feePctOf(res) / 100) / 100;
+}
+
 function doCheckIn(res) {
     router.post(route('reservations.check-in', res.id), {}, {
         preserveScroll: true,
@@ -280,11 +309,11 @@ function getRoomCalendarCells(room) {
                 <div class="flex items-center gap-3">
                     <h1 class="text-h2 text-primary-900">Kalendari i Rezervimeve</h1>
                 </div>
-                <div class="flex items-center gap-2 mt-1">
-                    <Link :href="route('reservations.index')" class="text-body-sm text-neutral-500 hover:text-accent-600 no-underline">← Lista</Link>
-                </div>
             </div>
             <div class="flex items-center gap-2">
+                <Link :href="route('reservations.index')" class="no-underline">
+                    <Button variant="outline" size="sm">📋 Lista</Button>
+                </Link>
                 <Button variant="outline" size="sm" @click="navigate(-1)">← 2 jave</Button>
                 <Button variant="ghost" size="sm" @click="goToToday">Sot</Button>
                 <Button variant="outline" size="sm" @click="navigate(1)">2 jave →</Button>
@@ -401,6 +430,10 @@ function getRoomCalendarCells(room) {
                     </span>
                 </div>
 
+                <div v-if="selectedReservation.status === 'cancelled'" class="rounded-lg bg-error-50 border border-error-100 px-3 py-2 text-body-sm text-error-700">
+                    Ky rezervim është anuluar — vetëm për shikim.
+                </div>
+
                 <!-- Key facts -->
                 <div class="grid grid-cols-2 gap-x-4 gap-y-3">
                     <div>
@@ -429,7 +462,10 @@ function getRoomCalendarCells(room) {
                     </div>
                     <div>
                         <p class="text-tiny text-neutral-400 uppercase">Total</p>
-                        <p class="text-body-sm text-accent-600 font-medium">€{{ selectedReservation.total_amount }}</p>
+                        <p class="text-body-sm text-accent-600 font-medium">
+                            €{{ selectedReservation.total_amount }}
+                            <span v-if="feePctOf(selectedReservation) > 0" class="text-neutral-400 font-normal">· Neto €{{ netOfRes(selectedReservation).toFixed(2) }}</span>
+                        </p>
                     </div>
                     <div v-if="selectedReservation.guest?.phone || selectedReservation.guest?.email">
                         <p class="text-tiny text-neutral-400 uppercase">Kontakt</p>
@@ -459,9 +495,11 @@ function getRoomCalendarCells(room) {
                 <Button v-if="canUpdate && selectedReservation?.status === 'confirmed'" variant="primary" size="sm" @click="doCheckIn(selectedReservation)">Check-in</Button>
                 <Button v-if="canUpdate && selectedReservation?.status === 'checked_in'" variant="secondary" size="sm" @click="doCheckOut(selectedReservation)">Check-out</Button>
                 <Button v-if="canUpdate && selectedReservation?.status === 'checked_in'" variant="outline" size="sm" @click="openMove">Zhvendos dhomën</Button>
+                <Button v-if="canUpdate && selectedReservation && !['checked_in','checked_out','cancelled'].includes(selectedReservation.status)" variant="outline" size="sm" @click="openEdit">Edito</Button>
                 <Link v-if="selectedReservation" :href="route('reservations.show', selectedReservation.id)" class="no-underline">
                     <Button variant="outline" size="sm">Detaje</Button>
                 </Link>
+                <Button v-if="canUpdate && selectedReservation && ['pending','confirmed'].includes(selectedReservation.status)" variant="outline" size="sm" class="text-error-600" @click="doCancel(selectedReservation)">Anulo</Button>
                 <Button variant="ghost" @click="showDetailModal = false">Mbyll</Button>
             </template>
         </Modal>
@@ -484,6 +522,16 @@ function getRoomCalendarCells(room) {
             :rooms="rooms"
             @close="showMoveModal = false"
             @moved="onRoomMoved"
+        />
+
+        <ReservationEditModal
+            :show="showEditModal"
+            :reservation="selectedReservation"
+            :rooms="rooms"
+            :guests="guests"
+            :channel-fees="channelFees"
+            @close="showEditModal = false"
+            @updated="onReservationUpdated"
         />
 
         <ToastContainer ref="toasts" />
