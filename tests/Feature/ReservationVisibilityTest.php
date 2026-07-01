@@ -55,4 +55,34 @@ class ReservationVisibilityTest extends TestCase
                 ->component('Reservations/Index')
                 ->has('reservations.data', 1));
     }
+
+    public function test_list_exposes_dates_as_plain_ymd_so_edit_does_not_shift(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $type = RoomType::create(['name' => 'Std', 'base_price' => 100, 'max_occupancy' => 3, 'amenities' => []]);
+        $room = Room::create(['room_type_id' => $type->id, 'room_number' => '501', 'floor' => 5, 'status' => 'available']);
+        $guest = Guest::create(['first_name' => 'Erjon', 'last_name' => 'Lushnja']);
+
+        Reservation::create([
+            'room_id' => $room->id,
+            'guest_id' => $guest->id,
+            'created_by' => $admin->id,
+            'check_in_date' => '2026-09-07',
+            'check_out_date' => '2026-09-14',
+            'status' => 'confirmed',
+            'total_amount' => 700,
+            'adults' => 2,
+        ]);
+
+        // The list must expose plain 'Y-m-d' (not a UTC ISO datetime), otherwise
+        // openEdit's .split('T')[0] reads the day before.
+        $this->actingAs($admin)->get(route('reservations.index'))
+            ->assertInertia(fn (AssertableInertia $p) => $p
+                ->has('reservations.data.0', fn (AssertableInertia $r) => $r
+                    ->where('check_in_date', '2026-09-07')
+                    ->where('check_out_date', '2026-09-14')
+                    ->etc()));
+    }
 }

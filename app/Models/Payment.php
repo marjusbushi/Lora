@@ -13,6 +13,8 @@ class Payment extends Model
         'created_by',
         'type',
         'is_voided',
+        'pok_order_id',
+        'currency',
     ];
 
     protected function casts(): array

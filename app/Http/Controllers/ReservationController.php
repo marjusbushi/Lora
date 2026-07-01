@@ -292,9 +292,11 @@ class ReservationController extends Controller
      */
     public function storeMulti(Request $request): RedirectResponse
     {
+        // Staff may back-date a booking (walk-in that already arrived, historical
+        // entry) — no after_or_equal:today here. The PUBLIC website stays future-only.
         $data = $request->validate([
             'guest_id' => ['required', 'exists:guests,id'],
-            'check_in_date' => ['required', 'date', 'after_or_equal:today'],
+            'check_in_date' => ['required', 'date'],
             'check_out_date' => ['required', 'date', 'after:check_in_date'],
             'status' => ['sometimes', 'in:pending,confirmed'],
             'channel' => ['sometimes', 'nullable', \Illuminate\Validation\Rule::in(Reservation::CHANNELS)],
@@ -304,6 +306,14 @@ class ReservationController extends Controller
             'rooms.*.adults' => ['required', 'integer', 'min:1', 'max:20'],
             'rooms.*.children' => ['sometimes', 'integer', 'min:0', 'max:20'],
             'rooms.*.total_amount' => ['nullable', 'numeric', 'min:0'],
+        ], [
+            'guest_id.required' => 'Zgjidh nje mysafir.',
+            'check_in_date.required' => 'Vendos daten e hyrjes (check-in).',
+            'check_out_date.required' => 'Vendos daten e daljes (check-out).',
+            'check_out_date.after' => 'Data e daljes duhet te jete pas dates se hyrjes.',
+            'rooms.required' => 'Shto te pakten nje dhome.',
+            'rooms.min' => 'Shto te pakten nje dhome.',
+            'rooms.*.room_id.required' => 'Zgjidh dhomen per cdo rresht.',
         ]);
 
         // No duplicate room within the same booking.

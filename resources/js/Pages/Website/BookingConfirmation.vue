@@ -4,7 +4,7 @@ import { Check } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 
-defineProps({ reservation: Object, hotel: Object });
+defineProps({ reservation: Object, hotel: Object, status: { type: String, default: 'confirmed' } });
 
 const { t } = useI18n();
 </script>
@@ -14,6 +14,17 @@ const { t } = useI18n();
     <WebsiteLayout>
         <section class="py-20">
             <div class="max-w-lg mx-auto px-4 text-center">
+                <!-- Hold released because online payment was not completed. -->
+                <template v-if="status === 'cancelled'">
+                    <div class="h-20 w-20 rounded-full bg-error-50 flex items-center justify-center mx-auto mb-6">
+                        <span class="text-4xl leading-none text-error-500">×</span>
+                    </div>
+                    <h1 class="text-h1 text-primary-900">Rezervimi nuk u përfundua</h1>
+                    <p class="text-body text-neutral-600 mt-3">Pagesa nuk u përfundua në kohë, ndaj dhoma u lirua. Mund të provosh sërish.</p>
+                    <Link href="/book" class="btn-reserve mt-8">Provo sërish</Link>
+                </template>
+
+                <template v-else>
                 <div class="h-20 w-20 rounded-full bg-ionian/10 flex items-center justify-center mx-auto mb-6">
                     <Check class="h-9 w-9 text-ionian" :stroke-width="1.5" />
                 </div>
@@ -50,6 +61,7 @@ const { t } = useI18n();
                 <Link href="/" class="btn-reserve mt-8">
                     {{ $t('confirmation.cta.home') }}
                 </Link>
+                </template>
             </div>
         </section>
     </WebsiteLayout>

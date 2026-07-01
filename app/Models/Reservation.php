@@ -42,6 +42,8 @@ class Reservation extends Model
         'booking_group_id',
         'commission_amount',
         'payment_collect',
+        'pok_order_id',
+        'paid_at',
         'no_show_at',
         'no_show_by',
         'eta',
@@ -66,9 +68,14 @@ class Reservation extends Model
     protected function casts(): array
     {
         return [
-            'check_in_date' => 'date',
-            'check_out_date' => 'date',
+            // 'date:Y-m-d' serializes as a plain LOCAL date string ('2026-09-07'), not a
+            // UTC ISO datetime. Without the format, a date stored '2026-09-07' becomes
+            // '2026-09-06T22:00:00Z' (APP_TZ Europe/Tirane), and openEdit's .split('T')[0]
+            // read '2026-09-06' — the edit form shifted every date one day back.
+            'check_in_date' => 'date:Y-m-d',
+            'check_out_date' => 'date:Y-m-d',
             'total_amount' => 'decimal:2',
+            'paid_at' => 'datetime',
             'no_show_at' => 'datetime',
             'early_check_in' => 'boolean',
             'late_check_out' => 'boolean',

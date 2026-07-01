@@ -9,6 +9,8 @@ use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\WebsiteSearchLog;
+use App\Services\PokClient;
+use App\Services\PokPayments;
 use App\Services\RoomPricing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -254,22 +256,152 @@ class WebsiteController extends Controller
             return back()->with('error', 'Kjo dhome nuk eshte me e disponueshme per keto data.');
         }
 
+        $guestName = trim("{$request->first_name} {$request->last_name}");
+
+        // Full prepayment (MANDATORY when POK is configured): create the order and send the
+        // guest to the embedded card form. If POK is NOT configured, fall back to the old
+        // no-payment confirmation so the public site never breaks before go-live.
+        $pok = app(PokClient::class);
+        if ($pok->configured() && (float) $reservation->total_amount > 0) {
+            try {
+                $order = $pok->createOrder((float) $reservation->total_amount, 'EUR', [
+                    'webhook' => route('website.pay.webhook'),
+                    // Return to the payment page — it re-verifies with POK and forwards a paid
+                    // booking to confirmation (works for BOTH the embedded flow and the hosted-page fallback).
+                    'redirect' => route('website.pay.show', $reservation->confirmation_token),
+                    'fail' => route('website.pay.show', $reservation->confirmation_token),
+                    'expires' => 30,
+                ]);
+                $reservation->update(['pok_order_id' => $order['id']]);
+
+                return redirect()->route('website.pay.show', $reservation->confirmation_token)
+                    ->with('book_guest_name', $guestName);
+            } catch (\Throwable $e) {
+                report($e);
+                // Couldn't reach POK — release the just-held room and ask the guest to retry.
+                $reservation->update(['status' => 'cancelled']);
+
+                return back()->with('error', 'Nuk u lidh dot pagesa me kartë. Provo sërish pas pak.');
+            }
+        }
+
         // Flash the name the booker just typed so the confirmation can greet THEM
         // without reading the stored guest's name (which may belong to someone else).
         return redirect()->route('website.booking.confirmation', $reservation->confirmation_token)
-            ->with('book_guest_name', trim("{$request->first_name} {$request->last_name}"));
+            ->with('book_guest_name', $guestName);
     }
 
-    public function bookingConfirmation(string $token): Response
+    /** The embedded POK card-payment page for a pending reservation. */
+    public function bookingPayment(string $token): Response|RedirectResponse
+    {
+        $reservation = Reservation::where('confirmation_token', $token)
+            ->with('room.roomType')
+            ->firstOrFail();
+
+        // No order / already resolved → the confirmation page reflects the true state.
+        if ($reservation->status !== 'pending' || ! $reservation->pok_order_id) {
+            return redirect()->route('website.booking.confirmation', $token);
+        }
+
+        // POK captures the moment the card form succeeds, so the guest may ALREADY have paid
+        // (a lost confirm POST, or they navigated back here). Re-verify BEFORE re-mounting a live
+        // card form — otherwise a paid guest is shown "pay again" (confusing / double-charge risk).
+        try {
+            if (app(PokPayments::class)->settle($reservation)) {
+                return redirect()->route('website.booking.confirmation', $token);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+            // POK unreachable — show a neutral "confirming your payment" state, NOT a live form.
+            return Inertia::render('Website/BookingPayment', array_merge($this->paymentProps($reservation, $token), [
+                'openForPayment' => false,
+            ]));
+        }
+
+        // Order genuinely still open/unpaid → render the embedded card form.
+        return Inertia::render('Website/BookingPayment', array_merge($this->paymentProps($reservation, $token), [
+            'openForPayment' => true,
+        ]));
+    }
+
+    /** @return array<string,mixed> */
+    private function paymentProps(Reservation $reservation, string $token): array
+    {
+        return [
+            'orderId' => $reservation->pok_order_id,
+            'env' => config('services.pok.production') ? 'production' : 'staging',
+            'amount' => (float) $reservation->total_amount,
+            'currency' => Setting::get('financial.default_currency_symbol', '€'),
+            'guestName' => session('book_guest_name'),
+            'confirmUrl' => route('website.pay.confirm', $token),
+            // POK's own hosted card page for this order — the reliable fallback when the
+            // embedded SDK misbehaves. The guest pays here and POK returns them to pay.show.
+            'payUrl' => rtrim(config('services.pok.production') ? 'https://pay.pokpay.io' : 'https://pay-staging.pokpay.io', '/').'/sdk-orders/'.$reservation->pok_order_id,
+            'roomName' => $reservation->room?->roomType?->name,
+            'nights' => (int) now()->parse($reservation->check_in_date)->diffInDays($reservation->check_out_date),
+        ];
+    }
+
+    /** Browser calls this after the embedded form fires onSuccess — verify + confirm. */
+    public function confirmPayment(string $token): RedirectResponse
+    {
+        $reservation = Reservation::where('confirmation_token', $token)->firstOrFail();
+
+        try {
+            app(PokPayments::class)->settle($reservation);
+        } catch (\Throwable $e) {
+            report($e); // never 500 the guest — the webhook is the backstop
+        }
+
+        if ($reservation->fresh()->status === 'confirmed') {
+            return redirect()->route('website.booking.confirmation', $token);
+        }
+
+        return redirect()->route('website.pay.show', $token)
+            ->with('error', "Pagesa s'u konfirmua ende. Nëse e paguat, prit pak sekonda dhe rifresko.");
+    }
+
+    /** POK server-to-server webhook (CSRF-exempt). Never trusts the body — re-verifies via getOrder. */
+    public function paymentWebhook(Request $request): \Illuminate\Http\Response
+    {
+        $orderId = $request->input('id')
+            ?? $request->input('sdkOrderId')
+            ?? $request->input('orderId')
+            ?? data_get($request->all(), 'data.sdkOrder.id')
+            ?? data_get($request->all(), 'data.id');
+
+        if ($orderId) {
+            $reservation = Reservation::where('pok_order_id', $orderId)->first();
+            if ($reservation) {
+                try {
+                    app(PokPayments::class)->settle($reservation); // confirms a payment OR reverses a refund
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
+
+        // POK retries on non-2xx — always acknowledge.
+        return response('ok', 200);
+    }
+
+    public function bookingConfirmation(string $token): Response|RedirectResponse
     {
         // Look up by the unguessable token, never by the sequential id (IDOR-safe).
         $reservation = Reservation::where('confirmation_token', $token)
             ->with(['room.roomType', 'guest'])
             ->firstOrFail();
 
+        // Payment not finished yet (pending with a POK order) → send the guest back to pay,
+        // never show a "booked successfully" screen for an unpaid hold.
+        if ($reservation->status === 'pending' && $reservation->pok_order_id) {
+            return redirect()->route('website.pay.show', $token);
+        }
+
         // Pass ONLY the fields this page renders — never the full Guest model
         // (document_number, date_of_birth, etc. must not reach the public props).
         return Inertia::render('Website/BookingConfirmation', [
+            'status' => $reservation->status, // 'confirmed' (paid) | 'pending' (no online payment) | 'cancelled'
             'reservation' => [
                 'reference' => strtoupper(substr($reservation->confirmation_token, 0, 8)),
                 // The booker's submitted name (flashed) — NOT the stored guest's name,

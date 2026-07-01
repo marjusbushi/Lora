@@ -17,6 +17,7 @@ import ActionMenu from '@/Components/UI/ActionMenu.vue';
 import { channelOptions } from '@/channels';
 import ReservationCreateModal from '@/Components/Reservations/ReservationCreateModal.vue';
 import MoveRoomModal from '@/Components/Reservations/MoveRoomModal.vue';
+import ReservationEditModal from '@/Components/Reservations/ReservationEditModal.vue';
 import { Eye, Pencil, Ban, ArrowRightLeft } from 'lucide-vue-next';
 
 const menuItemClass = 'flex w-full items-center gap-2.5 px-3 py-2 text-left text-body-sm text-neutral-700 transition-colors hover:bg-neutral-50 no-underline';
@@ -83,60 +84,8 @@ function clearFilters() {
     router.get(route('reservations.index'), {}, { preserveState: true });
 }
 
-// Forms
-const editForm = useForm({
-    room_id: '', guest_id: '', check_in_date: '', check_out_date: '',
-    status: '', adults: 1, children: 0, notes: '', channel: 'manual', total_amount: '',
-});
-
-// --- Price + channel commission (live preview; the server is authoritative) ---
-function basePriceOf(roomId) {
-    const r = props.rooms.find((x) => x.id === roomId);
-    return Number(r?.room_type?.base_price) || 0;
-}
-function nightsBetween(ci, co) {
-    if (!ci || !co) return 0;
-    const d = Math.round((new Date(co) - new Date(ci)) / 86400000);
-    return d > 0 ? d : 0;
-}
-function suggestedPrice(form) {
-    return basePriceOf(form.room_id) * nightsBetween(form.check_in_date, form.check_out_date);
-}
-function feePct(channel) {
-    return Number(props.channelFees?.[channel]) || 0;
-}
-function commissionOf(form) {
-    return Math.round((Number(form.total_amount) || 0) * feePct(form.channel)) / 100;
-}
-function netOf(form) {
-    return (Number(form.total_amount) || 0) - commissionOf(form);
-}
-
-// Auto-fill the price with room rate × nights, but stop overwriting once the
-// user types a custom amount (value-based: keep filling while it still matches
-// the last suggestion).
-let editLastSuggest = 0;
-watch(() => [editForm.room_id, editForm.check_in_date, editForm.check_out_date], () => {
-    const s = suggestedPrice(editForm);
-    if (!editForm.total_amount || Number(editForm.total_amount) === editLastSuggest) {
-        editForm.total_amount = s || '';
-    }
-    editLastSuggest = s;
-});
-
 function openEdit(res) {
     selectedRes.value = res;
-    editForm.room_id = res.room_id;
-    editForm.guest_id = res.guest_id;
-    editForm.check_in_date = res.check_in_date?.split('T')[0];
-    editForm.check_out_date = res.check_out_date?.split('T')[0];
-    editForm.status = res.status;
-    editForm.adults = res.adults;
-    editForm.children = res.children;
-    editForm.notes = res.notes || '';
-    editForm.channel = res.channel || 'manual';
-    editForm.total_amount = res.total_amount ?? '';
-    editLastSuggest = suggestedPrice(editForm); // baseline so a custom (OTA) price isn't overwritten
     showEditModal.value = true;
 }
 
@@ -152,13 +101,8 @@ function onRoomMoved() {
     toasts.value?.success('Mysafiri u zhvendos.');
 }
 
-function submitEdit() {
-    editForm.put(route('reservations.update', selectedRes.value.id), {
-        onSuccess: () => {
-            showEditModal.value = false;
-            toasts.value?.success('Rezervimi u perditesua.');
-        },
-    });
+function onReservationUpdated() {
+    toasts.value?.success('Rezervimi u perditesua.');
 }
 
 function doCheckIn(res) {
@@ -323,48 +267,16 @@ function formatDate(d) {
             @guest-created="toasts?.success('Mysafiri u shtua.')"
         />
 
-        <!-- Edit Modal -->
-        <Modal :show="showEditModal" title="Edito rezervimin" max-width="lg" @close="showEditModal = false">
-            <form @submit.prevent="submitEdit" class="space-y-4">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormGroup label="Mysafiri" :error="editForm.errors.guest_id" required>
-                        <Select v-model="editForm.guest_id" :options="guestOptions" :error="editForm.errors.guest_id" />
-                    </FormGroup>
-                    <FormGroup label="Dhoma" :error="editForm.errors.room_id" required>
-                        <Select v-model="editForm.room_id" :options="roomOptions" :error="editForm.errors.room_id" />
-                    </FormGroup>
-                    <FormGroup label="Check-in" :error="editForm.errors.check_in_date" required>
-                        <DatePicker v-model="editForm.check_in_date" :error="editForm.errors.check_in_date" />
-                    </FormGroup>
-                    <FormGroup label="Check-out" :error="editForm.errors.check_out_date" required>
-                        <DatePicker v-model="editForm.check_out_date" :error="editForm.errors.check_out_date" />
-                    </FormGroup>
-                    <FormGroup label="Te rritur">
-                        <TextInput type="number" v-model="editForm.adults" min="1" max="10" />
-                    </FormGroup>
-                    <FormGroup label="Femije">
-                        <TextInput type="number" v-model="editForm.children" min="0" max="10" />
-                    </FormGroup>
-                    <FormGroup label="Burimi" :error="editForm.errors.channel">
-                        <Select v-model="editForm.channel" :options="channelOptions" :error="editForm.errors.channel" />
-                    </FormGroup>
-                    <FormGroup label="Cmimi (me fee)" :error="editForm.errors.total_amount">
-                        <TextInput type="number" v-model="editForm.total_amount" min="0" step="0.01" placeholder="0.00" :error="editForm.errors.total_amount" />
-                    </FormGroup>
-                </div>
-                <div class="rounded-lg bg-neutral-50 border border-neutral-100 px-4 py-2.5 flex items-center gap-x-6 gap-y-1 flex-wrap text-body-sm">
-                    <span class="text-neutral-500">Komisioni <span class="text-neutral-400">{{ feePct(editForm.channel) }}%</span>: <span class="text-neutral-900 font-medium">€{{ commissionOf(editForm).toFixed(2) }}</span></span>
-                    <span class="text-neutral-500">Neto: <span class="text-accent-700 font-semibold">€{{ netOf(editForm).toFixed(2) }}</span></span>
-                </div>
-                <FormGroup label="Shenime">
-                    <Textarea v-model="editForm.notes" :rows="2" />
-                </FormGroup>
-            </form>
-            <template #footer>
-                <Button variant="outline" @click="showEditModal = false">Anulo</Button>
-                <Button variant="primary" :loading="editForm.processing" @click="submitEdit">Ruaj</Button>
-            </template>
-        </Modal>
+        <!-- Edit Modal — shared with the calendar view -->
+        <ReservationEditModal
+            :show="showEditModal"
+            :reservation="selectedRes"
+            :rooms="rooms"
+            :guests="guests"
+            :channel-fees="channelFees"
+            @close="showEditModal = false"
+            @updated="onReservationUpdated"
+        />
 
         <MoveRoomModal
             :show="showMoveModal"

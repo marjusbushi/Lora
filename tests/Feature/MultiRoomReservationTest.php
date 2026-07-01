@@ -127,4 +127,20 @@ class MultiRoomReservationTest extends TestCase
         $this->assertStringContainsString('mirembajtje', session('errors')->first('rooms'));
         $this->assertCount(0, Reservation::all());
     }
+
+    public function test_admin_can_back_date_a_reservation(): void
+    {
+        [$admin, $room1, , $guest] = $this->setupHotel();
+
+        $this->actingAs($admin)->post(route('reservations.store-multi'), [
+            'guest_id' => $guest->id,
+            'check_in_date' => now()->subDays(5)->toDateString(),
+            'check_out_date' => now()->subDays(2)->toDateString(),
+            'rooms' => [
+                ['room_id' => $room1->id, 'adults' => 1],
+            ],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertCount(1, Reservation::all());
+    }
 }

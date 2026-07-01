@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Çmim Inteligjent — Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef1f4; --card:#ffffff; --ink:#16202e; --muted:#6b7785; --hair:#e7ebf0;
+    --green:#16734e; --green-700:#0f5c3d; --green-50:#e7f4ee;
+    --peak:#d8443a; --peak-bg:#fdeae8; --peak-bd:#f6c9c4;
+    --high:#c97a12; --high-bg:#fbf1de; --high-bd:#f1ddb4;
+    --low:#2563d6;  --low-bg:#e9f1ff;  --low-bd:#cfe0fb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Plus Jakarta Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 60px}
+  .crumbs{font-size:12.5px;color:var(--muted);margin-bottom:6px}
+  h1{font-size:27px;font-weight:800;letter-spacing:-.02em;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 22px}
+
+  .card{background:var(--card);border:1px solid var(--hair);border-radius:18px;box-shadow:0 1px 2px rgba(16,32,46,.04),0 8px 24px -16px rgba(16,32,46,.18)}
+  .pad{padding:20px 22px}
+
+  /* room-type pills */
+  .types{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .pill{border:1px solid var(--hair);background:#fff;color:var(--muted);font-weight:600;font-size:13px;padding:8px 14px;border-radius:999px;cursor:pointer;transition:.15s}
+  .pill:hover{border-color:#cdd5dd;color:var(--ink)}
+  .pill.on{background:var(--ink);border-color:var(--ink);color:#fff}
+
+  /* room-type dropdown */
+  .selectrow{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+  .selectrow label{font-size:13px;font-weight:700;color:var(--muted)}
+  .select{appearance:none;-webkit-appearance:none;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7785'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E") no-repeat right 13px center;background-size:18px;border:1px solid var(--hair);border-radius:12px;padding:11px 42px 11px 15px;font-family:inherit;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;min-width:300px}
+  .select:hover{border-color:#cdd5dd}
+  .select:focus{outline:2px solid var(--green);outline-offset:1px;border-color:var(--green)}
+
+  /* calendar header */
+  .calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .month{font-weight:700;font-size:16px}
+  .nav{display:flex;gap:6px}
+  .nav button{width:34px;height:34px;border-radius:10px;border:1px solid var(--hair);background:#fff;color:var(--ink);font-size:15px;cursor:pointer}
+  .nav button:hover{background:#f5f7f9}
+
+  .dow{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:8px}
+  .dow span{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);text-align:center}
+
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+  .cell{min-height:78px;border:1px solid var(--hair);border-radius:13px;padding:8px 9px;background:#fff;position:relative;cursor:default;transition:.12s}
+  .cell.empty{background:transparent;border:none}
+  .cell .d{font-size:13px;font-weight:700;color:var(--ink)}
+  .cell .occ{margin-top:7px;font-size:11px;font-weight:700;color:var(--muted)}
+  .cell .bar{height:4px;border-radius:99px;background:#eef1f4;margin-top:5px;overflow:hidden}
+  .cell .bar > i{display:block;height:100%;border-radius:99px;background:#c2cad3}
+  .cell .tag{position:absolute;top:8px;right:9px;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:7px}
+
+  .cell.act{cursor:pointer}
+  .cell.act:hover{transform:translateY(-1px);box-shadow:0 8px 18px -12px rgba(16,32,46,.35)}
+  .cell.sel{outline:2px solid var(--green);outline-offset:1px}
+
+  .peak{background:var(--peak-bg);border-color:var(--peak-bd)}
+  .peak .occ{color:var(--peak)} .peak .bar>i{background:var(--peak)} .peak .tag{background:var(--peak);color:#fff}
+  .high{background:var(--high-bg);border-color:var(--high-bd)}
+  .high .occ{color:var(--high)} .high .bar>i{background:var(--high)} .high .tag{background:var(--high);color:#fff}
+  .low{background:var(--low-bg);border-color:var(--low-bd)}
+  .low .occ{color:var(--low)} .low .bar>i{background:var(--low)} .low .tag{background:var(--low);color:#fff}
+
+  /* legend */
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:16px;font-size:12.5px;color:var(--muted)}
+  .legend b{font-weight:700;color:var(--ink)}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+  /* detail panel */
+  .detail{margin-top:16px;border:1px solid var(--hair);border-radius:16px;overflow:hidden}
+  .detail .top{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:#fbfcfd;border-bottom:1px solid var(--hair)}
+  .detail .top .day{font-weight:700}
+  .detail .body{padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+  .price{display:flex;align-items:baseline;gap:12px}
+  .price .now{color:var(--muted);font-size:15px;text-decoration:line-through}
+  .price .arrow{color:var(--muted)}
+  .price .new{font-size:26px;font-weight:800;letter-spacing:-.01em}
+  .chip{font-size:12px;font-weight:800;padding:3px 9px;border-radius:8px}
+  .chip.up{background:var(--green-50);color:var(--green)}
+  .chip.down{background:var(--low-bg);color:var(--low)}
+  .why{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .actions{display:flex;gap:10px}
+  .btn{border:0;border-radius:11px;padding:11px 18px;font-weight:700;font-size:14px;cursor:pointer}
+  .btn.primary{background:var(--green);color:#fff}
+  .btn.primary:hover{background:var(--green-700)}
+  .btn.ghost{background:#fff;border:1px solid var(--hair);color:var(--ink)}
+  .hint{font-size:12px;color:var(--muted);margin-top:14px;text-align:center}
+  .ribbon{display:inline-block;background:#fff3cd;color:#7a5b00;border:1px solid #f3e3a8;font-size:12px;font-weight:600;padding:4px 10px;border-radius:8px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumbs">Dashboard / Çmim Inteligjent</div>
+  <h1>Çmim Inteligjent</h1>
+  <p class="sub">Mbushja e dhomave → çmimi i sugjeruar. Kliko një ditë me ngjyrë për ta aplikuar.</p>
+
+  <span class="ribbon">⚙︎ MOCKUP — vetëm pamje, asnjë buton s'punon ende</span>
+
+  <div class="card pad">
+    <!-- room type selector (dropdown) -->
+    <div class="selectrow">
+      <label for="rtype">Tipi i dhomës</label>
+      <select id="rtype" class="select">
+        <option>Apartment · 1 dhomë</option>
+        <option selected>Deluxe with Sea View · 4 dhoma</option>
+        <option>Deluxe Double Room · 1 dhomë</option>
+        <option>Family Room · 1 dhomë</option>
+        <option>Standart Room · 2 dhoma</option>
+      </select>
+    </div>
+
+    <div class="calhead">
+      <div class="month">Korrik 2026</div>
+      <div class="nav"><button>‹</button><button>›</button></div>
+    </div>
+
+    <div class="dow"><span>Hë</span><span>Ma</span><span>Më</span><span>En</span><span>Pr</span><span>Sh</span><span>Di</span></div>
+    <div class="grid" id="grid"></div>
+
+    <div class="legend">
+      <span><i class="dot" style="background:var(--peak)"></i><b>Plot</b> → ngri çmimin</span>
+      <span><i class="dot" style="background:var(--high)"></i><b>Po mbushet</b> → ngri pak</span>
+      <span><i class="dot" style="background:var(--low)"></i><b>Bosh &amp; afër</b> → ul çmimin</span>
+      <span><i class="dot" style="background:#c2cad3"></i>Normale → pa veprim</span>
+    </div>
+
+    <!-- detail of selected day -->
+    <div class="detail" id="detail">
+      <div class="top">
+        <div class="day" id="dDay">E shtunë, 4 Korrik · Deluxe with Sea View</div>
+        <div style="font-size:12.5px;color:var(--muted)" id="dOcc">Mbushja 4/4 · 100%</div>
+      </div>
+      <div class="body">
+        <div>
+          <div class="price">
+            <span class="now" id="dNow">€120</span>
+            <span class="arrow">→</span>
+            <span class="new" id="dNew">€156</span>
+            <span class="chip up" id="dChip">+30%</span>
+          </div>
+          <div class="why" id="dWhy">Plot — kërkesa e lartë, mund të fitosh më shumë.</div>
+        </div>
+        <div class="actions">
+          <button class="btn primary">Apliko €156</button>
+          <button class="btn ghost">Vendos çmim tjetër</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hint">Kalon nga muaji në muaj me ‹ › · çdo tip dhome ka kalendarin e vet · datat e largëta &amp; bosh nuk të bezdisin.</div>
+  </div>
+</div>
+
+<script>
+  // July 2026 starts on a Wednesday (Mon-first grid => 2 leading blanks).
+  const base = 120; // current Deluxe sea-view price
+  // sample story: weekends fill up (raise), a couple near-term empty days (lower), rest normal.
+  const data = {
+    2:{occ:25,kind:null}, 3:{occ:75,kind:'high'}, 4:{occ:100,kind:'peak'}, 5:{occ:50,kind:null},
+    6:{occ:0,kind:'low'}, 7:{occ:0,kind:'low'}, 8:{occ:25,kind:null}, 9:{occ:50,kind:null},
+    10:{occ:75,kind:'high'}, 11:{occ:100,kind:'peak'}, 12:{occ:50,kind:null},
+    17:{occ:100,kind:'peak'}, 18:{occ:100,kind:'peak'}, 24:{occ:75,kind:'high'}, 25:{occ:100,kind:'peak'},
+    31:{occ:75,kind:'high'}
+  };
+  const adj = {peak:30,high:15,low:-25};
+  const whyText = {peak:'Plot — kërkesa e lartë, mund të fitosh më shumë.',high:'Po mbushet shpejt — ngrije pak.',low:'Bosh dhe afër — ule që të mos humbet dhoma.'};
+  const dows = ['Hë','Ma','Më','En','Pr','Sh','Di'];
+  const moNames='';
+
+  const grid = document.getElementById('grid');
+  let html='';
+  for(let i=0;i<2;i++) html+='<div class="cell empty"></div>'; // Mon,Tue blank (1st = Wed)
+  for(let d=1; d<=31; d++){
+    const info = data[d]||{occ:null,kind:null};
+    const cls = info.kind ? ('act '+info.kind) : '';
+    let tag = info.kind==='peak'||info.kind==='high' ? '↑' : (info.kind==='low' ? '↓' : '');
+    let occ = info.occ===null ? '' : `<div class="occ">${info.occ}%</div><div class="bar"><i style="width:${Math.max(info.occ,4)}%"></i></div>`;
+    html += `<div class="cell ${cls}" data-d="${d}" data-occ="${info.occ}" data-kind="${info.kind||''}">
+      <div class="d">${d}</div>${occ}${tag?`<span class="tag">${tag}</span>`:''}</div>`;
+  }
+  grid.innerHTML = html;
+
+  function select(el){
+    document.querySelectorAll('.cell').forEach(c=>c.classList.remove('sel'));
+    el.classList.add('sel');
+    const d = +el.dataset.d, occ=+el.dataset.occ, kind=el.dataset.kind;
+    const a = adj[kind]||0;
+    const neww = Math.round(base*(1+a/100)*10)/10;
+    const dow = dows[(d+1)%7]; // July 1 = Wed(index2); (d-1+2)%7
+    const long = ['E hënë','E martë','E mërkurë','E enjte','E premte','E shtunë','E diel'][(d+1)%7];
+    document.getElementById('dDay').textContent = `${long}, ${d} Korrik · Deluxe with Sea View`;
+    document.getElementById('dOcc').textContent = `Mbushja ${Math.round(occ/100*4)}/4 · ${occ}%`;
+    document.getElementById('dNow').textContent = '€'+base;
+    document.getElementById('dNew').textContent = '€'+neww;
+    const chip = document.getElementById('dChip');
+    chip.textContent = (a>0?'+':'')+a+'%';
+    chip.className = 'chip '+(a>0?'up':'down');
+    document.getElementById('dWhy').textContent = whyText[kind]||'';
+    document.querySelector('.btn.primary').textContent = 'Apliko €'+neww;
+  }
+  document.querySelectorAll('.cell.act').forEach(c=>c.addEventListener('click',()=>select(c)));
+  // preselect July 4
+  select(document.querySelector('.cell[data-d="4"]'));
+</script>
+</body>
+</html>
