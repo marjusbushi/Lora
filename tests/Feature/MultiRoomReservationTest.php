@@ -109,4 +109,22 @@ class MultiRoomReservationTest extends TestCase
 
         $this->assertCount(0, Reservation::all());
     }
+
+    public function test_maintenance_room_gives_a_clear_reason(): void
+    {
+        [$admin, $room1, , $guest] = $this->setupHotel();
+        $room1->update(['status' => 'maintenance']);
+
+        $this->actingAs($admin)->post(route('reservations.store-multi'), [
+            'guest_id' => $guest->id,
+            'check_in_date' => now()->addDays(3)->toDateString(),
+            'check_out_date' => now()->addDays(5)->toDateString(),
+            'rooms' => [
+                ['room_id' => $room1->id, 'adults' => 1],
+            ],
+        ])->assertSessionHasErrors(['rooms']);
+
+        $this->assertStringContainsString('mirembajtje', session('errors')->first('rooms'));
+        $this->assertCount(0, Reservation::all());
+    }
 }

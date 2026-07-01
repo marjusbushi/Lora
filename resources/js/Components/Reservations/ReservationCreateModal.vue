@@ -4,6 +4,7 @@ import { useForm, usePage } from '@inertiajs/vue3';
 import Modal from '@/Components/UI/Modal.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import Select from '@/Components/UI/Select.vue';
+import SearchableSelect from '@/Components/UI/SearchableSelect.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import Textarea from '@/Components/UI/Textarea.vue';
 import DatePicker from '@/Components/UI/DatePicker.vue';
@@ -30,10 +31,12 @@ const perms = usePage().props.auth.user?.permissions || [];
 const canCreateGuest = perms.includes('create_guests');
 
 const guestOptions = computed(() =>
-    props.guests.map((g) => ({
-        value: g.id,
-        label: `${g.first_name} ${g.last_name}${g.phone ? ' · ' + g.phone : ''}`,
-    }))
+    props.guests
+        .map((g) => ({
+            value: g.id,
+            label: `${g.first_name} ${g.last_name}${g.phone ? ' · ' + g.phone : ''}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'sq'))
 );
 const roomOptions = computed(() =>
     props.rooms.map((r) => ({
@@ -211,7 +214,7 @@ function submit() {
             <!-- Shared: guest + dates + channel -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormGroup label="Mysafiri" :error="form.errors.guest_id" required>
-                    <Select v-model="form.guest_id" :options="guestOptions" placeholder="Zgjidh mysafirin..." :error="form.errors.guest_id" />
+                    <SearchableSelect v-model="form.guest_id" :options="guestOptions" placeholder="Zgjidh mysafirin..." search-placeholder="Kërko mysafir…" :error="form.errors.guest_id" />
                     <button v-if="canCreateGuest" type="button" class="mt-1.5 text-tiny text-accent-700 hover:text-accent-800" @click="showNewGuest = !showNewGuest">
                         {{ showNewGuest ? '− Mbyll' : '+ Mysafir i ri' }}
                     </button>

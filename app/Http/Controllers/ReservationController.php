@@ -333,6 +333,12 @@ class ReservationController extends Controller
                         throw new \RuntimeException("over_capacity:{$room->room_number}:{$maxOcc}");
                     }
 
+                    // A room under maintenance is out of service regardless of dates —
+                    // give a clear reason (not the misleading "booked for these dates").
+                    if ($room->status === 'maintenance') {
+                        throw new \RuntimeException("maintenance:{$room->room_number}");
+                    }
+
                     // Row lock + re-check availability inside the transaction (no double-book).
                     Room::where('id', $room->id)->lockForUpdate()->first();
                     if (!Reservation::isRoomAvailable($room->id, $data['check_in_date'], $data['check_out_date'])) {
@@ -369,9 +375,12 @@ class ReservationController extends Controller
             if (str_starts_with($msg, 'over_capacity:')) {
                 [, $rn, $cap] = explode(':', $msg);
                 $err = "Dhoma {$rn} lejon maksimumi {$cap} persona.";
+            } elseif (str_starts_with($msg, 'maintenance:')) {
+                [, $rn] = explode(':', $msg);
+                $err = "Dhoma {$rn} eshte ne mirembajtje. Ndrysho statusin e dhomes te 'Dhomat' per ta rezervuar.";
             } elseif (str_starts_with($msg, 'room_unavailable:')) {
                 [, $rn] = explode(':', $msg);
-                $err = "Dhoma {$rn} nuk eshte e disponueshme per keto data.";
+                $err = "Dhoma {$rn} eshte e zene per keto data (ka nje rezervim tjeter).";
             } else {
                 $err = 'Rezervimi nuk u krijua.';
             }
