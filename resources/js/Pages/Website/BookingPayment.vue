@@ -35,6 +35,35 @@ onMounted(() => {
     window.addEventListener('error', (ev) => note('JS error: ' + (ev.message || ev.error?.message || ev.error)));
     window.addEventListener('unhandledrejection', (ev) => note('Promise reject: ' + (ev.reason?.message || JSON.stringify(ev.reason))));
 
+    // Capture the network mechanism behind the silent GENERAL_ERROR (websocket / hidden-iframe / fetch).
+    try {
+        const OrigWS = window.WebSocket;
+        window.WebSocket = function (url, proto) {
+            note('WebSocket → ' + url);
+            const ws = proto ? new OrigWS(url, proto) : new OrigWS(url);
+            ws.addEventListener('error', () => note('WebSocket ERROR: ' + url));
+            ws.addEventListener('close', (ev) => note('WebSocket closed code=' + ev.code + ' ' + url));
+            return ws;
+        };
+        window.WebSocket.prototype = OrigWS.prototype;
+
+        const origFetch = window.fetch.bind(window);
+        window.fetch = async (...a) => {
+            try {
+                const r = await origFetch(...a);
+                if (!r.ok) note('fetch ' + r.status + ' ' + (a[0]?.url || a[0]));
+                return r;
+            } catch (e) { note('fetch FAILED ' + (a[0]?.url || a[0]) + ' — ' + e.message); throw e; }
+        };
+
+        window.addEventListener('message', (ev) => {
+            const o = String(ev.origin);
+            if (o.includes('pok') || o.includes('cyber') || o.includes('cardinal')) {
+                note('postMessage ' + o + ': ' + String(typeof ev.data === 'object' ? JSON.stringify(ev.data) : ev.data).slice(0, 140));
+            }
+        });
+    } catch (e) { note('instrument failed: ' + e.message); }
+
     if (!props.openForPayment || !props.orderId) return;
 
     try {
