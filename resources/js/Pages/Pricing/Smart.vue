@@ -48,16 +48,30 @@ async function generatePlan() {
     aiLoading.value = false;
 }
 
-function applyRec(rec, i) {
+function applyRec(rec, i, opts = {}) {
+    if (!rec.prices?.length) { toasts.value?.error(`"${rec.label}" s'ka çmime për të aplikuar.`); opts.onDone?.(); return; }
     router.post(route('pricing.smart.apply-plan'), { date_from: rec.date_from, date_to: rec.date_to, prices: rec.prices }, {
         preserveScroll: true,
         preserveState: true,
-        onSuccess: () => { applied.value = { ...applied.value, [i]: true }; toasts.value?.success(`U aplikua: ${rec.label}.`); },
-        onError: () => toasts.value?.error('Diçka shkoi keq.'),
+        onSuccess: () => { applied.value = { ...applied.value, [i]: true }; if (!opts.silent) toasts.value?.success(`U aplikua: ${rec.label}.`); },
+        onError: (errors) => toasts.value?.error(`Nuk u aplikua "${rec.label}": ${Object.values(errors)[0] || 'të dhëna të pavlefshme'}.`),
+        onFinish: () => opts.onDone?.(),
     });
 }
+// Apply recommendations ONE AT A TIME — concurrent Inertia visits cancel each other, so a
+// naive forEach would only ever apply the last one. Chain via onDone, then report a summary.
 function applyAll() {
-    (aiPlan.value?.recommendations || []).forEach((rec, i) => { if (rec.action !== 'hold') applyRec(rec, i); });
+    const queue = (aiPlan.value?.recommendations || [])
+        .map((rec, i) => ({ rec, i }))
+        .filter(x => x.rec.action !== 'hold');
+    if (!queue.length) { toasts.value?.error('Asnjë rekomandim për të aplikuar.'); return; }
+    let idx = 0;
+    const next = () => {
+        if (idx >= queue.length) { toasts.value?.success(`U përpunuan ${queue.length} rekomandime.`); return; }
+        const { rec, i } = queue[idx++];
+        applyRec(rec, i, { silent: true, onDone: next });
+    };
+    next();
 }
 
 const actionTone = {
@@ -142,7 +156,7 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
             </div>
 
             <div v-if="!aiConfigured" class="p-3 rounded-lg bg-warning-50 border border-warning-200 text-body-sm text-warning-800">
-                Asistenti AI s'është aktivizuar ende. Shto çelësin Anthropic te <b>Settings</b> që të punojë.
+                Asistenti AI s'është aktivizuar ende. Shto çelësin Gemini te <b>Settings → Asistenti AI</b> që të punojë.
             </div>
 
             <template v-else>

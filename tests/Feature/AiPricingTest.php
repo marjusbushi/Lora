@@ -81,6 +81,26 @@ class AiPricingTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_max_tokens_returns_a_friendly_error(): void
+    {
+        $this->type();
+        config()->set('services.gemini.key', 'test-key');
+        config()->set('services.gemini.model', 'gemini-2.5-flash');
+
+        // Simulate the thinking-budget-exhaustion failure mode: 200 OK, finishReason MAX_TOKENS, no call.
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['finishReason' => 'MAX_TOKENS', 'content' => ['parts' => []]]],
+            ], 200),
+        ]);
+
+        $res = $this->actingAs($this->admin())
+            ->postJson(route('pricing.smart.ai-plan'), ['month' => '2026-08-01']);
+
+        $res->assertStatus(502);
+        $this->assertStringContainsString('buxheti i tokenave', (string) $res->json('error'));
+    }
+
     public function test_apply_plan_writes_overrides_across_the_range(): void
     {
         $type = $this->type(); // base 70

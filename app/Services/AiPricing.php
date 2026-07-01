@@ -34,7 +34,7 @@ class AiPricing
             self::userPrompt($context, $events, $from, $to),
             self::tool(),
             'submit_pricing_plan',
-            3500,
+            8192, // generous ceiling; the function-call args are small, but 2.5-flash needs headroom
         );
 
         return [

@@ -14,6 +14,9 @@ use RuntimeException;
  */
 class GeminiClient
 {
+    /** Cap on gemini-2.5-flash "thinking" tokens so the forced function call is never starved. */
+    private const THINKING_BUDGET = 512;
+
     public function key(): ?string
     {
         return Setting::get('ai.gemini_key') ?: config('services.gemini.key');
@@ -55,11 +58,29 @@ class GeminiClient
             'contents' => [['role' => 'user', 'parts' => [['text' => $userMessage]]]],
             'tools' => [['function_declarations' => [$function]]],
             'tool_config' => ['function_calling_config' => ['mode' => 'ANY', 'allowed_function_names' => [$toolName]]],
-            'generationConfig' => ['maxOutputTokens' => $maxTokens, 'temperature' => 0.4],
+            'generationConfig' => [
+                'maxOutputTokens' => $maxTokens,
+                'temperature' => 0.4,
+                // gemini-2.5-flash is a THINKING model: without a cap its internal reasoning
+                // tokens are billed against maxOutputTokens and can consume the whole budget,
+                // leaving no room for the forced function call (finishReason=MAX_TOKENS, empty
+                // parts). A small budget keeps light reasoning while guaranteeing output room.
+                'thinkingConfig' => ['thinkingBudget' => self::THINKING_BUDGET],
+            ],
         ]);
 
         if (!$res->successful()) {
-            throw new RuntimeException("Gemini API error ({$res->status()}): ".$res->body());
+            // NOTE: the API key lives in the URL query, never in the response body, so
+            // reading $res->body() below cannot leak it. Map to a clear Albanian message.
+            $status = $res->status();
+            $body = (string) $res->body();
+            throw new RuntimeException(match (true) {
+                $status === 429 => 'Shumë kërkesa te Google (limiti u kalua). Prit pak minuta dhe provo sërish.',
+                $status === 400 && str_contains($body, 'API key not valid') => 'Çelësi Gemini nuk është i vlefshëm. Kontrollo çelësin te Settings → Asistenti AI.',
+                $status === 403 => 'Çelësi Gemini u refuzua (403). Kontrollo çelësin te Settings → Asistenti AI.',
+                $status === 404 => 'Modeli i AI nuk u gjet (404) — mund të jetë tërhequr. Njofto zhvilluesin.',
+                default => "Google ktheu një gabim ($status). Provo sërish.",
+            });
         }
 
         foreach ($res->json('candidates.0.content.parts', []) as $part) {
@@ -69,6 +90,11 @@ class GeminiClient
             }
         }
 
-        throw new RuntimeException('Gemini returned no function call: '.$res->body());
+        // No function call came back. The usual cause is the thinking budget eating the
+        // output — surface that specifically so it is actionable, not a generic failure.
+        $finish = $res->json('candidates.0.finishReason');
+        throw new RuntimeException($finish === 'MAX_TOKENS'
+            ? 'Modeli u ndërpre para se ta mbaronte planin (buxheti i tokenave u mbush). Provo sërish ose zvogëlo periudhën.'
+            : "Modeli s'ktheu një plan të vlefshëm. Provo sërish.");
     }
 }

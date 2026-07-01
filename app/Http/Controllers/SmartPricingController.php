@@ -12,11 +12,21 @@ use App\Services\SmartPricing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class SmartPricingController extends Controller
 {
+    /** A price outside 0.25×–4× of the room's base price is treated as a fat-finger / AI hallucination. */
+    private const MIN_BAND = 0.25;
+    private const MAX_BAND = 4.0;
+
+    private function priceOutOfBand(float $price, float $base): bool
+    {
+        return $base > 0 && ($price < $base * self::MIN_BAND || $price > $base * self::MAX_BAND);
+    }
+
     public function index(Request $request): Response
     {
         $types = RoomType::orderBy('name')->get(['id', 'name', 'base_price']);
@@ -65,6 +75,12 @@ class SmartPricingController extends Controller
             'price' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
         ]);
 
+        // Guard against an order-of-magnitude typo reaching the live OTA (e.g. €1 or €900k).
+        $base = (float) (RoomType::whereKey($data['room_type_id'])->value('base_price') ?? 0);
+        if ($this->priceOutOfBand((float) $data['price'], $base)) {
+            return back()->with('error', "Çmimi {$data['price']} është shumë larg çmimit bazë ({$base}). Kontrollo shumën.");
+        }
+
         // whereDate matches on the date part (the column may carry a 00:00:00 time), so a
         // re-apply UPDATES the existing row instead of hitting the unique(date,type) index.
         $override = RateOverride::whereDate('date', $data['date'])
@@ -106,7 +122,7 @@ class SmartPricingController extends Controller
     public function aiPlan(Request $request)
     {
         if (!AiPricing::configured()) {
-            return response()->json(['error' => 'Asistenti AI nuk është konfiguruar. Shto çelësin Anthropic te Settings.'], 422);
+            return response()->json(['error' => 'Asistenti AI nuk është konfiguruar. Shto çelësin Gemini te Settings → Asistenti AI.'], 422);
         }
 
         $data = $request->validate([
@@ -123,7 +139,11 @@ class SmartPricingController extends Controller
         } catch (\Throwable $e) {
             report($e);
 
-            return response()->json(['error' => "Asistenti AI s'u përgjigj. Provoni përsëri."], 502);
+            // GeminiClient throws owner-safe Albanian messages; strip any stray key= just in case.
+            $msg = preg_replace('/key=[A-Za-z0-9._\-]+/', 'key=***', $e->getMessage());
+            $msg = trim(mb_strimwidth((string) $msg, 0, 200, '…'));
+
+            return response()->json(['error' => $msg !== '' ? $msg : "Asistenti AI s'u përgjigj. Provoni përsëri."], 502);
         }
 
         return response()->json($plan);
@@ -135,29 +155,47 @@ class SmartPricingController extends Controller
         $data = $request->validate([
             'date_from' => ['required', 'date'],
             'date_to' => ['required', 'date', 'after_or_equal:date_from'],
-            'prices' => ['required', 'array', 'min:1'],
+            'prices' => ['required', 'array', 'min:1', 'max:20'],
             'prices.*.room_type_id' => ['required', 'exists:room_types,id'],
             'prices.*.suggested' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
         ]);
 
         $from = Carbon::parse($data['date_from'])->startOfDay();
         $to = Carbon::parse($data['date_to'])->startOfDay();
-        if ($to->diffInDays($from) > 62) {
-            return back()->with('error', 'Intervali është shumë i gjatë.');
+        // NB: $from->diffInDays($to) — arg order matters. In Carbon 3 the reverse returns a
+        // negative number, so the cap would silently never fire and let a far date write
+        // thousands of overrides + flood the OTA. Keep $from first.
+        if ($from->diffInDays($to) > 62) {
+            return back()->with('error', 'Intervali është shumë i gjatë (maksimumi ~2 muaj).');
         }
 
-        $typeIds = [];
-        for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
-            foreach ($data['prices'] as $p) {
-                $override = RateOverride::whereDate('date', $d->toDateString())
-                    ->where('room_type_id', $p['room_type_id'])->first()
-                    ?? new RateOverride(['date' => $d->toDateString(), 'room_type_id' => $p['room_type_id']]);
-                $override->price = $p['suggested'];
-                $override->created_by = auth()->id();
-                $override->save();
-                $typeIds[$p['room_type_id']] = true;
+        // Reject any suggested price wildly off the base price (AI hallucination / typo) before
+        // it can be written and pushed to Booking.com etc.
+        $bases = RoomType::whereIn('id', collect($data['prices'])->pluck('room_type_id'))
+            ->pluck('base_price', 'id');
+        foreach ($data['prices'] as $p) {
+            $base = (float) ($bases[$p['room_type_id']] ?? 0);
+            if ($this->priceOutOfBand((float) $p['suggested'], $base)) {
+                return back()->with('error', "Çmimi i sugjeruar {$p['suggested']} është jashtë kufijve të arsyeshëm (bazë {$base}). Nuk u aplikua.");
             }
         }
+
+        // Write the whole batch atomically: either all dates/types commit or none, so a mid-loop
+        // failure can't leave half-applied overrides (and dispatch pushes for a partial set).
+        $typeIds = [];
+        DB::transaction(function () use ($from, $to, $data, &$typeIds) {
+            for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
+                foreach ($data['prices'] as $p) {
+                    $override = RateOverride::whereDate('date', $d->toDateString())
+                        ->where('room_type_id', $p['room_type_id'])->first()
+                        ?? new RateOverride(['date' => $d->toDateString(), 'room_type_id' => $p['room_type_id']]);
+                    $override->price = $p['suggested'];
+                    $override->created_by = auth()->id();
+                    $override->save();
+                    $typeIds[$p['room_type_id']] = true;
+                }
+            }
+        });
 
         AuditLog::record('pricing.ai_apply', null, [
             'from' => $data['date_from'], 'to' => $data['date_to'], 'types' => array_keys($typeIds),
