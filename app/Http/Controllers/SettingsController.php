@@ -287,6 +287,13 @@ class SettingsController extends Controller
             'name' => ['required', 'string', 'max:255', 'unique:room_types,name'],
             'description' => ['nullable', 'string', 'max:500'],
             'base_price' => ['required', 'numeric', 'min:0'],
+            'min_price' => ['nullable', 'numeric', 'min:0'],
+            'max_price' => ['nullable', 'numeric', 'min:0', function ($attr, $value, $fail) use ($request) {
+                $min = $request->input('min_price');
+                if ($value !== null && $value !== '' && $min !== null && $min !== '' && (float) $value < (float) $min) {
+                    $fail('Çmimi maksimal duhet të jetë ≥ çmimit minimal.');
+                }
+            }],
             'max_occupancy' => ['required', 'integer', 'min:1', 'max:20'],
             'amenities' => ['nullable', 'array'],
             'amenities.*' => ['string', 'max:100'],
@@ -304,6 +311,13 @@ class SettingsController extends Controller
             'name' => ['required', 'string', 'max:255', 'unique:room_types,name,' . $roomType->id],
             'description' => ['nullable', 'string', 'max:500'],
             'base_price' => ['required', 'numeric', 'min:0'],
+            'min_price' => ['nullable', 'numeric', 'min:0'],
+            'max_price' => ['nullable', 'numeric', 'min:0', function ($attr, $value, $fail) use ($request) {
+                $min = $request->input('min_price');
+                if ($value !== null && $value !== '' && $min !== null && $min !== '' && (float) $value < (float) $min) {
+                    $fail('Çmimi maksimal duhet të jetë ≥ çmimit minimal.');
+                }
+            }],
             'max_occupancy' => ['required', 'integer', 'min:1', 'max:20'],
             'amenities' => ['nullable', 'array'],
             'amenities.*' => ['string', 'max:100'],

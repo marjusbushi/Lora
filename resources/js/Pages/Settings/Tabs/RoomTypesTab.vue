@@ -18,7 +18,7 @@ const editingType = ref(null);
 const selectedType = ref(null);
 
 const form = useForm({
-    name: '', description: '', base_price: '', max_occupancy: 2, amenities: [], breakfast_included: false,
+    name: '', description: '', base_price: '', min_price: '', max_price: '', max_occupancy: 2, amenities: [], breakfast_included: false,
 });
 
 const amenityInput = ref('');
@@ -35,6 +35,8 @@ function openEdit(type) {
     form.name = type.name;
     form.description = type.description || '';
     form.base_price = type.base_price;
+    form.min_price = type.min_price ?? '';
+    form.max_price = type.max_price ?? '';
     form.max_occupancy = type.max_occupancy;
     form.amenities = type.amenities || [];
     form.breakfast_included = !!type.breakfast_included;
@@ -177,6 +179,12 @@ function setAsFeatured(type, imageId) {
                 </FormGroup>
                 <FormGroup label="Cmimi baze (€/nate)" :error="form.errors.base_price" required>
                     <TextInput type="number" v-model="form.base_price" min="0" step="0.01" :error="form.errors.base_price" />
+                </FormGroup>
+                <FormGroup label="Cmimi minimal (€/nate) — kufi per Cmim Inteligjent" :error="form.errors.min_price">
+                    <TextInput type="number" v-model="form.min_price" min="0" step="0.01" :error="form.errors.min_price" placeholder="bosh = pa kufi" />
+                </FormGroup>
+                <FormGroup label="Cmimi maksimal (€/nate) — kufi per Cmim Inteligjent" :error="form.errors.max_price">
+                    <TextInput type="number" v-model="form.max_price" min="0" step="0.01" :error="form.errors.max_price" placeholder="bosh = pa kufi" />
                 </FormGroup>
             </div>
             <FormGroup label="Kapaciteti max" :error="form.errors.max_occupancy" required>

@@ -32,15 +32,20 @@ class SmartPricingController extends Controller
             return false;
         }
         $base = (float) $type->base_price;
-        $min = $type->min_price !== null ? (float) $type->min_price : ($base > 0 ? $base * self::MIN_BAND : null);
-        $max = $type->max_price !== null ? (float) $type->max_price : ($base > 0 ? $base * self::MAX_BAND : null);
+        // priceBounds() normalizes an inverted min>max pair to unset, so the
+        // guard can never reject a price the engine itself suggested.
+        [$min, $max] = $type->priceBounds();
+        $min ??= $base > 0 ? $base * self::MIN_BAND : null;
+        $max ??= $base > 0 ? $base * self::MAX_BAND : null;
 
         return ($min !== null && $price < $min) || ($max !== null && $price > $max);
     }
 
     public function index(Request $request): Response
     {
-        $types = RoomType::orderBy('name')->get(['id', 'name', 'base_price']);
+        // min/max MUST ride along: the engine clamps off these attributes, and
+        // a partial model would silently read them as null (no clamp at all).
+        $types = RoomType::orderBy('name')->get(['id', 'name', 'base_price', 'min_price', 'max_price']);
 
         $base = [
             'roomTypes' => $types->map(fn ($t) => ['id' => $t->id, 'name' => $t->name])->values(),

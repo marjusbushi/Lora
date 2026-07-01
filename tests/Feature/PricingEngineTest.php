@@ -261,5 +261,135 @@ class PricingEngineTest extends TestCase
         $row = $this->rowFor($type, $far);
         $this->assertFalse($row['actionable']);
         $this->assertEquals($row['current_price'], $row['suggested_price']);
+        $this->assertEmpty($row['factors'], 'suppressed demand factors must leave the breakdown too');
+    }
+
+    /** Review fix: a booked room flipping to maintenance must NOT read as demand cooling. */
+    public function test_room_entering_maintenance_does_not_fake_negative_pace(): void
+    {
+        $type = $this->type(100);
+        $rooms = $this->rooms($type, 6);
+        $date = $this->weekdayAfter(10);
+
+        foreach (array_slice($rooms, 0, 3) as $room) {
+            $this->book($room, $date->toDateString());
+        }
+        RoomInventorySnapshot::create([
+            'snapshot_date' => Carbon::today()->subDays(3)->toDateString(),
+            'stay_date' => $date->toDateString(),
+            'room_type_id' => $type->id,
+            'total_rooms' => 6, 'out_of_order' => 0, 'booked' => 3, 'available' => 3,
+        ]);
+
+        // AC breaks in one of the booked rooms — the reservation stays.
+        $rooms[0]->update(['status' => 'maintenance']);
+
+        $row = $this->rowFor($type, $date);
+        $this->assertNull(collect($row['factors'])->firstWhere('key', 'pace'),
+            'zero cancellations happened — no pace factor may fire');
+        $this->assertFalse($row['actionable']);
+    }
+
+    /** Review fix: the HTTP calendar path must clamp (partial model regression). */
+    public function test_calendar_http_path_applies_the_max_clamp(): void
+    {
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $type = $this->type(100, ['max_price' => 110]);
+        [$a, $b] = $this->rooms($type, 2);
+        $date = $this->weekdayAfter(15);
+        $this->book($a, $date->toDateString());
+        $this->book($b, $date->toDateString()); // would suggest 130 unclamped
+
+        $response = $this->actingAs($admin)->get(route('pricing.smart.index', [
+            'room_type_id' => $type->id, 'month' => $date->format('Y-m'),
+        ]))->assertOk();
+
+        $day = collect($response->viewData('page')['props']['days'])->firstWhere('date', $date->toDateString());
+        $this->assertSame('max', $day['clamped']);
+        $this->assertEquals(110.0, $day['suggested_price']);
+    }
+
+    /** Review fix: inverted min>max is treated as unset by BOTH engine and apply guard. */
+    public function test_inverted_min_max_falls_back_consistently(): void
+    {
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $type = $this->type(100, ['min_price' => 120, 'max_price' => 110]); // misconfigured
+        [$a, $b] = $this->rooms($type, 2);
+        $date = $this->weekdayAfter(15);
+        $this->book($a, $date->toDateString());
+        $this->book($b, $date->toDateString());
+
+        $row = $this->rowFor($type, $date);
+        $this->assertEquals(130.0, $row['suggested_price'], 'inverted pair = unset → no owner clamp');
+        $this->assertNull($row['clamped']);
+
+        // The guard accepts the engine's own suggestion (no suggest-then-reject loop).
+        $this->actingAs($admin)->post(route('pricing.smart.apply'), [
+            'date' => $date->toDateString(), 'room_type_id' => $type->id, 'price' => 130,
+        ])->assertRedirect()->assertSessionMissing('error');
+    }
+
+    /** Review fix: the owner's explicit negative event uplift survives the far-future anti-nag. */
+    public function test_negative_event_uplift_is_honored_far_out_and_breakdown_matches(): void
+    {
+        $type = $this->type(100);
+        $this->rooms($type, 3); // empty → negative demand, which the anti-nag drops
+
+        $far = $this->weekdayAfter(25);
+        PricingEvent::create([
+            'name' => 'Ulje speciale', 'date_from' => $far->toDateString(),
+            'date_to' => $far->toDateString(), 'uplift_pct' => -20, 'source' => 'manual',
+        ]);
+
+        $row = $this->rowFor($type, $far);
+        $this->assertTrue($row['actionable']);
+        $this->assertEquals(80.0, $row['suggested_price'], 'owner intent is never suppressed');
+
+        $product = collect($row['factors'])->reduce(fn ($p, $f) => $p * (1 + $f['pct'] / 100), 1.0);
+        $this->assertEquals($row['suggested_price'], round($row['reference'] * $product, 2),
+            'the breakdown must multiply out to the shown price');
+    }
+
+    /** Review fix: a far-future empty FRIDAY must not morph into a +8% raise. */
+    public function test_far_future_empty_friday_gets_no_phantom_raise(): void
+    {
+        $type = $this->type(100);
+        $this->rooms($type, 3); // empty hotel
+
+        $friday = Carbon::today()->addDays(19);
+        while ((int) $friday->dayOfWeekIso !== 5) {
+            $friday->addDay();
+        }
+
+        $row = $this->rowFor($type, $friday);
+        $this->assertFalse($row['actionable'], 'net-discount demand collapses entirely — DOW alone must not raise');
+    }
+
+    /** Review fix: the settings write path persists min/max and rejects an inverted pair. */
+    public function test_settings_write_path_for_min_max(): void
+    {
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $type = $this->type(100);
+
+        $this->actingAs($admin)->put(route('settings.room-types.update', $type), [
+            'name' => $type->name, 'base_price' => 100, 'max_occupancy' => 2,
+            'min_price' => 70, 'max_price' => 150,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $type->refresh();
+        $this->assertEquals(70.0, (float) $type->min_price);
+        $this->assertEquals(150.0, (float) $type->max_price);
+
+        $this->actingAs($admin)->put(route('settings.room-types.update', $type), [
+            'name' => $type->name, 'base_price' => 100, 'max_occupancy' => 2,
+            'min_price' => 150, 'max_price' => 70, // inverted
+        ])->assertSessionHasErrors('max_price');
     }
 }

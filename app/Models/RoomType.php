@@ -32,6 +32,25 @@ class RoomType extends Model
         ];
     }
 
+    /**
+     * The owner's price guardrails, normalized: an inverted pair (min > max)
+     * is misconfiguration — treat it as unset so the engine's clamp and the
+     * apply guard fall back to the same 0.25x-4x base sanity band and can
+     * never disagree with each other.
+     *
+     * @return array{0: ?float, 1: ?float} [min, max]
+     */
+    public function priceBounds(): array
+    {
+        $min = $this->min_price !== null ? (float) $this->min_price : null;
+        $max = $this->max_price !== null ? (float) $this->max_price : null;
+        if ($min !== null && $max !== null && $min > $max) {
+            return [null, null];
+        }
+
+        return [$min, $max];
+    }
+
     public function rooms()
     {
         return $this->hasMany(Room::class);
