@@ -71,4 +71,17 @@ return [
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
     ],
 
+    // POK (pokpay.io) card payments for the public booking site. Auth = login
+    // (keyId/keySecret) → short-lived Bearer token; amounts in MINOR units (cents).
+    // Defaults to STAGING until POK_PRODUCTION=true. See the pok-embedded-contract memory.
+    'pok' => [
+        'production' => env('POK_PRODUCTION', false),
+        'base_url' => env('POK_PRODUCTION', false)
+            ? 'https://api.pokpay.io'
+            : 'https://api-staging.pokpay.io',
+        'merchant_id' => env('POK_MERCHANT_ID'),
+        'key_id' => env('POK_KEY_ID'),
+        'key_secret' => env('POK_KEY_SECRET'),
+    ],
+
 ];
