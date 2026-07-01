@@ -249,7 +249,9 @@ class WebsiteController extends Controller
             try {
                 $order = $pok->createOrder((float) $reservation->total_amount, 'EUR', [
                     'webhook' => route('website.pay.webhook'),
-                    'redirect' => route('website.booking.confirmation', $reservation->confirmation_token),
+                    // Return to the payment page — it re-verifies with POK and forwards a paid
+                    // booking to confirmation (works for BOTH the embedded flow and the hosted-page fallback).
+                    'redirect' => route('website.pay.show', $reservation->confirmation_token),
                     'fail' => route('website.pay.show', $reservation->confirmation_token),
                     'expires' => 30,
                 ]);
@@ -315,6 +317,9 @@ class WebsiteController extends Controller
             'currency' => Setting::get('financial.default_currency_symbol', '€'),
             'guestName' => session('book_guest_name'),
             'confirmUrl' => route('website.pay.confirm', $token),
+            // POK's own hosted card page for this order — the reliable fallback when the
+            // embedded SDK misbehaves. The guest pays here and POK returns them to pay.show.
+            'payUrl' => rtrim(config('services.pok.production') ? 'https://pay.pokpay.io' : 'https://pay-staging.pokpay.io', '/').'/sdk-orders/'.$reservation->pok_order_id,
             'roomName' => $reservation->room?->roomType?->name,
             'nights' => (int) now()->parse($reservation->check_in_date)->diffInDays($reservation->check_out_date),
         ];
