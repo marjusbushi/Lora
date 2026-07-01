@@ -7,6 +7,7 @@ import Badge from '@/Components/UI/Badge.vue';
 import Modal from '@/Components/UI/Modal.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ReservationCreateModal from '@/Components/Reservations/ReservationCreateModal.vue';
+import MoveRoomModal from '@/Components/Reservations/MoveRoomModal.vue';
 import { channelMeta } from '@/channels';
 import { Link } from '@inertiajs/vue3';
 
@@ -22,6 +23,7 @@ const props = defineProps({
 const toasts = ref(null);
 const showCreateModal = ref(false);
 const showDetailModal = ref(false);
+const showMoveModal = ref(false);
 const selectedReservation = ref(null);
 
 const perms = usePage().props.auth.user?.permissions || [];
@@ -206,6 +208,14 @@ onBeforeUnmount(() => window.removeEventListener('mouseup', endDrag));
 
 function onReservationCreated() {
     toasts.value?.success('Rezervimi u krijua.');
+}
+
+function openMove() {
+    showDetailModal.value = false;
+    showMoveModal.value = true;
+}
+function onRoomMoved() {
+    toasts.value?.success('Mysafiri u zhvendos.');
 }
 
 function doCheckIn(res) {
@@ -447,6 +457,7 @@ function getRoomCalendarCells(room) {
             <template #footer>
                 <Button v-if="canUpdate && selectedReservation?.status === 'confirmed'" variant="primary" size="sm" @click="doCheckIn(selectedReservation)">Check-in</Button>
                 <Button v-if="canUpdate && selectedReservation?.status === 'checked_in'" variant="secondary" size="sm" @click="doCheckOut(selectedReservation)">Check-out</Button>
+                <Button v-if="canUpdate && selectedReservation?.status === 'checked_in'" variant="outline" size="sm" @click="openMove">Zhvendos dhomën</Button>
                 <Link v-if="selectedReservation" :href="route('reservations.show', selectedReservation.id)" class="no-underline">
                     <Button variant="outline" size="sm">Detaje</Button>
                 </Link>
@@ -464,6 +475,14 @@ function getRoomCalendarCells(room) {
             @close="showCreateModal = false"
             @created="onReservationCreated"
             @guest-created="toasts?.success('Mysafiri u shtua.')"
+        />
+
+        <MoveRoomModal
+            :show="showMoveModal"
+            :reservation="selectedReservation"
+            :rooms="rooms"
+            @close="showMoveModal = false"
+            @moved="onRoomMoved"
         />
 
         <ToastContainer ref="toasts" />

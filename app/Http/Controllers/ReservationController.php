@@ -432,6 +432,87 @@ class ReservationController extends Controller
         return back()->with('success', "Check-in per dhomen {$reservation->room->room_number} u krye.");
     }
 
+    /**
+     * Move a CHECKED-IN guest to a different room (upgrade / room problem). Only the
+     * room changes — dates, guest, folio and total stay the same. The new room must be
+     * free for the stay dates; the old room goes to cleaning + a housekeeping task.
+     */
+    public function moveRoom(Request $request, Reservation $reservation): RedirectResponse
+    {
+        if (!auth()->user()->can('update_reservations')) {
+            abort(403);
+        }
+
+        if ($reservation->status !== 'checked_in') {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'room_id' => 'Zhvendosja e dhomes lejohet vetem per mysafiret brenda (checked-in). Perndryshe perdor Edito.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'room_id' => ['required', 'exists:rooms,id'],
+        ]);
+
+        if ((int) $data['room_id'] === (int) $reservation->room_id) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'room_id' => 'Zgjidh nje dhome tjeter nga ajo aktuale.',
+            ]);
+        }
+
+        $newRoom = Room::with('roomType')->findOrFail($data['room_id']);
+        $oldRoom = $reservation->room;
+
+        try {
+            DB::transaction(function () use ($reservation, $newRoom, $oldRoom) {
+                Room::where('id', $newRoom->id)->lockForUpdate()->first();
+
+                if (!Reservation::isRoomAvailable(
+                    $newRoom->id,
+                    $reservation->check_in_date->toDateString(),
+                    $reservation->check_out_date->toDateString(),
+                    $reservation->id
+                )) {
+                    throw new \RuntimeException('unavailable');
+                }
+
+                $reservation->update(['room_id' => $newRoom->id]);
+                $newRoom->update(['status' => 'occupied']);
+
+                // The room the guest left needs cleaning — mirror check-out's housekeeping.
+                if ($oldRoom) {
+                    $oldRoom->update(['status' => 'cleaning']);
+
+                    if (Setting::get('housekeeping.auto_create_on_checkout', true)) {
+                        $alreadyOpen = CleaningTask::where('room_id', $oldRoom->id)
+                            ->where('type', 'checkout_clean')
+                            ->whereIn('status', ['pending', 'in_progress'])
+                            ->exists();
+
+                        if (!$alreadyOpen) {
+                            CleaningTask::create([
+                                'room_id' => $oldRoom->id,
+                                'type' => 'checkout_clean',
+                                'status' => 'pending',
+                                'priority' => Setting::get('housekeeping.default_priority', 'normal'),
+                            ]);
+                        }
+                    }
+                }
+            });
+        } catch (\RuntimeException $e) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'room_id' => "Dhoma {$newRoom->room_number} nuk eshte e lire per keto data.",
+            ]);
+        }
+
+        AuditLog::record('reservation.move_room', $reservation, [
+            'from' => $oldRoom?->room_number,
+            'to' => $newRoom->room_number,
+        ]);
+
+        return back()->with('success', "Mysafiri u zhvendos te dhoma {$newRoom->room_number}.");
+    }
+
     public function checkOut(Request $request, Reservation $reservation): RedirectResponse
     {
         if ($reservation->status !== 'checked_in') {

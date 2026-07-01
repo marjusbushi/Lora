@@ -16,7 +16,8 @@ import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ActionMenu from '@/Components/UI/ActionMenu.vue';
 import { channelOptions } from '@/channels';
 import ReservationCreateModal from '@/Components/Reservations/ReservationCreateModal.vue';
-import { Eye, Pencil, Ban } from 'lucide-vue-next';
+import MoveRoomModal from '@/Components/Reservations/MoveRoomModal.vue';
+import { Eye, Pencil, Ban, ArrowRightLeft } from 'lucide-vue-next';
 
 const menuItemClass = 'flex w-full items-center gap-2.5 px-3 py-2 text-left text-body-sm text-neutral-700 transition-colors hover:bg-neutral-50 no-underline';
 
@@ -33,6 +34,8 @@ const toasts = ref(null);
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const selectedRes = ref(null);
+const showMoveModal = ref(false);
+const moveRes = ref(null);
 
 const perms = usePage().props.auth.user?.permissions || [];
 const canCreate = perms.includes('create_reservations');
@@ -139,6 +142,14 @@ function openEdit(res) {
 
 function onReservationCreated() {
     toasts.value?.success('Rezervimi u krijua.');
+}
+
+function openMove(res) {
+    moveRes.value = res;
+    showMoveModal.value = true;
+}
+function onRoomMoved() {
+    toasts.value?.success('Mysafiri u zhvendos.');
 }
 
 function submitEdit() {
@@ -265,6 +276,9 @@ function formatDate(d) {
                                             <button v-if="canUpdate && !['checked_in','checked_out','cancelled'].includes(res.status)" type="button" :class="menuItemClass" @click="openEdit(res)">
                                                 <Pencil class="h-4 w-4 text-neutral-400" :stroke-width="1.75" /> Edito
                                             </button>
+                                            <button v-if="canUpdate && res.status === 'checked_in'" type="button" :class="menuItemClass" @click="openMove(res)">
+                                                <ArrowRightLeft class="h-4 w-4 text-neutral-400" :stroke-width="1.75" /> Zhvendos dhomën
+                                            </button>
                                             <button v-if="canUpdate && ['pending','confirmed'].includes(res.status)" type="button" :class="[menuItemClass, 'text-error-600']" @click="doCancel(res)">
                                                 <Ban class="h-4 w-4 text-error-500" :stroke-width="1.75" /> Anulo
                                             </button>
@@ -351,6 +365,14 @@ function formatDate(d) {
                 <Button variant="primary" :loading="editForm.processing" @click="submitEdit">Ruaj</Button>
             </template>
         </Modal>
+
+        <MoveRoomModal
+            :show="showMoveModal"
+            :reservation="moveRes"
+            :rooms="rooms"
+            @close="showMoveModal = false"
+            @moved="onRoomMoved"
+        />
 
         <ToastContainer ref="toasts" />
     </AppLayout>
