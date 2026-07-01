@@ -18,7 +18,7 @@ class AiPricing
 {
     public static function configured(): bool
     {
-        return app(AnthropicClient::class)->configured();
+        return app(GeminiClient::class)->configured();
     }
 
     /**
@@ -29,7 +29,7 @@ class AiPricing
     {
         $context = self::context($from, $to);
 
-        $out = app(AnthropicClient::class)->structured(
+        $out = app(GeminiClient::class)->structured(
             self::systemPrompt(),
             self::userPrompt($context, $events, $from, $to),
             self::tool(),

@@ -56,12 +56,19 @@ return [
         'webhook_secret' => env('CHANNEX_WEBHOOK_SECRET'),
     ],
 
-    // Anthropic (Claude) — powers the AI Pricing Assistant. The key may be set in the UI
-    // (Setting 'ai.anthropic_key') or via env; AnthropicClient prefers the Setting.
+    // Anthropic (Claude) — alternate AI provider (kept for future). Key via Setting or env.
     'anthropic' => [
         'key' => env('ANTHROPIC_API_KEY'),
         'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
         'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com/v1'),
+    ],
+
+    // Google Gemini — powers the AI Pricing Assistant. Key may be set in the UI
+    // (Setting 'ai.gemini_key') or via env (GEMINI_API_KEY / GOOGLE_API_KEY).
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY', env('GOOGLE_API_KEY')),
+        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+        'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
     ],
 
 ];

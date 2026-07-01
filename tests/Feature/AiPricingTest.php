@@ -29,26 +29,29 @@ class AiPricingTest extends TestCase
         return RoomType::create(['name' => 'Deluxe', 'base_price' => 70, 'max_occupancy' => 2]);
     }
 
-    private function fakeClaude(RoomType $type): void
+    private function fakeGemini(RoomType $type): void
     {
-        config()->set('services.anthropic.key', 'test-key');
-        config()->set('services.anthropic.model', 'claude-sonnet-4-6');
+        config()->set('services.gemini.key', 'test-key');
+        config()->set('services.gemini.model', 'gemini-2.5-flash');
 
         Http::fake([
-            'api.anthropic.com/*' => Http::response([
-                'content' => [[
-                    'type' => 'tool_use',
-                    'name' => 'submit_pricing_plan',
-                    'input' => [
-                        'summary' => 'Plani për Gushtin',
-                        'recommendations' => [[
-                            'date_from' => '2026-08-14', 'date_to' => '2026-08-16',
-                            'label' => 'Festa e Sarandës', 'reason' => 'Festival + fundjavë.',
-                            'action' => 'raise', 'adjustment_pct' => 55,
-                            'prices' => [['room_type_id' => $type->id, 'room_type_name' => 'Deluxe', 'current' => 70, 'suggested' => 110]],
-                            'projected_extra' => '+€500',
-                        ]],
-                    ],
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'functionCall' => [
+                            'name' => 'submit_pricing_plan',
+                            'args' => [
+                                'summary' => 'Plani për Gushtin',
+                                'recommendations' => [[
+                                    'date_from' => '2026-08-14', 'date_to' => '2026-08-16',
+                                    'label' => 'Festa e Sarandës', 'reason' => 'Festival + fundjavë.',
+                                    'action' => 'raise', 'adjustment_pct' => 55,
+                                    'prices' => [['room_type_id' => $type->id, 'room_type_name' => 'Deluxe', 'current' => 70, 'suggested' => 110]],
+                                    'projected_extra' => '+€500',
+                                ]],
+                            ],
+                        ],
+                    ]]],
                 ]],
             ], 200),
         ]);
@@ -57,7 +60,7 @@ class AiPricingTest extends TestCase
     public function test_ai_plan_returns_recommendations(): void
     {
         $type = $this->type();
-        $this->fakeClaude($type);
+        $this->fakeGemini($type);
 
         $this->actingAs($this->admin())
             ->postJson(route('pricing.smart.ai-plan'), ['month' => '2026-08-01', 'events' => ['15 Gush · Festa e Sarandës']])
@@ -65,13 +68,13 @@ class AiPricingTest extends TestCase
             ->assertJsonPath('recommendations.0.label', 'Festa e Sarandës')
             ->assertJsonPath('recommendations.0.prices.0.suggested', 110);
 
-        Http::assertSent(fn ($r) => str_contains($r->url(), 'api.anthropic.com')
-            && $r['tool_choice']['name'] === 'submit_pricing_plan');
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'generativelanguage.googleapis.com')
+            && $r['tool_config']['function_calling_config']['allowed_function_names'][0] === 'submit_pricing_plan');
     }
 
     public function test_ai_plan_requires_a_key(): void
     {
-        config()->set('services.anthropic.key', null);
+        config()->set('services.gemini.key', null);
 
         $this->actingAs($this->admin())
             ->postJson(route('pricing.smart.ai-plan'), ['month' => '2026-08-01'])
