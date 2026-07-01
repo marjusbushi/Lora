@@ -295,4 +295,49 @@ class PokPaymentTest extends TestCase
                 ->where('initialState.email', 'jon@test.al')
                 ->missing('initialState.countryCode')); // 'ALB' is not alpha-2 → omitted, not sent wrong
     }
+
+    public function test_repeat_booking_fills_an_existing_guests_EMPTY_nationality_so_country_prefills(): void
+    {
+        $this->configurePok();
+        // One fake for the whole test: order is created but NOT paid, so pay.show renders the form.
+        // (Http::fake stubs accumulate and the FIRST match wins — never re-fake mid-test.)
+        $this->fakePok($this->paidStatus(['isCompleted' => false]));
+        $room = $this->room(150);
+        // Existing guest (matched by email) with NO nationality — the owner's exact repro.
+        Guest::create(['first_name' => 'Marjus', 'last_name' => 'B', 'email' => 'repeat@test.al', 'phone' => '069000000']);
+
+        $this->post(route('website.book.submit'), [
+            'room_id' => $room->id,
+            'check_in' => now()->addDays(3)->toDateString(),
+            'check_out' => now()->addDays(4)->toDateString(),
+            'first_name' => 'Marjus', 'last_name' => 'B', 'email' => 'repeat@test.al',
+            'phone' => '069000000', 'nationality' => 'AL', 'adults' => 1,
+        ]);
+
+        $this->assertSame('AL', Guest::where('email', 'repeat@test.al')->value('nationality')); // blank got filled
+
+        $reservation = Reservation::latest('id')->first();
+        $this->get(route('website.pay.show', $reservation->confirmation_token))
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('initialState.countryCode', 'AL'));
+    }
+
+    public function test_repeat_booking_never_overwrites_an_existing_guests_nationality_or_phone(): void
+    {
+        $this->configurePok();
+        $this->fakePok($this->paidStatus());
+        $room = $this->room(150);
+        Guest::create(['first_name' => 'Ita', 'last_name' => 'G', 'email' => 'ita@test.al', 'phone' => '3551111', 'nationality' => 'IT']);
+
+        $this->post(route('website.book.submit'), [
+            'room_id' => $room->id,
+            'check_in' => now()->addDays(3)->toDateString(),
+            'check_out' => now()->addDays(4)->toDateString(),
+            'first_name' => 'Ita', 'last_name' => 'G', 'email' => 'ita@test.al',
+            'phone' => '3559999', 'nationality' => 'AL', 'adults' => 1, // attacker/typo tries to change them
+        ]);
+
+        $g = Guest::where('email', 'ita@test.al')->first();
+        $this->assertSame('IT', $g->nationality);   // anti-tamper intact
+        $this->assertSame('3551111', $g->phone);
+    }
 }

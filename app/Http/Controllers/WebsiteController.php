@@ -221,6 +221,21 @@ class WebsiteController extends Controller
                     ]
                 );
 
+                // Fill-if-EMPTY only: an existing guest's saved values are never overwritten
+                // (anti-tamper above), but blanks may be completed from this submission — so
+                // a repeat booker's nationality/phone still reach the card form's pre-fill.
+                if (! $guest->wasRecentlyCreated) {
+                    if (! $guest->nationality && $request->filled('nationality')) {
+                        $guest->nationality = $request->nationality;
+                    }
+                    if (! $guest->phone && $request->filled('phone')) {
+                        $guest->phone = $request->phone;
+                    }
+                    if ($guest->isDirty()) {
+                        $guest->save();
+                    }
+                }
+
                 return Reservation::create([
                     'room_id' => $room->id,
                     'guest_id' => $guest->id,
