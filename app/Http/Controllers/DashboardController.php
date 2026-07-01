@@ -60,6 +60,7 @@ class DashboardController extends Controller
         // ---- Cash & VAT today ----
         $taxRate = (float) Setting::get('financial.tax_rate', 20);
         $payByMethodToday = Payment::whereDate('created_at', $today)
+            ->notVoided()
             ->select('method', DB::raw('SUM(amount) as s'))->groupBy('method')->pluck('s', 'method');
         $posByMethodToday = PosOrder::where('status', 'completed')->whereDate('created_at', $today)
             ->select('payment_method', DB::raw('SUM(total_amount) as s'))->groupBy('payment_method')->pluck('s', 'payment_method');
@@ -204,6 +205,7 @@ class DashboardController extends Controller
                 DB::raw("SUM(CASE WHEN type = 'discount' THEN amount ELSE 0 END) as discounts"))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
         $pay = Payment::whereIn('reservation_id', $ids)
+            ->notVoided()
             ->select('reservation_id', DB::raw('SUM(amount) as paid'))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 

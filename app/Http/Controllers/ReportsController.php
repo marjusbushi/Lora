@@ -132,6 +132,7 @@ class ReportsController extends Controller
                 DB::raw("SUM(CASE WHEN type = 'discount' THEN amount ELSE 0 END) as discounts"))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
         $pay = Payment::whereIn('reservation_id', $ids)
+            ->notVoided()
             ->select('reservation_id', DB::raw('SUM(amount) as paid'))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
@@ -335,6 +336,7 @@ class ReportsController extends Controller
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
         $pay = Payment::whereIn('reservation_id', $ids)
+            ->notVoided()
             ->select('reservation_id', DB::raw('SUM(amount) as paid'))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
@@ -400,6 +402,7 @@ class ReportsController extends Controller
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
         $pay = Payment::whereIn('reservation_id', $ids)
+            ->notVoided()
             ->select('reservation_id', DB::raw('SUM(amount) as paid'))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
@@ -568,6 +571,7 @@ class ReportsController extends Controller
 
         // Source 1: reservation payments, grouped by day + method (cross-DB: DATE()).
         $payRows = Payment::whereBetween('created_at', [$start, $end])
+            ->notVoided()
             ->select(
                 DB::raw('DATE(created_at) as d'),
                 'method',

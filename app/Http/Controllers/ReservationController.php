@@ -143,7 +143,7 @@ class ReservationController extends Controller
         $taxRate = (float) Setting::get('financial.tax_rate', 20);
         $taxAmount = $taxRate > 0 ? round($gross - ($gross / (1 + $taxRate / 100)), 2) : 0.0;
 
-        $paid = (float) $reservation->payments->sum('amount');
+        $paid = (float) $reservation->payments->reject(fn ($p) => $p->is_voided)->sum('amount');
         $outstanding = round($gross - $paid, 2);
 
         $openPosOrders = PosOrder::where('reservation_id', $reservation->id)
@@ -548,7 +548,7 @@ class ReservationController extends Controller
                 $roomCharge = (float) $reservation->total_amount;
                 $folioCharges = (float) $reservation->folioItems->whereNotIn('type', ['discount', 'room'])->sum('amount');
                 $discounts = (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
-                $paid = (float) $reservation->payments->sum('amount');
+                $paid = (float) $reservation->payments->reject(fn ($p) => $p->is_voided)->sum('amount');
                 $outstanding = round($roomCharge + $folioCharges - $discounts - $paid, 2);
 
                 if ($outstanding > 0) {
