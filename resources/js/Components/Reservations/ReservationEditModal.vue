@@ -74,6 +74,33 @@ watch(
     }
 );
 
+// --- Capacity: cap persons by the chosen room's max_occupancy (like the create popup) ---
+const selectedRoom = computed(() => {
+    const id = Number(form.room_id);
+    return id ? props.rooms.find((r) => Number(r.id) === id) || null : null;
+});
+const maxOccupancy = computed(() => selectedRoom.value?.room_type?.max_occupancy ?? null);
+const adultsOptions = computed(() => {
+    const cap = maxOccupancy.value || 10;
+    return Array.from({ length: cap }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
+});
+const childrenOptions = computed(() => {
+    const cap = maxOccupancy.value || 10;
+    const remaining = Math.max(0, cap - (Number(form.adults) || 1));
+    return Array.from({ length: remaining + 1 }, (_, i) => ({ value: i, label: String(i) }));
+});
+// Changing to a smaller room auto-reduces persons so the update can't silently fail on capacity.
+watch(
+    () => [form.room_id, form.adults],
+    () => {
+        const cap = maxOccupancy.value;
+        if (!cap) return;
+        if (Number(form.adults) > cap) form.adults = cap;
+        if (Number(form.adults) < 1) form.adults = 1;
+        if (Number(form.adults) + Number(form.children) > cap) form.children = Math.max(0, cap - Number(form.adults));
+    }
+);
+
 function ymd(v) {
     return v ? String(v).split('T')[0] : '';
 }
@@ -127,11 +154,11 @@ function submit() {
                 <FormGroup label="Check-out" :error="form.errors.check_out_date" required>
                     <DatePicker v-model="form.check_out_date" :error="form.errors.check_out_date" />
                 </FormGroup>
-                <FormGroup label="Te rritur">
-                    <TextInput type="number" v-model="form.adults" min="1" max="10" />
+                <FormGroup label="Te rritur" :error="form.errors.adults">
+                    <Select v-model="form.adults" :options="adultsOptions" placeholder="" :error="form.errors.adults" />
                 </FormGroup>
-                <FormGroup label="Femije">
-                    <TextInput type="number" v-model="form.children" min="0" max="10" />
+                <FormGroup label="Femije" :error="form.errors.children">
+                    <Select v-model="form.children" :options="childrenOptions" placeholder="" :error="form.errors.children" />
                 </FormGroup>
                 <FormGroup label="Burimi" :error="form.errors.channel">
                     <Select v-model="form.channel" :options="channelOptions" :error="form.errors.channel" />

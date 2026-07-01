@@ -244,7 +244,7 @@ function feePctOf(res) {
 }
 function netOfRes(res) {
     const total = Number(res?.total_amount) || 0;
-    return total - Math.round(total * feePctOf(res) / 100) / 100;
+    return total - Math.round(total * feePctOf(res)) / 100;
 }
 
 function doCheckIn(res) {
