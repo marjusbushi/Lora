@@ -77,5 +77,8 @@ class DatabaseSeeder extends Seeder
 
         // Settings
         $this->call(SettingSeeder::class);
+
+        // Recurring demand events for pricing (holidays + August peak)
+        $this->call(PricingEventSeeder::class);
     }
 }
