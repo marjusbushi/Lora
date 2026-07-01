@@ -36,6 +36,13 @@ Route::post('/book/check', [WebsiteController::class, 'checkAvailability'])->mid
 Route::get('/book/availability', [WebsiteController::class, 'availability'])->middleware('throttle:60,1')->name('website.book.availability');
 Route::post('/book', [WebsiteController::class, 'submitBooking'])->middleware('throttle:10,1')->name('website.book.submit');
 Route::get('/book/confirmation/{token}', [WebsiteController::class, 'bookingConfirmation'])->name('website.booking.confirmation');
+
+// POK card payment (embedded) for a pending website booking.
+Route::get('/book/pay/{token}', [WebsiteController::class, 'bookingPayment'])->name('website.pay.show');
+Route::post('/book/pay/{token}', [WebsiteController::class, 'confirmPayment'])->middleware('throttle:20,1')->name('website.pay.confirm');
+// POK server-to-server webhook (CSRF-excluded in bootstrap/app.php; verifies via getOrder, never trusts the body).
+Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware('throttle:120,1')->name('website.pay.webhook');
+
 Route::get('/about', [WebsiteController::class, 'about'])->name('website.about');
 Route::get('/contact', [WebsiteController::class, 'contact'])->name('website.contact');
 Route::post('/contact', [WebsiteController::class, 'submitContact'])->middleware('throttle:5,1')->name('website.contact.submit');

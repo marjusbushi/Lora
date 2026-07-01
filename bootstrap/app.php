@@ -18,9 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
 
-        // Channex posts the booking webhook server-to-server (no CSRF token);
-        // it is authenticated by a shared-secret header in the controller.
-        $middleware->validateCsrfTokens(except: ['channex/webhook']);
+        // Channex + POK post webhooks server-to-server (no CSRF token). Channex uses a
+        // shared-secret header; POK re-verifies every event via getOrder (never trusts the body).
+        $middleware->validateCsrfTokens(except: ['channex/webhook', 'pok/webhook']);
 
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
@@ -38,5 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('channex:pull-bookings')->everyFifteenMinutes()->withoutOverlapping();
         // Nightly safety-net: re-push availability + rates in case a real-time push was missed.
         $schedule->command('channex:push-ari --queue')->dailyAt('04:00');
+        // Free abandoned holds: cancel pending direct bookings whose POK payment never completed.
+        $schedule->command('pok:release-unpaid')->everyFiveMinutes()->withoutOverlapping();
     })
     ->create();
