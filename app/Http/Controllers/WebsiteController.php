@@ -15,6 +15,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -64,6 +65,9 @@ class WebsiteController extends Controller
             'roomTypes' => $roomTypes,
             'preselectedType' => $request->input('room_type'),
             'hotel' => Setting::getGroup('hotel'),
+            // A card-payment step follows the form → the submit button says "Vazhdo te pagesa"
+            // instead of "Konfirmo", so the money step is never a surprise.
+            'paymentRequired' => app(PokClient::class)->configured(),
         ]);
     }
 
@@ -184,8 +188,12 @@ class WebsiteController extends Controller
 
         $room = Room::with('roomType')->findOrFail($request->room_id);
 
+        // A VALIDATION error (not a flash) so Inertia preserves the wizard's state — the guest
+        // keeps everything typed and recovers in-step instead of being reset to step 1.
         if ($room->roomType && ((int) $request->adults + (int) $request->children) > $room->roomType->max_occupancy) {
-            return back()->with('error', "Kjo dhome lejon maksimumi {$room->roomType->max_occupancy} persona.");
+            throw ValidationException::withMessages([
+                'room_id' => "Kjo dhomë lejon maksimumi {$room->roomType->max_occupancy} persona — zgjidh një dhomë më të madhe.",
+            ]);
         }
 
         $nights = now()->parse($request->check_in)->diffInDays($request->check_out);
@@ -251,7 +259,11 @@ class WebsiteController extends Controller
                 ]);
             });
         } catch (\RuntimeException $e) {
-            return back()->with('error', 'Kjo dhome nuk eshte me e disponueshme per keto data.');
+            // Validation error (not a flash) → the wizard keeps every typed field and shows
+            // an in-step recovery banner instead of resetting the guest to step 1.
+            throw ValidationException::withMessages([
+                'room_id' => 'Kjo dhomë nuk është më e disponueshme për këto data — zgjidh një dhomë tjetër.',
+            ]);
         }
 
         $guestName = trim("{$request->first_name} {$request->last_name}");
@@ -277,9 +289,12 @@ class WebsiteController extends Controller
             } catch (\Throwable $e) {
                 report($e);
                 // Couldn't reach POK — release the just-held room and ask the guest to retry.
+                // Validation error (not a flash) so the wizard keeps everything typed.
                 $reservation->update(['status' => 'cancelled']);
 
-                return back()->with('error', 'Nuk u lidh dot pagesa me kartë. Provo sërish pas pak.');
+                throw ValidationException::withMessages([
+                    'room_id' => 'Nuk u lidh dot pagesa me kartë. Provo sërish pas pak.',
+                ]);
             }
         }
 

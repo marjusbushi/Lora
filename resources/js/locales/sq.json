@@ -1,210 +1,227 @@
 {
-  "nav": {
-    "home": "Home",
-    "rooms": "Dhomat",
-    "book": "Rezervo",
-    "about": "Rreth Nesh",
-    "contact": "Kontakt",
-    "reserve": "Rezervo Tani"
-  },
-  "footer": {
-    "blurb": "Nje shtepi e madhe mbi detin Jon. Qetesi, gur i bardhe dhe mikpritje e vertete ne Ksamil.",
-    "nav": "Navigim",
-    "contact": "Kontakt",
-    "rights": "Te gjitha te drejtat e rezervuara."
-  },
-  "home": {
-    "meta": {
-      "title": "Kreu — Villa Mucho"
+    "nav": {
+        "home": "Home",
+        "rooms": "Dhomat",
+        "book": "Rezervo",
+        "about": "Rreth Nesh",
+        "contact": "Kontakt",
+        "reserve": "Rezervo Tani"
     },
-    "hero": {
-      "imageAlt": "Villa Mucho — Ksamil, bregu i Jonit",
-      "bookNow": "Rezervo Tani",
-      "viewRooms": "Shiko Dhomat"
+    "footer": {
+        "blurb": "Nje shtepi e madhe mbi detin Jon. Qetesi, gur i bardhe dhe mikpritje e vertete ne Ksamil.",
+        "nav": "Navigim",
+        "contact": "Kontakt",
+        "rights": "Te gjitha te drejtat e rezervuara."
     },
-    "features": {
-      "eyebrow": "Pervoja",
-      "heading": "Pse Villa Mucho?",
-      "subheading": "Cdo detaj eshte menduar per komoditetin tuaj",
-      "sea": {
-        "title": "Afer Detit",
-        "desc": "Vetem 2 minuta ne kembe nga plazhi i Ksamilit"
-      },
-      "breakfast": {
-        "title": "Mengjes i Perfshire",
-        "desc": "Mengjes i pasur dhe i larmishem mesdhetar"
-      },
-      "wifi": {
-        "title": "WiFi Falas",
-        "desc": "Internet i shpejte ne te gjitha ambientet"
-      },
-      "bar": {
-        "title": "Bar",
-        "desc": "Pije freskuese dhe kokteje perballe detit"
-      }
-    },
-    "rooms": {
-      "eyebrow": "Akomodimi",
-      "heading": "Dhomat & Suitat",
-      "subheading": "Nje koleksion i vogel suitash, secila me pamjen e vet nga Joni.",
-      "suiteLabel": "Suite",
-      "breakfastIncluded": "Mengjesi i perfshire",
-      "priceFrom": "Nga",
-      "perNight": "/ nate",
-      "reserve": "Rezervo",
-      "viewRoom": "Shiko Dhomen",
-      "maxOccupancy": "Max {count} persona"
-    },
-    "cta": {
-      "eyebrow": "Rezervo Direkt",
-      "heading": "Gati per pushime?",
-      "subheading": "Cmimi me i mire i garantuar kur rezervon drejtperdrejt me ne.",
-      "bookNow": "Rezervo Tani"
-    }
-  },
-  "rooms": {
-    "meta": {
-      "title": "Dhomat — Villa Mucho"
-    },
-    "hero": {
-      "eyebrow": "Akomodimi",
-      "title": "Dhomat & Suitat",
-      "subtitle": "Cdo dhome eshte projektuar per qetesine dhe pamjen nga deti."
-    },
-    "card": {
-      "priceFrom": "Nga",
-      "perNight": "/ nate",
-      "maxOccupancy": "Max {count} persona",
-      "roomsCount": "{count} dhoma",
-      "available": "{count} te lira",
-      "breakfastIncluded": "Mengjesi i perfshire",
-      "reserve": "Rezervo {name}"
-    }
-  },
-  "book": {
-    "head": {
-      "title": "Rezervo — Villa Mucho"
-    },
-    "header": {
-      "title": "Rezervo Dhomen",
-      "subtitle": "Zgjidhni datat dhe dhomen qe deshironi"
-    },
-    "steps": {
-      "dates": "Datat",
-      "room": "Dhoma",
-      "details": "Te dhenat"
-    },
-    "search": {
-      "heading": "Zgjidhni datat",
-      "checkIn": "Check-in *",
-      "checkOut": "Check-out *",
-      "roomType": "Tipi i dhomes",
-      "allTypes": "Te gjitha tipet",
-      "guests": "Mysafire",
-      "perNight": "nate",
-      "checkButton": "Kontrollo Disponueshmerine",
-      "checking": "Duke kontrolluar...",
-      "checkError": "Gabim gjate kontrollit"
+    "home": {
+        "meta": {
+            "title": "Kreu — Villa Mucho"
+        },
+        "hero": {
+            "imageAlt": "Villa Mucho — Ksamil, bregu i Jonit",
+            "bookNow": "Rezervo Tani",
+            "viewRooms": "Shiko Dhomat"
+        },
+        "features": {
+            "eyebrow": "Pervoja",
+            "heading": "Pse Villa Mucho?",
+            "subheading": "Cdo detaj eshte menduar per komoditetin tuaj",
+            "sea": {
+                "title": "Afer Detit",
+                "desc": "Vetem 2 minuta ne kembe nga plazhi i Ksamilit"
+            },
+            "breakfast": {
+                "title": "Mengjes i Perfshire",
+                "desc": "Mengjes i pasur dhe i larmishem mesdhetar"
+            },
+            "wifi": {
+                "title": "WiFi Falas",
+                "desc": "Internet i shpejte ne te gjitha ambientet"
+            },
+            "bar": {
+                "title": "Bar",
+                "desc": "Pije freskuese dhe kokteje perballe detit"
+            }
+        },
+        "rooms": {
+            "eyebrow": "Akomodimi",
+            "heading": "Dhomat & Suitat",
+            "subheading": "Nje koleksion i vogel suitash, secila me pamjen e vet nga Joni.",
+            "suiteLabel": "Suite",
+            "breakfastIncluded": "Mengjesi i perfshire",
+            "priceFrom": "Nga",
+            "perNight": "/ nate",
+            "reserve": "Rezervo",
+            "viewRoom": "Shiko Dhomen",
+            "maxOccupancy": "Max {count} persona"
+        },
+        "cta": {
+            "eyebrow": "Rezervo Direkt",
+            "heading": "Gati per pushime?",
+            "subheading": "Cmimi me i mire i garantuar kur rezervon drejtperdrejt me ne.",
+            "bookNow": "Rezervo Tani"
+        }
     },
     "rooms": {
-      "heading": "Dhomat e lira",
-      "changeDates": "← Ndrysho datat",
-      "nights": "net",
-      "room": "Dhoma",
-      "floor": "Kati",
-      "max": "Max",
-      "persons": "persona",
-      "emptyTitle": "Nuk ka dhoma te lira per keto data.",
-      "tryOtherDates": "Provoni data te tjera"
+        "meta": {
+            "title": "Dhomat — Villa Mucho"
+        },
+        "hero": {
+            "eyebrow": "Akomodimi",
+            "title": "Dhomat & Suitat",
+            "subtitle": "Cdo dhome eshte projektuar per qetesine dhe pamjen nga deti."
+        },
+        "card": {
+            "priceFrom": "Nga",
+            "perNight": "/ nate",
+            "maxOccupancy": "Max {count} persona",
+            "roomsCount": "{count} dhoma",
+            "available": "{count} te lira",
+            "breakfastIncluded": "Mengjesi i perfshire",
+            "reserve": "Rezervo {name}"
+        }
     },
-    "guest": {
-      "heading": "Te dhenat tuaja",
-      "changeRoom": "← Ndrysho dhomen",
-      "firstName": "Emri *",
-      "firstNamePlaceholder": "Emri",
-      "lastName": "Mbiemri *",
-      "lastNamePlaceholder": "Mbiemri",
-      "email": "Email *",
-      "emailPlaceholder": "email{'@'}example.com",
-      "phone": "Telefon *",
-      "phonePlaceholder": "+355 69...",
-      "nationality": "Kombesia",
-      "nationalityPlaceholder": "Zgjidh shtetin...",
-      "specialRequests": "Kerkesa speciale",
-      "notesPlaceholder": "Shenime shtese...",
-      "submitting": "Duke derguar...",
-      "confirm": "Konfirmo Rezervimin"
+    "book": {
+        "head": {
+            "title": "Rezervo — Villa Mucho"
+        },
+        "header": {
+            "title": "Rezervo Dhomen",
+            "subtitle": "Zgjidhni datat dhe dhomen qe deshironi"
+        },
+        "steps": {
+            "dates": "Datat",
+            "room": "Dhoma",
+            "details": "Te dhenat",
+            "navLabel": "Hapat e rezervimit",
+            "backTo": "Kthehu te hapi {step}"
+        },
+        "search": {
+            "heading": "Zgjidhni datat",
+            "checkIn": "Check-in *",
+            "checkOut": "Check-out *",
+            "roomType": "Tipi i dhomes",
+            "allTypes": "Te gjitha tipet",
+            "guests": "Mysafire",
+            "perNight": "nate",
+            "checkButton": "Kontrollo Disponueshmerine",
+            "checking": "Duke kontrolluar...",
+            "checkError": "Gabim gjate kontrollit",
+            "adults": "Të rritur",
+            "children": "Fëmijë",
+            "pickCheckout": "— zgjidh datën e daljes",
+            "freeRooms": "{count} dhoma të lira për {nights} net",
+            "noRooms": "Asnjë dhomë e lirë për këto data — provo data të tjera",
+            "continueRooms": "Vazhdo te dhomat ({count}) →",
+            "pickDatesHint": "Zgjidh datat në kalendar për të vazhduar",
+            "retry": "Provo sërish"
+        },
+        "rooms": {
+            "heading": "Dhomat e lira",
+            "changeDates": "← Ndrysho datat",
+            "nights": "net",
+            "room": "Dhoma",
+            "floor": "Kati",
+            "max": "Max",
+            "persons": "persona",
+            "emptyTitle": "Nuk ka dhoma te lira per keto data.",
+            "tryOtherDates": "Provoni data te tjera"
+        },
+        "guest": {
+            "heading": "Te dhenat tuaja",
+            "changeRoom": "← Ndrysho dhomen",
+            "firstName": "Emri *",
+            "firstNamePlaceholder": "Emri",
+            "lastName": "Mbiemri *",
+            "lastNamePlaceholder": "Mbiemri",
+            "email": "Email *",
+            "emailPlaceholder": "email{'@'}example.com",
+            "phone": "Telefon *",
+            "phonePlaceholder": "+355 69...",
+            "nationality": "Kombesia",
+            "nationalityPlaceholder": "Zgjidh shtetin...",
+            "specialRequests": "Kerkesa speciale",
+            "notesPlaceholder": "Shenime shtese...",
+            "submitting": "Duke derguar...",
+            "confirm": "Konfirmo Rezervimin",
+            "commonCountries": "Më të zakonshmet",
+            "allCountries": "Të gjitha",
+            "chooseOther": "Zgjidh dhomë tjetër",
+            "continuePay": "Vazhdo te pagesa",
+            "paymentNote": "Rezervimi konfirmohet pas pagesës së sigurt me kartë. Dhoma mbahet për ty 30 minuta.",
+            "adultsShort": "të rritur",
+            "childrenShort": "fëmijë"
+        }
+    },
+    "contact": {
+        "meta": {
+            "title": "Kontakt — Villa Mucho"
+        },
+        "heading": {
+            "title": "Na Kontaktoni",
+            "subtitle": "Keni pyetje? Na shkruani dhe do ju pergjigjemi sa me shpejt."
+        },
+        "form": {
+            "name": {
+                "label": "Emri juaj *",
+                "placeholder": "Emri Mbiemri"
+            },
+            "email": {
+                "label": "Email *",
+                "placeholder": "email{'@'}example.com"
+            },
+            "message": {
+                "label": "Mesazhi *",
+                "placeholder": "Shkruani mesazhin tuaj..."
+            },
+            "submit": "Dergo Mesazhin",
+            "submitting": "Duke derguar..."
+        },
+        "info": {
+            "title": "Informacione Kontakti",
+            "address": "Adresa",
+            "phone": "Telefon",
+            "email": "Email"
+        }
+    },
+    "about": {
+        "meta": {
+            "title": "Rreth Nesh — Villa Mucho"
+        },
+        "hero": {
+            "title": "Rreth Nesh"
+        },
+        "photoSoon": "Foto se shpejti",
+        "story": {
+            "title": "Historia Jone",
+            "paragraph1": "Villa Mucho lindi nga dashuria per mikpritjen dhe bukurine e Jugut te Shqiperise. E vendosur ne brigjet e Ksamilit, villa jone ofron nje pervojë unike qe kombinon luksin modern me traditen shqiptare.",
+            "paragraph2": "Me dhoma te rehatshme, restorant me kuzhine mesdhetare, dhe staf te perkushtuar, ne sigurojme qe cdo mysafir te ndihet si ne shtepi — por me mire."
+        },
+        "stats": {
+            "rooms": "Dhoma te rehatshme",
+            "guests": "Mysafire te kenaqur",
+            "rating": "Vleresim mesatar"
+        },
+        "staff": {
+            "title": "Stafi Yne",
+            "paragraph1": "Ekipi yne i perkushtuar punon cdo dite per te siguruar pervojen me te mire. Nga receptionist-et e buzequmur deri te kuzhinier-et e talentuar, secili anetar i stafit tone jep kontribut per te bere qendrimin tuaj te paharrueshëm.",
+            "paragraph2": "Ne besojme ne mikpritjen e vertete — jo vetem sherbim, por kujdes i sinqerte per cdo mysafir."
+        }
+    },
+    "confirmation": {
+        "pageTitle": "Rezervimi u konfirmua — Villa Mucho",
+        "heading": "Faleminderit!",
+        "intro": "Rezervimi juaj u regjistrua me sukses. Do te konfirmohet nga stafi yne brenda 24 oreve.",
+        "labels": {
+            "reference": "Nr. Rezervimit",
+            "guest": "Mysafiri",
+            "room": "Dhoma",
+            "checkIn": "Check-in",
+            "checkOut": "Check-out",
+            "total": "Total"
+        },
+        "cta": {
+            "home": "Kthehu ne faqen kryesore"
+        }
     }
-  },
-  "contact": {
-    "meta": {
-      "title": "Kontakt — Villa Mucho"
-    },
-    "heading": {
-      "title": "Na Kontaktoni",
-      "subtitle": "Keni pyetje? Na shkruani dhe do ju pergjigjemi sa me shpejt."
-    },
-    "form": {
-      "name": {
-        "label": "Emri juaj *",
-        "placeholder": "Emri Mbiemri"
-      },
-      "email": {
-        "label": "Email *",
-        "placeholder": "email{'@'}example.com"
-      },
-      "message": {
-        "label": "Mesazhi *",
-        "placeholder": "Shkruani mesazhin tuaj..."
-      },
-      "submit": "Dergo Mesazhin",
-      "submitting": "Duke derguar..."
-    },
-    "info": {
-      "title": "Informacione Kontakti",
-      "address": "Adresa",
-      "phone": "Telefon",
-      "email": "Email"
-    }
-  },
-  "about": {
-    "meta": {
-      "title": "Rreth Nesh — Villa Mucho"
-    },
-    "hero": {
-      "title": "Rreth Nesh"
-    },
-    "photoSoon": "Foto se shpejti",
-    "story": {
-      "title": "Historia Jone",
-      "paragraph1": "Villa Mucho lindi nga dashuria per mikpritjen dhe bukurine e Jugut te Shqiperise. E vendosur ne brigjet e Ksamilit, villa jone ofron nje pervojë unike qe kombinon luksin modern me traditen shqiptare.",
-      "paragraph2": "Me dhoma te rehatshme, restorant me kuzhine mesdhetare, dhe staf te perkushtuar, ne sigurojme qe cdo mysafir te ndihet si ne shtepi — por me mire."
-    },
-    "stats": {
-      "rooms": "Dhoma te rehatshme",
-      "guests": "Mysafire te kenaqur",
-      "rating": "Vleresim mesatar"
-    },
-    "staff": {
-      "title": "Stafi Yne",
-      "paragraph1": "Ekipi yne i perkushtuar punon cdo dite per te siguruar pervojen me te mire. Nga receptionist-et e buzequmur deri te kuzhinier-et e talentuar, secili anetar i stafit tone jep kontribut per te bere qendrimin tuaj te paharrueshëm.",
-      "paragraph2": "Ne besojme ne mikpritjen e vertete — jo vetem sherbim, por kujdes i sinqerte per cdo mysafir."
-    }
-  },
-  "confirmation": {
-    "pageTitle": "Rezervimi u konfirmua — Villa Mucho",
-    "heading": "Faleminderit!",
-    "intro": "Rezervimi juaj u regjistrua me sukses. Do te konfirmohet nga stafi yne brenda 24 oreve.",
-    "labels": {
-      "reference": "Nr. Rezervimit",
-      "guest": "Mysafiri",
-      "room": "Dhoma",
-      "checkIn": "Check-in",
-      "checkOut": "Check-out",
-      "total": "Total"
-    },
-    "cta": {
-      "home": "Kthehu ne faqen kryesore"
-    }
-  }
 }

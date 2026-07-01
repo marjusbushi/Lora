@@ -247,7 +247,27 @@ export const COUNTRIES = [
     { code: "ZW", name: "Zimbabwe" },
 ];
 
-export const countryOptions = COUNTRIES.map((c) => ({ value: c.code, label: c.name }));
+// Guests are overwhelmingly Albanian — show ALBANIAN country names (browser-built-in
+// Intl.DisplayNames, no data shipped), English name as the fallback. Book.vue pins the
+// common origin countries first via PRIORITY_COUNTRIES.
+const displaySq = typeof Intl !== 'undefined' && Intl.DisplayNames
+    ? new Intl.DisplayNames(['sq'], { type: 'region' })
+    : null;
+
+function albanianLabel(c) {
+    try {
+        const label = displaySq?.of(c.code);
+        if (label && label !== c.code) return label;
+    } catch (e) { /* unknown region code → fallback to English */ }
+    return c.name;
+}
+
+export const countryOptions = COUNTRIES
+    .map((c) => ({ value: c.code, label: albanianLabel(c) }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'sq'));
+
+// Where Villa Mucho's guests actually come from — pinned first in the nationality dropdown.
+export const PRIORITY_COUNTRIES = ['AL', 'XK', 'MK', 'GR', 'IT', 'DE', 'CH', 'GB', 'US'];
 
 const BY_CODE = Object.fromEntries(COUNTRIES.map((c) => [c.code, c.name]));
 

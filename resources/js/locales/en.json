@@ -1,210 +1,227 @@
 {
-  "nav": {
-    "home": "Home",
-    "rooms": "Rooms",
-    "book": "Book",
-    "about": "About",
-    "contact": "Contact",
-    "reserve": "Book Now"
-  },
-  "footer": {
-    "blurb": "A grand house above the Ionian Sea. Calm, white stone and true hospitality in Ksamil.",
-    "nav": "Navigation",
-    "contact": "Contact",
-    "rights": "All rights reserved."
-  },
-  "home": {
-    "meta": {
-      "title": "Home — Villa Mucho"
+    "nav": {
+        "home": "Home",
+        "rooms": "Rooms",
+        "book": "Book",
+        "about": "About",
+        "contact": "Contact",
+        "reserve": "Book Now"
     },
-    "hero": {
-      "imageAlt": "Villa Mucho — Ksamil, the Ionian shore",
-      "bookNow": "Book Now",
-      "viewRooms": "View Rooms"
+    "footer": {
+        "blurb": "A grand house above the Ionian Sea. Calm, white stone and true hospitality in Ksamil.",
+        "nav": "Navigation",
+        "contact": "Contact",
+        "rights": "All rights reserved."
     },
-    "features": {
-      "eyebrow": "Experience",
-      "heading": "Why Villa Mucho?",
-      "subheading": "Every detail is designed for your comfort",
-      "sea": {
-        "title": "By the Sea",
-        "desc": "Just a 2-minute walk from Ksamil beach"
-      },
-      "breakfast": {
-        "title": "Breakfast Included",
-        "desc": "A rich and varied Mediterranean breakfast"
-      },
-      "wifi": {
-        "title": "Free WiFi",
-        "desc": "Fast internet throughout the property"
-      },
-      "bar": {
-        "title": "Bar",
-        "desc": "Refreshing drinks and cocktails by the sea"
-      }
-    },
-    "rooms": {
-      "eyebrow": "Accommodation",
-      "heading": "Rooms & Suites",
-      "subheading": "A small collection of suites, each with its own view of the Ionian.",
-      "suiteLabel": "Suite",
-      "breakfastIncluded": "Breakfast included",
-      "priceFrom": "From",
-      "perNight": "/ night",
-      "reserve": "Reserve",
-      "viewRoom": "View Room",
-      "maxOccupancy": "Max {count} guests"
-    },
-    "cta": {
-      "eyebrow": "Book Direct",
-      "heading": "Ready for a getaway?",
-      "subheading": "Best price guaranteed when you book directly with us.",
-      "bookNow": "Book Now"
-    }
-  },
-  "rooms": {
-    "meta": {
-      "title": "Rooms — Villa Mucho"
-    },
-    "hero": {
-      "eyebrow": "Accommodation",
-      "title": "Rooms & Suites",
-      "subtitle": "Every room is designed for tranquility and sea views."
-    },
-    "card": {
-      "priceFrom": "From",
-      "perNight": "/ night",
-      "maxOccupancy": "Up to {count} guests",
-      "roomsCount": "{count} rooms",
-      "available": "{count} available",
-      "breakfastIncluded": "Breakfast included",
-      "reserve": "Book {name}"
-    }
-  },
-  "book": {
-    "head": {
-      "title": "Book — Villa Mucho"
-    },
-    "header": {
-      "title": "Book a Room",
-      "subtitle": "Choose your dates and the room you want"
-    },
-    "steps": {
-      "dates": "Dates",
-      "room": "Room",
-      "details": "Details"
-    },
-    "search": {
-      "heading": "Choose your dates",
-      "checkIn": "Check-in *",
-      "checkOut": "Check-out *",
-      "roomType": "Room type",
-      "allTypes": "All types",
-      "guests": "Guests",
-      "perNight": "night",
-      "checkButton": "Check Availability",
-      "checking": "Checking...",
-      "checkError": "Error while checking availability"
+    "home": {
+        "meta": {
+            "title": "Home — Villa Mucho"
+        },
+        "hero": {
+            "imageAlt": "Villa Mucho — Ksamil, the Ionian shore",
+            "bookNow": "Book Now",
+            "viewRooms": "View Rooms"
+        },
+        "features": {
+            "eyebrow": "Experience",
+            "heading": "Why Villa Mucho?",
+            "subheading": "Every detail is designed for your comfort",
+            "sea": {
+                "title": "By the Sea",
+                "desc": "Just a 2-minute walk from Ksamil beach"
+            },
+            "breakfast": {
+                "title": "Breakfast Included",
+                "desc": "A rich and varied Mediterranean breakfast"
+            },
+            "wifi": {
+                "title": "Free WiFi",
+                "desc": "Fast internet throughout the property"
+            },
+            "bar": {
+                "title": "Bar",
+                "desc": "Refreshing drinks and cocktails by the sea"
+            }
+        },
+        "rooms": {
+            "eyebrow": "Accommodation",
+            "heading": "Rooms & Suites",
+            "subheading": "A small collection of suites, each with its own view of the Ionian.",
+            "suiteLabel": "Suite",
+            "breakfastIncluded": "Breakfast included",
+            "priceFrom": "From",
+            "perNight": "/ night",
+            "reserve": "Reserve",
+            "viewRoom": "View Room",
+            "maxOccupancy": "Max {count} guests"
+        },
+        "cta": {
+            "eyebrow": "Book Direct",
+            "heading": "Ready for a getaway?",
+            "subheading": "Best price guaranteed when you book directly with us.",
+            "bookNow": "Book Now"
+        }
     },
     "rooms": {
-      "heading": "Available rooms",
-      "changeDates": "← Change dates",
-      "nights": "nights",
-      "room": "Room",
-      "floor": "Floor",
-      "max": "Max",
-      "persons": "guests",
-      "emptyTitle": "No rooms available for these dates.",
-      "tryOtherDates": "Try other dates"
+        "meta": {
+            "title": "Rooms — Villa Mucho"
+        },
+        "hero": {
+            "eyebrow": "Accommodation",
+            "title": "Rooms & Suites",
+            "subtitle": "Every room is designed for tranquility and sea views."
+        },
+        "card": {
+            "priceFrom": "From",
+            "perNight": "/ night",
+            "maxOccupancy": "Up to {count} guests",
+            "roomsCount": "{count} rooms",
+            "available": "{count} available",
+            "breakfastIncluded": "Breakfast included",
+            "reserve": "Book {name}"
+        }
     },
-    "guest": {
-      "heading": "Your details",
-      "changeRoom": "← Change room",
-      "firstName": "First name *",
-      "firstNamePlaceholder": "First name",
-      "lastName": "Last name *",
-      "lastNamePlaceholder": "Last name",
-      "email": "Email *",
-      "emailPlaceholder": "email{'@'}example.com",
-      "phone": "Phone *",
-      "phonePlaceholder": "+355 69...",
-      "nationality": "Nationality",
-      "nationalityPlaceholder": "Select country...",
-      "specialRequests": "Special requests",
-      "notesPlaceholder": "Additional notes...",
-      "submitting": "Sending...",
-      "confirm": "Confirm Booking"
+    "book": {
+        "head": {
+            "title": "Book — Villa Mucho"
+        },
+        "header": {
+            "title": "Book a Room",
+            "subtitle": "Choose your dates and the room you want"
+        },
+        "steps": {
+            "dates": "Dates",
+            "room": "Room",
+            "details": "Details",
+            "navLabel": "Booking steps",
+            "backTo": "Back to step {step}"
+        },
+        "search": {
+            "heading": "Choose your dates",
+            "checkIn": "Check-in *",
+            "checkOut": "Check-out *",
+            "roomType": "Room type",
+            "allTypes": "All types",
+            "guests": "Guests",
+            "perNight": "night",
+            "checkButton": "Check Availability",
+            "checking": "Checking...",
+            "checkError": "Error while checking availability",
+            "adults": "Adults",
+            "children": "Children",
+            "pickCheckout": "— pick a check-out date",
+            "freeRooms": "{count} rooms available for {nights} nights",
+            "noRooms": "No rooms available for these dates — try different dates",
+            "continueRooms": "Continue to rooms ({count}) →",
+            "pickDatesHint": "Pick your dates on the calendar to continue",
+            "retry": "Try again"
+        },
+        "rooms": {
+            "heading": "Available rooms",
+            "changeDates": "← Change dates",
+            "nights": "nights",
+            "room": "Room",
+            "floor": "Floor",
+            "max": "Max",
+            "persons": "guests",
+            "emptyTitle": "No rooms available for these dates.",
+            "tryOtherDates": "Try other dates"
+        },
+        "guest": {
+            "heading": "Your details",
+            "changeRoom": "← Change room",
+            "firstName": "First name *",
+            "firstNamePlaceholder": "First name",
+            "lastName": "Last name *",
+            "lastNamePlaceholder": "Last name",
+            "email": "Email *",
+            "emailPlaceholder": "email{'@'}example.com",
+            "phone": "Phone *",
+            "phonePlaceholder": "+355 69...",
+            "nationality": "Nationality",
+            "nationalityPlaceholder": "Select country...",
+            "specialRequests": "Special requests",
+            "notesPlaceholder": "Additional notes...",
+            "submitting": "Sending...",
+            "confirm": "Confirm Booking",
+            "commonCountries": "Most common",
+            "allCountries": "All countries",
+            "chooseOther": "Choose another room",
+            "continuePay": "Continue to payment",
+            "paymentNote": "Your booking is confirmed after a secure card payment. The room is held for you for 30 minutes.",
+            "adultsShort": "adults",
+            "childrenShort": "children"
+        }
+    },
+    "contact": {
+        "meta": {
+            "title": "Contact — Villa Mucho"
+        },
+        "heading": {
+            "title": "Get in Touch",
+            "subtitle": "Have a question? Write to us and we'll reply as soon as possible."
+        },
+        "form": {
+            "name": {
+                "label": "Your name *",
+                "placeholder": "First and last name"
+            },
+            "email": {
+                "label": "Email *",
+                "placeholder": "email{'@'}example.com"
+            },
+            "message": {
+                "label": "Message *",
+                "placeholder": "Write your message..."
+            },
+            "submit": "Send Message",
+            "submitting": "Sending..."
+        },
+        "info": {
+            "title": "Contact Information",
+            "address": "Address",
+            "phone": "Phone",
+            "email": "Email"
+        }
+    },
+    "about": {
+        "meta": {
+            "title": "About Us — Villa Mucho"
+        },
+        "hero": {
+            "title": "About Us"
+        },
+        "photoSoon": "Photo coming soon",
+        "story": {
+            "title": "Our Story",
+            "paragraph1": "Villa Mucho was born out of a love for hospitality and the beauty of southern Albania. Set on the shores of Ksamil, our villa offers a unique experience that blends modern luxury with Albanian tradition.",
+            "paragraph2": "With comfortable rooms, a restaurant serving Mediterranean cuisine, and a dedicated staff, we make sure every guest feels at home — only better."
+        },
+        "stats": {
+            "rooms": "Comfortable rooms",
+            "guests": "Happy guests",
+            "rating": "Average rating"
+        },
+        "staff": {
+            "title": "Our Staff",
+            "paragraph1": "Our dedicated team works every day to deliver the very best experience. From our smiling receptionists to our talented chefs, every member of our staff plays a part in making your stay unforgettable.",
+            "paragraph2": "We believe in genuine hospitality — not just service, but heartfelt care for every guest."
+        }
+    },
+    "confirmation": {
+        "pageTitle": "Booking confirmed — Villa Mucho",
+        "heading": "Thank you!",
+        "intro": "Your booking has been submitted successfully. It will be confirmed by our team within 24 hours.",
+        "labels": {
+            "reference": "Booking No.",
+            "guest": "Guest",
+            "room": "Room",
+            "checkIn": "Check-in",
+            "checkOut": "Check-out",
+            "total": "Total"
+        },
+        "cta": {
+            "home": "Back to homepage"
+        }
     }
-  },
-  "contact": {
-    "meta": {
-      "title": "Contact — Villa Mucho"
-    },
-    "heading": {
-      "title": "Get in Touch",
-      "subtitle": "Have a question? Write to us and we'll reply as soon as possible."
-    },
-    "form": {
-      "name": {
-        "label": "Your name *",
-        "placeholder": "First and last name"
-      },
-      "email": {
-        "label": "Email *",
-        "placeholder": "email{'@'}example.com"
-      },
-      "message": {
-        "label": "Message *",
-        "placeholder": "Write your message..."
-      },
-      "submit": "Send Message",
-      "submitting": "Sending..."
-    },
-    "info": {
-      "title": "Contact Information",
-      "address": "Address",
-      "phone": "Phone",
-      "email": "Email"
-    }
-  },
-  "about": {
-    "meta": {
-      "title": "About Us — Villa Mucho"
-    },
-    "hero": {
-      "title": "About Us"
-    },
-    "photoSoon": "Photo coming soon",
-    "story": {
-      "title": "Our Story",
-      "paragraph1": "Villa Mucho was born out of a love for hospitality and the beauty of southern Albania. Set on the shores of Ksamil, our villa offers a unique experience that blends modern luxury with Albanian tradition.",
-      "paragraph2": "With comfortable rooms, a restaurant serving Mediterranean cuisine, and a dedicated staff, we make sure every guest feels at home — only better."
-    },
-    "stats": {
-      "rooms": "Comfortable rooms",
-      "guests": "Happy guests",
-      "rating": "Average rating"
-    },
-    "staff": {
-      "title": "Our Staff",
-      "paragraph1": "Our dedicated team works every day to deliver the very best experience. From our smiling receptionists to our talented chefs, every member of our staff plays a part in making your stay unforgettable.",
-      "paragraph2": "We believe in genuine hospitality — not just service, but heartfelt care for every guest."
-    }
-  },
-  "confirmation": {
-    "pageTitle": "Booking confirmed — Villa Mucho",
-    "heading": "Thank you!",
-    "intro": "Your booking has been submitted successfully. It will be confirmed by our team within 24 hours.",
-    "labels": {
-      "reference": "Booking No.",
-      "guest": "Guest",
-      "room": "Room",
-      "checkIn": "Check-in",
-      "checkOut": "Check-out",
-      "total": "Total"
-    },
-    "cta": {
-      "home": "Back to homepage"
-    }
-  }
 }

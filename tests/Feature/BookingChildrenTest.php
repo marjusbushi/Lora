@@ -46,8 +46,10 @@ class BookingChildrenTest extends TestCase
     {
         $room = $this->room(4);
 
+        // Capacity failures are now VALIDATION errors (room_id) so the booking wizard
+        // preserves everything the guest typed instead of resetting to step 1.
         $this->post(route('website.book.submit'), $this->payload($room, 3, 3)) // total 6 > 4
-            ->assertSessionHas('error');
+            ->assertSessionHasErrors('room_id');
 
         $this->assertSame(0, Reservation::count());
     }
