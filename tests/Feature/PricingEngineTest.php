@@ -106,6 +106,7 @@ class PricingEngineTest extends TestCase
         // Blended (56%) sits in the neutral zone → no +30 knee-jerk raise.
         $this->assertEquals(0.0, $row['adjustment_pct']);
         $this->assertFalse($row['actionable']);
+        $this->assertStringContainsString('zonën e mirë', $row['quiet_reason'], 'quiet days explain themselves');
     }
 
     public function test_pace_factor_reacts_to_booking_velocity_from_snapshots(): void
@@ -266,6 +267,7 @@ class PricingEngineTest extends TestCase
         $row = $this->rowFor($type, $date);
         $this->assertFalse($row['actionable'], '0.39% move is below the 1% floor');
         $this->assertEquals(129.50, $row['suggested_price'], 'non-actionable → shows current');
+        $this->assertStringContainsString('i vogël', $row['quiet_reason']);
 
         // But a real gap (129.50 → 120 override → 8.3%) stays actionable.
         \App\Models\RateOverride::whereDate('date', $date->toDateString())->update(['price' => 120]);
@@ -284,6 +286,7 @@ class PricingEngineTest extends TestCase
         $this->assertFalse($row['actionable']);
         $this->assertEquals($row['current_price'], $row['suggested_price']);
         $this->assertEmpty($row['factors'], 'suppressed demand factors must leave the breakdown too');
+        $this->assertStringContainsString('E largët', $row['quiet_reason']);
     }
 
     /** Review fix: a booked room flipping to maintenance must NOT read as demand cooling. */

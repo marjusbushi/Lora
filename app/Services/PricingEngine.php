@@ -182,8 +182,10 @@ class PricingEngine
         // demand signal is a discount beyond the horizon, drop the demand
         // factors entirely (from the price AND the breakdown, so "Pse ky
         // çmim?" always multiplies out to the number). Events survive.
+        $demandCollapsed = false;
         if ($daysUntil > self::DISCOUNT_HORIZON_DAYS && $product($demand) < 1) {
             $demand = [];
+            $demandCollapsed = true;
         }
 
         $factors = array_merge($demand, $eventFactors);
@@ -209,6 +211,18 @@ class PricingEngine
         $moveVsCurrent = $current > 0 ? abs($suggested / $current - 1) * 100 : 0.0;
         $actionable = ! $isPast && $reference > 0 && $pctTotal != 0.0 && $moveVsCurrent >= 1.0;
 
+        // WHY is this day quiet? Silence without a reason reads as a bug to
+        // the owner — say it plainly (shown in the day panel).
+        $quietReason = null;
+        if (! $actionable && ! $isPast) {
+            $quietReason = match (true) {
+                $reference <= 0 || $typeTotal === 0 => 'Ky tip s\'ka çmim bazë ose dhoma aktive.',
+                $demandCollapsed => sprintf('E largët (%d ditë) dhe ende e qetë — ulja shfaqet vetëm kur t\'i afrohet %d ditëve, që të mos shesësh lirë pa nevojë.', max($daysUntil, 0), self::DISCOUNT_HORIZON_DAYS),
+                $factors === [] => sprintf('Zënia (%s%%) është në zonën e mirë — çmimi është aty ku duhet.', $occ),
+                default => 'Ndryshimi i llogaritur është shumë i vogël (nën 1%) për t\'ia vlejtur.',
+            };
+        }
+
         return [
             'date' => $date->toDateString(),
             'occupancy_pct' => (int) round($occ),
@@ -225,6 +239,7 @@ class PricingEngine
             'has_override' => (bool) $override,
             'days_until' => $daysUntil,
             'actionable' => $actionable,
+            'quiet_reason' => $quietReason,
             'is_past' => $isPast,
         ];
     }

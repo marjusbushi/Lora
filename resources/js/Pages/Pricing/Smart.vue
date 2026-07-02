@@ -412,7 +412,7 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                                             </span>
                                         </template>
                                     </div>
-                                    <p v-if="!selected.actionable" class="text-tiny text-neutral-400 mt-1">Çmimi aktual për këtë natë — s'ka sugjerim ndryshimi.</p>
+                                    <p v-if="!selected.actionable" class="text-tiny text-neutral-400 mt-1">{{ selected.quiet_reason || "Çmimi aktual për këtë natë — s'ka sugjerim ndryshimi." }}</p>
                                 </div>
                                 <div class="flex flex-wrap gap-2.5">
                                     <Button v-if="selected.actionable" variant="primary" @click="apply(selected, selected.suggested_price)">Apliko {{ currency }}{{ fmtPrice(selected.suggested_price) }}</Button>
