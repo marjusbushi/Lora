@@ -181,9 +181,15 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::post('/pricing/smart/apply', [SmartPricingController::class, 'apply'])->name('pricing.smart.apply');
         Route::post('/pricing/smart/remove', [SmartPricingController::class, 'remove'])->name('pricing.smart.remove');
         // AI Pricing Assistant — generate a reasoned plan (JSON) + apply one recommendation
-        Route::post('/pricing/smart/ai-plan', [SmartPricingController::class, 'aiPlan'])->name('pricing.smart.ai-plan');
-        Route::post('/pricing/smart/apply-plan', [SmartPricingController::class, 'applyPlan'])->name('pricing.smart.apply-plan');
         Route::post('/pricing/smart/apply-range', [SmartPricingController::class, 'applyRange'])->name('pricing.smart.apply-range');
+        Route::post('/pricing/smart/explain', [SmartPricingController::class, 'explain'])->name('pricing.smart.explain');
+        Route::post('/pricing/smart/ask', [SmartPricingController::class, 'ask'])->name('pricing.smart.ask');
+        Route::post('/pricing/smart/events/suggest', [SmartPricingController::class, 'suggestEvents'])->name('pricing.smart.events.suggest');
+        Route::post('/pricing/smart/events', [SmartPricingController::class, 'approveEvent'])->name('pricing.smart.events.approve');
+        Route::delete('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'destroyEvent'])->name('pricing.smart.events.destroy');
+        Route::post('/pricing/smart/report', [SmartPricingController::class, 'generateReport'])->name('pricing.smart.report');
+        Route::post('/pricing/smart/autopilot', [SmartPricingController::class, 'updateAutopilot'])->name('pricing.smart.autopilot');
+        Route::post('/pricing/smart/autopilot/revert/{log}', [SmartPricingController::class, 'revertAutopilot'])->name('pricing.smart.autopilot.revert');
         Route::post('/pricing/smart/strategy', [SmartPricingController::class, 'updateStrategy'])->name('pricing.smart.strategy');
         Route::put('/pricing/smart/bounds/{roomType}', [SmartPricingController::class, 'updateBounds'])->name('pricing.smart.bounds');
 

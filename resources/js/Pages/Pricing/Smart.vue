@@ -19,6 +19,9 @@ const props = defineProps({
     currency: { type: String, default: '€' },
     aiConfigured: { type: Boolean, default: false },
     lastSyncAt: { type: String, default: null },
+    upcomingEvents: { type: Array, default: () => [] },
+    latestReport: { type: Object, default: null },
+    autopilot: { type: Object, default: () => ({ enabled: false, logs: [] }) },
 });
 
 const toasts = ref(null);
@@ -98,85 +101,108 @@ function confirmBulk() {
     });
 }
 
-// ── Asistenti AI (Gemini) — mbetet si sot; Copa 4 e bashkon plotësisht ──
-const aiEvents = ref([]);
-const aiEventInput = ref('');
-const aiLoading = ref(false);
-const aiPlan = ref(null);
-const aiError = ref('');
-const applied = ref({});
-const aiOpen = ref(false);
-
-function addEvent() {
-    const v = aiEventInput.value.trim();
-    if (v) { aiEvents.value.push(v); aiEventInput.value = ''; }
-}
-function removeEvent(i) { aiEvents.value.splice(i, 1); }
-
-async function generatePlan() {
-    aiLoading.value = true; aiError.value = ''; aiPlan.value = null; applied.value = {};
+// ── Gemini: 4 punët (shpjegon, evente, raport, pyetje) — kurrë numrin ──
+const explainText = ref('');
+const explainLoading = ref(false);
+async function explainDay() {
+    if (!selected.value) return;
+    explainLoading.value = true; explainText.value = '';
     try {
-        const { data } = await axios.post(route('pricing.smart.ai-plan'), { month: props.month, events: aiEvents.value });
-        aiPlan.value = data;
+        const { data } = await axios.post(route('pricing.smart.explain'), { date: selected.value.date, room_type_id: typeId.value });
+        explainText.value = data.sentence;
     } catch (e) {
-        aiError.value = e.response?.data?.error || 'Asistenti AI s\'u përgjigj. Provoni përsëri.';
+        toasts.value?.error(e.response?.data?.error || 'Shpjegimi s\'u gjenerua dot.');
     }
-    aiLoading.value = false;
+    explainLoading.value = false;
 }
 
-function applyRec(rec, i, opts = {}) {
-    if (!rec.prices?.length) { toasts.value?.error(`"${rec.label}" s'ka çmime për të aplikuar.`); opts.onDone?.(); return; }
-    router.post(route('pricing.smart.apply-plan'), { date_from: rec.date_from, date_to: rec.date_to, prices: rec.prices }, {
+const evSuggestions = ref([]);
+const evLoading = ref(false);
+async function suggestEvents() {
+    evLoading.value = true; evSuggestions.value = [];
+    try {
+        const { data } = await axios.post(route('pricing.smart.events.suggest'));
+        evSuggestions.value = data.events || [];
+        if (!evSuggestions.value.length) toasts.value?.success('S\'u gjet asnjë event i ri — kalendari duket i plotë.');
+    } catch (e) {
+        toasts.value?.error(e.response?.data?.error || 'Sugjerimet s\'u morën dot.');
+    }
+    evLoading.value = false;
+}
+function approveEvent(ev, i) {
+    router.post(route('pricing.smart.events.approve'), {
+        name: ev.name, date_from: ev.date_from, date_to: ev.date_to, uplift_pct: ev.uplift_pct ?? null,
+    }, {
         preserveScroll: true,
-        preserveState: true,
-        onSuccess: () => { applied.value = { ...applied.value, [i]: true }; if (!opts.silent) toasts.value?.success(`U aplikua: ${rec.label}.`); },
-        onError: (errors) => toasts.value?.error(`Nuk u aplikua "${rec.label}": ${Object.values(errors)[0] || 'të dhëna të pavlefshme'}.`),
-        onFinish: () => opts.onDone?.(),
+        onSuccess: () => { evSuggestions.value.splice(i, 1); toasts.value?.success(`"${ev.name}" u shtua.`); },
+        onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Eventi s\'u shtua.'),
     });
 }
-// Apply recommendations ONE AT A TIME — concurrent Inertia visits cancel each other.
-function applyAll() {
-    const queue = (aiPlan.value?.recommendations || [])
-        .map((rec, i) => ({ rec, i }))
-        .filter(x => x.rec.action !== 'hold');
-    if (!queue.length) { toasts.value?.error('Asnjë rekomandim për të aplikuar.'); return; }
-    let idx = 0;
-    const next = () => {
-        if (idx >= queue.length) { toasts.value?.success(`U përpunuan ${queue.length} rekomandime.`); return; }
-        const { rec, i } = queue[idx++];
-        applyRec(rec, i, { silent: true, onDone: next });
-    };
-    next();
+function removeEventRow(ev) {
+    router.delete(route('pricing.smart.events.destroy', ev.id), {
+        preserveScroll: true,
+        onSuccess: () => toasts.value?.success(`"${ev.name}" u hoq.`),
+    });
 }
 
-const actionTone = {
-    raise: 'bg-success-50 text-success-700',
-    lower: 'bg-info-50 text-info-700',
-    hold: 'bg-neutral-100 text-neutral-500',
-};
-const recBorder = { raise: 'border-l-success-500', lower: 'border-l-info-500', hold: 'border-l-neutral-300' };
+const reportLoading = ref(false);
+function generateReport() {
+    reportLoading.value = true;
+    router.post(route('pricing.smart.report'), {}, {
+        preserveScroll: true,
+        onFinish: () => { reportLoading.value = false; },
+    });
+}
+
+const askQ = ref('');
+const askA = ref('');
+const askLoading = ref(false);
+async function askAi() {
+    const q = askQ.value.trim();
+    if (!q) return;
+    askLoading.value = true; askA.value = '';
+    try {
+        const { data } = await axios.post(route('pricing.smart.ask'), { question: q, month: props.month, room_type_id: typeId.value });
+        askA.value = data.answer;
+    } catch (e) {
+        toasts.value?.error(e.response?.data?.error || 'Përgjigja s\'u mor dot.');
+    }
+    askLoading.value = false;
+}
+
+// ── Autopiloti me kufij (default: I FIKUR — vetëm ti e ndez) ──
+const apConfirmOpen = ref(false);
+const apForm = ref({});
+function openAutopilot(intendEnable) {
+    apForm.value = {
+        enabled: intendEnable,
+        materiality_pct: props.autopilot.materiality_pct ?? 5,
+        daily_cap_pct: props.autopilot.daily_cap_pct ?? 15,
+        protect_manual_days: props.autopilot.protect_manual_days ?? 3,
+        pause_from: props.autopilot.pause_from ?? '',
+        pause_to: props.autopilot.pause_to ?? '',
+    };
+    apConfirmOpen.value = true;
+}
+function saveAutopilot() {
+    router.post(route('pricing.smart.autopilot'), {
+        ...apForm.value,
+        pause_from: apForm.value.pause_from || null,
+        pause_to: apForm.value.pause_to || null,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => { apConfirmOpen.value = false; },
+        onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Cilësimet s\'u ruajtën.'),
+    });
+}
+function revertAutopilot(log) {
+    router.post(route('pricing.smart.autopilot.revert', log.id), {}, { preserveScroll: true });
+}
+
 function fmtRange(a, b) {
     const f = (d) => new Date(d + 'T00:00:00').toLocaleDateString('sq-AL', { day: '2-digit', month: 'short' });
     return a === b ? f(a) : `${f(a)} – ${f(b)}`;
 }
-
-// date -> AI price overlay for the selected type (from the generated plan).
-const aiByDate = computed(() => {
-    const map = {};
-    const tid = Number(typeId.value);
-    const fmt = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-    for (const rec of (aiPlan.value?.recommendations || [])) {
-        const p = (rec.prices || []).find((x) => Number(x.room_type_id) === tid);
-        if (!p || !rec.date_from || !rec.date_to) continue;
-        const [ys, ms, ds] = rec.date_from.split('-').map(Number);
-        const [ye, me, de] = rec.date_to.split('-').map(Number);
-        let cur = new Date(ys, ms - 1, ds);
-        const last = new Date(ye, me - 1, de);
-        while (cur <= last) { map[fmt(cur)] = { price: p.suggested, label: rec.label, reason: rec.reason }; cur.setDate(cur.getDate() + 1); }
-    }
-    return map;
-});
-const selAi = computed(() => (selected.value ? aiByDate.value[selected.value.date] : null) || null);
 
 // ── Kalendari ──
 const dows = ['Hë', 'Ma', 'Më', 'En', 'Pr', 'Sh', 'Di'];
@@ -206,7 +232,7 @@ function cellTone(d) {
     return 'bg-white border-neutral-100 hover:border-neutral-200';
 }
 
-function pick(d) { if (!d.is_past) { selected.value = d; manualPrice.value = ''; } }
+function pick(d) { if (!d.is_past) { selected.value = d; manualPrice.value = ''; explainText.value = ''; } }
 
 function apply(d, price) {
     const p = Number(price);
@@ -338,8 +364,7 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                             <div class="mt-1 text-body-sm sm:text-h4 font-bold text-primary-900 tabular-nums leading-none">{{ currency }}{{ fmtPrice(d.current_price) }}</div>
 
                             <!-- THE suggestion, visible on the grid -->
-                            <div v-if="aiByDate[d.date]" class="mt-1 text-tiny font-bold text-accent-600 tabular-nums leading-none">✦ {{ currency }}{{ fmtPrice(aiByDate[d.date].price) }}</div>
-                            <div v-else-if="d.actionable" class="mt-1 text-tiny font-bold tabular-nums leading-none" :class="d.adjustment_pct > 0 ? 'text-success-700' : 'text-info-700'">
+                            <div v-if="d.actionable" class="mt-1 text-tiny font-bold tabular-nums leading-none" :class="d.adjustment_pct > 0 ? 'text-success-700' : 'text-info-700'">
                                 {{ d.adjustment_pct > 0 ? '▲' : '▼' }} {{ currency }}{{ fmtPrice(d.suggested_price) }}<span v-if="d.clamped" :title="'I ndalur te kufiri ' + (d.clamped === 'max' ? 'maksimal' : 'minimal')"> 🔒</span>
                             </div>
 
@@ -356,7 +381,6 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                         <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-warning-100 border border-warning-200 mr-1.5 align-[-1px]" />Po mbushet</span>
                         <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-error-100 border border-error-200 mr-1.5 align-[-1px]" />Plot</span>
                         <span><span class="text-error-600 font-bold mr-1">⚑</span>Festë</span>
-                        <span><span class="text-accent-600 font-bold mr-1">✦</span>Plani i AI-së</span>
                         <span><i class="inline-block w-2 h-2 rounded-full bg-info-500 mr-1.5 align-[0px]" />Çmim i vendosur nga ti</span>
                     </div>
 
@@ -416,14 +440,13 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                                 </div>
                             </div>
 
-                            <!-- AI plan overlay for this date (secondary — never silently wins) -->
-                            <div v-if="selAi" class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent-100 bg-accent-50/60 p-3">
-                                <div class="text-body-sm text-neutral-700">
-                                    <span class="font-bold text-accent-700">✦ Plani i AI-së:</span>
-                                    {{ currency }}{{ fmtPrice(selAi.price) }}
-                                    <span v-if="selAi.reason" class="text-neutral-500">— {{ selAi.reason }}</span>
+                            <!-- "✦ Shpjegim AI" — the breakdown, told as one warm sentence -->
+                            <div v-if="aiConfigured && selected.factors && selected.factors.length" class="rounded-xl border border-accent-100 bg-accent-50/60 p-3">
+                                <div class="flex flex-wrap items-center justify-between gap-3">
+                                    <span class="text-body-sm font-bold text-accent-700">✦ Shpjegimi i AI-së</span>
+                                    <Button size="sm" variant="outline" :loading="explainLoading" @click="explainDay">Shpjego</Button>
                                 </div>
-                                <Button size="sm" variant="outline" @click="apply(selected, selAi.price)">Apliko ✦ {{ currency }}{{ fmtPrice(selAi.price) }}</Button>
+                                <p v-if="explainText" class="text-body-sm text-neutral-700 mt-2">{{ explainText }}</p>
                             </div>
 
                             <!-- manual price — full control on any night -->
@@ -442,72 +465,156 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
             </Card>
         </div>
 
-        <!-- Asistenti AI — collapsed card (Copa 4 will fold it into the engine fully) -->
-        <Card class="mt-6">
-            <button class="w-full flex items-center justify-between gap-2.5" @click="aiOpen = !aiOpen">
-                <span class="flex items-center gap-2.5">
-                    <span class="grid place-items-center w-9 h-9 rounded-xl text-white text-lg shrink-0" style="background:linear-gradient(135deg,#16734e,#0f766e)">✦</span>
-                    <span class="text-left">
-                        <span class="block text-h4 text-primary-900 leading-tight">Asistent Çmimesh me AI</span>
-                        <span class="block text-tiny text-neutral-500">Plan mujor me arsyetim — opsional, mbi sugjerimet e motorit.</span>
-                    </span>
-                </span>
-                <span class="text-neutral-400 text-body-sm">{{ aiOpen ? '▴ Mbyll' : '▾ Hap' }}</span>
-            </button>
-
-            <div v-if="aiOpen" class="mt-4">
-                <div v-if="!aiConfigured" class="p-3 rounded-lg bg-warning-50 border border-warning-200 text-body-sm text-warning-800">
-                    Asistenti AI s'është aktivizuar ende. Shto çelësin Gemini te <b>Settings → Asistenti AI</b> që të punojë.
+        <!-- Gemini: eventet + raporti javor + pyet -->
+        <div class="mt-6 grid lg:grid-cols-2 gap-6 items-start">
+            <Card>
+                <div class="flex items-center justify-between gap-3 mb-3">
+                    <div>
+                        <h2 class="text-h4 text-primary-900 leading-tight">Eventet e kërkesës</h2>
+                        <p class="text-tiny text-neutral-500">Festa e evente që motori i llogarit në çmim. Ruhen një herë — s'ke pse i rishkruan.</p>
+                    </div>
+                    <Button v-if="aiConfigured" size="sm" variant="outline" :loading="evLoading" @click="suggestEvents">✦ Sugjero me AI</Button>
                 </div>
 
-                <template v-else>
-                    <label class="block text-label text-neutral-600 mb-1.5">Evente që di ti (festa, festivale) — opsionale</label>
-                    <div class="flex flex-wrap items-center gap-2 mb-3">
-                        <span v-for="(e, i) in aiEvents" :key="i" class="inline-flex items-center gap-1.5 bg-success-50 text-success-700 border border-success-100 text-small font-medium px-2.5 py-1 rounded-full">
-                            {{ e }} <button class="opacity-50 hover:opacity-100" @click="removeEvent(i)">✕</button>
+                <div v-if="!upcomingEvents.length" class="text-body-sm text-neutral-400 py-3">S'ka evente të ardhshme në 90 ditët e para.</div>
+                <div v-else class="space-y-1.5 mb-2">
+                    <div v-for="ev in upcomingEvents" :key="ev.id + ev.date_from" class="flex items-center justify-between gap-2 text-body-sm border border-neutral-100 rounded-lg px-3 py-1.5">
+                        <span class="text-neutral-700">
+                            <b class="text-primary-900">{{ ev.name }}</b> · {{ fmtRange(ev.date_from, ev.date_to) }}
+                            <span v-if="ev.uplift_pct" class="text-success-700 font-semibold">+{{ ev.uplift_pct }}%</span>
+                            <span v-if="ev.source === 'ai'" class="text-tiny text-accent-600 font-semibold ml-1">✦</span>
                         </span>
-                        <input v-model="aiEventInput" type="text" placeholder="p.sh. 15 Gush · Festa e Sarandës" class="rounded-lg border border-neutral-200 px-3 py-1.5 text-body-sm min-w-[220px] focus:border-ionian focus:ring-2 focus:ring-ionian/30" @keyup.enter="addEvent" />
-                        <Button size="sm" variant="outline" @click="addEvent">+ Shto</Button>
+                        <button class="text-neutral-300 hover:text-error-600 shrink-0" title="Hiq eventin" @click="removeEventRow(ev)">✕</button>
                     </div>
-                    <Button variant="primary" :loading="aiLoading" @click="generatePlan">✦ Gjenero planin për {{ monthLabel }}</Button>
+                </div>
 
-                    <p v-if="aiError" class="mt-3 text-body-sm text-error-600">{{ aiError }}</p>
-
-                    <div v-if="aiPlan" class="mt-5">
-                        <p v-if="aiPlan.summary" class="text-body-sm text-neutral-700 mb-3"><span class="font-semibold text-primary-900">AI:</span> {{ aiPlan.summary }}</p>
-
-                        <div v-for="(rec, i) in aiPlan.recommendations" :key="i" :class="['border border-neutral-200 border-l-4 rounded-xl p-4 mb-3 bg-white', recBorder[rec.action] || 'border-l-neutral-300']">
-                            <div class="flex items-start justify-between gap-3">
-                                <div class="text-body-sm font-bold text-primary-900 capitalize">{{ fmtRange(rec.date_from, rec.date_to) }} · {{ rec.label }}</div>
-                                <span :class="['text-tiny font-bold px-2 py-0.5 rounded-lg whitespace-nowrap', actionTone[rec.action] || 'bg-neutral-100 text-neutral-500']">
-                                    {{ rec.action === 'raise' ? '↑ Ngri' : rec.action === 'lower' ? '↓ Ul' : 'Mbaj' }}<span v-if="rec.adjustment_pct"> {{ rec.adjustment_pct > 0 ? '+' : '' }}{{ rec.adjustment_pct }}%</span>
-                                </span>
-                            </div>
-                            <div class="flex flex-wrap gap-x-5 gap-y-1 my-2.5">
-                                <span v-for="(p, j) in rec.prices" :key="j" class="text-body-sm text-neutral-700">
-                                    {{ p.room_type_name }}
-                                    <span v-if="p.current" class="text-neutral-400 line-through ml-1">{{ currency }}{{ p.current }}</span>
-                                    <span class="font-bold text-primary-900 ml-1">{{ currency }}{{ p.suggested }}</span>
-                                </span>
-                            </div>
-                            <div class="flex gap-2 text-body-sm text-neutral-600 bg-neutral-50 border border-neutral-100 rounded-lg p-2.5">
-                                <span class="shrink-0">💡</span><span>{{ rec.reason }}<template v-if="rec.projected_extra"> <b class="text-success-700">{{ rec.projected_extra }}</b></template></span>
-                            </div>
-                            <div class="flex justify-end mt-3">
-                                <Button v-if="rec.action !== 'hold'" size="sm" :variant="applied[i] ? 'ghost' : 'primary'" :disabled="!!applied[i]" @click="applyRec(rec, i)">
-                                    {{ applied[i] ? '✓ U aplikua' : 'Apliko' }}
-                                </Button>
-                                <span v-else class="text-tiny text-neutral-400 self-center">s'ka ndryshim</span>
-                            </div>
+                <div v-if="evSuggestions.length" class="mt-3 border-t border-neutral-100 pt-3">
+                    <p class="text-tiny font-bold uppercase tracking-wide text-neutral-400 mb-2">Sugjerime — prano vetëm ç'të duhen</p>
+                    <div v-for="(ev, i) in evSuggestions" :key="i" class="flex items-start justify-between gap-3 border border-accent-100 bg-accent-50/40 rounded-lg px-3 py-2 mb-1.5">
+                        <div class="text-body-sm text-neutral-700">
+                            <b class="text-primary-900">{{ ev.name }}</b> · {{ fmtRange(ev.date_from, ev.date_to) }}
+                            <span v-if="ev.uplift_pct" class="text-success-700 font-semibold">+{{ ev.uplift_pct }}%</span>
+                            <p class="text-tiny text-neutral-500">{{ ev.reason }}</p>
                         </div>
-
-                        <div v-if="aiPlan.recommendations && aiPlan.recommendations.some(r => r.action !== 'hold')" class="flex justify-end">
-                            <Button variant="outline" @click="applyAll">Apliko të gjitha</Button>
+                        <div class="flex gap-1.5 shrink-0">
+                            <Button size="sm" variant="primary" @click="approveEvent(ev, i)">Prano</Button>
+                            <Button size="sm" variant="ghost" @click="evSuggestions.splice(i, 1)">Jo</Button>
                         </div>
                     </div>
+                </div>
+            </Card>
+
+            <Card>
+                <div class="flex items-center justify-between gap-3 mb-3">
+                    <div>
+                        <h2 class="text-h4 text-primary-900 leading-tight">Raporti javor i çmimeve</h2>
+                        <p class="text-tiny text-neutral-500">Çdo të hënë në 07:00 — çfarë po ndodh dhe çfarë ia vlen të bësh.</p>
+                    </div>
+                    <Button v-if="aiConfigured" size="sm" variant="outline" :loading="reportLoading" @click="generateReport">Gjenero tani</Button>
+                </div>
+
+                <div v-if="!aiConfigured" class="p-3 rounded-lg bg-warning-50 border border-warning-200 text-body-sm text-warning-800">
+                    Asistenti AI s'është aktivizuar ende. Shto çelësin Gemini te <b>Settings → Asistenti AI</b>.
+                </div>
+                <template v-else-if="latestReport">
+                    <p class="text-body-sm font-bold text-primary-900">{{ latestReport.title }}</p>
+                    <p class="text-body-sm text-neutral-700 mt-1.5 whitespace-pre-line">{{ latestReport.body }}</p>
+                    <ul v-if="latestReport.highlights && latestReport.highlights.length" class="mt-2.5 space-y-1">
+                        <li v-for="(h, i) in latestReport.highlights" :key="i" class="text-body-sm text-neutral-600 flex gap-2"><span class="text-success-600 shrink-0">•</span>{{ h }}</li>
+                    </ul>
                 </template>
+                <p v-else class="text-body-sm text-neutral-400 py-3">Ende s'ka raport — kliko "Gjenero tani".</p>
+
+                <div v-if="aiConfigured" class="mt-4 border-t border-neutral-100 pt-3">
+                    <label class="block text-tiny font-bold uppercase tracking-wide text-neutral-400 mb-1.5">Pyet AI-në për kalendarin</label>
+                    <div class="flex gap-1.5">
+                        <input v-model="askQ" type="text" placeholder="p.sh. Pse ky çmim më 15 gusht?" maxlength="500"
+                            class="flex-1 rounded-lg border border-neutral-200 px-3 py-1.5 text-body-sm focus:border-ionian focus:ring-2 focus:ring-ionian/30" @keyup.enter="askAi" />
+                        <Button size="sm" variant="primary" :loading="askLoading" @click="askAi">Pyet</Button>
+                    </div>
+                    <p v-if="askA" class="text-body-sm text-neutral-700 mt-2.5 bg-neutral-50 border border-neutral-100 rounded-lg p-2.5">{{ askA }}</p>
+                </div>
+            </Card>
+        </div>
+
+        <!-- Autopiloti me kufij -->
+        <Card class="mt-6">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div>
+                    <h2 class="text-h4 text-primary-900 leading-tight">
+                        Autopilot me kufij
+                        <span :class="['text-tiny font-bold px-2 py-0.5 rounded-full align-[2px] ml-1', autopilot.enabled ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500']">
+                            {{ autopilot.enabled ? 'NDEZUR' : 'FIKUR' }}
+                        </span>
+                    </h2>
+                    <p class="text-tiny text-neutral-500">Çdo natë në 03:45 aplikon vetë sugjerimet e motorit — vetëm brenda kufijve të tu, kurrë mbi çmimet që ke vënë ti me dorë.</p>
+                </div>
+                <Button :variant="autopilot.enabled ? 'outline' : 'primary'" @click="openAutopilot(!autopilot.enabled)">
+                    {{ autopilot.enabled ? 'Fike / ndrysho kufijtë' : 'Ndize autopilotin' }}
+                </Button>
             </div>
+
+            <div v-if="autopilot.enabled" class="flex flex-wrap gap-x-5 gap-y-1 text-tiny text-neutral-500 mb-3">
+                <span>Ndryshim minimal: <b class="text-primary-900">{{ autopilot.materiality_pct }}%</b></span>
+                <span>Tavan ditor: <b class="text-primary-900">±{{ autopilot.daily_cap_pct }}%</b></span>
+                <span>Mbron çmimet e tua: <b class="text-primary-900">{{ autopilot.protect_manual_days }} ditë</b></span>
+                <span v-if="autopilot.pause_from">Pauzë: <b class="text-primary-900">{{ fmtRange(autopilot.pause_from, autopilot.pause_to) }}</b></span>
+            </div>
+
+            <template v-if="autopilot.logs && autopilot.logs.length">
+                <p class="text-tiny font-bold uppercase tracking-wide text-neutral-400 mb-2">Ndryshimet e fundit</p>
+                <div class="space-y-1.5">
+                    <div v-for="l in autopilot.logs" :key="l.id" class="flex items-center justify-between gap-2 text-body-sm border border-neutral-100 rounded-lg px-3 py-1.5" :class="l.reverted ? 'opacity-50' : ''">
+                        <span class="text-neutral-700">
+                            {{ fmtRange(l.date, l.date) }} · {{ l.room_type }} ·
+                            <span class="text-neutral-400 tabular-nums">{{ l.old_price !== null ? currency + fmtPrice(l.old_price) : 'sezonal' }}</span>
+                            <span class="text-neutral-400">→</span>
+                            <b class="text-primary-900 tabular-nums">{{ currency }}{{ fmtPrice(l.new_price) }}</b>
+                        </span>
+                        <Button v-if="!l.reverted" size="sm" variant="ghost" @click="revertAutopilot(l)">Kthe</Button>
+                        <span v-else class="text-tiny text-neutral-400 shrink-0">u kthye</span>
+                    </div>
+                </div>
+            </template>
+            <p v-else class="text-body-sm text-neutral-400">Ende asnjë ndryshim automatik.</p>
         </Card>
+
+        <!-- autopilot confirm -->
+        <Modal :show="apConfirmOpen" title="Autopilot me kufij" @close="apConfirmOpen = false">
+            <p v-if="apForm.enabled" class="text-body-sm text-neutral-600 mb-4">
+                Duke e ndezur, sistemi do të <b>aplikojë vetë</b> sugjerimet e motorit çdo natë — por VETËM brenda
+                kufijve min/max të çdo tipi dhome, vetëm ndryshime ≥ pragut, me tavan ditor, dhe <b>kurrë</b> mbi
+                çmimet që ke vënë ti kohët e fundit. Çdo ndryshim regjistrohet dhe kthehet me një klik.
+            </p>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-label text-neutral-600 mb-1">Ndryshimi minimal (%)</label>
+                    <input v-model="apForm.materiality_pct" type="number" min="1" max="50" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                </div>
+                <div>
+                    <label class="block text-label text-neutral-600 mb-1">Tavani ditor (±%)</label>
+                    <input v-model="apForm.daily_cap_pct" type="number" min="1" max="50" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                </div>
+                <div>
+                    <label class="block text-label text-neutral-600 mb-1">Mbro çmimet e mia (ditë)</label>
+                    <input v-model="apForm.protect_manual_days" type="number" min="0" max="30" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                </div>
+                <div class="col-span-2 grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-label text-neutral-600 mb-1">Pauzë nga (ops.)</label>
+                        <input v-model="apForm.pause_from" type="date" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                    </div>
+                    <div>
+                        <label class="block text-label text-neutral-600 mb-1">deri më</label>
+                        <input v-model="apForm.pause_to" type="date" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2.5 mt-5">
+                <Button variant="ghost" @click="apConfirmOpen = false">Anulo</Button>
+                <Button variant="primary" @click="saveAutopilot">{{ apForm.enabled ? 'Po, ndize' : 'Ruaj (i fikur)' }}</Button>
+            </div>
+        </Modal>
 
         <!-- bounds drawer -->
         <Modal :show="boundsOpen" title="Kufijtë e çmimit" @close="boundsOpen = false">

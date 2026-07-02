@@ -43,7 +43,7 @@ class GeminiClient
      *
      * @return array<string,mixed>
      */
-    public function structured(string $system, string $userMessage, array $tool, string $toolName, int $maxTokens = 8192): array
+    public function structured(string $system, string $userMessage, array $tool, string $toolName, int $maxTokens = 8192, int $timeoutSeconds = 60): array
     {
         $function = [
             'name' => $tool['name'],
@@ -51,9 +51,14 @@ class GeminiClient
             'parameters' => $tool['input_schema'] ?? ['type' => 'object'],
         ];
 
-        $url = $this->base().'/models/'.$this->model().':generateContent?key='.urlencode((string) $this->key());
+        // The key travels in the x-goog-api-key HEADER — never in the URL, so it
+        // can never leak via exception messages, access logs, or report() traces.
+        $url = $this->base().'/models/'.$this->model().':generateContent';
 
-        $res = Http::withHeaders(['content-type' => 'application/json'])->timeout(60)->post($url, [
+        $res = Http::withHeaders([
+            'content-type' => 'application/json',
+            'x-goog-api-key' => (string) $this->key(),
+        ])->timeout($timeoutSeconds)->post($url, [
             'system_instruction' => ['parts' => [['text' => $system]]],
             'contents' => [['role' => 'user', 'parts' => [['text' => $userMessage]]]],
             'tools' => [['function_declarations' => [$function]]],
@@ -70,8 +75,8 @@ class GeminiClient
         ]);
 
         if (!$res->successful()) {
-            // NOTE: the API key lives in the URL query, never in the response body, so
-            // reading $res->body() below cannot leak it. Map to a clear Albanian message.
+            // The key lives only in a request header, so reading $res->body() below
+            // cannot leak it. Map to a clear Albanian message.
             $status = $res->status();
             $body = (string) $res->body();
             throw new RuntimeException(match (true) {

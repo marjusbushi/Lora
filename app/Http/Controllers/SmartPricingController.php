@@ -60,6 +60,36 @@ class SmartPricingController extends Controller
             // per-date pushed/pending status does not exist in the data model).
             'lastSyncAt' => \App\Models\ChannelSyncLog::where('direction', 'push')
                 ->where('status', 'ok')->latest('id')->value('created_at')?->toDateTimeString(),
+            'upcomingEvents' => \App\Models\PricingEvent::betweenDates(Carbon::today(), Carbon::today()->addDays(90))
+                ->map(fn ($e) => [
+                    'id' => $e->id,
+                    'name' => $e->name,
+                    'date_from' => $e->resolved_from->toDateString(),
+                    'date_to' => $e->resolved_to->toDateString(),
+                    'uplift_pct' => $e->uplift_pct !== null ? (float) $e->uplift_pct : null,
+                    'source' => $e->source,
+                    'recurring' => (bool) $e->recurring,
+                ])->sortBy('date_from')->values(),
+            'latestReport' => \App\Models\PricingReport::latest('week_start')->first(),
+            'autopilot' => [
+                'enabled' => filter_var(Setting::get('pricing.autopilot.enabled', '0'), FILTER_VALIDATE_BOOL),
+                'materiality_pct' => (float) Setting::get('pricing.autopilot.materiality_pct', 5),
+                'daily_cap_pct' => (float) Setting::get('pricing.autopilot.daily_cap_pct', 15),
+                'protect_manual_days' => (int) Setting::get('pricing.autopilot.protect_manual_days', 3),
+                'pause_from' => Setting::get('pricing.autopilot.pause_from'),
+                'pause_to' => Setting::get('pricing.autopilot.pause_to'),
+                'logs' => \App\Models\PricingAutopilotLog::with('roomType:id,name')
+                    ->latest('id')->limit(20)->get()
+                    ->map(fn ($l) => [
+                        'id' => $l->id,
+                        'date' => $l->date->toDateString(),
+                        'room_type' => $l->roomType?->name,
+                        'old_price' => $l->old_price !== null ? (float) $l->old_price : null,
+                        'new_price' => (float) $l->new_price,
+                        'reverted' => (bool) $l->reverted_at,
+                        'at' => $l->created_at->toDateTimeString(),
+                    ]),
+            ],
         ];
 
         if ($types->isEmpty()) {
@@ -142,94 +172,6 @@ class SmartPricingController extends Controller
         return back()->with('success', 'Çmimi u rikthye te tarifa normale.');
     }
 
-    /** AI Pricing Assistant: generate a reasoned plan for a month (returns JSON). */
-    public function aiPlan(Request $request)
-    {
-        if (!AiPricing::configured()) {
-            return response()->json(['error' => 'Asistenti AI nuk është konfiguruar. Shto çelësin Gemini te Settings → Asistenti AI.'], 422);
-        }
-
-        $data = $request->validate([
-            'month' => ['required', 'date'],
-            'events' => ['array', 'max:20'],
-            'events.*' => ['string', 'max:200'],
-        ]);
-
-        $from = Carbon::parse($data['month'])->startOfMonth();
-        $to = $from->copy()->endOfMonth();
-
-        try {
-            $plan = AiPricing::plan($from, $to, $data['events'] ?? []);
-        } catch (\Throwable $e) {
-            report($e);
-
-            // GeminiClient throws owner-safe Albanian messages; strip any stray key= just in case.
-            $msg = preg_replace('/key=[A-Za-z0-9._\-]+/', 'key=***', $e->getMessage());
-            $msg = trim(mb_strimwidth((string) $msg, 0, 200, '…'));
-
-            return response()->json(['error' => $msg !== '' ? $msg : "Asistenti AI s'u përgjigj. Provoni përsëri."], 502);
-        }
-
-        return response()->json($plan);
-    }
-
-    /** Apply one AI recommendation: write the suggested price for each date in the range × each room type. */
-    public function applyPlan(Request $request): RedirectResponse
-    {
-        $data = $request->validate([
-            'date_from' => ['required', 'date'],
-            'date_to' => ['required', 'date', 'after_or_equal:date_from'],
-            'prices' => ['required', 'array', 'min:1', 'max:20'],
-            'prices.*.room_type_id' => ['required', 'exists:room_types,id'],
-            'prices.*.suggested' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
-        ]);
-
-        $from = Carbon::parse($data['date_from'])->startOfDay();
-        $to = Carbon::parse($data['date_to'])->startOfDay();
-        // NB: $from->diffInDays($to) — arg order matters. In Carbon 3 the reverse returns a
-        // negative number, so the cap would silently never fire and let a far date write
-        // thousands of overrides + flood the OTA. Keep $from first.
-        if ($from->diffInDays($to) > 62) {
-            return back()->with('error', 'Intervali është shumë i gjatë (maksimumi ~2 muaj).');
-        }
-
-        // Reject any suggested price wildly off the allowed band (AI hallucination / typo)
-        // before it can be written and pushed to Booking.com etc.
-        $types = RoomType::whereIn('id', collect($data['prices'])->pluck('room_type_id'))
-            ->get()->keyBy('id');
-        foreach ($data['prices'] as $p) {
-            if ($this->priceOutOfBand((float) $p['suggested'], $types->get($p['room_type_id']))) {
-                return back()->with('error', "Çmimi i sugjeruar {$p['suggested']} është jashtë kufijve të lejuar. Nuk u aplikua.");
-            }
-        }
-
-        // Write the whole batch atomically: either all dates/types commit or none, so a mid-loop
-        // failure can't leave half-applied overrides (and dispatch pushes for a partial set).
-        $typeIds = [];
-        DB::transaction(function () use ($from, $to, $data, &$typeIds) {
-            for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
-                foreach ($data['prices'] as $p) {
-                    $override = RateOverride::whereDate('date', $d->toDateString())
-                        ->where('room_type_id', $p['room_type_id'])->first()
-                        ?? new RateOverride(['date' => $d->toDateString(), 'room_type_id' => $p['room_type_id']]);
-                    $override->price = $p['suggested'];
-                    $override->created_by = auth()->id();
-                    $override->save();
-                    $typeIds[$p['room_type_id']] = true;
-                }
-            }
-        });
-
-        AuditLog::record('pricing.ai_apply', null, [
-            'from' => $data['date_from'], 'to' => $data['date_to'], 'types' => array_keys($typeIds),
-        ]);
-        foreach (array_keys($typeIds) as $tid) {
-            PushRoomTypeAri::dispatch((int) $tid);
-        }
-
-        return back()->with('success', 'Plani u aplikua për këto data.');
-    }
-
     /** One slider, three presets — the only tuning knob the owner needs. */
     public function updateStrategy(Request $request): RedirectResponse
     {
@@ -309,5 +251,169 @@ class SmartPricingController extends Controller
         PushRoomTypeAri::dispatch($type->id);
 
         return back()->with('success', 'U aplikuan '.$suggestions->count().' çmime — po dërgohen te OTA-t.');
+    }
+
+    /** "✦ Shpjegim AI" — one cached Albanian sentence for a day's breakdown. */
+    public function explain(Request $request)
+    {
+        if (! AiPricing::configured()) {
+            return response()->json(['error' => 'Asistenti AI nuk është konfiguruar.'], 422);
+        }
+        $data = $request->validate([
+            'date' => ['required', 'date'],
+            'room_type_id' => ['required', 'exists:room_types,id'],
+        ]);
+
+        try {
+            $sentence = AiPricing::explain(RoomType::findOrFail($data['room_type_id']), $data['date']);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['error' => self::safeAiError($e)], 502);
+        }
+
+        return response()->json(['sentence' => $sentence]);
+    }
+
+    /** Gemini proposes demand events; NOTHING is written until the owner approves. */
+    public function suggestEvents()
+    {
+        if (! AiPricing::configured()) {
+            return response()->json(['error' => 'Asistenti AI nuk është konfiguruar.'], 422);
+        }
+
+        try {
+            return response()->json(['events' => AiPricing::suggestEvents()]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['error' => self::safeAiError($e)], 502);
+        }
+    }
+
+    /** Owner approval turns a suggestion into a real pricing_events row. */
+    public function approveEvent(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:200'],
+            'date_from' => ['required', 'date'],
+            'date_to' => ['required', 'date', 'after_or_equal:date_from'],
+            'uplift_pct' => ['nullable', 'numeric', 'between:-50,100'],
+        ]);
+
+        \App\Models\PricingEvent::create($data + ['source' => 'ai', 'created_by' => auth()->id()]);
+        AuditLog::record('pricing.event_approve', null, $data);
+
+        return back()->with('success', 'Eventi u shtua — motori do ta marrë parasysh.');
+    }
+
+    /** Remove an event from the calendar (any source). */
+    public function destroyEvent(\App\Models\PricingEvent $pricingEvent): RedirectResponse
+    {
+        AuditLog::record('pricing.event_delete', $pricingEvent, ['name' => $pricingEvent->name]);
+        $pricingEvent->delete();
+
+        return back()->with('success', 'Eventi u hoq.');
+    }
+
+    /** Calendar Q&A — grounded strictly in the engine's data for the month. */
+    public function ask(Request $request)
+    {
+        if (! AiPricing::configured()) {
+            return response()->json(['error' => 'Asistenti AI nuk është konfiguruar.'], 422);
+        }
+        $data = $request->validate([
+            'question' => ['required', 'string', 'max:500'],
+            'month' => ['required', 'date'],
+            'room_type_id' => ['nullable', 'exists:room_types,id'],
+        ]);
+
+        try {
+            $answer = AiPricing::ask(
+                $data['question'],
+                $data['month'],
+                isset($data['room_type_id']) ? RoomType::find($data['room_type_id']) : null,
+            );
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['error' => self::safeAiError($e)], 502);
+        }
+
+        return response()->json(['answer' => $answer]);
+    }
+
+    /** "Gjenero tani" — refresh this week's report on demand. */
+    public function generateReport(): RedirectResponse
+    {
+        if (! AiPricing::configured()) {
+            return back()->with('error', 'Asistenti AI nuk është konfiguruar. Shto çelësin te Settings → Asistenti AI.');
+        }
+
+        \Illuminate\Support\Facades\Artisan::call('pricing:weekly-report');
+
+        return back()->with('success', 'Raporti javor u gjenerua.');
+    }
+
+    /** Owner-safe Albanian error, guaranteed key-free (key travels in a header). */
+    private static function safeAiError(\Throwable $e): string
+    {
+        $msg = preg_replace('/key=[A-Za-z0-9._\-]+/', 'key=***', $e->getMessage());
+
+        return trim(mb_strimwidth((string) $msg, 0, 200, '…')) ?: "Asistenti AI s'u përgjigj. Provoni përsëri.";
+    }
+
+    /** Autopilot switch + guardrail knobs (pilot-then-confirm: explicit action). */
+    public function updateAutopilot(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'materiality_pct' => ['required', 'numeric', 'between:1,50'],
+            'daily_cap_pct' => ['required', 'numeric', 'between:1,50'],
+            'protect_manual_days' => ['required', 'integer', 'between:0,30'],
+            'pause_from' => ['nullable', 'date', 'required_with:pause_to'],
+            'pause_to' => ['nullable', 'date', 'required_with:pause_from', 'after_or_equal:pause_from'],
+        ]);
+
+        Setting::set('pricing.autopilot.enabled', $data['enabled'] ? '1' : '0');
+        Setting::set('pricing.autopilot.materiality_pct', (string) $data['materiality_pct']);
+        Setting::set('pricing.autopilot.daily_cap_pct', (string) $data['daily_cap_pct']);
+        Setting::set('pricing.autopilot.protect_manual_days', (string) $data['protect_manual_days']);
+        Setting::set('pricing.autopilot.pause_from', $data['pause_from'] ?? null);
+        Setting::set('pricing.autopilot.pause_to', $data['pause_to'] ?? null);
+        AuditLog::record('pricing.autopilot_settings', null, $data);
+
+        return back()->with('success', $data['enabled']
+            ? 'Autopiloti u NDEZ — do aplikojë vetëm brenda kufijve të tu.'
+            : 'Autopiloti u fik.');
+    }
+
+    /** 1-tap "Kthe": restore the pre-autopilot price and re-push to the OTAs. */
+    public function revertAutopilot(\App\Models\PricingAutopilotLog $log): RedirectResponse
+    {
+        if ($log->reverted_at) {
+            return back()->with('error', 'Ky ndryshim është kthyer tashmë.');
+        }
+
+        DB::transaction(function () use ($log) {
+            $override = RateOverride::whereDate('date', $log->date->toDateString())
+                ->where('room_type_id', $log->room_type_id)->first();
+
+            if ($log->old_price === null) {
+                $override?->delete(); // there was no override before — back to the seasonal price
+            } else {
+                $override ??= new RateOverride(['date' => $log->date->toDateString(), 'room_type_id' => $log->room_type_id]);
+                $override->price = $log->old_price;
+                $override->created_by = auth()->id(); // reverting IS the owner's hand — protected from re-apply
+                $override->save();
+            }
+
+            $log->update(['reverted_at' => now()]);
+            AuditLog::record('pricing.autopilot_revert', $log, ['date' => $log->date->toDateString()]);
+        });
+
+        PushRoomTypeAri::dispatch($log->room_type_id);
+
+        return back()->with('success', 'Çmimi u kthye — po dërgohet te OTA-t.');
     }
 }

@@ -224,36 +224,6 @@ class SmartPricingTest extends TestCase
         $this->assertNull($far['kind']);
     }
 
-    public function test_apply_plan_rejects_range_over_62_days(): void
-    {
-        $admin = $this->admin();
-        $type = $this->type(80);
-
-        // 75-day span — the corrected cap must fire (regression guard for the reversed diffInDays bug).
-        $this->actingAs($admin)->post(route('pricing.smart.apply-plan'), [
-            'date_from' => now()->addDays(5)->toDateString(),
-            'date_to' => now()->addDays(80)->toDateString(),
-            'prices' => [['room_type_id' => $type->id, 'suggested' => 100]], // 1.25× base, in band
-        ])->assertRedirect()->assertSessionHas('error');
-
-        $this->assertEquals(0, RateOverride::count()); // nothing written
-    }
-
-    public function test_apply_plan_rejects_out_of_band_price(): void
-    {
-        $admin = $this->admin();
-        $type = $this->type(100);
-        $date = now()->addDays(5)->toDateString();
-
-        // €5 against a €100 base (0.05×) is a hallucination/typo — must be refused before any write/OTA push.
-        $this->actingAs($admin)->post(route('pricing.smart.apply-plan'), [
-            'date_from' => $date, 'date_to' => $date,
-            'prices' => [['room_type_id' => $type->id, 'suggested' => 5]],
-        ])->assertRedirect()->assertSessionHas('error');
-
-        $this->assertEquals(0, RateOverride::count());
-    }
-
     public function test_apply_rejects_absurd_single_price(): void
     {
         $admin = $this->admin();
