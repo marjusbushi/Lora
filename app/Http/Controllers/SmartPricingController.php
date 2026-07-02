@@ -71,6 +71,25 @@ class SmartPricingController extends Controller
                     'recurring' => (bool) $e->recurring,
                 ])->sortBy('date_from')->values(),
             'latestReport' => \App\Models\PricingReport::latest('week_start')->first(),
+            'autopilot' => [
+                'enabled' => filter_var(Setting::get('pricing.autopilot.enabled', '0'), FILTER_VALIDATE_BOOL),
+                'materiality_pct' => (float) Setting::get('pricing.autopilot.materiality_pct', 5),
+                'daily_cap_pct' => (float) Setting::get('pricing.autopilot.daily_cap_pct', 15),
+                'protect_manual_days' => (int) Setting::get('pricing.autopilot.protect_manual_days', 3),
+                'pause_from' => Setting::get('pricing.autopilot.pause_from'),
+                'pause_to' => Setting::get('pricing.autopilot.pause_to'),
+                'logs' => \App\Models\PricingAutopilotLog::with('roomType:id,name')
+                    ->latest('id')->limit(20)->get()
+                    ->map(fn ($l) => [
+                        'id' => $l->id,
+                        'date' => $l->date->toDateString(),
+                        'room_type' => $l->roomType?->name,
+                        'old_price' => $l->old_price !== null ? (float) $l->old_price : null,
+                        'new_price' => (float) $l->new_price,
+                        'reverted' => (bool) $l->reverted_at,
+                        'at' => $l->created_at->toDateTimeString(),
+                    ]),
+            ],
         ];
 
         if ($types->isEmpty()) {
@@ -342,5 +361,59 @@ class SmartPricingController extends Controller
         $msg = preg_replace('/key=[A-Za-z0-9._\-]+/', 'key=***', $e->getMessage());
 
         return trim(mb_strimwidth((string) $msg, 0, 200, '…')) ?: "Asistenti AI s'u përgjigj. Provoni përsëri.";
+    }
+
+    /** Autopilot switch + guardrail knobs (pilot-then-confirm: explicit action). */
+    public function updateAutopilot(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'materiality_pct' => ['required', 'numeric', 'between:1,50'],
+            'daily_cap_pct' => ['required', 'numeric', 'between:1,50'],
+            'protect_manual_days' => ['required', 'integer', 'between:0,30'],
+            'pause_from' => ['nullable', 'date', 'required_with:pause_to'],
+            'pause_to' => ['nullable', 'date', 'required_with:pause_from', 'after_or_equal:pause_from'],
+        ]);
+
+        Setting::set('pricing.autopilot.enabled', $data['enabled'] ? '1' : '0');
+        Setting::set('pricing.autopilot.materiality_pct', (string) $data['materiality_pct']);
+        Setting::set('pricing.autopilot.daily_cap_pct', (string) $data['daily_cap_pct']);
+        Setting::set('pricing.autopilot.protect_manual_days', (string) $data['protect_manual_days']);
+        Setting::set('pricing.autopilot.pause_from', $data['pause_from'] ?? null);
+        Setting::set('pricing.autopilot.pause_to', $data['pause_to'] ?? null);
+        AuditLog::record('pricing.autopilot_settings', null, $data);
+
+        return back()->with('success', $data['enabled']
+            ? 'Autopiloti u NDEZ — do aplikojë vetëm brenda kufijve të tu.'
+            : 'Autopiloti u fik.');
+    }
+
+    /** 1-tap "Kthe": restore the pre-autopilot price and re-push to the OTAs. */
+    public function revertAutopilot(\App\Models\PricingAutopilotLog $log): RedirectResponse
+    {
+        if ($log->reverted_at) {
+            return back()->with('error', 'Ky ndryshim është kthyer tashmë.');
+        }
+
+        DB::transaction(function () use ($log) {
+            $override = RateOverride::whereDate('date', $log->date->toDateString())
+                ->where('room_type_id', $log->room_type_id)->first();
+
+            if ($log->old_price === null) {
+                $override?->delete(); // there was no override before — back to the seasonal price
+            } else {
+                $override ??= new RateOverride(['date' => $log->date->toDateString(), 'room_type_id' => $log->room_type_id]);
+                $override->price = $log->old_price;
+                $override->created_by = auth()->id(); // reverting IS the owner's hand — protected from re-apply
+                $override->save();
+            }
+
+            $log->update(['reverted_at' => now()]);
+            AuditLog::record('pricing.autopilot_revert', $log, ['date' => $log->date->toDateString()]);
+        });
+
+        PushRoomTypeAri::dispatch($log->room_type_id);
+
+        return back()->with('success', 'Çmimi u kthye — po dërgohet te OTA-t.');
     }
 }

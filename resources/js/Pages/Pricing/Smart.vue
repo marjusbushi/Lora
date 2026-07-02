@@ -21,6 +21,7 @@ const props = defineProps({
     lastSyncAt: { type: String, default: null },
     upcomingEvents: { type: Array, default: () => [] },
     latestReport: { type: Object, default: null },
+    autopilot: { type: Object, default: () => ({ enabled: false, logs: [] }) },
 });
 
 const toasts = ref(null);
@@ -167,6 +168,35 @@ async function askAi() {
         toasts.value?.error(e.response?.data?.error || 'Përgjigja s\'u mor dot.');
     }
     askLoading.value = false;
+}
+
+// ── Autopiloti me kufij (default: I FIKUR — vetëm ti e ndez) ──
+const apConfirmOpen = ref(false);
+const apForm = ref({});
+function openAutopilot(intendEnable) {
+    apForm.value = {
+        enabled: intendEnable,
+        materiality_pct: props.autopilot.materiality_pct ?? 5,
+        daily_cap_pct: props.autopilot.daily_cap_pct ?? 15,
+        protect_manual_days: props.autopilot.protect_manual_days ?? 3,
+        pause_from: props.autopilot.pause_from ?? '',
+        pause_to: props.autopilot.pause_to ?? '',
+    };
+    apConfirmOpen.value = true;
+}
+function saveAutopilot() {
+    router.post(route('pricing.smart.autopilot'), {
+        ...apForm.value,
+        pause_from: apForm.value.pause_from || null,
+        pause_to: apForm.value.pause_to || null,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => { apConfirmOpen.value = false; },
+        onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Cilësimet s\'u ruajtën.'),
+    });
+}
+function revertAutopilot(log) {
+    router.post(route('pricing.smart.autopilot.revert', log.id), {}, { preserveScroll: true });
 }
 
 function fmtRange(a, b) {
@@ -506,6 +536,85 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                 </div>
             </Card>
         </div>
+
+        <!-- Autopiloti me kufij -->
+        <Card class="mt-6">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div>
+                    <h2 class="text-h4 text-primary-900 leading-tight">
+                        Autopilot me kufij
+                        <span :class="['text-tiny font-bold px-2 py-0.5 rounded-full align-[2px] ml-1', autopilot.enabled ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500']">
+                            {{ autopilot.enabled ? 'NDEZUR' : 'FIKUR' }}
+                        </span>
+                    </h2>
+                    <p class="text-tiny text-neutral-500">Çdo natë në 03:45 aplikon vetë sugjerimet e motorit — vetëm brenda kufijve të tu, kurrë mbi çmimet që ke vënë ti me dorë.</p>
+                </div>
+                <Button :variant="autopilot.enabled ? 'outline' : 'primary'" @click="openAutopilot(!autopilot.enabled)">
+                    {{ autopilot.enabled ? 'Fike / ndrysho kufijtë' : 'Ndize autopilotin' }}
+                </Button>
+            </div>
+
+            <div v-if="autopilot.enabled" class="flex flex-wrap gap-x-5 gap-y-1 text-tiny text-neutral-500 mb-3">
+                <span>Ndryshim minimal: <b class="text-primary-900">{{ autopilot.materiality_pct }}%</b></span>
+                <span>Tavan ditor: <b class="text-primary-900">±{{ autopilot.daily_cap_pct }}%</b></span>
+                <span>Mbron çmimet e tua: <b class="text-primary-900">{{ autopilot.protect_manual_days }} ditë</b></span>
+                <span v-if="autopilot.pause_from">Pauzë: <b class="text-primary-900">{{ fmtRange(autopilot.pause_from, autopilot.pause_to) }}</b></span>
+            </div>
+
+            <template v-if="autopilot.logs && autopilot.logs.length">
+                <p class="text-tiny font-bold uppercase tracking-wide text-neutral-400 mb-2">Ndryshimet e fundit</p>
+                <div class="space-y-1.5">
+                    <div v-for="l in autopilot.logs" :key="l.id" class="flex items-center justify-between gap-2 text-body-sm border border-neutral-100 rounded-lg px-3 py-1.5" :class="l.reverted ? 'opacity-50' : ''">
+                        <span class="text-neutral-700">
+                            {{ fmtRange(l.date, l.date) }} · {{ l.room_type }} ·
+                            <span class="text-neutral-400 tabular-nums">{{ l.old_price !== null ? currency + fmtPrice(l.old_price) : 'sezonal' }}</span>
+                            <span class="text-neutral-400">→</span>
+                            <b class="text-primary-900 tabular-nums">{{ currency }}{{ fmtPrice(l.new_price) }}</b>
+                        </span>
+                        <Button v-if="!l.reverted" size="sm" variant="ghost" @click="revertAutopilot(l)">Kthe</Button>
+                        <span v-else class="text-tiny text-neutral-400 shrink-0">u kthye</span>
+                    </div>
+                </div>
+            </template>
+            <p v-else class="text-body-sm text-neutral-400">Ende asnjë ndryshim automatik.</p>
+        </Card>
+
+        <!-- autopilot confirm -->
+        <Modal :show="apConfirmOpen" title="Autopilot me kufij" @close="apConfirmOpen = false">
+            <p v-if="apForm.enabled" class="text-body-sm text-neutral-600 mb-4">
+                Duke e ndezur, sistemi do të <b>aplikojë vetë</b> sugjerimet e motorit çdo natë — por VETËM brenda
+                kufijve min/max të çdo tipi dhome, vetëm ndryshime ≥ pragut, me tavan ditor, dhe <b>kurrë</b> mbi
+                çmimet që ke vënë ti kohët e fundit. Çdo ndryshim regjistrohet dhe kthehet me një klik.
+            </p>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-label text-neutral-600 mb-1">Ndryshimi minimal (%)</label>
+                    <input v-model="apForm.materiality_pct" type="number" min="1" max="50" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                </div>
+                <div>
+                    <label class="block text-label text-neutral-600 mb-1">Tavani ditor (±%)</label>
+                    <input v-model="apForm.daily_cap_pct" type="number" min="1" max="50" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                </div>
+                <div>
+                    <label class="block text-label text-neutral-600 mb-1">Mbro çmimet e mia (ditë)</label>
+                    <input v-model="apForm.protect_manual_days" type="number" min="0" max="30" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                </div>
+                <div class="col-span-2 grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-label text-neutral-600 mb-1">Pauzë nga (ops.)</label>
+                        <input v-model="apForm.pause_from" type="date" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                    </div>
+                    <div>
+                        <label class="block text-label text-neutral-600 mb-1">deri më</label>
+                        <input v-model="apForm.pause_to" type="date" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2.5 mt-5">
+                <Button variant="ghost" @click="apConfirmOpen = false">Anulo</Button>
+                <Button variant="primary" @click="saveAutopilot">{{ apForm.enabled ? 'Po, ndize' : 'Ruaj (i fikur)' }}</Button>
+            </div>
+        </Modal>
 
         <!-- bounds drawer -->
         <Modal :show="boundsOpen" title="Kufijtë e çmimit" @close="boundsOpen = false">
