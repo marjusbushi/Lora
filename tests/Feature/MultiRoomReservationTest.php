@@ -6,6 +6,7 @@ use App\Models\Guest;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
+use App\Models\Season;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -126,6 +127,54 @@ class MultiRoomReservationTest extends TestCase
 
         $this->assertStringContainsString('mirembajtje', session('errors')->first('rooms'));
         $this->assertCount(0, Reservation::all());
+    }
+
+    /** A stay with no manually-entered price must default to the SEASONAL rate, not base_price. */
+    public function test_reservation_without_manual_price_uses_seasonal_rate(): void
+    {
+        [$admin, $room1, , $guest] = $this->setupHotel(); // base_price 100
+        $ci = now()->addDays(3)->toDateString();
+        $co = now()->addDays(5)->toDateString(); // 2 nights
+        // A high season covering the stay with a per-type rate of 150.
+        $season = Season::create([
+            'name' => 'High',
+            'start_date' => now()->addDay()->toDateString(),
+            'end_date' => now()->addDays(30)->toDateString(),
+            'priority' => 100,
+        ]);
+        $season->rates()->create(['room_type_id' => $room1->room_type_id, 'price' => 150]);
+
+        $this->actingAs($admin)->post(route('reservations.store-multi'), [
+            'guest_id' => $guest->id,
+            'check_in_date' => $ci,
+            'check_out_date' => $co,
+            'rooms' => [
+                ['room_id' => $room1->id, 'adults' => 1, 'children' => 0, 'total_amount' => null],
+            ],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        // Seasonal 150 × 2 nights = 300, NOT base 100 × 2 = 200.
+        $this->assertEqualsWithDelta(300.0, (float) Reservation::first()->total_amount, 0.01);
+    }
+
+    /** The quote endpoint prices server-side from RoomPricing and ignores any client-sent amount. */
+    public function test_quote_endpoint_is_server_computed_and_ignores_client_price(): void
+    {
+        [$admin, $room1, , ] = $this->setupHotel();
+        $season = Season::create([
+            'name' => 'High',
+            'start_date' => now()->addDay()->toDateString(),
+            'end_date' => now()->addDays(30)->toDateString(),
+            'priority' => 100,
+        ]);
+        $season->rates()->create(['room_type_id' => $room1->room_type_id, 'price' => 150]);
+
+        $this->actingAs($admin)->getJson(route('reservations.quote', [
+            'room_id' => $room1->id,
+            'check_in' => now()->addDays(3)->toDateString(),
+            'check_out' => now()->addDays(5)->toDateString(),
+            'total' => 5, // a hostile client-supplied price must be ignored
+        ]))->assertOk()->assertJson(['nights' => 2, 'total' => 300]);
     }
 
     public function test_admin_can_back_date_a_reservation(): void

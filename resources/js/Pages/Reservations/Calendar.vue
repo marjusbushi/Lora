@@ -560,7 +560,7 @@ function getRoomCalendarCells(room) {
 .cal-next-leave-active,
 .cal-prev-enter-active,
 .cal-prev-leave-active {
-    transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 300ms ease;
+    transition: transform 420ms cubic-bezier(0.4, 0, 0.2, 1), opacity 420ms ease;
     will-change: transform, opacity;
 }
 .cal-next-leave-active,

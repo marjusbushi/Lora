@@ -62,6 +62,8 @@ const form = useForm({
 
 // Per-row flag: once the user edits a price by hand, stop auto-filling it.
 let priceTouched = [false];
+// Per-row request counter — guards against a stale seasonal quote landing after a newer one.
+let priceSeq = [];
 
 // --- Capacity per room ---
 function roomById(id) {
@@ -113,9 +115,30 @@ function clampRow(i) {
         row.children = Math.max(0, cap - Number(row.adults));
     }
 }
+// Auto-fill a row's price with the SEASONAL total for its room + the chosen dates.
+// base_price×nights is only a placeholder shown instantly while the server quote
+// (which accounts for seasons + rate overrides) is fetched.
 function priceRow(i) {
     if (priceTouched[i]) return; // never clobber a manually-entered price
-    form.rooms[i].total_amount = suggestedFor(form.rooms[i].room_id) || '';
+    const roomId = form.rooms[i].room_id;
+    const ci = form.check_in_date;
+    const co = form.check_out_date;
+    if (!roomId || !ci || !co || nights() <= 0) {
+        form.rooms[i].total_amount = '';
+        return;
+    }
+    // Instant local estimate so the field is never blank while the quote loads.
+    form.rooms[i].total_amount = suggestedFor(roomId) || '';
+    const seq = (priceSeq[i] = (priceSeq[i] || 0) + 1);
+    window.axios
+        .get(route('reservations.quote'), { params: { room_id: roomId, check_in: ci, check_out: co } })
+        .then(({ data }) => {
+            const row = form.rooms[i];
+            // Drop a stale response: row gone, room changed, a newer request fired, or the user typed a price.
+            if (!row || row.room_id !== roomId || seq !== priceSeq[i] || priceTouched[i]) return;
+            if (data && Number.isFinite(Number(data.total))) row.total_amount = Number(data.total);
+        })
+        .catch(() => { /* keep the local estimate if the quote fails */ });
 }
 
 function onRoomChange(i, val) {
