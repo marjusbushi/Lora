@@ -627,6 +627,39 @@ class ReservationController extends Controller
         return back()->with('success', "Check-out per dhomen {$reservation->room->room_number} u krye.");
     }
 
+    /**
+     * Front desk requests a stayover (daily) cleaning while the guest is still in-house.
+     * Creates a stayover_clean task WITHOUT ending the stay or touching room status —
+     * the guest stays put, the room stays occupied. Can be requested again next day.
+     */
+    public function requestCleaning(Reservation $reservation): RedirectResponse
+    {
+        if ($reservation->status !== 'checked_in') {
+            return back()->with('error', 'Pastrimi ditor mund te kerkohet vetem kur klienti eshte brenda (check-in).');
+        }
+
+        // One open stayover task per room is enough — don't stack duplicates.
+        $alreadyOpen = CleaningTask::where('room_id', $reservation->room_id)
+            ->where('type', 'stayover_clean')
+            ->whereIn('status', ['pending', 'in_progress'])
+            ->exists();
+        if ($alreadyOpen) {
+            return back()->with('error', 'Ka tashme nje pastrim ditor ne pritje per kete dhome.');
+        }
+
+        CleaningTask::create([
+            'room_id' => $reservation->room_id,
+            'type' => 'stayover_clean',
+            'status' => 'pending',
+            'priority' => Setting::get('housekeeping.default_priority', 'normal'),
+            'notes' => 'Kerkuar nga recepsioni per klientin ne dhome.',
+        ]);
+
+        AuditLog::record('housekeeping.stayover_requested', $reservation, ['room' => $reservation->room->room_number]);
+
+        return back()->with('success', 'Pastrimi ditor u kerkua — housekeeping do ta shohe ne board.');
+    }
+
     public function cancel(Reservation $reservation): RedirectResponse
     {
         if (in_array($reservation->status, ['checked_in', 'checked_out'])) {

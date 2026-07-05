@@ -32,6 +32,21 @@ const checkoutMode = ref(false);
 const perms = usePage().props.auth.user?.permissions || [];
 const canUpdate = perms.includes('update_reservations');
 
+// Front desk asks housekeeping for a daily (stayover) clean while the guest is in-house.
+const requestingCleaning = ref(false);
+function requestCleaning() {
+    requestingCleaning.value = true;
+    router.post(route('reservations.request-cleaning', props.reservation.id), {}, {
+        preserveScroll: true,
+        onSuccess: (page) => {
+            const flash = page.props?.flash || {};
+            if (flash.error) toasts.value?.error(flash.error);
+            else toasts.value?.success(flash.success || 'Pastrimi ditor u kerkua.');
+        },
+        onFinish: () => (requestingCleaning.value = false),
+    });
+}
+
 const statusBadge = {
     pending: { variant: 'warning', label: 'Ne pritje' },
     confirmed: { variant: 'info', label: 'Konfirmuar' },
@@ -148,6 +163,14 @@ function settleAndCheckout(method) {
                 <Button v-if="canUpdate" variant="outline" @click="showLineModal = true">+ Rresht</Button>
                 <Button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" variant="success" @click="showPayModal = true">Paguaj</Button>
                 <Button variant="outline" @click="openInvoice">Fature</Button>
+                <Button
+                    v-if="canUpdate && reservation.status === 'checked_in'"
+                    variant="outline"
+                    :loading="requestingCleaning"
+                    @click="requestCleaning"
+                >
+                    Kërko pastrim
+                </Button>
                 <Button
                     v-if="canUpdate && reservation.status === 'checked_in'"
                     variant="primary"

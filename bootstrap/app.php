@@ -47,5 +47,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('pricing:autopilot')->dailyAt('03:45');
         // Monday-morning pricing narrative for the owner (skips if Gemini unset).
         $schedule->command('pricing:weekly-report')->weeklyOn(1, '07:00');
+        // Midnight: archive inspected cleaning tasks so the board shows only the day's live work.
+        $schedule->command('housekeeping:archive-inspected')->daily();
     })
     ->create();

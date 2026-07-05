@@ -20,6 +20,7 @@ class CleaningTask extends Model
         'completed_at',
         'started_at',
         'inspected_at',
+        'archived_at',
     ];
 
     protected function casts(): array
@@ -29,6 +30,7 @@ class CleaningTask extends Model
             'completed_at' => 'datetime',
             'started_at' => 'datetime',
             'inspected_at' => 'datetime',
+            'archived_at' => 'datetime',
         ];
     }
 

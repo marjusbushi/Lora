@@ -26,6 +26,8 @@ class CleaningTaskController extends Controller
                 'assignedUser:id,name',
                 'inspectedBy:id,name',
             ])
+            // Daily-archived (inspected) tasks drop off the board — kept in the DB for records.
+            ->whereNull('archived_at')
             ->orderByRaw("CASE status WHEN 'in_progress' THEN 0 WHEN 'pending' THEN 1 WHEN 'completed' THEN 2 WHEN 'inspected' THEN 3 ELSE 4 END")
             ->orderByRaw("CASE priority WHEN 'urgent' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END");
 
