@@ -482,9 +482,16 @@ class SettingsController extends Controller
     // --- Room Type Images ---
     public function uploadRoomTypeImages(Request $request, RoomType $roomType): RedirectResponse
     {
+        // The client optimizes photos before upload (HEIC→JPG + downscaled to web size), so these
+        // arrive as small JPEGs. The 15MB cap is a safety net for a raw file that skips the client
+        // path; it also fits under php-fpm upload_max_filesize (25M) / post_max_size (30M).
         $request->validate([
             'images' => ['required', 'array', 'min:1'],
-            'images.*' => ['image', 'max:3072'], // 3MB per image
+            'images.*' => ['image', 'max:15360'], // 15MB per image
+        ], [
+            'images.required' => 'Zgjidh të paktën një foto.',
+            'images.*.image' => 'Skedari duhet të jetë një foto (JPG, PNG ose WebP).',
+            'images.*.max' => 'Fotoja është shumë e madhe — maksimumi 15MB.',
         ]);
 
         $maxOrder = $roomType->images()->max('sort_order') ?? -1;

@@ -23,6 +23,47 @@ const form = useForm({
 
 const amenityInput = ref('');
 const imageFiles = ref(null);
+const uploading = ref(false);
+const uploadStatus = ref('');
+
+// Photos are optimized IN THE BROWSER before upload: iPhone HEIC is converted to JPG (the
+// server has GD only — no HEIF — and Chrome/Firefox can't even display HEIC), and every image
+// is downscaled to web size so a 12MB phone photo becomes a fast ~300KB JPG that always uploads.
+const MAX_IMAGE_DIM = 2560; // px on the longest side — sharp on retina, tiny on the wire
+const JPEG_QUALITY = 0.85;
+
+function isHeic(file) {
+    const type = (file.type || '').toLowerCase();
+    const name = (file.name || '').toLowerCase();
+    return type === 'image/heic' || type === 'image/heif' || name.endsWith('.heic') || name.endsWith('.heif');
+}
+
+// HEIC→JPG (if needed) + downscale. Returns a JPEG File ready to upload.
+async function prepareImage(file) {
+    let source = file;
+    if (isHeic(file)) {
+        // heic2any bundles libheif (WASM); imported on demand so it never weighs down first paint.
+        const heic2any = (await import('heic2any')).default;
+        source = await heic2any({ blob: file, toType: 'image/jpeg', quality: JPEG_QUALITY });
+        if (Array.isArray(source)) source = source[0]; // a multi-frame HEIC → take the first frame
+    }
+
+    // imageOrientation honors EXIF so a portrait phone photo isn't uploaded sideways.
+    const bitmap = await createImageBitmap(source, { imageOrientation: 'from-image' });
+    const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(bitmap.width, bitmap.height));
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+    bitmap.close?.();
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
+    const baseName = (file.name || 'foto').replace(/\.[^.]+$/, '');
+    return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
+}
 
 function openCreate() {
     editingType.value = null;
@@ -89,18 +130,46 @@ function deleteType(type) {
     });
 }
 
-function uploadImages() {
-    if (!imageFiles.value?.files?.length) return;
-    const formData = new FormData();
-    for (const file of imageFiles.value.files) {
-        formData.append('images[]', file);
+async function uploadImages() {
+    const files = imageFiles.value?.files;
+    if (!files?.length || uploading.value) return;
+
+    uploading.value = true;
+    const prepared = [];
+    for (let i = 0; i < files.length; i++) {
+        uploadStatus.value = `Po përgatitet foto ${i + 1}/${files.length}...`;
+        try {
+            prepared.push(await prepareImage(files[i]));
+        } catch (e) {
+            props.toasts?.error(`Fotoja "${files[i].name || i + 1}" s'u lexua dot — provo një format tjetër.`);
+        }
     }
+
+    if (!prepared.length) {
+        uploading.value = false;
+        uploadStatus.value = '';
+        return;
+    }
+
+    const formData = new FormData();
+    prepared.forEach((f) => formData.append('images[]', f));
+    uploadStatus.value = `Po ngarkohen ${prepared.length} foto...`;
+
     router.post(route('settings.room-types.images.upload', selectedType.value.id), formData, {
         forceFormData: true,
         preserveScroll: true,
         onSuccess: () => {
             props.toasts?.success('Fotot u ngarkuan.');
-            imageFiles.value.value = '';
+            if (imageFiles.value) imageFiles.value.value = '';
+        },
+        // Surface the real reason instead of failing silently (this was the whole bug).
+        onError: (errors) => {
+            const first = Object.values(errors || {})[0];
+            props.toasts?.error(first || 'Fotot nuk u ngarkuan. Provo sërish.');
+        },
+        onFinish: () => {
+            uploading.value = false;
+            uploadStatus.value = '';
         },
     });
 }
@@ -236,12 +305,16 @@ function setAsFeatured(type, imageId) {
                 <input
                     ref="imageFiles"
                     type="file"
-                    accept="image/jpeg,image/png,image/webp"
+                    accept="image/*,.heic,.heif"
                     multiple
-                    class="block w-full text-small text-neutral-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-accent-600 file:text-white file:font-medium file:cursor-pointer hover:file:bg-accent-700"
+                    :disabled="uploading"
+                    class="block w-full text-small text-neutral-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-accent-600 file:text-white file:font-medium file:cursor-pointer hover:file:bg-accent-700 disabled:opacity-50"
                 />
-                <p class="text-tiny text-neutral-400 mt-2">JPG, PNG, WebP. Max 3MB per foto. Mund te zgjidhni shume njeheres.</p>
-                <Button size="sm" variant="primary" class="mt-3" @click="uploadImages">Ngarko fotot</Button>
+                <p class="text-tiny text-neutral-400 mt-2">Foto nga telefoni ose kompjuteri — edhe nga iPhone. Optimizohen vetë para ngarkimit. Mund të zgjidhni shumë njëherësh.</p>
+                <div class="mt-3 flex items-center gap-3">
+                    <Button size="sm" variant="primary" :loading="uploading" :disabled="uploading" @click="uploadImages">Ngarko fotot</Button>
+                    <span v-if="uploadStatus" class="text-tiny text-neutral-500">{{ uploadStatus }}</span>
+                </div>
             </div>
 
             <!-- Gallery -->
