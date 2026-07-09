@@ -217,10 +217,18 @@ class WebsiteController extends Controller
 
         // Attribute public bookings to a stable system user (self-seeding) — never a hardcoded
         // id, so a missing/renumbered user 1 can't 500 the public booking funnel.
-        $creator = User::firstOrCreate(
+        // withTrashed(): if the system user was SOFT-DELETED (e.g. removed from the admin Users
+        // screen), a plain firstOrCreate can't see the trashed row but the users.email UNIQUE
+        // index still counts it — so it would try to re-INSERT and 500 with a duplicate-key on
+        // EVERY public booking. Looking up including trashed rows finds it; restore() un-trashes
+        // it so the funnel self-heals instead of going down.
+        $creator = User::withTrashed()->firstOrCreate(
             ['email' => 'system@villamucho.local'],
             ['name' => 'Website Booking', 'password' => Str::random(40)]
         );
+        if ($creator->trashed()) {
+            $creator->restore();
+        }
 
         try {
             // Lock the room row + re-check availability INSIDE the transaction so two
