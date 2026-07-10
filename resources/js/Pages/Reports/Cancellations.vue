@@ -87,7 +87,7 @@ const kpis = [
                 <div class="px-5 py-4 border-b border-neutral-200">
                     <h3 class="text-label text-neutral-600 uppercase tracking-wider">Mundësi no-show</h3>
                     <p class="mt-1 text-tiny text-neutral-500">
-                        Vlerësim: rezervime ende «në pritje» që data e hyrjes ka kaluar — verifikoji para se t'i mbyllësh.
+                        Vlerësim: rezervime «në pritje» ose «të konfirmuara» me hyrje të kaluar — verifikoji para se t'i mbyllësh.
                     </p>
                 </div>
                 <div class="overflow-x-auto">

@@ -574,14 +574,32 @@ class ReservationController extends Controller
 
     public function checkIn(Reservation $reservation): RedirectResponse
     {
-        if ($reservation->status !== 'confirmed') {
-            return back()->with('error', 'Vetem rezervimet e konfirmuara mund te bejne check-in.');
-        }
-
         DB::transaction(function () use ($reservation) {
-            $reservation->update(['status' => 'checked_in']);
-            $reservation->room->update(['status' => 'occupied']);
+            $lockedReservation = Reservation::query()->lockForUpdate()->findOrFail($reservation->id);
+            if ($lockedReservation->status !== 'confirmed') {
+                throw ValidationException::withMessages([
+                    'check_in' => 'Vetem rezervimet e konfirmuara mund te bejne check-in.',
+                ]);
+            }
+
+            $room = Room::query()->lockForUpdate()->find($lockedReservation->room_id);
+            $roomNotReady = ! $room
+                || $room->status !== 'available'
+                || CleaningTask::query()
+                    ->where('room_id', $lockedReservation->room_id)
+                    ->whereIn('status', ['pending', 'in_progress'])
+                    ->exists();
+            if ($roomNotReady) {
+                throw ValidationException::withMessages([
+                    'check_in' => 'Dhoma duhet te jete e lire, e pastruar dhe pa detyre pastrimi te hapur para check-in.',
+                ]);
+            }
+
+            $lockedReservation->update(['status' => 'checked_in']);
+            $room->update(['status' => 'occupied']);
         });
+
+        $reservation->refresh()->loadMissing('room');
 
         AuditLog::record('reservation.check_in', $reservation, ['room' => $reservation->room->room_number]);
 

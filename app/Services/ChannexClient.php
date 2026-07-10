@@ -204,11 +204,17 @@ class ChannexClient
     // -- writes: ARI push (single HTTP attempt; queue job retries) --------
 
     /** Push availability (rooms free) for a room type over one inclusive range. */
-    public function pushAvailability(string $roomTypeId, string $dateFrom, string $dateTo, int $available, ?string $propertyId = null): bool
-    {
+    public function pushAvailability(
+        string $roomTypeId,
+        string $dateFrom,
+        string $dateTo,
+        int $available,
+        ?string $propertyId = null,
+        ?int $pmsRoomTypeId = null,
+    ): bool {
         return $this->pushAvailabilityRanges($roomTypeId, [
             ['date_from' => $dateFrom, 'date_to' => $dateTo, 'availability' => $available],
-        ], $propertyId);
+        ], $propertyId, $pmsRoomTypeId);
     }
 
     /**
@@ -216,8 +222,12 @@ class ChannexClient
      * call. $ranges = [['date_from'=>'Y-m-d','date_to'=>'Y-m-d','availability'=>int], ...].
      * An empty $ranges is a no-op success (nothing to send).
      */
-    public function pushAvailabilityRanges(string $roomTypeId, array $ranges, ?string $propertyId = null): bool
-    {
+    public function pushAvailabilityRanges(
+        string $roomTypeId,
+        array $ranges,
+        ?string $propertyId = null,
+        ?int $pmsRoomTypeId = null,
+    ): bool {
         if ($ranges === []) {
             return true;
         }
@@ -234,7 +244,7 @@ class ChannexClient
         // comfortably below the database queue's retry_after window.
         $resp = $this->http(timeout: 20)->post("{$this->baseUrl}/availability", ['values' => $values]);
         $accepted = $this->ariAccepted($resp);
-        $this->log('push', 'availability', ['values' => $values], $resp, $accepted);
+        $this->log('push', 'availability', ['values' => $values], $resp, $accepted, $pmsRoomTypeId);
 
         return $accepted;
     }
@@ -243,11 +253,17 @@ class ChannexClient
      * Push a nightly rate for a rate plan over an inclusive range. $price is in
      * MAJOR units (euros); Channex wants cents, so it is converted here (gotcha #1).
      */
-    public function pushRate(string $ratePlanId, string $dateFrom, string $dateTo, float $price, ?string $propertyId = null): bool
-    {
+    public function pushRate(
+        string $ratePlanId,
+        string $dateFrom,
+        string $dateTo,
+        float $price,
+        ?string $propertyId = null,
+        ?int $pmsRoomTypeId = null,
+    ): bool {
         return $this->pushRateRanges($ratePlanId, [
             ['date_from' => $dateFrom, 'date_to' => $dateTo, 'rate' => $price],
-        ], $propertyId);
+        ], $propertyId, $pmsRoomTypeId);
     }
 
     /**
@@ -255,8 +271,12 @@ class ChannexClient
      * Each range's 'rate' is in EUROS (major units) and converted to cents here.
      * An empty $ranges is a no-op success.
      */
-    public function pushRateRanges(string $ratePlanId, array $ranges, ?string $propertyId = null): bool
-    {
+    public function pushRateRanges(
+        string $ratePlanId,
+        array $ranges,
+        ?string $propertyId = null,
+        ?int $pmsRoomTypeId = null,
+    ): bool {
         if ($ranges === []) {
             return true;
         }
@@ -271,7 +291,7 @@ class ChannexClient
 
         $resp = $this->http(timeout: 20)->post("{$this->baseUrl}/restrictions", ['values' => $values]);
         $accepted = $this->ariAccepted($resp);
-        $this->log('push', 'rate', ['values' => $values], $resp, $accepted);
+        $this->log('push', 'rate', ['values' => $values], $resp, $accepted, $pmsRoomTypeId);
 
         return $accepted;
     }
@@ -354,6 +374,7 @@ class ChannexClient
         array $request,
         Response $response,
         ?bool $accepted = null,
+        ?int $roomTypeId = null,
     ): void {
         $body = $response->json();
         $ok = $accepted ?? $response->successful();
@@ -362,6 +383,7 @@ class ChannexClient
             'channel' => 'channex',
             'direction' => $direction,
             'action' => $action,
+            'room_type_id' => $roomTypeId,
             'status' => $ok ? 'ok' : 'error',
             'request' => $request,
             'response' => is_array($body) ? $body : ['raw' => $response->body()],
