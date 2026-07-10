@@ -270,6 +270,8 @@ function doCheckOut(res) {
     router.post(route('reservations.check-out', res.id), {}, {
         preserveScroll: true,
         onSuccess: () => { showDetailModal.value = false; toasts.value?.success('Check-out OK'); },
+        // A guest who still owes is blocked server-side — keep the modal open and show why.
+        onError: (errors) => toasts.value?.error(errors.settle_method || 'Check-out deshtoi.'),
     });
 }
 

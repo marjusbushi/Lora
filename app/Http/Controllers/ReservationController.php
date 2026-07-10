@@ -17,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -576,28 +577,39 @@ class ReservationController extends Controller
             'settle_method' => ['nullable', 'in:cash,card'],
         ]);
 
-        DB::transaction(function () use ($reservation, $data) {
-            // Record a payment for whatever is still owed, with the chosen method, before flipping status.
-            if (!empty($data['settle_method'])) {
-                $reservation->loadMissing('folioItems', 'payments');
-                $roomCharge = (float) $reservation->total_amount;
-                $folioCharges = (float) $reservation->folioItems->whereNotIn('type', ['discount', 'room'])->sum('amount');
-                $discounts = (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
-                $paid = (float) $reservation->payments->reject(fn ($p) => $p->is_voided)->sum('amount');
-                $outstanding = round($roomCharge + $folioCharges - $discounts - $paid, 2);
+        // Live outstanding balance — same formula as the folio view: room charge + extra folio
+        // charges − discounts − payments already taken (voided ones excluded, per Payment::notVoided).
+        $reservation->loadMissing('folioItems', 'payments');
+        $roomCharge = (float) $reservation->total_amount;
+        $folioCharges = (float) $reservation->folioItems->whereNotIn('type', ['discount', 'room'])->sum('amount');
+        $discounts = (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
+        $paid = (float) $reservation->payments->reject(fn ($p) => $p->is_voided)->sum('amount');
+        $outstanding = round($roomCharge + $folioCharges - $discounts - $paid, 2);
 
-                if ($outstanding > 0) {
-                    $reservation->payments()->create([
-                        'amount' => $outstanding,
-                        'method' => $data['settle_method'],
-                        'created_by' => auth()->id(),
-                    ]);
-                    AuditLog::record('payment.record', $reservation, [
-                        'amount' => $outstanding,
-                        'method' => $data['settle_method'],
-                        'context' => 'checkout_settle',
-                    ]);
-                }
+        // MANDATORY payment before check-out: a guest who still owes cannot leave. Enforced HERE at
+        // the backend so NO path can bypass it — the reservation list and calendar both POST an empty
+        // body, and would otherwise check a guest out unpaid. To clear the bill the caller passes
+        // settle_method (cash/card) and the payment is recorded below; a balance already at 0 (e.g. an
+        // OTA prepaid stay) checks out straight through.
+        if ($outstanding > 0.005 && empty($data['settle_method'])) {
+            throw ValidationException::withMessages([
+                'settle_method' => 'Klienti ka '.number_format($outstanding, 2).'€ pa paguar — regjistro pagesën para check-out.',
+            ]);
+        }
+
+        DB::transaction(function () use ($reservation, $data, $outstanding) {
+            // Record a payment for whatever is still owed, with the chosen method, before flipping status.
+            if (!empty($data['settle_method']) && $outstanding > 0) {
+                $reservation->payments()->create([
+                    'amount' => $outstanding,
+                    'method' => $data['settle_method'],
+                    'created_by' => auth()->id(),
+                ]);
+                AuditLog::record('payment.record', $reservation, [
+                    'amount' => $outstanding,
+                    'method' => $data['settle_method'],
+                    'context' => 'checkout_settle',
+                ]);
             }
 
             $reservation->update(['status' => 'checked_out']);

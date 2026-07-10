@@ -117,7 +117,8 @@ function doCheckOut(res) {
     router.post(route('reservations.check-out', res.id), {}, {
         preserveScroll: true,
         onSuccess: () => toasts.value?.success(`Check-out: ${res.guest?.first_name} ${res.guest?.last_name}`),
-        onError: () => toasts.value?.error('Check-out deshtoi.'),
+        // A guest who still owes is blocked server-side — show why (the amount + "record payment first").
+        onError: (errors) => toasts.value?.error(errors.settle_method || 'Check-out deshtoi.'),
     });
 }
 

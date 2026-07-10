@@ -143,7 +143,7 @@ function settleAndCheckout(method) {
                         : 'Check-out u krye.'
                 );
             },
-            onError: () => toasts.value?.error('Check-out deshtoi.'),
+            onError: (errors) => toasts.value?.error(errors.settle_method || 'Check-out deshtoi.'),
             onFinish: () => { checkingOut.value = false; },
         }
     );
