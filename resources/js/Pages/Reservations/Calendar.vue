@@ -342,17 +342,17 @@ function getRoomCalendarCells(room) {
         <!-- Calendar grid — slides horizontally when changing week -->
         <div class="relative overflow-hidden">
         <Transition :name="slideDir === 'next' ? 'cal-next' : 'cal-prev'">
-        <div :key="startDate" class="bg-white rounded-lg border border-neutral-200 overflow-x-auto">
+        <div :key="startDate" class="bg-white rounded-lg border border-neutral-200 max-h-[calc(100vh-13rem)] overflow-auto overscroll-contain">
             <table class="w-full border-collapse" style="min-width: 900px;">
                 <!-- Day headers -->
                 <thead>
                     <tr>
-                        <th class="sticky left-0 z-10 bg-neutral-50 border-b border-r border-neutral-200 px-3 py-2 text-left text-label text-neutral-600 w-28">Dhoma</th>
+                        <th class="sticky top-0 left-0 z-30 bg-neutral-50 border-b border-r border-neutral-200 px-3 py-2 text-left text-label text-neutral-600 w-28">Dhoma</th>
                         <th
                             v-for="day in days"
                             :key="day.date"
                             :class="[
-                                'border-b border-r border-neutral-200 px-1 py-2 text-center min-w-[56px]',
+                                'sticky top-0 z-20 border-b border-r border-neutral-200 px-1 py-2 text-center min-w-[56px]',
                                 day.isToday ? 'bg-accent-50' : day.isWeekend ? 'bg-neutral-100' : 'bg-neutral-50',
                             ]"
                         >
