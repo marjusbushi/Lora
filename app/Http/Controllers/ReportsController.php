@@ -510,7 +510,7 @@ class ReportsController extends Controller
         ]);
     }
 
-    /** Anulime & No-Show: cancellation rate + value, plus pending past-arrival no-show candidates (heuristic). */
+    /** Anulime & No-Show: cancellation rate + value, plus unresolved past-arrival candidates. */
     public function cancellations(Request $request): Response
     {
         [$from, $to] = $this->range($request);
@@ -529,9 +529,10 @@ class ReportsController extends Controller
         $cancelledCount = $cancelled->count();
         $cancelledValue = (float) $cancelled->sum('total_amount');
 
-        // No-show candidates (heuristic): still pending although arrival date has already passed.
+        // No-show candidates: pending/confirmed, arrival passed, not already marked.
         $noShows = Reservation::whereBetween('check_in_date', [$from, $to])
-            ->where('status', 'pending')
+            ->whereIn('status', ['pending', 'confirmed'])
+            ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<', $today)
             ->with(['room:id,room_number', 'guest:id,first_name,last_name'])
             ->orderByDesc('check_in_date')

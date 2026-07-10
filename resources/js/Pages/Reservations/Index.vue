@@ -32,16 +32,17 @@ const props = defineProps({
     channelFees: { type: Object, default: () => ({}) },
 });
 
+const perms = usePage().props.auth.user?.permissions || [];
+const canCreate = perms.includes('create_reservations');
+const canUpdate = perms.includes('update_reservations');
+
 const toasts = ref(null);
-const showCreateModal = ref(false);
+const openCreateFromQuery = new URL(usePage().url, 'http://localhost').searchParams.get('new') === '1';
+const showCreateModal = ref(canCreate && openCreateFromQuery);
 const showEditModal = ref(false);
 const selectedRes = ref(null);
 const showMoveModal = ref(false);
 const moveRes = ref(null);
-
-const perms = usePage().props.auth.user?.permissions || [];
-const canCreate = perms.includes('create_reservations');
-const canUpdate = perms.includes('update_reservations');
 
 const statusBadge = {
     pending: { variant: 'warning', label: 'Ne pritje' },
@@ -143,6 +144,16 @@ function openEdit(res) {
 
 function onReservationCreated() {
     toasts.value?.success('Rezervimi u krijua.');
+}
+
+function closeCreateModal() {
+    showCreateModal.value = false;
+    if (typeof window === 'undefined') return;
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('new') !== '1') return;
+    url.searchParams.delete('new');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
 function openMove(res) {
@@ -384,7 +395,7 @@ function isLatest(reservation) {
             :rooms="rooms"
             :guests="guests"
             :channel-fees="channelFees"
-            @close="showCreateModal = false"
+            @close="closeCreateModal"
             @created="onReservationCreated"
             @guest-created="toasts?.success('Mysafiri u shtua.')"
         />

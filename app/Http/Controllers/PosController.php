@@ -166,6 +166,8 @@ class PosController extends Controller
                 'status' => 'completed',
                 'payment_method' => $request->payment_method,
                 'reservation_id' => $reservationId,
+                'paid_at' => now(),
+                'business_date' => today(),
                 // Cash physically enters the drawer of whoever finalizes the sale, so attribute the
                 // order to the completing user's shift — fixes cross-shift completion + legacy NULL orders.
                 'pos_shift_id' => $shift->id,

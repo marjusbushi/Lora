@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\PushRoomTypeAri;
 use App\Models\ChannelMapping;
+use App\Models\ChannelSyncLog;
 use App\Models\Guest;
 use App\Models\Reservation;
 use App\Models\Room;
@@ -148,6 +149,14 @@ class ChannelSyncTest extends TestCase
             $type, CarbonImmutable::parse('2026-07-01'), CarbonImmutable::parse('2026-07-03')
         );
         $this->assertTrue($ok);
+        $this->assertSame(
+            2,
+            ChannelSyncLog::query()
+                ->where('room_type_id', $type->id)
+                ->whereIn('action', ['availability', 'rate'])
+                ->where('status', 'ok')
+                ->count(),
+        );
 
         // flat 2 rooms, no reservations -> ONE availability range
         Http::assertSent(function ($r) {

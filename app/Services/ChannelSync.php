@@ -83,12 +83,14 @@ class ChannelSync
             $ok = $this->channex->pushAvailabilityRanges(
                 $mapping->channex_room_type_id,
                 $this->toRanges($availability, 'availability'),
+                pmsRoomTypeId: $roomType->id,
             );
 
             if ($mapping->channex_rate_plan_id && $range !== null) {
                 $ok = $this->channex->pushRateRanges(
                     $mapping->channex_rate_plan_id,
                     $this->toRanges($this->priceByDate($roomType, $effectiveFrom, $effectiveTo), 'rate'),
+                    pmsRoomTypeId: $roomType->id,
                 ) && $ok;
             }
 
@@ -156,12 +158,14 @@ class ChannelSync
             $ok = $this->channex->pushAvailabilityRanges(
                 $mapping->channex_room_type_id,
                 $this->toRanges($availability, 'availability'),
+                pmsRoomTypeId: $roomType->id,
             );
 
             if ($mapping->channex_rate_plan_id && $sellThrough->gte($today)) {
                 $ok = $this->channex->pushRateRanges(
                     $mapping->channex_rate_plan_id,
                     $this->toRanges($this->priceByDate($roomType, $today, $sellThrough), 'rate'),
+                    pmsRoomTypeId: $roomType->id,
                 ) && $ok;
             }
 
