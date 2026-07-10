@@ -12,8 +12,10 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\RoomTypeImage;
 use App\Models\Setting;
+use App\Services\PricingRulesVersion;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -36,7 +38,7 @@ class SettingsController extends Controller
             'settings' => $settings,
             'checklistDefaults' => CleaningTask::DEFAULT_CHECKLISTS,
             'roomTypes' => RoomType::withCount('rooms')->with('images')->orderBy('name')->get(),
-            'menuCategories' => MenuCategory::with(['items' => fn($q) => $q->orderBy('name')])
+            'menuCategories' => MenuCategory::with(['items' => fn ($q) => $q->orderBy('name')])
                 ->orderBy('sort_order')
                 ->get(),
             'floors' => Floor::orderBy('number')->get(),
@@ -60,7 +62,7 @@ class SettingsController extends Controller
     public function updateFloor(Request $request, Floor $floor): RedirectResponse
     {
         $request->validate([
-            'number' => ['required', 'integer', 'min:0', 'max:255', 'unique:floors,number,' . $floor->id],
+            'number' => ['required', 'integer', 'min:0', 'max:255', 'unique:floors,number,'.$floor->id],
             'name' => ['required', 'string', 'max:100'],
         ]);
 
@@ -304,8 +306,8 @@ class SettingsController extends Controller
             'name' => ['required', 'string', 'max:255', 'unique:room_types,name'],
             'description' => ['nullable', 'string', 'max:500'],
             'base_price' => ['required', 'numeric', 'min:0'],
-            'min_price' => ['nullable', 'numeric', 'min:0'],
-            'max_price' => ['nullable', 'numeric', 'min:0', function ($attr, $value, $fail) use ($request) {
+            'min_price' => ['nullable', 'numeric', 'min:0.01'],
+            'max_price' => ['nullable', 'numeric', 'min:0.01', function ($attr, $value, $fail) use ($request) {
                 $min = $request->input('min_price');
                 if ($value !== null && $value !== '' && $min !== null && $min !== '' && (float) $value < (float) $min) {
                     $fail('Çmimi maksimal duhet të jetë ≥ çmimit minimal.');
@@ -317,7 +319,11 @@ class SettingsController extends Controller
             'breakfast_included' => ['boolean'],
         ]);
 
-        RoomType::create($data);
+        DB::transaction(function () use ($data) {
+            $version = PricingRulesVersion::lock();
+            RoomType::create($data);
+            PricingRulesVersion::increment($version);
+        }, 3);
 
         return back()->with('success', 'Tipi i dhomes u shtua.');
     }
@@ -325,11 +331,11 @@ class SettingsController extends Controller
     public function updateRoomType(Request $request, RoomType $roomType): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:room_types,name,' . $roomType->id],
+            'name' => ['required', 'string', 'max:255', 'unique:room_types,name,'.$roomType->id],
             'description' => ['nullable', 'string', 'max:500'],
             'base_price' => ['required', 'numeric', 'min:0'],
-            'min_price' => ['nullable', 'numeric', 'min:0'],
-            'max_price' => ['nullable', 'numeric', 'min:0', function ($attr, $value, $fail) use ($request) {
+            'min_price' => ['nullable', 'numeric', 'min:0.01'],
+            'max_price' => ['nullable', 'numeric', 'min:0.01', function ($attr, $value, $fail) use ($request) {
                 $min = $request->input('min_price');
                 if ($value !== null && $value !== '' && $min !== null && $min !== '' && (float) $value < (float) $min) {
                     $fail('Çmimi maksimal duhet të jetë ≥ çmimit minimal.');
@@ -341,7 +347,18 @@ class SettingsController extends Controller
             'breakfast_included' => ['boolean'],
         ]);
 
-        $roomType->update($data);
+        DB::transaction(function () use ($data, $roomType) {
+            $version = PricingRulesVersion::lock();
+            $lockedType = RoomType::query()->whereKey($roomType->id)->lockForUpdate()->firstOrFail();
+            $lockedType->fill($data);
+            $engineChanged = $lockedType->isDirty(['base_price', 'min_price', 'max_price']);
+            if ($lockedType->isDirty()) {
+                $lockedType->save();
+            }
+            if ($engineChanged) {
+                PricingRulesVersion::increment($version);
+            }
+        }, 3);
 
         return back()->with('success', 'Tipi i dhomes u perditesua.');
     }
@@ -396,7 +413,7 @@ class SettingsController extends Controller
     public function updateMenuCategory(Request $request, MenuCategory $menuCategory): RedirectResponse
     {
         $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:menu_categories,name,' . $menuCategory->id],
+            'name' => ['required', 'string', 'max:255', 'unique:menu_categories,name,'.$menuCategory->id],
         ]);
 
         $menuCategory->update(['name' => $request->name]);
@@ -454,7 +471,7 @@ class SettingsController extends Controller
         if ($request->hasFile('image')) {
             // Delete old image
             if ($menuItem->image_path) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($menuItem->image_path);
+                Storage::disk('public')->delete($menuItem->image_path);
             }
             $data['image_path'] = $request->file('image')->store('menu', 'public');
         }
@@ -466,9 +483,10 @@ class SettingsController extends Controller
 
     public function toggleMenuItem(MenuItem $menuItem): RedirectResponse
     {
-        $menuItem->update(['is_available' => !$menuItem->is_available]);
+        $menuItem->update(['is_available' => ! $menuItem->is_available]);
 
         $status = $menuItem->is_available ? 'disponueshem' : 'jo disponueshem';
+
         return back()->with('success', "{$menuItem->name} tani eshte {$status}.");
     }
 
@@ -504,7 +522,7 @@ class SettingsController extends Controller
             ]);
         }
 
-        return back()->with('success', count($request->file('images')) . ' foto u ngarkuan.');
+        return back()->with('success', count($request->file('images')).' foto u ngarkuan.');
     }
 
     public function deleteRoomTypeImage(RoomTypeImage $roomTypeImage): RedirectResponse

@@ -1,9 +1,16 @@
 <?php
 
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\ChannelSyncLog;
+use App\Models\WebsiteSearchLog;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Spatie\Permission\Middleware\PermissionMiddleware;
+use Spatie\Permission\Middleware\RoleMiddleware;
+use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -14,8 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
-            \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+            HandleInertiaRequests::class,
+            AddLinkHeadersForPreloadedAssets::class,
         ]);
 
         // Channex + POK post webhooks server-to-server (no CSRF token). Channex uses a
@@ -23,9 +30,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: ['channex/webhook', 'pok/webhook']);
 
         $middleware->alias([
-            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
-            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
-            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+            'role' => RoleMiddleware::class,
+            'permission' => PermissionMiddleware::class,
+            'role_or_permission' => RoleOrPermissionMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -33,7 +40,7 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withSchedule(function (Schedule $schedule): void {
         // Retention: channel sync audit (90d) + website search demand log (2y).
-        $schedule->command('model:prune', ['--model' => [\App\Models\ChannelSyncLog::class, \App\Models\WebsiteSearchLog::class]])->daily();
+        $schedule->command('model:prune', ['--model' => [ChannelSyncLog::class, WebsiteSearchLog::class]])->daily();
         // Catch-up: re-pull any OTA booking a missed webhook left unacknowledged.
         $schedule->command('channex:pull-bookings')->everyFifteenMinutes()->withoutOverlapping();
         // On-the-books snapshot per future date × room type (pickup-pace history).
@@ -44,7 +51,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Free abandoned holds: cancel pending direct bookings whose POK payment never completed.
         $schedule->command('pok:release-unpaid')->everyFiveMinutes()->withoutOverlapping();
         // Guarded auto-pricing (owner-enabled only), between snapshot and ARI push.
-        $schedule->command('pricing:autopilot')->dailyAt('03:45');
+        $schedule->command('pricing:autopilot')->dailyAt('03:45')->withoutOverlapping()->onOneServer();
         // Monday-morning pricing narrative for the owner (skips if Gemini unset).
         $schedule->command('pricing:weekly-report')->weeklyOn(1, '07:00');
         // Midnight: archive inspected cleaning tasks so the board shows only the day's live work.

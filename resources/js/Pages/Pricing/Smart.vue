@@ -25,11 +25,36 @@ const props = defineProps({
 });
 
 const toasts = ref(null);
-const typeId = ref(props.selectedTypeId);
+const typeId = computed(() => props.selectedTypeId);
+const typeLoading = ref(false);
 const selected = ref(null);
 const manualPrice = ref('');
+const applySaving = ref(false);
+const removeSaving = ref(false);
+const bulkSaving = ref(false);
+const revertSavingId = ref(null);
+const strategySaving = ref(false);
+const priceMutationBusy = computed(() => applySaving.value || removeSaving.value || bulkSaving.value || revertSavingId.value !== null);
 
 const currentType = computed(() => props.roomTypes.find((t) => Number(t.id) === Number(typeId.value)) || null);
+
+function showServerResult(page, fallback) {
+    const flash = page?.props?.flash || {};
+    if (flash.error) {
+        toasts.value?.error(flash.error);
+        return false;
+    }
+    toasts.value?.success(flash.success || fallback);
+    return true;
+}
+
+// Inertia replaces the server props after every rule/price mutation. Keep the
+// open detail panel attached to the fresh row, never to a stale suggestion.
+watch(() => props.days, (days) => {
+    if (!selected.value) return;
+    selected.value = days.find((day) => day.date === selected.value.date) || null;
+    explainText.value = '';
+});
 
 // ── Strategjia (një rrëshqitës, tre shpejtësi) ──
 const strategies = [
@@ -38,10 +63,13 @@ const strategies = [
     { key: 'agresiv', label: 'Agresiv', hint: 'ndryshime të forta' },
 ];
 function setStrategy(key) {
-    if (key === props.strategy) return;
+    if (key === props.strategy || strategySaving.value || priceMutationBusy.value) return;
+    strategySaving.value = true;
     router.post(route('pricing.smart.strategy'), { strategy: key }, {
         preserveScroll: true,
-        onSuccess: () => toasts.value?.success('Strategjia u ndryshua — sugjerimet u rifreskuan.'),
+        onSuccess: (page) => showServerResult(page, 'Strategjia u ndryshua — sugjerimet u rifreskuan.'),
+        onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Strategjia nuk u ruajt.'),
+        onFinish: () => { strategySaving.value = false; },
     });
 }
 
@@ -49,16 +77,21 @@ function setStrategy(key) {
 const boundsOpen = ref(false);
 const boundsMin = ref('');
 const boundsMax = ref('');
+const boundsSaving = ref(false);
 function openBounds() {
+    if (priceMutationBusy.value || boundsSaving.value) return;
     boundsMin.value = currentType.value?.min_price ?? '';
     boundsMax.value = currentType.value?.max_price ?? '';
     boundsOpen.value = true;
 }
 function saveBounds() {
+    if (boundsSaving.value) return;
+    boundsSaving.value = true;
     router.put(route('pricing.smart.bounds', typeId.value), { min_price: boundsMin.value || null, max_price: boundsMax.value || null }, {
         preserveScroll: true,
         onSuccess: () => { boundsOpen.value = false; toasts.value?.success('Kufijtë u ruajtën.'); },
         onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Kufij të pavlefshëm.'),
+        onFinish: () => { boundsSaving.value = false; },
     });
 }
 const boundsLabel = computed(() => {
@@ -80,24 +113,30 @@ function weekOf(dateStr) {
     return { from: f(start), to: f(end) };
 }
 function askBulkWeek() {
-    if (!selected.value) return;
+    if (!selected.value || priceMutationBusy.value) return;
     const w = weekOf(selected.value.date);
     if (!w) return;
     const count = props.days.filter((d) => d.date >= w.from && d.date <= w.to && d.actionable && !d.is_past).length;
-    bulk.value = { label: 'javën e ' + longDate(selected.value.date), date_from: w.from, date_to: w.to, count };
+    bulk.value = { label: 'javën e ' + longDate(selected.value.date), date_from: w.from, date_to: w.to, count, room_type_id: Number(props.selectedTypeId) };
 }
 function askBulkMonth() {
+    if (priceMutationBusy.value) return;
     const count = props.days.filter((d) => d.actionable && !d.is_past).length;
     const last = props.days.length ? props.days[props.days.length - 1].date : props.month;
-    bulk.value = { label: 'gjithë ' + monthLabel.value, date_from: props.month, date_to: last, count };
+    bulk.value = { label: 'gjithë ' + monthLabel.value, date_from: props.month, date_to: last, count, room_type_id: Number(props.selectedTypeId) };
 }
 function confirmBulk() {
     const b = bulk.value;
-    if (!b) return;
-    router.post(route('pricing.smart.apply-range'), { room_type_id: typeId.value, date_from: b.date_from, date_to: b.date_to }, {
+    if (!b || bulkSaving.value) return;
+    bulkSaving.value = true;
+    router.post(route('pricing.smart.apply-range'), { room_type_id: b.room_type_id, date_from: b.date_from, date_to: b.date_to }, {
         preserveScroll: true,
-        onSuccess: () => { bulk.value = null; selected.value = null; toasts.value?.success('Sugjerimet u aplikuan — po dërgohen te OTA-t.'); },
+        onSuccess: (page) => {
+            bulk.value = null;
+            if (showServerResult(page, 'Sugjerimet u aplikuan — po dërgohen te OTA-t.')) selected.value = null;
+        },
         onError: (e) => { bulk.value = null; toasts.value?.error(Object.values(e)[0] || 'S\'u aplikua asgjë.'); },
+        onFinish: () => { bulkSaving.value = false; },
     });
 }
 
@@ -118,7 +157,74 @@ async function explainDay() {
 
 const evSuggestions = ref([]);
 const evLoading = ref(false);
+const eventEdit = ref(null);
+const eventUplift = ref('');
+const eventSaving = ref(false);
+const eventScopeConfirmed = ref(false);
+const eventApprovingKey = ref(null);
+const eventDeletingId = ref(null);
+const eventBusy = computed(() => eventEdit.value !== null || evLoading.value || eventSaving.value || eventApprovingKey.value !== null || eventDeletingId.value !== null);
+function suggestionKey(ev) { return `${ev.name}|${ev.date_from}|${ev.date_to}`; }
+const overlappingPricedEvents = computed(() => {
+    if (!eventEdit.value) return [];
+    return props.upcomingEvents.filter((ev) =>
+        ev.id !== eventEdit.value.id
+        && ev.affects_price
+        && ev.date_from <= eventEdit.value.date_to
+        && ev.date_to >= eventEdit.value.date_from
+    );
+});
+const eventImpactPreview = computed(() => {
+    if (eventUplift.value === '' || Number(eventUplift.value) === 0) {
+        return 'Vetëm informacion: eventi shfaqet në kalendar, por nuk ndryshon sugjerimin.';
+    }
+    const pct = Number(eventUplift.value);
+    if (!Number.isFinite(pct) || pct < -50 || pct > 100) return 'Vendos një përqindje nga -50% deri në +100%.';
+    const factor = (1 + pct / 100).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+    const example = 100 * (1 + pct / 100);
+    return `Motori shumëzon rezultatin me ${factor}. Shembull: ${props.currency}100 → ${props.currency}${fmtPrice(example)}.`;
+});
+const normalizedEditedUplift = computed(() => {
+    if (eventUplift.value === '' || Number(eventUplift.value) === 0) return null;
+    const pct = Number(eventUplift.value);
+    return Number.isFinite(pct) ? Math.round(pct * 100) / 100 : null;
+});
+const normalizedCurrentUplift = computed(() => (
+    eventEdit.value?.affects_price ? Math.round(Number(eventEdit.value.uplift_pct) * 100) / 100 : null
+));
+const eventRuleChanges = computed(() => normalizedEditedUplift.value !== normalizedCurrentUplift.value);
+function openEventImpact(ev) {
+    if (eventBusy.value) return;
+    eventEdit.value = ev;
+    eventUplift.value = ev.affects_price ? Number(ev.uplift_pct) : '';
+    eventScopeConfirmed.value = false;
+}
+function saveEventImpact() {
+    if (!eventEdit.value || eventSaving.value) return;
+    const pct = eventUplift.value === '' ? null : Number(eventUplift.value);
+    if (pct !== null && (!Number.isFinite(pct) || pct < -50 || pct > 100)) {
+        toasts.value?.error('Ndikimi duhet të jetë nga -50% deri në +100%.');
+        return;
+    }
+    if (eventRuleChanges.value && !eventScopeConfirmed.value) {
+        toasts.value?.error('Konfirmo që ky ndryshim vlen për të gjitha tipet e dhomave.');
+        return;
+    }
+    const submittedId = eventEdit.value.id;
+    eventSaving.value = true;
+    router.put(route('pricing.smart.events.update', submittedId), {
+        uplift_pct: normalizedEditedUplift.value,
+    }, {
+        preserveScroll: true,
+        onSuccess: (page) => {
+            if (showServerResult(page, 'Ndikimi i eventit u ruajt.') && eventEdit.value?.id === submittedId) eventEdit.value = null;
+        },
+        onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Ndikimi i eventit nuk u ruajt.'),
+        onFinish: () => { eventSaving.value = false; },
+    });
+}
 async function suggestEvents() {
+    if (eventBusy.value) return;
     evLoading.value = true; evSuggestions.value = [];
     try {
         const { data } = await axios.post(route('pricing.smart.events.suggest'));
@@ -129,19 +235,40 @@ async function suggestEvents() {
     }
     evLoading.value = false;
 }
-function approveEvent(ev, i) {
+function approveEvent(ev) {
+    const key = suggestionKey(ev);
+    if (eventBusy.value) return;
+    const uplift = ev.uplift_pct == null || Number(ev.uplift_pct) === 0
+        ? null
+        : Math.round(Number(ev.uplift_pct) * 100) / 100;
+    if (uplift !== null) {
+        const autopilotWarning = props.autopilot.enabled
+            ? ' Autopiloti është ndezur dhe mund ta publikojë efektin në ekzekutimin e ardhshëm.'
+            : '';
+        if (!window.confirm(`Ky ndikim ${uplift > 0 ? '+' : ''}${uplift}% vlen për të gjitha tipet e dhomave.${autopilotWarning} Ta pranosh?`)) return;
+    }
+    eventApprovingKey.value = key;
     router.post(route('pricing.smart.events.approve'), {
-        name: ev.name, date_from: ev.date_from, date_to: ev.date_to, uplift_pct: ev.uplift_pct ?? null,
+        name: ev.name, date_from: ev.date_from, date_to: ev.date_to, uplift_pct: uplift,
     }, {
         preserveScroll: true,
-        onSuccess: () => { evSuggestions.value.splice(i, 1); toasts.value?.success(`"${ev.name}" u shtua.`); },
+        onSuccess: (page) => {
+            if (showServerResult(page, `"${ev.name}" u shtua.`)) {
+                evSuggestions.value = evSuggestions.value.filter((candidate) => suggestionKey(candidate) !== key);
+            }
+        },
         onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Eventi s\'u shtua.'),
+        onFinish: () => { if (eventApprovingKey.value === key) eventApprovingKey.value = null; },
     });
 }
 function removeEventRow(ev) {
+    if (eventBusy.value || !window.confirm(`Hiq eventin "${ev.name}"? Ky ndryshim vlen për të gjitha tipet e dhomave.`)) return;
+    eventDeletingId.value = ev.id;
     router.delete(route('pricing.smart.events.destroy', ev.id), {
         preserveScroll: true,
-        onSuccess: () => toasts.value?.success(`"${ev.name}" u hoq.`),
+        onSuccess: (page) => showServerResult(page, `"${ev.name}" u hoq.`),
+        onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Eventi nuk u hoq.'),
+        onFinish: () => { if (eventDeletingId.value === ev.id) eventDeletingId.value = null; },
     });
 }
 
@@ -173,7 +300,16 @@ async function askAi() {
 // ── Autopiloti me kufij (default: I FIKUR — vetëm ti e ndez) ──
 const apConfirmOpen = ref(false);
 const apForm = ref({});
+const autopilotSaving = ref(false);
+const navigationLocked = computed(() => priceMutationBusy.value
+    || strategySaving.value
+    || boundsSaving.value
+    || autopilotSaving.value
+    || eventSaving.value
+    || eventApprovingKey.value !== null
+    || eventDeletingId.value !== null);
 function openAutopilot(intendEnable) {
+    if (navigationLocked.value) return;
     apForm.value = {
         enabled: intendEnable,
         materiality_pct: props.autopilot.materiality_pct ?? 5,
@@ -185,18 +321,28 @@ function openAutopilot(intendEnable) {
     apConfirmOpen.value = true;
 }
 function saveAutopilot() {
+    if (autopilotSaving.value) return;
+    autopilotSaving.value = true;
     router.post(route('pricing.smart.autopilot'), {
         ...apForm.value,
         pause_from: apForm.value.pause_from || null,
         pause_to: apForm.value.pause_to || null,
     }, {
         preserveScroll: true,
-        onSuccess: () => { apConfirmOpen.value = false; },
+        onSuccess: (page) => { if (showServerResult(page, 'Cilësimet e autopilotit u ruajtën.')) apConfirmOpen.value = false; },
         onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Cilësimet s\'u ruajtën.'),
+        onFinish: () => { autopilotSaving.value = false; },
     });
 }
 function revertAutopilot(log) {
-    router.post(route('pricing.smart.autopilot.revert', log.id), {}, { preserveScroll: true });
+    if (revertSavingId.value) return;
+    revertSavingId.value = log.id;
+    router.post(route('pricing.smart.autopilot.revert', log.id), {}, {
+        preserveScroll: true,
+        onSuccess: (page) => showServerResult(page, 'Çmimi u kthye dhe po dërgohet te OTA-t.'),
+        onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Çmimi nuk u kthye.'),
+        onFinish: () => { if (revertSavingId.value === log.id) revertSavingId.value = null; },
+    });
 }
 
 function fmtRange(a, b) {
@@ -212,10 +358,16 @@ const monthLabel = computed(() =>
 const leadingBlanks = computed(() => (props.days.length ? props.days[0].dow - 1 : 0));
 const actionableCount = computed(() => props.days.filter((d) => d.actionable && !d.is_past).length);
 
-function go(month) {
+function go(month, roomTypeId = props.selectedTypeId) {
+    if (navigationLocked.value) return;
     selected.value = null;
-    router.get(route('pricing.smart.index'), { room_type_id: typeId.value, month }, { preserveScroll: true });
+    router.get(route('pricing.smart.index'), { room_type_id: roomTypeId, month }, {
+        preserveScroll: true,
+        onStart: () => { typeLoading.value = true; },
+        onFinish: () => { typeLoading.value = false; },
+    });
 }
+function changeType(event) { go(props.month, event.target.value); }
 function dayNum(d) { return parseInt(d.date.slice(8, 10), 10); }
 function longDate(date) {
     return new Date(date + 'T00:00:00').toLocaleDateString('sq-AL', { weekday: 'long', day: '2-digit', month: 'long' });
@@ -234,19 +386,36 @@ function cellTone(d) {
 
 function pick(d) { if (!d.is_past) { selected.value = d; manualPrice.value = ''; explainText.value = ''; } }
 
-function apply(d, price) {
-    const p = Number(price);
-    if (!p || p <= 0) { toasts.value?.error('Vendos një çmim të vlefshëm.'); return; }
-    router.post(route('pricing.smart.apply'), { date: d.date, room_type_id: typeId.value, price: p }, {
+function apply(d, price = null, useLatestSuggestion = false) {
+    if (applySaving.value) return;
+    const payload = { date: d.date, room_type_id: props.selectedTypeId };
+    let p = null;
+    if (!useLatestSuggestion) {
+        p = Number(price);
+        if (!p || p <= 0) { toasts.value?.error('Vendos një çmim të vlefshëm.'); return; }
+        payload.price = p;
+    }
+    applySaving.value = true;
+    router.post(route('pricing.smart.apply'), payload, {
         preserveScroll: true,
-        onSuccess: () => { toasts.value?.success(`Çmimi u vendos ${props.currency}${fmtPrice(p)} për ${longDate(d.date)} — po dërgohet te OTA-t.`); selected.value = null; },
+        onSuccess: (page) => {
+            const fallback = useLatestSuggestion
+                ? `Sugjerimi më i fundit për ${longDate(d.date)} u aplikua — po dërgohet te OTA-t.`
+                : `Çmimi u vendos ${props.currency}${fmtPrice(p)} për ${longDate(d.date)} — po dërgohet te OTA-t.`;
+            if (showServerResult(page, fallback)) selected.value = null;
+        },
         onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Diçka shkoi keq. Provoni përsëri.'),
+        onFinish: () => { applySaving.value = false; },
     });
 }
 function remove(d) {
-    router.post(route('pricing.smart.remove'), { date: d.date, room_type_id: typeId.value }, {
+    if (removeSaving.value) return;
+    removeSaving.value = true;
+    router.post(route('pricing.smart.remove'), { date: d.date, room_type_id: props.selectedTypeId }, {
         preserveScroll: true,
-        onSuccess: () => { toasts.value?.success('Çmimi u rikthye te tarifa normale.'); selected.value = null; },
+        onSuccess: (page) => { showServerResult(page, 'Çmimi u rikthye te tarifa normale.'); selected.value = null; },
+        onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Çmimi nuk u hoq.'),
+        onFinish: () => { removeSaving.value = false; },
     });
 }
 
@@ -255,7 +424,6 @@ function syncLabel(ts) {
     return new Date(ts.replace(' ', 'T')).toLocaleString('sq-AL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
 </script>
 
 <template>
@@ -274,16 +442,17 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
         </PageHeader>
 
         <div class="mt-6">
-            <Card>
+            <Card :class="typeLoading ? 'pointer-events-none opacity-60' : ''">
                 <!-- toolbar: type · bounds · month nav -->
                 <div class="flex flex-wrap items-center justify-between gap-4 mb-5">
                     <div class="flex flex-wrap items-center gap-3">
                         <div class="flex items-center gap-2.5">
                             <label class="text-label text-neutral-600">Tipi i dhomës</label>
                             <select
-                                v-model="typeId"
+                                :value="typeId"
+                                :disabled="typeLoading || navigationLocked"
                                 class="rounded-xl border border-neutral-200 px-3.5 py-2.5 text-body-sm font-medium text-primary-900 focus:border-ionian focus:ring-2 focus:ring-ionian/30 min-w-[200px]"
-                                @change="go(month)"
+                                @change="changeType"
                             >
                                 <option v-for="t in roomTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
                             </select>
@@ -291,6 +460,8 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
 
                         <button
                             class="inline-flex items-center gap-1.5 text-tiny font-semibold text-neutral-600 border border-neutral-200 rounded-xl px-3 py-2.5 hover:border-ionian hover:text-primary-900 transition"
+                            :disabled="navigationLocked"
+                            :class="navigationLocked ? 'opacity-50 cursor-not-allowed' : ''"
                             :title="'Motori sugjeron vetëm brenda këtyre kufijve'"
                             @click="openBounds"
                         >
@@ -301,8 +472,8 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                     <div class="flex items-center gap-3">
                         <span class="text-body font-semibold text-primary-900 capitalize min-w-[130px] text-center">{{ monthLabel }}</span>
                         <div class="flex gap-1.5">
-                            <Button size="sm" variant="outline" @click="go(prevMonth)">‹</Button>
-                            <Button size="sm" variant="outline" @click="go(nextMonth)">›</Button>
+                            <Button size="sm" variant="outline" :disabled="navigationLocked" @click="go(prevMonth)">‹</Button>
+                            <Button size="sm" variant="outline" :disabled="navigationLocked" @click="go(nextMonth)">›</Button>
                         </div>
                     </div>
                 </div>
@@ -317,8 +488,11 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                             :class="[
                                 'px-3.5 py-1.5 rounded-lg text-small font-semibold transition',
                                 strategy === s.key ? 'bg-white shadow text-primary-900 border border-neutral-200' : 'text-neutral-500 hover:text-primary-900',
+                                navigationLocked ? 'opacity-50 cursor-not-allowed' : '',
                             ]"
                             :title="s.hint"
+                            :disabled="navigationLocked"
+                            :aria-busy="strategySaving"
                             @click="setStrategy(s.key)"
                         >
                             {{ s.label }}
@@ -326,7 +500,7 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                     </div>
                     <span v-if="actionableCount" class="inline-flex items-center gap-2 text-tiny text-neutral-500">
                         {{ actionableCount }} sugjerime këtë muaj
-                        <Button size="sm" variant="outline" @click="askBulkMonth">Apliko muajin</Button>
+                        <Button size="sm" variant="outline" :disabled="navigationLocked" @click="askBulkMonth">Apliko muajin</Button>
                     </span>
                 </div>
 
@@ -386,15 +560,19 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
 
                     <!-- selected day: "Pse ky çmim?" -->
                     <div v-if="selected" class="mt-5 border border-neutral-200 rounded-2xl overflow-hidden">
-                        <div class="flex items-center justify-between px-4 py-3 border-b border-neutral-200" :class="selected.holiday ? 'bg-error-50' : 'bg-neutral-50'">
-                            <span class="text-body-sm font-semibold text-primary-900 capitalize flex items-center gap-2">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 border-b border-neutral-200" :class="selected.holiday ? 'bg-error-50' : 'bg-neutral-50'">
+                            <span class="min-w-0 text-body-sm font-semibold text-primary-900 capitalize flex flex-wrap items-center gap-2">
                                 <span v-if="selected.holiday" class="text-error-600">⚑</span>
                                 {{ longDate(selected.date) }}
                                 <span v-if="selected.holiday" class="text-tiny font-semibold text-error-700 bg-error-100 rounded-full px-2 py-0.5">{{ selected.holiday }}</span>
                                 <span v-else-if="selected.is_weekend" class="text-tiny font-semibold text-warning-700 bg-warning-100 rounded-full px-2 py-0.5">Fundjavë</span>
                             </span>
-                            <span class="text-tiny text-neutral-500">
-                                {{ selected.booked }}/{{ selected.total }} dhoma<template v-if="selected.total > 0 && selected.booked >= selected.total"> · <b class="text-primary-900">Plot</b></template>
+                            <span class="text-tiny text-neutral-500 text-left sm:text-right break-words">
+                                {{ selected.booked }}/{{ selected.total }} dhoma
+                                · kategori <b class="text-primary-900">{{ selected.occupancy_type_pct }}%</b>
+                                · pronë <b class="text-primary-900">{{ selected.occupancy_property_pct }}%</b>
+                                · sinjal <b class="text-primary-900">{{ selected.occupancy_pct }}%</b>
+                                <template v-if="selected.total > 0 && selected.booked >= selected.total"> · <b class="text-primary-900">Plot</b></template>
                             </span>
                         </div>
 
@@ -415,9 +593,9 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                                     <p v-if="!selected.actionable" class="text-tiny text-neutral-400 mt-1">{{ selected.quiet_reason || "Çmimi aktual për këtë natë — s'ka sugjerim ndryshimi." }}</p>
                                 </div>
                                 <div class="flex flex-wrap gap-2.5">
-                                    <Button v-if="selected.actionable" variant="primary" @click="apply(selected, selected.suggested_price)">Apliko {{ currency }}{{ fmtPrice(selected.suggested_price) }}</Button>
-                                    <Button variant="outline" size="sm" @click="askBulkWeek">Apliko javën</Button>
-                                    <Button v-if="selected.has_override" variant="ghost" @click="remove(selected)">Hiq</Button>
+                                    <Button v-if="selected.actionable" variant="primary" :loading="applySaving" :disabled="removeSaving" @click="apply(selected, null, true)">Apliko {{ currency }}{{ fmtPrice(selected.suggested_price) }}</Button>
+                                    <Button variant="outline" size="sm" :disabled="applySaving || removeSaving" @click="askBulkWeek">Apliko javën</Button>
+                                    <Button v-if="selected.has_override" variant="ghost" :loading="removeSaving" :disabled="applySaving" @click="remove(selected)">Hiq</Button>
                                 </div>
                             </div>
 
@@ -430,13 +608,16 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                                         <span class="font-semibold tabular-nums text-primary-900">{{ currency }}{{ fmtPrice(selected.reference) }}</span>
                                     </div>
                                     <div v-for="(f, i) in selected.factors" :key="i" class="flex items-center justify-between text-body-sm text-neutral-600">
-                                        <span>{{ f.label }}</span>
+                                        <span class="min-w-0 break-words">{{ f.label }}</span>
                                         <span class="font-semibold tabular-nums" :class="f.pct > 0 ? 'text-success-700' : 'text-info-700'">{{ f.pct > 0 ? '+' : '' }}{{ f.pct }}%</span>
                                     </div>
                                     <div v-if="selected.clamped" class="flex items-center justify-between text-body-sm font-semibold text-warning-700 border-t border-neutral-200 pt-1.5">
                                         <span>🔒 U ndal te kufiri yt {{ selected.clamped === 'max' ? 'maksimal' : 'minimal' }}</span>
                                         <span class="tabular-nums">{{ currency }}{{ fmtPrice(selected.suggested_price) }}</span>
                                     </div>
+                                    <p class="text-tiny text-neutral-400 border-t border-neutral-200 pt-1.5">
+                                        Faktorët aplikohen njëri pas tjetrit me shumëzim; nuk mblidhen si përqindje të thjeshta.
+                                    </p>
                                 </div>
                             </div>
 
@@ -456,7 +637,7 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                                     <span class="text-body-sm text-neutral-400">{{ currency }}</span>
                                     <input v-model="manualPrice" type="number" min="1" step="1" :placeholder="String(fmtPrice(selected.current_price))"
                                         class="w-28 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-body-sm tabular-nums focus:border-ionian focus:ring-2 focus:ring-ionian/30" />
-                                    <Button size="sm" variant="outline" @click="apply(selected, manualPrice)">Vendos</Button>
+                                    <Button size="sm" variant="outline" :loading="applySaving" :disabled="removeSaving" @click="apply(selected, manualPrice)">Vendos</Button>
                                 </div>
                             </div>
                         </div>
@@ -471,34 +652,46 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                 <div class="flex items-center justify-between gap-3 mb-3">
                     <div>
                         <h2 class="text-h4 text-primary-900 leading-tight">Eventet e kërkesës</h2>
-                        <p class="text-tiny text-neutral-500">Festa e evente që motori i llogarit në çmim. Ruhen një herë — s'ke pse i rishkruan.</p>
+                        <p class="text-tiny text-neutral-500">Vetëm eventet me përqindje ndikojnë në çmim; të tjerat janë informacion në kalendar.</p>
                     </div>
-                    <Button v-if="aiConfigured" size="sm" variant="outline" :loading="evLoading" @click="suggestEvents">✦ Sugjero me AI</Button>
+                    <Button v-if="aiConfigured" size="sm" variant="outline" :loading="evLoading" :disabled="eventBusy" @click="suggestEvents">✦ Sugjero me AI</Button>
                 </div>
 
                 <div v-if="!upcomingEvents.length" class="text-body-sm text-neutral-400 py-3">S'ka evente të ardhshme në 90 ditët e para.</div>
                 <div v-else class="space-y-1.5 mb-2">
-                    <div v-for="ev in upcomingEvents" :key="ev.id + ev.date_from" class="flex items-center justify-between gap-2 text-body-sm border border-neutral-100 rounded-lg px-3 py-1.5">
-                        <span class="text-neutral-700">
+                    <div v-for="ev in upcomingEvents" :key="ev.id + ev.date_from" class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-body-sm border border-neutral-100 rounded-lg px-3 py-1.5">
+                        <span class="text-neutral-700 min-w-0 break-words">
                             <b class="text-primary-900">{{ ev.name }}</b> · {{ fmtRange(ev.date_from, ev.date_to) }}
-                            <span v-if="ev.uplift_pct" class="text-success-700 font-semibold">+{{ ev.uplift_pct }}%</span>
+                            <span v-if="ev.affects_price" class="font-semibold" :class="ev.uplift_pct > 0 ? 'text-success-700' : 'text-info-700'">
+                                {{ ev.uplift_pct > 0 ? '+' : '' }}{{ ev.uplift_pct }}% aplikohet
+                            </span>
+                            <span v-else class="text-tiny text-neutral-400 font-semibold">vetëm informacion</span>
+                            <span v-if="ev.recurring" class="text-tiny text-neutral-500 font-semibold">· përsëritet çdo vit</span>
                             <span v-if="ev.source === 'ai'" class="text-tiny text-accent-600 font-semibold ml-1">✦</span>
                         </span>
-                        <button class="text-neutral-300 hover:text-error-600 shrink-0" title="Hiq eventin" @click="removeEventRow(ev)">✕</button>
+                        <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                            <Button size="sm" variant="ghost" :disabled="eventBusy" @click="openEventImpact(ev)">Ndikimi</Button>
+                            <button class="inline-flex h-11 w-11 items-center justify-center rounded-md text-neutral-400 hover:text-error-600 hover:bg-error-50 focus:outline-none focus:ring-2 focus:ring-error-500/40"
+                                :disabled="eventBusy" :class="eventDeletingId === ev.id ? 'opacity-50 cursor-wait' : ''"
+                                :aria-label="'Hiq eventin ' + ev.name" :title="'Hiq eventin ' + ev.name" @click="removeEventRow(ev)">✕</button>
+                        </div>
                     </div>
                 </div>
 
                 <div v-if="evSuggestions.length" class="mt-3 border-t border-neutral-100 pt-3">
                     <p class="text-tiny font-bold uppercase tracking-wide text-neutral-400 mb-2">Sugjerime — prano vetëm ç'të duhen</p>
-                    <div v-for="(ev, i) in evSuggestions" :key="i" class="flex items-start justify-between gap-3 border border-accent-100 bg-accent-50/40 rounded-lg px-3 py-2 mb-1.5">
-                        <div class="text-body-sm text-neutral-700">
+                    <div v-for="ev in evSuggestions" :key="`${ev.name}|${ev.date_from}|${ev.date_to}`" class="flex flex-col sm:flex-row items-start justify-between gap-3 border border-accent-100 bg-accent-50/40 rounded-lg px-3 py-2 mb-1.5">
+                        <div class="min-w-0 text-body-sm text-neutral-700 break-words">
                             <b class="text-primary-900">{{ ev.name }}</b> · {{ fmtRange(ev.date_from, ev.date_to) }}
-                            <span v-if="ev.uplift_pct" class="text-success-700 font-semibold">+{{ ev.uplift_pct }}%</span>
+                            <span v-if="ev.uplift_pct" class="font-semibold" :class="ev.uplift_pct > 0 ? 'text-success-700' : 'text-info-700'">
+                                {{ ev.uplift_pct > 0 ? '+' : '' }}{{ ev.uplift_pct }}%
+                            </span>
+                            <span v-else class="text-tiny text-neutral-400 font-semibold">vetëm informacion</span>
                             <p class="text-tiny text-neutral-500">{{ ev.reason }}</p>
                         </div>
-                        <div class="flex gap-1.5 shrink-0">
-                            <Button size="sm" variant="primary" @click="approveEvent(ev, i)">Prano</Button>
-                            <Button size="sm" variant="ghost" @click="evSuggestions.splice(i, 1)">Jo</Button>
+                        <div class="flex gap-1.5 shrink-0 self-end sm:self-auto">
+                            <Button size="sm" variant="primary" :loading="eventApprovingKey === suggestionKey(ev)" :disabled="eventBusy" @click="approveEvent(ev)">Prano</Button>
+                            <Button size="sm" variant="ghost" :disabled="eventBusy" @click="evSuggestions = evSuggestions.filter((candidate) => suggestionKey(candidate) !== suggestionKey(ev))">Jo</Button>
                         </div>
                     </div>
                 </div>
@@ -549,7 +742,7 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                     </h2>
                     <p class="text-tiny text-neutral-500">Çdo natë në 03:45 aplikon vetë sugjerimet e motorit — vetëm brenda kufijve të tu, kurrë mbi çmimet që ke vënë ti me dorë.</p>
                 </div>
-                <Button :variant="autopilot.enabled ? 'outline' : 'primary'" @click="openAutopilot(!autopilot.enabled)">
+                <Button :variant="autopilot.enabled ? 'outline' : 'primary'" :disabled="navigationLocked" @click="openAutopilot(!autopilot.enabled)">
                     {{ autopilot.enabled ? 'Fike / ndrysho kufijtë' : 'Ndize autopilotin' }}
                 </Button>
             </div>
@@ -571,7 +764,7 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                             <span class="text-neutral-400">→</span>
                             <b class="text-primary-900 tabular-nums">{{ currency }}{{ fmtPrice(l.new_price) }}</b>
                         </span>
-                        <Button v-if="!l.reverted" size="sm" variant="ghost" @click="revertAutopilot(l)">Kthe</Button>
+                        <Button v-if="!l.reverted" size="sm" variant="ghost" :loading="revertSavingId === l.id" :disabled="!!revertSavingId" @click="revertAutopilot(l)">Kthe</Button>
                         <span v-else class="text-tiny text-neutral-400 shrink-0">u kthye</span>
                     </div>
                 </div>
@@ -579,8 +772,45 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
             <p v-else class="text-body-sm text-neutral-400">Ende asnjë ndryshim automatik.</p>
         </Card>
 
+        <!-- event impact: editing the rule never publishes a price by itself -->
+        <Modal :show="!!eventEdit" title="Ndikimi i eventit" :closeable="!eventSaving" @close="eventEdit = null">
+            <template v-if="eventEdit">
+                <p class="text-body-sm text-neutral-600 mb-4">
+                    <b class="break-words">{{ eventEdit.name }}</b> · {{ fmtRange(eventEdit.date_from, eventEdit.date_to) }}.
+                    Lëre bosh që eventi të jetë vetëm informacion.
+                    <span v-if="eventEdit.recurring" class="font-semibold">Ky event përsëritet çdo vit.</span>
+                </p>
+                <label for="event-uplift" class="block text-label text-neutral-600 mb-1">Ndikimi në sugjerim (%)</label>
+                <input id="event-uplift" v-model="eventUplift" type="number" min="-50" max="100" step="1" placeholder="p.sh. 10"
+                    class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm tabular-nums focus:border-ionian focus:ring-2 focus:ring-ionian/30" />
+                <div class="mt-3 rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-body-sm text-neutral-700">
+                    {{ eventImpactPreview }}
+                    <p class="text-tiny text-neutral-500 mt-1">
+                        Ky rregull vlen për <b>të gjitha tipet e dhomave</b><template v-if="eventEdit.recurring"> dhe çdo përsëritje vjetore</template>.
+                        Nuk dërgon çmim te OTA-t tani.
+                    </p>
+                    <p v-if="autopilot.enabled && eventRuleChanges" class="text-tiny text-warning-700 mt-1 font-semibold">
+                        Autopiloti është ndezur: ky ndryshim hyn në llogaritjen e ekzekutimit të ardhshëm.
+                    </p>
+                </div>
+                <div v-if="eventUplift !== '' && Number(eventUplift) !== 0 && overlappingPricedEvents.length"
+                    class="mt-3 rounded-lg border border-warning-200 bg-warning-50 p-3 text-body-sm text-warning-800 break-words">
+                    Mbivendoset me: <b>{{ overlappingPricedEvents.map((ev) => ev.name).join(', ') }}</b>.
+                    Faktorët e eventeve shumëzohen, ndaj kontrollo efektin e kombinuar.
+                </div>
+                <label v-if="eventRuleChanges" class="mt-3 flex items-start gap-2 text-body-sm text-neutral-700 cursor-pointer">
+                    <input v-model="eventScopeConfirmed" type="checkbox" class="mt-0.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500" />
+                    <span>E kuptoj që ky ndryshim prek sugjerimet e të gjitha tipeve të dhomave.</span>
+                </label>
+                <div class="flex justify-end gap-2.5 mt-5">
+                    <Button variant="ghost" :disabled="eventSaving" @click="eventEdit = null">Anulo</Button>
+                    <Button variant="primary" :loading="eventSaving" :disabled="eventRuleChanges && !eventScopeConfirmed" @click="saveEventImpact">Ruaj ndikimin</Button>
+                </div>
+            </template>
+        </Modal>
+
         <!-- autopilot confirm -->
-        <Modal :show="apConfirmOpen" title="Autopilot me kufij" @close="apConfirmOpen = false">
+        <Modal :show="apConfirmOpen" title="Autopilot me kufij" :closeable="!autopilotSaving" @close="apConfirmOpen = false">
             <p v-if="apForm.enabled" class="text-body-sm text-neutral-600 mb-4">
                 Duke e ndezur, sistemi do të <b>aplikojë vetë</b> sugjerimet e motorit çdo natë — por VETËM brenda
                 kufijve min/max të çdo tipi dhome, vetëm ndryshime ≥ pragut, me tavan ditor, dhe <b>kurrë</b> mbi
@@ -589,35 +819,35 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-label text-neutral-600 mb-1">Ndryshimi minimal (%)</label>
-                    <input v-model="apForm.materiality_pct" type="number" min="1" max="50" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                    <input v-model="apForm.materiality_pct" type="number" min="1" max="50" :disabled="autopilotSaving" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
                 </div>
                 <div>
                     <label class="block text-label text-neutral-600 mb-1">Tavani ditor (±%)</label>
-                    <input v-model="apForm.daily_cap_pct" type="number" min="1" max="50" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                    <input v-model="apForm.daily_cap_pct" type="number" min="1" max="50" :disabled="autopilotSaving" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
                 </div>
                 <div>
                     <label class="block text-label text-neutral-600 mb-1">Mbro çmimet e mia (ditë)</label>
-                    <input v-model="apForm.protect_manual_days" type="number" min="0" max="30" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                    <input v-model="apForm.protect_manual_days" type="number" min="0" max="30" :disabled="autopilotSaving" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
                 </div>
                 <div class="col-span-2 grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-label text-neutral-600 mb-1">Pauzë nga (ops.)</label>
-                        <input v-model="apForm.pause_from" type="date" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                        <input v-model="apForm.pause_from" type="date" :disabled="autopilotSaving" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
                     </div>
                     <div>
                         <label class="block text-label text-neutral-600 mb-1">deri më</label>
-                        <input v-model="apForm.pause_to" type="date" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                        <input v-model="apForm.pause_to" type="date" :disabled="autopilotSaving" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
                     </div>
                 </div>
             </div>
             <div class="flex justify-end gap-2.5 mt-5">
-                <Button variant="ghost" @click="apConfirmOpen = false">Anulo</Button>
-                <Button variant="primary" @click="saveAutopilot">{{ apForm.enabled ? 'Po, ndize' : 'Ruaj (i fikur)' }}</Button>
+                <Button variant="ghost" :disabled="autopilotSaving" @click="apConfirmOpen = false">Anulo</Button>
+                <Button variant="primary" :loading="autopilotSaving" @click="saveAutopilot">{{ apForm.enabled ? 'Po, ndize' : 'Ruaj (i fikur)' }}</Button>
             </div>
         </Modal>
 
         <!-- bounds drawer -->
-        <Modal :show="boundsOpen" title="Kufijtë e çmimit" @close="boundsOpen = false">
+        <Modal :show="boundsOpen" title="Kufijtë e çmimit" :closeable="!boundsSaving" @close="boundsOpen = false">
             <p class="text-body-sm text-neutral-600 mb-4">
                 Motori sugjeron (dhe autopiloti do të aplikojë) çmime <b>vetëm brenda këtyre kufijve</b> për
                 <b>{{ currentType?.name }}</b>. Bosh = pa kufi.
@@ -625,23 +855,23 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="block text-label text-neutral-600 mb-1">Minimal ({{ currency }}/natë)</label>
-                    <input v-model="boundsMin" type="number" min="0" step="1" placeholder="p.sh. 60"
+                    <input v-model="boundsMin" type="number" min="0.01" step="1" :disabled="boundsSaving" placeholder="p.sh. 60"
                         class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm tabular-nums focus:border-ionian focus:ring-2 focus:ring-ionian/30" />
                 </div>
                 <div>
                     <label class="block text-label text-neutral-600 mb-1">Maksimal ({{ currency }}/natë)</label>
-                    <input v-model="boundsMax" type="number" min="0" step="1" placeholder="p.sh. 200"
+                    <input v-model="boundsMax" type="number" min="0.01" step="1" :disabled="boundsSaving" placeholder="p.sh. 200"
                         class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm tabular-nums focus:border-ionian focus:ring-2 focus:ring-ionian/30" />
                 </div>
             </div>
             <div class="flex justify-end gap-2.5 mt-5">
-                <Button variant="ghost" @click="boundsOpen = false">Anulo</Button>
-                <Button variant="primary" @click="saveBounds">Ruaj kufijtë</Button>
+                <Button variant="ghost" :disabled="boundsSaving" @click="boundsOpen = false">Anulo</Button>
+                <Button variant="primary" :loading="boundsSaving" @click="saveBounds">Ruaj kufijtë</Button>
             </div>
         </Modal>
 
         <!-- bulk apply confirm -->
-        <Modal :show="!!bulk" title="Apliko sugjerimet në masë" @close="bulk = null">
+        <Modal :show="!!bulk" title="Apliko sugjerimet në masë" :closeable="!bulkSaving" @close="bulk = null">
             <template v-if="bulk">
                 <p class="text-body-sm text-neutral-600">
                     Do të aplikohen sugjerimet e motorit për <b>{{ bulk.label }}</b>
@@ -649,8 +879,8 @@ watch(() => props.selectedTypeId, (v) => { typeId.value = v; });
                     llogaritja përfundimtare bëhet në server, gjithmonë brenda kufijve të tu, dhe dërgohet vetë te OTA-t.
                 </p>
                 <div class="flex justify-end gap-2.5 mt-5">
-                    <Button variant="ghost" @click="bulk = null">Anulo</Button>
-                    <Button variant="primary" @click="confirmBulk">Po, apliko</Button>
+                    <Button variant="ghost" :disabled="bulkSaving" @click="bulk = null">Anulo</Button>
+                    <Button variant="primary" :loading="bulkSaving" @click="confirmBulk">Po, apliko</Button>
                 </div>
             </template>
         </Modal>

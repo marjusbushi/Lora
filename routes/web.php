@@ -1,20 +1,20 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\CleaningTaskController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\PosController;
-use App\Http\Controllers\PosShiftController;
-use App\Http\Controllers\SettingsController;
-use App\Http\Controllers\GuestController;
-use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ChannexController;
 use App\Http\Controllers\ChannexWebhookController;
+use App\Http\Controllers\CleaningTaskController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\GuestController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PosController;
+use App\Http\Controllers\PosShiftController;
 use App\Http\Controllers\PricingController;
-use App\Http\Controllers\SmartPricingController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\RoomController;
+use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SmartPricingController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebsiteController;
 use Illuminate\Http\Request;
@@ -28,6 +28,7 @@ Route::get('/', function (Request $request) {
     if (str_starts_with($request->getHost(), 'admin.')) {
         return redirect()->route('dashboard');
     }
+
     return app(WebsiteController::class)->home();
 })->name('website.home');
 Route::get('/rooms', [WebsiteController::class, 'rooms'])->name('website.rooms');
@@ -65,8 +66,10 @@ Route::middleware('auth')->prefix('pms')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Notifications (new-reservation bell) — any authenticated staff
-    Route::get('/notifications/reservations', [NotificationController::class, 'reservations'])->name('notifications.reservations');
+    // Notifications (new-reservation bell) — staff with reservation access
+    Route::get('/notifications/reservations', [NotificationController::class, 'reservations'])
+        ->middleware('permission:view_reservations')
+        ->name('notifications.reservations');
 
     // Room Management
     Route::middleware('permission:view_rooms')->group(function () {
@@ -193,6 +196,7 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::post('/pricing/smart/ask', [SmartPricingController::class, 'ask'])->name('pricing.smart.ask');
         Route::post('/pricing/smart/events/suggest', [SmartPricingController::class, 'suggestEvents'])->name('pricing.smart.events.suggest');
         Route::post('/pricing/smart/events', [SmartPricingController::class, 'approveEvent'])->name('pricing.smart.events.approve');
+        Route::put('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'updateEvent'])->name('pricing.smart.events.update');
         Route::delete('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'destroyEvent'])->name('pricing.smart.events.destroy');
         Route::post('/pricing/smart/report', [SmartPricingController::class, 'generateReport'])->name('pricing.smart.report');
         Route::post('/pricing/smart/autopilot', [SmartPricingController::class, 'updateAutopilot'])->name('pricing.smart.autopilot');

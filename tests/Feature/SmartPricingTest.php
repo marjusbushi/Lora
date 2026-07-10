@@ -2,16 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\Guest;
+use App\Models\PricingEvent;
 use App\Models\RateOverride;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Season;
 use App\Models\SeasonRate;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\RoomPricing;
 use App\Services\SmartPricing;
+use Carbon\Carbon;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
@@ -77,7 +81,7 @@ class SmartPricingTest extends TestCase
             'guest_id' => Guest::create(['first_name' => 'G', 'last_name' => 'X'])->id,
             'created_by' => User::factory()->create()->id,
             'check_in_date' => $date,
-            'check_out_date' => \Carbon\Carbon::parse($date)->addDay()->toDateString(),
+            'check_out_date' => Carbon::parse($date)->addDay()->toDateString(),
             'status' => 'confirmed',
             'total_amount' => 100,
             'adults' => 1,
@@ -183,6 +187,25 @@ class SmartPricingTest extends TestCase
         $this->assertEquals(100.0, RoomPricing::total($type, $date, $next)); // back to base
     }
 
+    public function test_accepting_a_suggestion_recomputes_the_latest_engine_price_on_the_server(): void
+    {
+        $admin = $this->admin();
+        $type = $this->type(100);
+        [$room] = $this->rooms($type, 1);
+        $date = $this->weekdayAfter(5);
+        $this->book($room, $date);
+
+        // The browser sends identity only — never a potentially stale price.
+        $this->actingAs($admin)->post(route('pricing.smart.apply'), [
+            'date' => $date,
+            'room_type_id' => $type->id,
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $this->assertEquals(130.0, (float) RateOverride::whereDate('date', $date)->firstOrFail()->price);
+        $audit = AuditLog::where('action', 'pricing.smart_apply')->latest('id')->firstOrFail();
+        $this->assertSame('engine', $audit->properties['source']);
+    }
+
     public function test_smart_pricing_page_renders(): void
     {
         $admin = $this->admin();
@@ -206,6 +229,41 @@ class SmartPricingTest extends TestCase
         $this->assertTrue($row['actionable']);
         $this->assertSame('peak', $row['kind']);
         $this->assertEquals(130.0, $row['suggested_price']); // 100 × 1.30
+    }
+
+    public function test_calendar_exposes_type_property_and_blended_occupancy_separately(): void
+    {
+        $type = $this->type(100);
+        [$targetRoom] = $this->rooms($type, 1);
+        $other = RoomType::create(['name' => 'Other', 'base_price' => 80, 'max_occupancy' => 2]);
+        $this->rooms($other, 2);
+        $date = $this->weekdayAfter(5);
+        $this->book($targetRoom, $date);
+
+        $row = collect(SmartPricing::calendar($type, Carbon::parse($date), Carbon::parse($date)))->first();
+
+        $this->assertSame(100, $row['occupancy_type_pct']);
+        $this->assertSame(33, $row['occupancy_property_pct']);
+        $this->assertSame(67, $row['occupancy_pct']);
+    }
+
+    public function test_context_only_event_is_visible_without_entering_the_price_factors(): void
+    {
+        $type = $this->type(100);
+        $date = $this->weekdayAfter(10);
+        PricingEvent::create([
+            'name' => 'Event informativ',
+            'date_from' => $date,
+            'date_to' => $date,
+            'uplift_pct' => null,
+            'source' => 'manual',
+        ]);
+
+        $row = collect(SmartPricing::calendar($type, Carbon::parse($date), Carbon::parse($date)))->first();
+
+        $this->assertSame('Event informativ', $row['holiday']);
+        $this->assertFalse($row['events'][0]['affects_price']);
+        $this->assertFalse(collect($row['factors'])->contains('key', 'event'));
     }
 
     public function test_calendar_suppresses_far_future_discounts(): void
@@ -237,11 +295,209 @@ class SmartPricingTest extends TestCase
         $this->assertEquals(0, RateOverride::count());
     }
 
+    public function test_bounds_reject_zero_values(): void
+    {
+        $admin = $this->admin();
+        $type = $this->type(100);
+
+        $this->actingAs($admin)->put(route('pricing.smart.bounds', $type), [
+            'min_price' => 0,
+            'max_price' => 150,
+        ])->assertSessionHasErrors('min_price');
+
+        $this->actingAs($admin)->put(route('pricing.smart.bounds', $type), [
+            'min_price' => 50,
+            'max_price' => 0,
+        ])->assertSessionHasErrors('max_price');
+    }
+
+    public function test_bulk_apply_aborts_atomically_when_engine_output_is_not_positive(): void
+    {
+        $admin = $this->admin();
+        $type = $this->type(100);
+        $type->update(['max_price' => 0]); // simulate legacy/bad data that predates validation
+        [$a] = $this->rooms($type, 1);
+        $date = $this->weekdayAfter(10);
+        $this->book($a, $date);
+
+        $this->actingAs($admin)->post(route('pricing.smart.apply-range'), [
+            'room_type_id' => $type->id,
+            'date_from' => $date,
+            'date_to' => $date,
+        ])->assertRedirect()->assertSessionHas('error');
+
+        $this->assertSame(0, RateOverride::count());
+    }
+
+    public function test_owner_can_turn_an_event_uplift_on_and_back_to_context_only(): void
+    {
+        $admin = $this->admin();
+        $event = PricingEvent::create([
+            'name' => 'Festivali',
+            'date_from' => now()->addDays(20)->toDateString(),
+            'date_to' => now()->addDays(21)->toDateString(),
+            'uplift_pct' => null,
+            'source' => 'manual',
+        ]);
+
+        $this->actingAs($admin)->put(route('pricing.smart.events.update', $event), [
+            'uplift_pct' => 12.345,
+        ])->assertRedirect()->assertSessionHas('success');
+        $this->actingAs($admin)->put(route('pricing.smart.events.update', $event), [
+            'uplift_pct' => 12.345,
+        ])->assertRedirect()->assertSessionHas('success');
+        $this->assertSame(1, AuditLog::where('action', 'pricing.event_update')->count());
+        $this->assertSame(1, PricingEvent::whereKey($event->id)->count(), 'PUT is idempotent and never duplicates the event');
+        $this->assertEquals(12.35, (float) $event->fresh()->uplift_pct);
+
+        $this->actingAs($admin)->put(route('pricing.smart.events.update', $event), [
+            'uplift_pct' => null,
+        ])->assertRedirect()->assertSessionHas('success');
+        $this->assertNull($event->fresh()->uplift_pct);
+        $this->assertSame(2, AuditLog::where('action', 'pricing.event_update')->count());
+    }
+
+    public function test_empty_event_update_cannot_clear_an_existing_uplift(): void
+    {
+        $admin = $this->admin();
+        $event = PricingEvent::create([
+            'name' => 'Mos e fshi',
+            'date_from' => now()->addDays(20)->toDateString(),
+            'date_to' => now()->addDays(20)->toDateString(),
+            'uplift_pct' => 15,
+            'source' => 'manual',
+        ]);
+
+        $this->actingAs($admin)->put(route('pricing.smart.events.update', $event), [])
+            ->assertSessionHasErrors('uplift_pct');
+
+        $this->assertEquals(15.0, (float) $event->fresh()->uplift_pct);
+        $this->assertSame(0, AuditLog::where('action', 'pricing.event_update')->count());
+    }
+
+    public function test_repeated_event_approval_is_idempotent_and_audited_once(): void
+    {
+        $admin = $this->admin();
+        $payload = [
+            'name' => 'Festivali unik',
+            'date_from' => now()->addDays(30)->toDateString(),
+            'date_to' => now()->addDays(31)->toDateString(),
+            'uplift_pct' => 10.123,
+        ];
+
+        $this->actingAs($admin)->post(route('pricing.smart.events.approve'), $payload)
+            ->assertRedirect()->assertSessionHas('success');
+        $this->actingAs($admin)->post(route('pricing.smart.events.approve'), $payload)
+            ->assertRedirect()->assertSessionHas('success');
+
+        $this->assertSame(1, PricingEvent::where('name', $payload['name'])->count());
+        $this->assertEquals(10.12, (float) PricingEvent::where('name', $payload['name'])->firstOrFail()->uplift_pct);
+        $this->assertSame(1, AuditLog::where('action', 'pricing.event_approve')->count());
+    }
+
+    public function test_event_approval_reports_a_conflicting_existing_rule_instead_of_hiding_it(): void
+    {
+        $admin = $this->admin();
+        $date = now()->addDays(30)->toDateString();
+        $event = PricingEvent::create([
+            'name' => 'I njëjti emër',
+            'date_from' => $date,
+            'date_to' => $date,
+            'uplift_pct' => null,
+            'source' => 'manual',
+        ]);
+
+        $this->actingAs($admin)->post(route('pricing.smart.events.approve'), [
+            'name' => $event->name,
+            'date_from' => $date,
+            'date_to' => $date,
+            'uplift_pct' => 20,
+        ])->assertRedirect()->assertSessionHas('error');
+
+        $this->assertSame(1, PricingEvent::where('name', $event->name)->count());
+        $this->assertNull($event->fresh()->uplift_pct);
+        $this->assertSame(0, AuditLog::where('action', 'pricing.event_approve')->count());
+    }
+
+    public function test_event_changes_increment_the_engine_rules_version_only_when_the_rule_changes(): void
+    {
+        $admin = $this->admin();
+        $event = PricingEvent::create([
+            'name' => 'Versionim',
+            'date_from' => now()->addDays(20)->toDateString(),
+            'date_to' => now()->addDays(20)->toDateString(),
+            'source' => 'manual',
+        ]);
+        $before = (int) Setting::get('pricing.rules_version', 0);
+
+        $this->actingAs($admin)->put(route('pricing.smart.events.update', $event), ['uplift_pct' => 8])
+            ->assertSessionHas('success');
+        $afterChange = (int) Setting::get('pricing.rules_version', 0);
+        $this->assertSame($before + 1, $afterChange);
+
+        $this->actingAs($admin)->put(route('pricing.smart.events.update', $event), ['uplift_pct' => 8])
+            ->assertSessionHas('success');
+        $this->assertSame($afterChange, (int) Setting::get('pricing.rules_version', 0));
+    }
+
+    public function test_event_update_requires_authentication_and_admin_role(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $event = PricingEvent::create([
+            'name' => 'Privat',
+            'date_from' => now()->addDays(20)->toDateString(),
+            'date_to' => now()->addDays(20)->toDateString(),
+            'source' => 'manual',
+        ]);
+
+        $this->put(route('pricing.smart.events.update', $event), ['uplift_pct' => 10])
+            ->assertRedirect(route('login'));
+
+        $staff = User::factory()->create();
+        $this->actingAs($staff)->put(route('pricing.smart.events.update', $event), ['uplift_pct' => 10])
+            ->assertForbidden();
+
+        $this->assertNull($event->fresh()->uplift_pct);
+    }
+
+    public function test_event_update_rejects_malformed_and_out_of_range_uplifts(): void
+    {
+        $admin = $this->admin();
+        $event = PricingEvent::create([
+            'name' => 'Validim',
+            'date_from' => now()->addDays(20)->toDateString(),
+            'date_to' => now()->addDays(20)->toDateString(),
+            'source' => 'manual',
+        ]);
+
+        foreach (['not-a-number', -51, 101] as $invalid) {
+            $this->actingAs($admin)->put(route('pricing.smart.events.update', $event), [
+                'uplift_pct' => $invalid,
+            ])->assertSessionHasErrors('uplift_pct');
+        }
+
+        $this->assertNull($event->fresh()->uplift_pct);
+
+        $this->actingAs($admin)->post(route('pricing.smart.events.approve'), [
+            'name' => 'Datë jo kanonike',
+            'date_from' => 'August 1 2026',
+            'date_to' => 'August 2 2026',
+            'uplift_pct' => 10,
+        ])->assertSessionHasErrors(['date_from', 'date_to']);
+    }
+
     public function test_calendar_flags_weekends_and_holidays(): void
     {
         $type = $this->type(100);
+        PricingEvent::create([
+            'name' => 'Ferragosto / Shën Maria',
+            'date_from' => '2026-08-15',
+            'date_to' => '2026-08-15',
+            'uplift_pct' => null,
+            'source' => 'system',
+        ]);
         // Aug 2026: 14=Fri, 15=Sat (Ferragosto), 17=Mon.
-        $days = collect(SmartPricing::calendar($type, \Carbon\Carbon::parse('2026-08-01'), \Carbon\Carbon::parse('2026-08-31')));
+        $days = collect(SmartPricing::calendar($type, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-31')));
 
         $this->assertTrue($days->firstWhere('date', '2026-08-14')['is_weekend']);            // Friday night
         $this->assertTrue($days->firstWhere('date', '2026-08-15')['is_weekend']);            // Saturday night

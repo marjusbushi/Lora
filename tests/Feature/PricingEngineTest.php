@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Guest;
 use App\Models\PricingEvent;
+use App\Models\RateOverride;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomInventorySnapshot;
@@ -12,6 +13,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\PricingEngine;
 use Carbon\Carbon;
+use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -194,6 +196,28 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(10.0, $event['pct'], "owner's event uplift is NEVER scaled");
     }
 
+    public function test_overlapping_event_uplifts_are_explicitly_multiplicative(): void
+    {
+        $type = $this->type(100);
+        $this->rooms($type, 2);
+        $date = $this->weekdayAfter(20);
+
+        foreach ([['Piku', 20], ['Festivali', 10]] as [$name, $pct]) {
+            PricingEvent::create([
+                'name' => $name,
+                'date_from' => $date->toDateString(),
+                'date_to' => $date->toDateString(),
+                'uplift_pct' => $pct,
+                'source' => 'manual',
+            ]);
+        }
+
+        $row = $this->rowFor($type, $date);
+
+        $this->assertEquals(132.0, $row['suggested_price']); // 100 × 1.20 × 1.10
+        $this->assertCount(2, collect($row['factors'])->where('key', 'event'));
+    }
+
     public function test_strategy_presets_change_intensity_via_one_setting(): void
     {
         $type = $this->type(100);
@@ -263,14 +287,14 @@ class PricingEngineTest extends TestCase
         $this->book($b, $date->toDateString()); // engine wants 130
 
         // Owner already priced it at 129.50 — a +€0.50 nudge is not worth showing.
-        \App\Models\RateOverride::create(['date' => $date->toDateString(), 'room_type_id' => $type->id, 'price' => 129.50]);
+        RateOverride::create(['date' => $date->toDateString(), 'room_type_id' => $type->id, 'price' => 129.50]);
         $row = $this->rowFor($type, $date);
         $this->assertFalse($row['actionable'], '0.39% move is below the 1% floor');
         $this->assertEquals(129.50, $row['suggested_price'], 'non-actionable → shows current');
         $this->assertStringContainsString('i vogël', $row['quiet_reason']);
 
         // But a real gap (129.50 → 120 override → 8.3%) stays actionable.
-        \App\Models\RateOverride::whereDate('date', $date->toDateString())->update(['price' => 120]);
+        RateOverride::whereDate('date', $date->toDateString())->update(['price' => 120]);
         $row = $this->rowFor($type, $date);
         $this->assertTrue($row['actionable']);
         $this->assertEquals(130.0, $row['suggested_price']);
@@ -318,7 +342,7 @@ class PricingEngineTest extends TestCase
     /** Review fix: the HTTP calendar path must clamp (partial model regression). */
     public function test_calendar_http_path_applies_the_max_clamp(): void
     {
-        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $this->seed(RolePermissionSeeder::class);
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
@@ -340,7 +364,7 @@ class PricingEngineTest extends TestCase
     /** Review fix: inverted min>max is treated as unset by BOTH engine and apply guard. */
     public function test_inverted_min_max_falls_back_consistently(): void
     {
-        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $this->seed(RolePermissionSeeder::class);
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
@@ -399,10 +423,11 @@ class PricingEngineTest extends TestCase
     /** Review fix: the settings write path persists min/max and rejects an inverted pair. */
     public function test_settings_write_path_for_min_max(): void
     {
-        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $this->seed(RolePermissionSeeder::class);
         $admin = User::factory()->create();
         $admin->assignRole('admin');
         $type = $this->type(100);
+        $versionBefore = (int) Setting::get('pricing.rules_version', 0);
 
         $this->actingAs($admin)->put(route('settings.room-types.update', $type), [
             'name' => $type->name, 'base_price' => 100, 'max_occupancy' => 2,
@@ -411,10 +436,40 @@ class PricingEngineTest extends TestCase
         $type->refresh();
         $this->assertEquals(70.0, (float) $type->min_price);
         $this->assertEquals(150.0, (float) $type->max_price);
+        $this->assertSame($versionBefore + 1, (int) Setting::get('pricing.rules_version', 0));
 
         $this->actingAs($admin)->put(route('settings.room-types.update', $type), [
             'name' => $type->name, 'base_price' => 100, 'max_occupancy' => 2,
             'min_price' => 150, 'max_price' => 70, // inverted
         ])->assertSessionHasErrors('max_price');
+
+        $this->actingAs($admin)->put(route('settings.room-types.update', $type), [
+            'name' => $type->name, 'base_price' => 100, 'max_occupancy' => 2,
+            'min_price' => 0, 'max_price' => 150,
+        ])->assertSessionHasErrors('min_price');
+
+        $this->actingAs($admin)->put(route('settings.room-types.update', $type), [
+            'name' => $type->name, 'base_price' => 100, 'max_occupancy' => 2,
+            'min_price' => 70, 'max_price' => 0,
+        ])->assertSessionHasErrors('max_price');
+    }
+
+    public function test_base_rate_matrix_changes_increment_the_rules_version_but_no_op_retries_do_not(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $type = $this->type(100);
+        $before = (int) Setting::get('pricing.rules_version', 0);
+
+        $payload = ['base' => [$type->id => 90], 'rates' => []];
+        $this->actingAs($admin)->post(route('pricing.rates.save'), $payload)
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $afterChange = (int) Setting::get('pricing.rules_version', 0);
+        $this->assertSame($before + 1, $afterChange);
+
+        $this->actingAs($admin)->post(route('pricing.rates.save'), $payload)
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame($afterChange, (int) Setting::get('pricing.rules_version', 0));
     }
 }

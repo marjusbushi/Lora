@@ -133,13 +133,30 @@ class PricingEngine
 
         $demand = [];
         $eventFactors = [];
+        $eventContext = $ctx['events']->map(fn ($event) => [
+            'id' => $event->id,
+            'name' => $event->name,
+            'uplift_pct' => $event->uplift_pct !== null ? (float) $event->uplift_pct : null,
+            'affects_price' => $event->uplift_pct !== null && (float) $event->uplift_pct != 0.0,
+        ])->values()->all();
 
         if (! $isPast && $reference > 0 && $typeTotal > 0) {
             // 1. Occupancy — continuous curve anchored to the old bands at the
             // extremes (100% → +30) but smooth in between, scaled by strategy.
             $occPct = self::occupancyCurve($occ) * $mult;
             if (abs($occPct) >= 0.05) {
-                $demand[] = ['key' => 'occupancy', 'label' => sprintf('Zënia %d/%d dhoma (%s%%)', $ctx['type_booked'], $typeTotal, $occ), 'pct' => round($occPct, 1)];
+                $demand[] = [
+                    'key' => 'occupancy',
+                    'label' => sprintf(
+                        'Sinjali i zënies %s%% (kategoria %d/%d = %s%%, prona %s%%)',
+                        $occ,
+                        $ctx['type_booked'],
+                        $typeTotal,
+                        round($occType, 1),
+                        round($occProperty, 1),
+                    ),
+                    'pct' => round($occPct, 1),
+                ];
             }
 
             // 2. Pickup pace — how fast this night filled since the baseline
@@ -218,7 +235,7 @@ class PricingEngine
             $quietReason = match (true) {
                 $reference <= 0 || $typeTotal === 0 => 'Ky tip s\'ka çmim bazë ose dhoma aktive.',
                 $demandCollapsed => sprintf('E largët (%d ditë) dhe ende e qetë — ulja shfaqet vetëm kur t\'i afrohet %d ditëve, që të mos shesësh lirë pa nevojë.', max($daysUntil, 0), self::DISCOUNT_HORIZON_DAYS),
-                $factors === [] => sprintf('Zënia (%s%%) është në zonën e mirë — çmimi është aty ku duhet.', $occ),
+                $factors === [] => sprintf('Sinjali i zënies (%s%%) është në zonën e mirë — çmimi është aty ku duhet.', $occ),
                 default => 'Ndryshimi i llogaritur është shumë i vogël (nën 1%) për t\'ia vlejtur.',
             };
         }
@@ -227,6 +244,7 @@ class PricingEngine
             'date' => $date->toDateString(),
             'occupancy_pct' => (int) round($occ),
             'occupancy_type_pct' => (int) round($occType),
+            'occupancy_property_pct' => (int) round($occProperty),
             'booked' => $ctx['type_booked'],
             'total' => $typeTotal,
             'reference' => round($reference, 2),
@@ -234,6 +252,7 @@ class PricingEngine
             'suggested_price' => $actionable ? $suggested : round($current, 2),
             'adjustment_pct' => $actionable ? $pctTotal : 0.0,
             'factors' => $factors,
+            'events' => $eventContext,
             'clamped' => $clamped,
             'kind' => $actionable ? ($pctTotal >= 20 ? 'peak' : ($pctTotal > 0 ? 'high' : 'low')) : null,
             'has_override' => (bool) $override,

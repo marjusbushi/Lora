@@ -60,7 +60,7 @@ class SmartPricing
 
     /**
      * One room type, one month: engine suggestion + presentation fields
-     * (weekend/holiday) per date for the calendar view.
+     * (weekend/demand events) per date for the calendar view.
      *
      * @return array<int,array<string,mixed>>
      */
@@ -73,7 +73,10 @@ class SmartPricing
             $row = $engine[$d->toDateString()];
             $row['dow'] = (int) $d->dayOfWeekIso; // 1=Mon .. 7=Sun
             $row['is_weekend'] = in_array((int) $d->dayOfWeekIso, [5, 6], true); // Fri + Sat nights
-            $row['holiday'] = Holidays::for($d); // name or null
+            // One source of truth: the same persisted events feed both the
+            // badge and the engine. Context-only events stay visible but do
+            // not enter the factor breakdown.
+            $row['holiday'] = collect($row['events'] ?? [])->pluck('name')->implode(' · ') ?: null;
             $days[] = $row;
         }
 

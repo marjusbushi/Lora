@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\PushRoomTypeAri;
 use App\Models\Guest;
 use App\Models\RateOverride;
 use App\Models\Reservation;
@@ -72,9 +73,18 @@ class PricingCalendarV2Test extends TestCase
     {
         $admin = $this->admin();
 
+        // A missing rules-version row previously surfaced as a misleading 404.
+        Setting::where('group', 'pricing')->where('key', 'rules_version')->delete();
+
+        $this->actingAs($admin)->post(route('pricing.smart.strategy'), ['strategy' => 'kujdesshem'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('kujdesshem', Setting::get('pricing.strategy'));
+        $this->assertSame(1, (int) Setting::get('pricing.rules_version'));
+
         $this->actingAs($admin)->post(route('pricing.smart.strategy'), ['strategy' => 'agresiv'])
             ->assertRedirect()->assertSessionHasNoErrors();
         $this->assertSame('agresiv', Setting::get('pricing.strategy'));
+        $this->assertSame(2, (int) Setting::get('pricing.rules_version'));
 
         $this->actingAs($admin)->post(route('pricing.smart.strategy'), ['strategy' => 'cowboy'])
             ->assertSessionHasErrors('strategy');
@@ -129,7 +139,7 @@ class PricingCalendarV2Test extends TestCase
             $this->assertNotNull($o, "override for {$d->toDateString()}");
             $this->assertEquals(130.0, (float) $o->price, 'server-computed 100% occupancy price');
         }
-        Queue::assertPushed(\App\Jobs\PushRoomTypeAri::class);
+        Queue::assertPushed(PushRoomTypeAri::class);
     }
 
     public function test_apply_range_rejects_long_ranges_and_reports_empty(): void

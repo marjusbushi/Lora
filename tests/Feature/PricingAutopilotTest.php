@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\PushRoomTypeAri;
 use App\Models\Guest;
 use App\Models\PricingAutopilotLog;
+use App\Models\PricingManualProtection;
 use App\Models\RateOverride;
 use App\Models\Reservation;
 use App\Models\Room;
@@ -13,6 +15,8 @@ use App\Models\User;
 use Carbon\Carbon;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -57,7 +61,14 @@ class PricingAutopilotTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->type = RoomType::create(['name' => 'Twin', 'base_price' => 100, 'max_occupancy' => 2, 'amenities' => []]);
+        $this->type = RoomType::create([
+            'name' => 'Twin',
+            'base_price' => 100,
+            'min_price' => 50,
+            'max_price' => 200,
+            'max_occupancy' => 2,
+            'amenities' => [],
+        ]);
         $this->rooms = [
             Room::create(['room_number' => 'AP1', 'room_type_id' => $this->type->id, 'floor' => 1, 'status' => 'available']),
             Room::create(['room_number' => 'AP2', 'room_type_id' => $this->type->id, 'floor' => 1, 'status' => 'available']),
@@ -102,11 +113,107 @@ class PricingAutopilotTest extends TestCase
         $log = $this->logFor($date);
         $this->assertNotNull($log);
         $this->assertNull($log->old_price, 'no override existed before');
+        $this->assertEquals(100.0, (float) $log->effective_old_price, 'the effective seasonal/base price is retained as the daily baseline');
         $this->assertEquals(115.0, (float) $log->new_price);
         // Near-term empty nights legitimately get capped discounts too.
         $this->assertGreaterThan(1, PricingAutopilotLog::count());
 
-        Queue::assertPushed(\App\Jobs\PushRoomTypeAri::class);
+        Queue::assertPushed(PushRoomTypeAri::class);
+    }
+
+    public function test_repeated_run_same_day_never_compounds_past_the_daily_cap(): void
+    {
+        $date = $this->fullNight();
+        $this->enable(['daily_cap_pct' => '15']);
+
+        $this->artisan('pricing:autopilot')->assertSuccessful();
+        $this->artisan('pricing:autopilot')->assertSuccessful();
+
+        $override = RateOverride::whereDate('date', $date)->where('room_type_id', $this->type->id)->firstOrFail();
+        $this->assertEquals(115.0, (float) $override->price, 'the second run stays capped from the first price of the day');
+        $this->assertSame(1, PricingAutopilotLog::whereDate('date', $date)->where('room_type_id', $this->type->id)->count());
+    }
+
+    public function test_duplicate_command_invocation_is_skipped_while_run_lock_is_held(): void
+    {
+        $this->fullNight();
+        $this->enable();
+        $lock = Cache::lock('pricing:autopilot:run', 60);
+        $this->assertTrue($lock->get());
+
+        try {
+            $this->artisan('pricing:autopilot')->assertSuccessful();
+        } finally {
+            $lock->release();
+        }
+
+        $this->assertSame(0, RateOverride::count());
+        $this->assertSame(0, PricingAutopilotLog::count());
+    }
+
+    public function test_a_later_date_failure_rolls_back_the_entire_room_type_batch(): void
+    {
+        $this->enable();
+        $failDate = Carbon::tomorrow()->addDay()->toDateString();
+        DB::unprepared("CREATE TRIGGER fail_second_autopilot_write
+            BEFORE INSERT ON rate_overrides
+            WHEN date(NEW.date) = '{$failDate}'
+            BEGIN SELECT RAISE(ABORT, 'forced batch failure'); END;");
+
+        $failed = false;
+        try {
+            $exitCode = $this->artisan('pricing:autopilot', ['--days' => 3])->run();
+            $failed = $exitCode !== 0;
+        } catch (\Throwable) {
+            $failed = true;
+        }
+
+        $this->assertTrue($failed, 'the injected database failure must surface');
+        $this->assertSame(0, RateOverride::count(), 'earlier dates roll back with the failed date');
+        $this->assertSame(0, PricingAutopilotLog::count(), 'no partial audit batch remains');
+    }
+
+    public function test_command_refuses_to_run_when_an_active_type_has_missing_bounds(): void
+    {
+        $this->fullNight();
+        $unbounded = RoomType::create(['name' => 'Unbounded', 'base_price' => 80, 'max_occupancy' => 2, 'amenities' => []]);
+        Room::create(['room_number' => 'UB1', 'room_type_id' => $unbounded->id, 'floor' => 1, 'status' => 'available']);
+        $this->enable();
+
+        $this->artisan('pricing:autopilot')->assertFailed();
+
+        $this->assertSame(0, RateOverride::count());
+        $this->assertSame(0, PricingAutopilotLog::count());
+    }
+
+    public function test_command_refuses_legacy_zero_or_inverted_bounds(): void
+    {
+        $this->fullNight();
+        $this->type->update(['min_price' => 50, 'max_price' => 0]);
+        $this->enable();
+
+        $this->artisan('pricing:autopilot')->assertFailed();
+
+        $this->assertSame(0, RateOverride::count());
+        $this->assertSame(0, PricingAutopilotLog::count());
+    }
+
+    public function test_existing_out_of_bounds_price_is_never_auto_repaired_past_the_daily_cap(): void
+    {
+        $date = $this->fullNight();
+        $this->type->update(['min_price' => 90, 'max_price' => 110]);
+        RateOverride::create([
+            'date' => $date,
+            'room_type_id' => $this->type->id,
+            'price' => 200,
+            'created_by' => null,
+        ]);
+        $this->enable();
+
+        $this->artisan('pricing:autopilot')->assertSuccessful();
+
+        $this->assertEquals(200.0, (float) RateOverride::whereDate('date', $date)->first()->price);
+        $this->assertNull($this->logFor($date));
     }
 
     public function test_materiality_guard_skips_small_changes(): void
@@ -175,13 +282,122 @@ class PricingAutopilotTest extends TestCase
         $this->actingAs($admin)->post(route('pricing.smart.autopilot.revert', $log->id))
             ->assertRedirect()->assertSessionHas('success');
 
-        $this->assertNull(RateOverride::whereDate('date', $date)->first(), 'old_price null → override removed (back to seasonal)');
+        $this->assertNull(RateOverride::whereDate('date', $date)->first(), 'the date returns to the real seasonal fallback');
+        $protection = PricingManualProtection::whereDate('date', $date)->firstOrFail();
+        $this->assertSame($admin->id, $protection->created_by, 'the owner\'s revert is protected without a fake override');
         $this->assertNotNull($log->fresh()->reverted_at);
-        Queue::assertPushed(\App\Jobs\PushRoomTypeAri::class);
+        Queue::assertPushed(PushRoomTypeAri::class);
+
+        $logsBeforeRetry = PricingAutopilotLog::whereDate('date', $date)->count();
+        $this->artisan('pricing:autopilot')->assertSuccessful();
+        $this->assertSame($logsBeforeRetry, PricingAutopilotLog::whereDate('date', $date)->count());
+        $this->assertNull(RateOverride::whereDate('date', $date)->first(), 'autopilot cannot immediately undo the owner\'s revert');
 
         // Second revert is rejected.
         $this->actingAs($admin)->post(route('pricing.smart.autopilot.revert', $log->id))
             ->assertSessionHas('error');
+    }
+
+    public function test_manual_remove_keeps_the_normal_rate_and_blocks_immediate_reapply(): void
+    {
+        Queue::fake();
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $date = $this->fullNight();
+        $this->enable();
+        $this->artisan('pricing:autopilot')->assertSuccessful();
+        $logsBeforeRemove = PricingAutopilotLog::whereDate('date', $date)->count();
+
+        $this->actingAs($admin)->post(route('pricing.smart.remove'), [
+            'date' => $date,
+            'room_type_id' => $this->type->id,
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $this->assertNull(RateOverride::whereDate('date', $date)->first());
+        $this->assertSame($admin->id, PricingManualProtection::whereDate('date', $date)->firstOrFail()->created_by);
+
+        $this->artisan('pricing:autopilot')->assertSuccessful();
+        $this->assertNull(RateOverride::whereDate('date', $date)->first());
+        $this->assertSame($logsBeforeRemove, PricingAutopilotLog::whereDate('date', $date)->count());
+    }
+
+    public function test_revert_does_not_overwrite_a_newer_manual_price(): void
+    {
+        Queue::fake();
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $date = $this->fullNight();
+        $this->enable();
+        $this->artisan('pricing:autopilot')->assertSuccessful();
+        $log = $this->logFor($date);
+
+        $override = RateOverride::whereDate('date', $date)->firstOrFail();
+        $override->update(['price' => 123, 'created_by' => $admin->id]);
+        Queue::fake();
+
+        $this->actingAs($admin)->post(route('pricing.smart.autopilot.revert', $log->id))
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertEquals(123.0, (float) $override->fresh()->price);
+        $this->assertNull($log->fresh()->reverted_at);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_revert_rejects_an_older_log_even_when_the_newer_system_price_matches(): void
+    {
+        Queue::fake();
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $date = $this->fullNight();
+        $this->enable();
+        $this->artisan('pricing:autopilot')->assertSuccessful();
+        $oldLog = $this->logFor($date);
+        PricingAutopilotLog::create([
+            'room_type_id' => $this->type->id,
+            'date' => $date,
+            'old_price' => 115,
+            'effective_old_price' => 115,
+            'new_price' => 115,
+        ]);
+        Queue::fake();
+
+        $this->actingAs($admin)->post(route('pricing.smart.autopilot.revert', $oldLog->id))
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertEquals(115.0, (float) RateOverride::whereDate('date', $date)->firstOrFail()->price);
+        $this->assertNull($oldLog->fresh()->reverted_at);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_revert_refuses_to_publish_a_price_outside_current_bounds(): void
+    {
+        Queue::fake();
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $date = $this->fullNight();
+        $this->enable();
+        $this->artisan('pricing:autopilot')->assertSuccessful();
+        $log = $this->logFor($date);
+        $this->type->update(['min_price' => 110, 'max_price' => 200]);
+        Queue::fake();
+
+        $this->actingAs($admin)->post(route('pricing.smart.autopilot.revert', $log->id))
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertEquals(115.0, (float) RateOverride::whereDate('date', $date)->firstOrFail()->price);
+        $this->assertNull($log->fresh()->reverted_at);
+        Queue::assertNothingPushed();
     }
 
     public function test_disabling_stops_all_auto_writes_immediately(): void
@@ -214,6 +430,31 @@ class PricingAutopilotTest extends TestCase
             'protect_manual_days' => 3, 'pause_from' => '2026-08-25', 'pause_to' => '2026-08-01',
         ])->assertSessionHasErrors('pause_to');
 
+        $this->actingAs($admin)->post(route('pricing.smart.autopilot'), [
+            'enabled' => true, 'materiality_pct' => 5, 'daily_cap_pct' => 15,
+            'protect_manual_days' => 3, 'pause_from' => 'August 1 2026', 'pause_to' => 'August 25 2026',
+        ])->assertSessionHasErrors(['pause_from', 'pause_to']);
+
         $this->artisan('schedule:list')->expectsOutputToContain('pricing:autopilot')->assertSuccessful();
+    }
+
+    public function test_settings_endpoint_cannot_enable_with_missing_bounds_on_an_active_type(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $unbounded = RoomType::create(['name' => 'No Bounds', 'base_price' => 80, 'max_occupancy' => 2, 'amenities' => []]);
+        Room::create(['room_number' => 'NB1', 'room_type_id' => $unbounded->id, 'floor' => 1, 'status' => 'available']);
+
+        $this->actingAs($admin)->post(route('pricing.smart.autopilot'), [
+            'enabled' => true,
+            'materiality_pct' => 5,
+            'daily_cap_pct' => 15,
+            'protect_manual_days' => 3,
+            'pause_from' => null,
+            'pause_to' => null,
+        ])->assertSessionHasErrors('enabled');
+
+        $this->assertNotSame('1', Setting::get('pricing.autopilot.enabled'));
     }
 }
