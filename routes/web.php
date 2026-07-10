@@ -1,20 +1,21 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\CleaningTaskController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\PosController;
-use App\Http\Controllers\PosShiftController;
-use App\Http\Controllers\SettingsController;
-use App\Http\Controllers\GuestController;
-use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ChannexController;
 use App\Http\Controllers\ChannexWebhookController;
+use App\Http\Controllers\CleaningTaskController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\GuestController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PosController;
+use App\Http\Controllers\PosShiftController;
 use App\Http\Controllers\PricingController;
-use App\Http\Controllers\SmartPricingController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\RoomController;
+use App\Http\Controllers\SeasonCopyController;
+use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SmartPricingController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebsiteController;
 use Illuminate\Http\Request;
@@ -28,6 +29,7 @@ Route::get('/', function (Request $request) {
     if (str_starts_with($request->getHost(), 'admin.')) {
         return redirect()->route('dashboard');
     }
+
     return app(WebsiteController::class)->home();
 })->name('website.home');
 Route::get('/rooms', [WebsiteController::class, 'rooms'])->name('website.rooms');
@@ -179,6 +181,8 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         // Pricing (Cmimet) — seasons + per-type rate matrix
         Route::get('/pricing', [PricingController::class, 'index'])->name('pricing.index');
         Route::post('/pricing/seasons', [PricingController::class, 'storeSeason'])->name('pricing.seasons.store');
+        Route::post('/pricing/seasons/copy/preview', [SeasonCopyController::class, 'preview'])->name('pricing.seasons.copy.preview');
+        Route::post('/pricing/seasons/copy', [SeasonCopyController::class, 'apply'])->name('pricing.seasons.copy.apply');
         Route::put('/pricing/seasons/{season}', [PricingController::class, 'updateSeason'])->name('pricing.seasons.update');
         Route::delete('/pricing/seasons/{season}', [PricingController::class, 'destroySeason'])->name('pricing.seasons.destroy');
         Route::post('/pricing/rates', [PricingController::class, 'saveRates'])->name('pricing.rates.save');
@@ -203,6 +207,8 @@ Route::middleware('auth')->prefix('pms')->group(function () {
 
         // Channel manager (Channex) — manual full re-sync
         Route::post('/channex/sync', [ChannexController::class, 'sync'])->name('channex.sync');
+        Route::post('/channex/sell-window/preview', [ChannexController::class, 'previewSellWindow'])->name('channex.sell-window.preview');
+        Route::put('/channex/sell-window', [ChannexController::class, 'updateSellWindow'])->name('channex.sell-window.update');
 
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
         Route::put('/settings/hotel', [SettingsController::class, 'updateHotel'])->name('settings.hotel');

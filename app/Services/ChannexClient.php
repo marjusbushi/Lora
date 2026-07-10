@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ChannelSyncLog;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
@@ -32,7 +33,9 @@ class ChannexClient
     private const PAGE_LIMIT = 100;
 
     protected string $apiKey;
+
     protected string $baseUrl;
+
     protected string $propertyId;
 
     public function __construct()
@@ -82,6 +85,53 @@ class ChannexClient
     public function getRatePlans(?string $propertyId = null): array
     {
         return $this->getList('/rate_plans', ['filter' => ['property_id' => $propertyId ?: $this->propertyId]]);
+    }
+
+    /** Read room-type availability for an inclusive range (used to verify a cutoff closure). */
+    public function getAvailabilityRange(
+        CarbonInterface $from,
+        CarbonInterface $to,
+        ?string $propertyId = null,
+    ): array {
+        $resp = $this->http(timeout: 20)->get("{$this->baseUrl}/availability", [
+            'filter' => [
+                'property_id' => $propertyId ?: $this->propertyId,
+                'date' => [
+                    'gte' => $from->toDateString(),
+                    'lte' => $to->toDateString(),
+                ],
+            ],
+        ]);
+
+        if (! $resp->successful()) {
+            throw new RuntimeException("Channex availability verification failed: HTTP {$resp->status()}");
+        }
+
+        return $resp->json('data') ?? [];
+    }
+
+    /** Read per-rate-plan nightly rates for an inclusive range. */
+    public function getRateRange(
+        CarbonInterface $from,
+        CarbonInterface $to,
+        ?string $propertyId = null,
+    ): array {
+        $resp = $this->http(timeout: 20)->get("{$this->baseUrl}/restrictions", [
+            'filter' => [
+                'property_id' => $propertyId ?: $this->propertyId,
+                'date' => [
+                    'gte' => $from->toDateString(),
+                    'lte' => $to->toDateString(),
+                ],
+                'restrictions' => 'rate',
+            ],
+        ]);
+
+        if (! $resp->successful()) {
+            throw new RuntimeException("Channex rate verification failed: HTTP {$resp->status()}");
+        }
+
+        return $resp->json('data') ?? [];
     }
 
     /**
@@ -151,7 +201,7 @@ class ChannexClient
         return $resp->successful() ? $resp->json('data.id') : null;
     }
 
-    // -- writes: ARI push (idempotent: retried) ---------------------------
+    // -- writes: ARI push (single HTTP attempt; queue job retries) --------
 
     /** Push availability (rooms free) for a room type over one inclusive range. */
     public function pushAvailability(string $roomTypeId, string $dateFrom, string $dateTo, int $available, ?string $propertyId = null): bool
@@ -180,10 +230,13 @@ class ChannexClient
             'availability' => (int) $r['availability'],
         ], $ranges);
 
-        $resp = $this->http(idempotent: true)->post("{$this->baseUrl}/availability", ['values' => $values]);
-        $this->log('push', 'availability', ['values' => $values], $resp);
+        // Queue jobs own the retry/backoff. One HTTP attempt keeps each job
+        // comfortably below the database queue's retry_after window.
+        $resp = $this->http(timeout: 20)->post("{$this->baseUrl}/availability", ['values' => $values]);
+        $accepted = $this->ariAccepted($resp);
+        $this->log('push', 'availability', ['values' => $values], $resp, $accepted);
 
-        return $resp->successful();
+        return $accepted;
     }
 
     /**
@@ -216,10 +269,11 @@ class ChannexClient
             'rate' => self::toCents((float) $r['rate']),
         ], $ranges);
 
-        $resp = $this->http(idempotent: true)->post("{$this->baseUrl}/restrictions", ['values' => $values]);
-        $this->log('push', 'rate', ['values' => $values], $resp);
+        $resp = $this->http(timeout: 20)->post("{$this->baseUrl}/restrictions", ['values' => $values]);
+        $accepted = $this->ariAccepted($resp);
+        $this->log('push', 'rate', ['values' => $values], $resp, $accepted);
 
-        return $resp->successful();
+        return $accepted;
     }
 
     // -- bookings (inbound: OTA -> PMS) -----------------------------------
@@ -258,39 +312,62 @@ class ChannexClient
 
     // -- internals --------------------------------------------------------
 
-    protected function http(bool $idempotent = false): PendingRequest
+    protected function http(bool $idempotent = false, int $timeout = 30): PendingRequest
     {
         $req = Http::withHeaders(['user-api-key' => $this->apiKey])
             ->acceptJson()
-            ->timeout(30);
+            ->timeout($timeout);
 
         if (! $idempotent) {
             // Creates are single-shot: a retry could duplicate a room type / rate plan.
             return $req;
         }
 
-        // Idempotent calls (reads, ARI set-value) retry only TRANSIENT failures
-        // (connection error / 5xx). A 4xx is a permanent client error — retrying
-        // wastes time. throw:false -> the caller inspects the response (getList
-        // throws on !ok; ARI pushes log + return bool).
+        // Idempotent reads retry only TRANSIENT failures (connection error /
+        // 5xx). A 4xx is a permanent client error, so retrying wastes time.
+        // ARI writes intentionally use one HTTP attempt; their queue jobs own
+        // the one-minute retry/backoff policy.
         return $req->retry(3, 250, function (\Throwable $e) {
             return ! ($e instanceof RequestException) || (bool) $e->response?->serverError();
         }, throw: false);
     }
 
-    /** Best-effort audit row; a logging failure must never break the sync. */
-    protected function log(string $direction, string $action, array $request, Response $response): void
+    /**
+     * Channex can return HTTP 200 while rejecting one or more ARI rows. Those
+     * rejections are reported under meta.warnings and must fail the queue job.
+     */
+    private function ariAccepted(Response $response): bool
     {
+        if (! $response->successful()) {
+            return false;
+        }
+
+        $warnings = $response->json('meta.warnings', []);
+
+        return ! is_array($warnings) || $warnings === [];
+    }
+
+    /** Best-effort audit row; a logging failure must never break the sync. */
+    protected function log(
+        string $direction,
+        string $action,
+        array $request,
+        Response $response,
+        ?bool $accepted = null,
+    ): void {
         $body = $response->json();
+        $ok = $accepted ?? $response->successful();
 
         ChannelSyncLog::record([
             'channel' => 'channex',
             'direction' => $direction,
             'action' => $action,
-            'status' => $response->successful() ? 'ok' : 'error',
+            'status' => $ok ? 'ok' : 'error',
             'request' => $request,
             'response' => is_array($body) ? $body : ['raw' => $response->body()],
-            'error' => $response->successful() ? null : "HTTP {$response->status()}",
+            'error' => $ok
+                ? null
+                : ($response->successful() ? 'HTTP 200 with Channex ARI warnings' : "HTTP {$response->status()}"),
         ]);
     }
 }

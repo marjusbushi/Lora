@@ -3,9 +3,11 @@
 namespace App\Console\Commands;
 
 use App\Jobs\PushRoomTypeAri;
+use App\Jobs\ReconcileOtaSellWindow;
 use App\Models\ChannelMapping;
 use App\Models\RoomType;
 use App\Services\ChannelSync;
+use App\Services\OtaSellWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 
@@ -19,11 +21,11 @@ use Illuminate\Console\Command;
  */
 class ChannexPushAri extends Command
 {
-    protected $signature = 'channex:push-ari {--days=365 : Days ahead to sync} {--queue : Dispatch jobs instead of pushing inline}';
+    protected $signature = 'channex:push-ari {--days=365 : Days ahead to sync} {--queue : Dispatch jobs instead of pushing inline} {--reconcile-fixed : Re-apply and verify a configured fixed OTA cutoff}';
 
     protected $description = 'Push availability + rates for all Channex-mapped room types';
 
-    public function handle(ChannelSync $sync): int
+    public function handle(ChannelSync $sync, OtaSellWindow $sellWindow): int
     {
         if (! config('services.channex.api_key')) {
             $this->error('CHANNEX_API_KEY is not set (.env).');
@@ -38,25 +40,45 @@ class ChannexPushAri extends Command
             return self::SUCCESS;
         }
 
+        $days = filter_var($this->option('days'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+        if ($days === false) {
+            $this->error('--days must be a non-negative integer.');
+
+            return self::FAILURE;
+        }
+
+        $from = CarbonImmutable::today();
+        $to = $from->addDays($days);
+
         if ($this->option('queue')) {
-            $count = PushRoomTypeAri::dispatchAllMapped();
+            if ($this->option('reconcile-fixed') && $sellWindow->configuredUntil()) {
+                ReconcileOtaSellWindow::dispatch(
+                    $sellWindow->version(),
+                    $sellWindow->effectiveUntil()->toDateString(),
+                );
+                $this->info('Queued fixed OTA sell-window reconciliation.');
+
+                return self::SUCCESS;
+            }
+
+            $count = PushRoomTypeAri::dispatchAllMapped($from, $to);
             $this->info("Queued {$count} room type push(es).");
 
             return self::SUCCESS;
         }
 
-        $from = CarbonImmutable::today();
-        $to = $from->addDays((int) $this->option('days'));
+        $failed = false;
         foreach (RoomType::whereIn('id', $ids)->orderBy('id')->get() as $roomType) {
             try {
                 $ok = $sync->pushRoomType($roomType, $from, $to);
                 $this->line(($ok ? '  OK   ' : '  SKIP ').$roomType->name);
             } catch (\Throwable $e) {
+                $failed = true;
                 $this->line('  FAIL '.$roomType->name.' — '.$e->getMessage());
             }
         }
-        $this->info('Done.');
+        $this->info($failed ? 'Done with failures.' : 'Done.');
 
-        return self::SUCCESS;
+        return $failed ? self::FAILURE : self::SUCCESS;
     }
 }

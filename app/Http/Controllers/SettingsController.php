@@ -365,11 +365,23 @@ class SettingsController extends Controller
 
     public function destroyRoomType(RoomType $roomType): RedirectResponse
     {
-        if ($roomType->rooms()->exists()) {
-            return back()->with('error', "Nuk mund te fshihet — ka {$roomType->rooms()->count()} dhoma te ketij tipi.");
-        }
+        $roomCount = DB::transaction(function () use ($roomType) {
+            $version = PricingRulesVersion::lock();
+            $lockedType = RoomType::query()->whereKey($roomType->id)->lockForUpdate()->firstOrFail();
+            $count = $lockedType->rooms()->count();
+            if ($count > 0) {
+                return $count;
+            }
 
-        $roomType->delete();
+            $lockedType->delete();
+            PricingRulesVersion::increment($version);
+
+            return 0;
+        }, 3);
+
+        if ($roomCount > 0) {
+            return back()->with('error', "Nuk mund te fshihet — ka {$roomCount} dhoma te ketij tipi.");
+        }
 
         return back()->with('success', 'Tipi i dhomes u fshi.');
     }

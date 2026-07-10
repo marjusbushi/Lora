@@ -6,6 +6,7 @@ use App\Models\ChannelMapping;
 use App\Models\RoomType;
 use App\Services\ChannelSync;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -25,7 +26,12 @@ class PushRoomTypeAri implements ShouldQueue
 
     public int $tries = 3;
 
-    public int $backoff = 30;
+    /** Channex recommends waiting at least one minute after an API error/429. */
+    public int $backoff = 60;
+
+    public int $timeout = 120;
+
+    public bool $failOnTimeout = true;
 
     public function __construct(
         public int $roomTypeId,
@@ -59,18 +65,21 @@ class PushRoomTypeAri implements ShouldQueue
      * configured). Returns how many were queued. Shared by the pricing save, the
      * Sync-now button, and the channex:push-ari command.
      */
-    public static function dispatchAllMapped(): int
-    {
+    public static function dispatchAllMapped(
+        CarbonInterface|string|null $from = null,
+        CarbonInterface|string|null $to = null,
+    ): int {
         if (! config('services.channex.api_key')) {
             return 0;
         }
 
+        $fromDate = $from ? CarbonImmutable::parse($from)->toDateString() : null;
+        $toDate = $to ? CarbonImmutable::parse($to)->toDateString() : null;
         $ids = ChannelMapping::where('channel', 'channex')->pluck('room_type_id');
         foreach ($ids as $id) {
-            self::dispatch($id);
+            self::dispatch($id, $fromDate, $toDate);
         }
 
         return $ids->count();
     }
 }
-

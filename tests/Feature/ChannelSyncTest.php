@@ -279,6 +279,27 @@ class ChannelSyncTest extends TestCase
         app(ChannelSync::class)->pushRoomType($type, CarbonImmutable::parse('2026-07-01'), CarbonImmutable::parse('2026-07-02'));
     }
 
+    public function test_push_throws_when_channex_returns_http_200_with_ari_warnings(): void
+    {
+        $type = $this->type('Std', 80);
+        $this->rooms($type, 1);
+        $this->map($type, 'RT-1', 'RP-1');
+        Http::fake([
+            '*availability*' => Http::response(['data' => [], 'meta' => ['warnings' => []]]),
+            '*restrictions*' => Http::response([
+                'data' => [],
+                'meta' => ['warnings' => [['warning' => ['rate' => ['rejected']]]]],
+            ]),
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        app(ChannelSync::class)->pushRoomType(
+            $type,
+            CarbonImmutable::parse('2026-07-01'),
+            CarbonImmutable::parse('2026-07-02'),
+        );
+    }
+
     public function test_checked_out_reservation_does_not_reduce_availability(): void
     {
         $type = $this->type();
@@ -301,7 +322,7 @@ class ChannelSyncTest extends TestCase
         }
     }
 
-    public function test_check_in_on_the_window_end_is_counted_whereDate_boundary(): void
+    public function test_check_in_on_the_window_end_is_counted_where_date_boundary(): void
     {
         // Guards the whereDate fix: a raw '<=' against a 'YYYY-MM-DD 00:00:00' value
         // would drop this same-day check-in and report the room as free.
@@ -436,8 +457,23 @@ class ChannelSyncTest extends TestCase
         $type = $this->type();
         $this->map($type, 'RT-1', 'RP-1');
 
-        $this->artisan('channex:push-ari', ['--queue' => true])->assertSuccessful();
-        Queue::assertPushed(PushRoomTypeAri::class, fn ($job) => $job->roomTypeId === $type->id);
+        $this->artisan('channex:push-ari', ['--queue' => true, '--days' => 30])->assertSuccessful();
+        Queue::assertPushed(PushRoomTypeAri::class, fn ($job) => $job->roomTypeId === $type->id
+            && $job->from === '2026-07-01'
+            && $job->to === '2026-07-31');
+    }
+
+    public function test_inline_push_ari_command_returns_failure_when_a_room_type_push_fails(): void
+    {
+        $type = $this->type();
+        $this->rooms($type, 1);
+        $this->map($type, 'RT-1', 'RP-1');
+        Http::fake([
+            '*availability*' => Http::response(['data' => []]),
+            '*restrictions*' => Http::response(['errors' => ['rejected']], 422),
+        ]);
+
+        $this->artisan('channex:push-ari', ['--days' => 1])->assertFailed();
     }
 
     public function test_job_no_ops_for_a_missing_room_type(): void

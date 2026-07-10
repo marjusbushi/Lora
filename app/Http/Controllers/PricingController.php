@@ -6,6 +6,7 @@ use App\Jobs\PushRoomTypeAri;
 use App\Models\RoomType;
 use App\Models\Season;
 use App\Models\SeasonRate;
+use App\Services\OtaSellWindow;
 use App\Services\PricingRulesVersion;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,25 +16,37 @@ use Inertia\Response;
 
 class PricingController extends Controller
 {
-    public function index(): Response
+    public function index(OtaSellWindow $sellWindow): Response
     {
         $roomTypes = RoomType::orderBy('name')->get(['id', 'name', 'base_price']);
 
-        $seasons = Season::orderByDesc('priority')->orderBy('start_date')
+        $seasonModels = Season::orderByDesc('priority')->orderBy('start_date')
             ->with('rates:id,season_id,room_type_id,price')
-            ->get()
-            ->map(fn ($s) => [
-                'id' => $s->id,
-                'name' => $s->name,
-                'start_date' => $s->start_date->toDateString(),
-                'end_date' => $s->end_date->toDateString(),
-                'priority' => $s->priority,
-                'rates' => $s->rates->mapWithKeys(fn ($r) => [$r->room_type_id => (float) $r->price]),
-            ]);
+            ->get();
+        $seasons = $seasonModels->map(fn ($s) => [
+            'id' => $s->id,
+            'name' => $s->name,
+            'start_date' => $s->start_date->toDateString(),
+            'end_date' => $s->end_date->toDateString(),
+            'priority' => $s->priority,
+            'rates' => $s->rates->mapWithKeys(fn ($r) => [$r->room_type_id => (float) $r->price]),
+        ]);
+        $sourceYears = $seasonModels
+            ->map(fn (Season $season) => $season->start_date->year)
+            ->unique()
+            ->sort()
+            ->values();
+        $defaultSourceYear = $sourceYears->last() ?? now()->year;
 
         return Inertia::render('Pricing/Index', [
             'roomTypes' => $roomTypes,
             'seasons' => $seasons,
+            'otaWindow' => $sellWindow->summary(),
+            'seasonCopy' => [
+                'source_years' => $sourceYears,
+                'default_source_year' => $defaultSourceYear,
+                'default_target_year' => $defaultSourceYear + 1,
+            ],
         ]);
     }
 

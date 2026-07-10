@@ -51,6 +51,8 @@ return [
         'api_key' => env('CHANNEX_API_KEY'),
         'base_url' => env('CHANNEX_BASE_URL', 'https://app.channex.io/api/v1'),
         'property_id' => env('CHANNEX_PROPERTY_ID'),
+        // Must match Property Settings -> Inventory Days in Channex (100..730).
+        'state_length_days' => env('CHANNEX_STATE_LENGTH_DAYS', 500),
         // Shared secret echoed in the inbound booking webhook (Channex has no HMAC
         // signing). Set the same value when registering the webhook + in .env.
         'webhook_secret' => env('CHANNEX_WEBHOOK_SECRET'),

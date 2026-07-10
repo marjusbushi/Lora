@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ChannelSyncLog;
 use App\Services\ChannexClient;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -49,6 +50,50 @@ class ChannexClientTest extends TestCase
 
         $this->assertSame('Villa Mucho', $props[0]['attributes']['title']);
         Http::assertSent(fn ($r) => $r->hasHeader('user-api-key', 'test-key') && str_contains($r->url(), '/properties'));
+    }
+
+    public function test_get_availability_range_uses_property_and_inclusive_date_filters(): void
+    {
+        Http::fake(['*availability*' => Http::response(['data' => [
+            'RT-1' => ['2026-07-04' => 0],
+        ]])]);
+
+        $data = (new ChannexClient)->getAvailabilityRange(
+            CarbonImmutable::parse('2026-07-04'),
+            CarbonImmutable::parse('2026-07-05'),
+        );
+
+        $this->assertSame(0, $data['RT-1']['2026-07-04']);
+        Http::assertSent(function ($request) {
+            $query = $request->data()['filter'] ?? [];
+
+            return $request->method() === 'GET'
+                && ($query['property_id'] ?? null) === 'PROP-1'
+                && ($query['date']['gte'] ?? null) === '2026-07-04'
+                && ($query['date']['lte'] ?? null) === '2026-07-05';
+        });
+    }
+
+    public function test_get_rate_range_requests_only_rates_for_the_inclusive_dates(): void
+    {
+        Http::fake(['*restrictions*' => Http::response(['data' => [
+            'RP-1' => ['2026-07-04' => ['rate' => '80.00']],
+        ]])]);
+
+        $data = (new ChannexClient)->getRateRange(
+            CarbonImmutable::parse('2026-07-04'),
+            CarbonImmutable::parse('2026-07-05'),
+        );
+
+        $this->assertSame('80.00', $data['RP-1']['2026-07-04']['rate']);
+        Http::assertSent(function ($request) {
+            $filter = $request->data()['filter'] ?? [];
+
+            return $request->method() === 'GET'
+                && ($filter['restrictions'] ?? null) === 'rate'
+                && ($filter['date']['gte'] ?? null) === '2026-07-04'
+                && ($filter['date']['lte'] ?? null) === '2026-07-05';
+        });
     }
 
     public function test_create_room_type_posts_wrapped_payload_and_returns_id(): void
@@ -129,6 +174,24 @@ class ChannexClientTest extends TestCase
         $log = ChannelSyncLog::where('channel', 'channex')->latest('id')->first();
         $this->assertSame('error', $log->status);
         $this->assertSame('HTTP 422', $log->error);
+    }
+
+    public function test_http_200_with_ari_warnings_is_treated_as_a_failed_push(): void
+    {
+        Http::fake(['*restrictions*' => Http::response([
+            'data' => [],
+            'meta' => [
+                'message' => 'Success',
+                'warnings' => [['warning' => ['rate' => ['must be greater than 0']]]],
+            ],
+        ])]);
+
+        $ok = (new ChannexClient)->pushRate('RP-1', '2026-07-01', '2026-07-10', 50.0);
+
+        $this->assertFalse($ok);
+        $log = ChannelSyncLog::where('channel', 'channex')->latest('id')->firstOrFail();
+        $this->assertSame('error', $log->status);
+        $this->assertSame('HTTP 200 with Channex ARI warnings', $log->error);
     }
 
     public function test_read_throws_on_auth_failure_instead_of_returning_empty(): void

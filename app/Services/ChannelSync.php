@@ -22,7 +22,10 @@ class ChannelSync
     /** Default sync window: today .. today + this many days (inclusive). */
     public const WINDOW_DAYS = 365;
 
-    public function __construct(protected ChannexClient $channex) {}
+    public function __construct(
+        protected ChannexClient $channex,
+        protected OtaSellWindow $sellWindow,
+    ) {}
 
     /**
      * Push availability + rates for one room type to Channex over [from, to]
@@ -42,30 +45,134 @@ class ChannelSync
             return false;
         }
 
-        $from = $from ? CarbonImmutable::parse($from) : CarbonImmutable::today();
-        $to = $to ? CarbonImmutable::parse($to) : $from->addDays(self::WINDOW_DAYS);
+        return $this->sellWindow->withAriLock(function () use ($roomType, $mapping, $from, $to) {
+            // Resolve the cutoff only after taking the same mutex used by every
+            // ARI writer and sell-window change. This prevents a queued, stale
+            // incremental push from reopening a date just closed by the owner.
+            [$requestedFrom, $requestedTo] = $this->sellWindow->requestedRange($from, $to);
+            $range = $this->sellWindow->clamp($from, $to);
+            $availability = [];
+            $publishedThrough = null;
+            if ($range !== null) {
+                [$effectiveFrom, $effectiveTo] = $range;
+                $availability = $this->availabilityByDate($roomType, $effectiveFrom, $effectiveTo);
+                $publishedThrough = $effectiveTo;
+            }
 
-        $ok = $this->channex->pushAvailabilityRanges(
-            $mapping->channex_room_type_id,
-            $this->toRanges($this->availabilityByDate($roomType, $from, $to), 'availability'),
-        );
+            // Channex may auto-adjust availability after an OTA modification
+            // or cancellation. For explicit reservation ranges, immediately
+            // re-close any requested nights beyond the owner's fixed cutoff.
+            if ($from !== null || $to !== null) {
+                $closeFrom = $requestedFrom
+                    ->max($this->sellWindow->today())
+                    ->max($this->sellWindow->effectiveUntil()->addDay());
+                // Re-close every requested night that still exists in the
+                // current Channex inventory table, even if PMS had not
+                // previously recorded that date as published.
+                $closeTo = $requestedTo->min($this->sellWindow->maxUntil());
+                for ($date = $closeFrom; $date->lte($closeTo); $date = $date->addDay()) {
+                    $availability[$date->toDateString()] = 0;
+                    $publishedThrough = $date;
+                }
+            }
 
-        if ($mapping->channex_rate_plan_id) {
-            $ok = $this->channex->pushRateRanges(
-                $mapping->channex_rate_plan_id,
-                $this->toRanges($this->priceByDate($roomType, $from, $to), 'rate'),
-            ) && $ok;
+            if ($availability === []) {
+                return true;
+            }
+
+            $ok = $this->channex->pushAvailabilityRanges(
+                $mapping->channex_room_type_id,
+                $this->toRanges($availability, 'availability'),
+            );
+
+            if ($mapping->channex_rate_plan_id && $range !== null) {
+                $ok = $this->channex->pushRateRanges(
+                    $mapping->channex_rate_plan_id,
+                    $this->toRanges($this->priceByDate($roomType, $effectiveFrom, $effectiveTo), 'rate'),
+                ) && $ok;
+            }
+
+            // A rejected push (4xx / exhausted 5xx) must SURFACE so the queued
+            // job retries; stale availability on an OTA risks overbooking.
+            if (! $ok) {
+                throw new RuntimeException("Channex push failed for room type {$roomType->id}");
+            }
+
+            if ($publishedThrough) {
+                $this->sellWindow->rememberPublishedThrough($publishedThrough);
+            }
+
+            return true;
+        });
+    }
+
+    /**
+     * Apply one sell-window revision for one room type.
+     *
+     * Availability truth through the target and explicit zeroes after it are
+     * combined in ONE Channex availability request. Rates are refreshed only
+     * through the target. We deliberately never send stop_sell: availability=0
+     * closes the removed dates without overwriting independent restrictions.
+     *
+     * @return bool|null true=applied, false=unconfigured/unmapped, null=stale
+     */
+    public function reconcileRoomType(RoomType $roomType, int $expectedVersion, CarbonInterface $expectedTarget): ?bool
+    {
+        if (! $this->channex->configured()) {
+            return false;
         }
 
-        // A rejected push (4xx / exhausted 5xx) must SURFACE so the queued job
-        // retries — stale availability on an OTA risks overbooking. The skip
-        // cases (not configured / unmapped) already returned false above without
-        // attempting any push, so reaching here means a push was actually made.
-        if (! $ok) {
-            throw new RuntimeException("Channex push failed for room type {$roomType->id}");
+        $mapping = ChannelMapping::where('channel', 'channex')
+            ->where('room_type_id', $roomType->id)
+            ->first();
+        if (! $mapping || ! $mapping->channex_room_type_id) {
+            return false;
         }
 
-        return true;
+        return $this->sellWindow->withAriLock(function () use ($roomType, $mapping, $expectedVersion, $expectedTarget) {
+            $target = $this->sellWindow->effectiveUntil();
+            if ($this->sellWindow->version() !== $expectedVersion || ! $target->isSameDay($expectedTarget)) {
+                return null;
+            }
+
+            $today = $this->sellWindow->today();
+            // Inventory Days is a rolling table: one new future date enters it
+            // every day. Reconcile the whole current table so a fixed cutoff
+            // remains fixed without relying on Channex's defaults for that new
+            // edge date.
+            $horizon = $this->sellWindow->maxUntil();
+            $sellThrough = $target->min($horizon);
+            $availability = $sellThrough->gte($today)
+                ? $this->availabilityByDate($roomType, $today, $sellThrough)
+                : [];
+
+            // A fixed cutoff eventually becomes a past date. Channex only needs
+            // current/future dates closed, so never send a past ARI date.
+            $closeFrom = $target->addDay()->max($today);
+            for ($date = $closeFrom; $date->lte($horizon); $date = $date->addDay()) {
+                $availability[$date->toDateString()] = 0;
+            }
+
+            $ok = $this->channex->pushAvailabilityRanges(
+                $mapping->channex_room_type_id,
+                $this->toRanges($availability, 'availability'),
+            );
+
+            if ($mapping->channex_rate_plan_id && $sellThrough->gte($today)) {
+                $ok = $this->channex->pushRateRanges(
+                    $mapping->channex_rate_plan_id,
+                    $this->toRanges($this->priceByDate($roomType, $today, $sellThrough), 'rate'),
+                ) && $ok;
+            }
+
+            if (! $ok) {
+                throw new RuntimeException("Channex sell-window reconciliation failed for room type {$roomType->id}");
+            }
+
+            $this->sellWindow->rememberPublishedThrough($horizon);
+
+            return true;
+        });
     }
 
     /**
@@ -74,7 +181,7 @@ class ChannelSync
      * occupies [check_in, check_out) — the check-out day is free (matches
      * Reservation::isRoomAvailable).
      *
-     * @return array<string,int>  'Y-m-d' => available
+     * @return array<string,int> 'Y-m-d' => available
      */
     public function availabilityByDate(RoomType $roomType, CarbonInterface $from, CarbonInterface $to): array
     {
@@ -111,7 +218,7 @@ class ChannelSync
      * Nightly price per date from RoomPricing (seasons + base). quote() is
      * half-open, so quote [from, to+1] to get a price for every inclusive day.
      *
-     * @return array<string,float>  'Y-m-d' => price
+     * @return array<string,float> 'Y-m-d' => price
      */
     public function priceByDate(RoomType $roomType, CarbonInterface $from, CarbonInterface $to): array
     {

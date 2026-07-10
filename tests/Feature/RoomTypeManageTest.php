@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Amenity;
 use App\Models\Room;
 use App\Models\RoomType;
+use App\Models\Setting;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -57,6 +58,7 @@ class RoomTypeManageTest extends TestCase
             ->delete(route('settings.room-types.destroy', $empty->id))
             ->assertRedirect();
         $this->assertNull(RoomType::find($empty->id));
+        $this->assertSame(1, (int) Setting::get('pricing.rules_version', 0));
 
         $used = RoomType::create(['name' => 'Used', 'base_price' => 40, 'max_occupancy' => 2, 'amenities' => []]);
         Room::create(['room_type_id' => $used->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
@@ -64,5 +66,6 @@ class RoomTypeManageTest extends TestCase
             ->delete(route('settings.room-types.destroy', $used->id))
             ->assertSessionHas('error');
         $this->assertNotNull(RoomType::find($used->id));
+        $this->assertSame(1, (int) Setting::get('pricing.rules_version', 0));
     }
 }
