@@ -17,6 +17,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,12 +27,21 @@ class ReservationController extends Controller
 {
     public function index(Request $request): Response
     {
+        $perPage = (int) $request->input('per_page', 25);
+        if (! in_array($perPage, [25, 50, 100], true)) {
+            $perPage = 25;
+        }
+
+        $sort = $request->input('sort', 'latest');
+        if (! is_string($sort) || ! in_array($sort, ['latest', 'checkin', 'checkout'], true)) {
+            $sort = 'latest';
+        }
+
         $query = Reservation::select(
             'id', 'room_id', 'guest_id', 'check_in_date', 'check_out_date',
             'status', 'total_amount', 'adults', 'children', 'channel', 'created_at'
         )
-            ->with(['room:id,room_number', 'room.roomType:id,name', 'guest:id,first_name,last_name'])
-            ->orderByDesc('check_in_date');
+            ->with(['room:id,room_number', 'room.roomType:id,name', 'guest:id,first_name,last_name']);
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -44,8 +55,64 @@ class ReservationController extends Controller
             });
         }
 
+        $today = today()->toDateString();
+
+        if ($sort === 'checkin') {
+            $query
+                // Active arrivals come first: today/overdue, then the next arrivals.
+                ->orderByRaw("CASE
+                    WHEN status IN ('pending', 'confirmed') AND check_in_date <= ? THEN 0
+                    WHEN status IN ('pending', 'confirmed') AND check_in_date > ? THEN 1
+                    WHEN status = 'checked_in' THEN 2
+                    WHEN status = 'checked_out' THEN 3
+                    ELSE 4
+                END", [$today, $today])
+                ->orderByRaw("CASE
+                    WHEN status IN ('pending', 'confirmed') AND check_in_date <= ?
+                    THEN check_in_date
+                END DESC", [$today])
+                ->orderByRaw("CASE
+                    WHEN status IN ('pending', 'confirmed') AND check_in_date > ?
+                    THEN check_in_date
+                END ASC", [$today])
+                ->orderByDesc('check_in_date');
+        } elseif ($sort === 'checkout') {
+            $query
+                // Guests already in-house are the operational checkout queue.
+                ->orderByRaw("CASE
+                    WHEN status = 'checked_in' AND check_out_date <= ? THEN 0
+                    WHEN status = 'checked_in' AND check_out_date > ? THEN 1
+                    WHEN status IN ('pending', 'confirmed') AND check_out_date >= ? THEN 2
+                    WHEN status IN ('pending', 'confirmed') THEN 3
+                    WHEN status = 'checked_out' THEN 4
+                    ELSE 5
+                END", [$today, $today, $today])
+                ->orderByRaw("CASE
+                    WHEN status = 'checked_in' AND check_out_date <= ?
+                    THEN check_out_date
+                END DESC", [$today])
+                ->orderByRaw("CASE
+                    WHEN status = 'checked_in' AND check_out_date > ?
+                    THEN check_out_date
+                END ASC", [$today])
+                ->orderByRaw("CASE
+                    WHEN status IN ('pending', 'confirmed') AND check_out_date >= ?
+                    THEN check_out_date
+                END ASC", [$today])
+                ->orderByDesc('check_out_date');
+        }
+
+        // Stable tie-breakers also define the default "latest received" order.
+        $query->orderByDesc('created_at')->orderByDesc('id');
+
+        $filters = array_merge($request->only('status', 'search'), [
+            'per_page' => $perPage,
+            'sort' => $sort,
+        ]);
+
         return Inertia::render('Reservations/Index', [
-            'reservations' => $query->paginate(15),
+            'reservations' => $query->paginate($perPage)->appends($filters),
+            'latestReservationId' => Reservation::orderByDesc('created_at')->orderByDesc('id')->value('id'),
             'rooms' => Room::select('id', 'room_number', 'room_type_id')
                 ->with('roomType:id,name,base_price,max_occupancy')
                 ->orderBy('room_number')
@@ -53,7 +120,7 @@ class ReservationController extends Controller
             'guests' => Guest::select('id', 'first_name', 'last_name', 'email', 'phone')
                 ->orderBy('last_name')
                 ->get(),
-            'filters' => $request->only('status', 'search'),
+            'filters' => $filters,
             'channelFees' => Setting::get('financial.channel_fees', []),
             'stats' => [
                 'total' => Reservation::count(),
@@ -128,8 +195,8 @@ class ReservationController extends Controller
             'room:id,room_number,room_type_id',
             'room.roomType:id,name,base_price',
             'guest:id,first_name,last_name,email,phone',
-            'folioItems' => fn($q) => $q->orderBy('charge_date')->orderBy('id'),
-            'payments' => fn($q) => $q->orderBy('created_at'),
+            'folioItems' => fn ($q) => $q->orderBy('charge_date')->orderBy('id'),
+            'payments' => fn ($q) => $q->orderBy('created_at'),
         ]);
 
         // Balance = room charge + folio charges - discounts - payments.
@@ -183,7 +250,7 @@ class ReservationController extends Controller
                 'items' => $reservation->folioItems
                     ->where('type', '!=', 'room')
                     ->values()
-                    ->map(fn($i) => [
+                    ->map(fn ($i) => [
                         'id' => $i->id,
                         'description' => $i->description,
                         'type' => $i->type,
@@ -198,7 +265,7 @@ class ReservationController extends Controller
                 'paid' => round($paid, 2),
                 'outstanding' => $outstanding,
             ],
-            'payments' => $reservation->payments->map(fn($p) => [
+            'payments' => $reservation->payments->map(fn ($p) => [
                 'id' => $p->id,
                 'amount' => (float) $p->amount,
                 'method' => $p->method,
@@ -211,12 +278,33 @@ class ReservationController extends Controller
 
     public function addFolioLine(Request $request, Reservation $reservation): RedirectResponse
     {
+        if (! in_array($reservation->status, ['pending', 'confirmed', 'checked_in'], true)) {
+            throw ValidationException::withMessages([
+                'type' => 'Nuk mund te shtosh tarife ne nje rezervim te anulluar ose te mbyllur.',
+            ]);
+        }
+
         $data = $request->validate([
-            'type' => ['required', 'in:restaurant,bar,minibar,extra,discount'],
+            // Restaurant/bar charges must originate in POS so they remain linked
+            // to the order and cannot be posted twice by hand.
+            'type' => ['required', 'in:minibar,extra,discount'],
             'description' => ['required', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
             'charge_date' => ['nullable', 'date'],
         ]);
+
+        if ($data['type'] === 'discount') {
+            $charges = (float) $reservation->total_amount
+                + (float) $reservation->folioItems()->whereNotIn('type', ['discount', 'room'])->sum('amount');
+            $discounts = (float) $reservation->folioItems()->where('type', 'discount')->sum('amount');
+            $maximumDiscount = max(0, round($charges - $discounts, 2));
+
+            if ((float) $data['amount'] > $maximumDiscount) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Zbritja nuk mund te jete me e madhe se totali aktual.',
+                ]);
+            }
+        }
 
         $reservation->folioItems()->create([
             'description' => $data['description'],
@@ -227,7 +315,7 @@ class ReservationController extends Controller
 
         AuditLog::record('folio.add_line', $reservation, ['type' => $data['type'], 'amount' => $data['amount']]);
 
-        return back()->with('success', 'Rreshti u shtua ne folio.');
+        return back()->with('success', 'Tarifa u shtua ne llogarine e mysafirit.');
     }
 
     public function recordPayment(Request $request, Reservation $reservation): RedirectResponse
@@ -274,7 +362,7 @@ class ReservationController extends Controller
             DB::transaction(function () use ($data, $room) {
                 Room::where('id', $room->id)->lockForUpdate()->first();
 
-                if (!Reservation::isRoomAvailable($room->id, $data['check_in_date'], $data['check_out_date'])) {
+                if (! Reservation::isRoomAvailable($room->id, $data['check_in_date'], $data['check_out_date'])) {
                     throw new \RuntimeException('room_unavailable');
                 }
 
@@ -302,7 +390,7 @@ class ReservationController extends Controller
             'check_in_date' => ['required', 'date'],
             'check_out_date' => ['required', 'date', 'after:check_in_date'],
             'status' => ['sometimes', 'in:pending,confirmed'],
-            'channel' => ['sometimes', 'nullable', \Illuminate\Validation\Rule::in(Reservation::CHANNELS)],
+            'channel' => ['sometimes', 'nullable', Rule::in(Reservation::CHANNELS)],
             'notes' => ['nullable', 'string', 'max:1000'],
             'rooms' => ['required', 'array', 'min:1'],
             'rooms.*.room_id' => ['required', 'exists:rooms,id'],
@@ -322,7 +410,7 @@ class ReservationController extends Controller
         // No duplicate room within the same booking.
         $roomIds = array_column($data['rooms'], 'room_id');
         if (count($roomIds) !== count(array_unique($roomIds))) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'rooms' => 'Nuk mund te zgjedhesh te njejten dhome dy here ne te njejtin rezervim.',
             ]);
         }
@@ -333,8 +421,8 @@ class ReservationController extends Controller
         $multi = count($data['rooms']) > 1;
 
         try {
-            DB::transaction(function () use ($data, $nights, $channel, $status, $multi) {
-                $groupId = $multi ? (string) \Illuminate\Support\Str::uuid() : null;
+            DB::transaction(function () use ($data, $channel, $status, $multi) {
+                $groupId = $multi ? (string) Str::uuid() : null;
 
                 foreach ($data['rooms'] as $row) {
                     $room = Room::with('roomType')->findOrFail($row['room_id']);
@@ -354,7 +442,7 @@ class ReservationController extends Controller
 
                     // Row lock + re-check availability inside the transaction (no double-book).
                     Room::where('id', $room->id)->lockForUpdate()->first();
-                    if (!Reservation::isRoomAvailable($room->id, $data['check_in_date'], $data['check_out_date'])) {
+                    if (! Reservation::isRoomAvailable($room->id, $data['check_in_date'], $data['check_out_date'])) {
                         throw new \RuntimeException("room_unavailable:{$room->room_number}");
                     }
 
@@ -397,10 +485,11 @@ class ReservationController extends Controller
             } else {
                 $err = 'Rezervimi nuk u krijua.';
             }
-            throw \Illuminate\Validation\ValidationException::withMessages(['rooms' => $err]);
+            throw ValidationException::withMessages(['rooms' => $err]);
         }
 
         $count = count($data['rooms']);
+
         return back()->with('success', $count > 1
             ? "U krijuan {$count} rezervime per kete mysafir."
             : 'Rezervimi u krijua me sukses.');
@@ -484,12 +573,12 @@ class ReservationController extends Controller
      */
     public function moveRoom(Request $request, Reservation $reservation): RedirectResponse
     {
-        if (!auth()->user()->can('update_reservations')) {
+        if (! auth()->user()->can('update_reservations')) {
             abort(403);
         }
 
         if ($reservation->status !== 'checked_in') {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'room_id' => 'Zhvendosja e dhomes lejohet vetem per mysafiret brenda (checked-in). Perndryshe perdor Edito.',
             ]);
         }
@@ -499,7 +588,7 @@ class ReservationController extends Controller
         ]);
 
         if ((int) $data['room_id'] === (int) $reservation->room_id) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'room_id' => 'Zgjidh nje dhome tjeter nga ajo aktuale.',
             ]);
         }
@@ -511,7 +600,7 @@ class ReservationController extends Controller
             DB::transaction(function () use ($reservation, $newRoom, $oldRoom) {
                 Room::where('id', $newRoom->id)->lockForUpdate()->first();
 
-                if (!Reservation::isRoomAvailable(
+                if (! Reservation::isRoomAvailable(
                     $newRoom->id,
                     $reservation->check_in_date->toDateString(),
                     $reservation->check_out_date->toDateString(),
@@ -533,7 +622,7 @@ class ReservationController extends Controller
                             ->whereIn('status', ['pending', 'in_progress'])
                             ->exists();
 
-                        if (!$alreadyOpen) {
+                        if (! $alreadyOpen) {
                             CleaningTask::create([
                                 'room_id' => $oldRoom->id,
                                 'type' => 'checkout_clean',
@@ -545,7 +634,7 @@ class ReservationController extends Controller
                 }
             });
         } catch (\RuntimeException $e) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'room_id' => "Dhoma {$newRoom->room_number} nuk eshte e lire per keto data.",
             ]);
         }
@@ -599,7 +688,7 @@ class ReservationController extends Controller
 
         DB::transaction(function () use ($reservation, $data, $outstanding) {
             // Record a payment for whatever is still owed, with the chosen method, before flipping status.
-            if (!empty($data['settle_method']) && $outstanding > 0) {
+            if (! empty($data['settle_method']) && $outstanding > 0) {
                 $reservation->payments()->create([
                     'amount' => $outstanding,
                     'method' => $data['settle_method'],
@@ -623,7 +712,7 @@ class ReservationController extends Controller
                     ->whereIn('status', ['pending', 'in_progress'])
                     ->exists();
 
-                if (!$alreadyOpen) {
+                if (! $alreadyOpen) {
                     CleaningTask::create([
                         'room_id' => $reservation->room_id,
                         'type' => 'checkout_clean',
@@ -687,7 +776,7 @@ class ReservationController extends Controller
 
     public function destroy(Reservation $reservation): RedirectResponse
     {
-        if (!auth()->user()->can('delete_reservations')) {
+        if (! auth()->user()->can('delete_reservations')) {
             abort(403);
         }
 

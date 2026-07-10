@@ -13,6 +13,7 @@ import Select from '@/Components/UI/Select.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import { channelMeta } from '@/channels';
+import { ArrowLeft } from 'lucide-vue-next';
 
 const props = defineProps({
     reservation: Object,
@@ -57,15 +58,13 @@ const statusBadge = {
 
 const typeLabel = {
     room: 'Dhoma', restaurant: 'Restorant', bar: 'Bar',
-    minibar: 'Minibar', extra: 'Ekstra', tax: 'Taksa', discount: 'Zbritje',
+    minibar: 'Minibar', extra: 'Shërbim', tax: 'Taksa', discount: 'Zbritje',
 };
 const methodLabel = { cash: 'Kesh', card: 'Karte' };
 
 const lineTypeOptions = [
-    { value: 'restaurant', label: 'Restorant' },
-    { value: 'bar', label: 'Bar' },
     { value: 'minibar', label: 'Minibar' },
-    { value: 'extra', label: 'Ekstra' },
+    { value: 'extra', label: 'Shërbim hoteli' },
     { value: 'discount', label: 'Zbritje' },
 ];
 const methodOptions = [
@@ -75,6 +74,7 @@ const methodOptions = [
 
 const hasOpenOrders = computed(() => (props.openPosOrders?.length || 0) > 0);
 const unsettled = computed(() => Number(props.folio.outstanding) > 0.005);
+const canAddCharge = computed(() => canUpdate && ['pending', 'confirmed', 'checked_in'].includes(props.reservation.status));
 const hotelName = usePage().props.settings?.hotel_name || 'Hotel';
 
 // Group folio charges by category for the invoice (room + bar + restaurant + ...).
@@ -93,6 +93,17 @@ function printInvoice() {
 const lineForm = useForm({ type: 'extra', description: '', amount: '', charge_date: '' });
 const payForm = useForm({ amount: '', method: 'cash' });
 
+function openLineModal() {
+    lineForm.reset();
+    lineForm.clearErrors();
+    showLineModal.value = true;
+}
+function closeLineModal() {
+    showLineModal.value = false;
+    lineForm.reset();
+    lineForm.clearErrors();
+}
+
 function money(v) {
     return `${props.currency}${Number(v ?? 0).toFixed(2)}`;
 }
@@ -102,10 +113,14 @@ function formatDate(d) {
 }
 
 function submitLine() {
+    const addingDiscount = lineForm.type === 'discount';
     lineForm.post(route('reservations.folio.add', props.reservation.id), {
         preserveScroll: true,
-        onSuccess: () => { showLineModal.value = false; lineForm.reset(); toasts.value?.success('Rreshti u shtua.'); },
-        onError: () => toasts.value?.error('Deshtoi shtimi i rreshtit.'),
+        onSuccess: () => {
+            closeLineModal();
+            toasts.value?.success(addingDiscount ? 'Zbritja u shtua në llogari.' : 'Tarifa u shtua në llogari.');
+        },
+        onError: () => toasts.value?.error(addingDiscount ? 'Dështoi shtimi i zbritjes.' : 'Dështoi shtimi i tarifës.'),
     });
 }
 function submitPay() {
@@ -152,6 +167,14 @@ function settleAndCheckout(method) {
 
 <template>
     <AppLayout>
+        <Link
+            :href="route('reservations.index')"
+            class="mb-3 inline-flex items-center gap-1.5 text-body-sm font-medium text-neutral-600 no-underline transition-colors hover:text-accent-700"
+        >
+            <ArrowLeft class="h-4 w-4" :stroke-width="1.75" />
+            Kthehu te lista
+        </Link>
+
         <PageHeader
             :title="`Rezervimi #${reservation.id}`"
             :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Rezervimet', href: route('reservations.index') }, { label: `#${reservation.id}` }]"
@@ -160,8 +183,8 @@ function settleAndCheckout(method) {
                 <Badge :variant="statusBadge[reservation.status]?.variant" dot>
                     {{ statusBadge[reservation.status]?.label }}
                 </Badge>
-                <Button v-if="canUpdate" variant="outline" @click="showLineModal = true">+ Rresht</Button>
-                <Button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" variant="success" @click="showPayModal = true">Paguaj</Button>
+                <Button v-if="canAddCharge" variant="outline" @click="openLineModal">+ Tarifë</Button>
+                <Button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" variant="success" @click="showPayModal = true">Regjistro pagesë</Button>
                 <Button variant="outline" @click="openInvoice">Fature</Button>
                 <Button
                     v-if="canUpdate && reservation.status === 'checked_in'"
@@ -331,37 +354,50 @@ function settleAndCheckout(method) {
             </Card>
         </div>
 
-        <!-- Add folio line modal -->
-        <Modal :show="showLineModal" title="Shto rresht ne folio" max-width="md" @close="showLineModal = false">
+        <!-- Add a hotel charge to the guest account. Food/drinks come from POS. -->
+        <Modal
+            :show="showLineModal"
+            :title="lineForm.type === 'discount' ? 'Shto zbritje në llogari' : 'Shto tarifë në llogari'"
+            max-width="md"
+            @close="closeLineModal"
+        >
             <form @submit.prevent="submitLine" class="space-y-4">
+                <div v-if="lineForm.type === 'discount'" class="rounded-lg border border-success-200 bg-success-50 px-3 py-2.5 text-small text-success-800">
+                    Zbritja ul totalin e llogarisë dhe nuk mund ta kalojë vlerën aktuale.
+                </div>
+                <div v-else class="rounded-lg border border-info-200 bg-info-50 px-3 py-2.5 text-small text-info-800">
+                    Për minibar, parking, lavanderi, transfer, late check-out, krevat shtesë ose dëmtim. Porositë e barit dhe restorantit kalohen nga POS-i.
+                </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormGroup label="Lloji" :error="lineForm.errors.type" required>
+                    <FormGroup label="Kategoria" :error="lineForm.errors.type" required>
                         <Select v-model="lineForm.type" :options="lineTypeOptions" :error="lineForm.errors.type" />
                     </FormGroup>
-                    <FormGroup label="Shuma" :error="lineForm.errors.amount" required>
+                    <FormGroup :label="lineForm.type === 'discount' ? 'Shuma e zbritjes' : 'Shuma'" :error="lineForm.errors.amount" required>
                         <TextInput type="number" step="0.01" min="0.01" v-model="lineForm.amount" placeholder="0.00" :error="lineForm.errors.amount" />
                     </FormGroup>
                 </div>
-                <FormGroup label="Pershkrimi" :error="lineForm.errors.description" required>
-                    <TextInput v-model="lineForm.description" placeholder="P.sh. Minibar, transferim..." :error="lineForm.errors.description" />
+                <FormGroup label="Përshkrimi" :error="lineForm.errors.description" required>
+                    <TextInput v-model="lineForm.description" placeholder="P.sh. Lavanderi, parking, late check-out..." :error="lineForm.errors.description" />
                 </FormGroup>
-                <FormGroup label="Data (opsionale)" :error="lineForm.errors.charge_date">
+                <FormGroup label="Data e tarifës (opsionale)" :error="lineForm.errors.charge_date">
                     <DatePicker v-model="lineForm.charge_date" :error="lineForm.errors.charge_date" />
                 </FormGroup>
             </form>
             <template #footer>
-                <Button variant="outline" @click="showLineModal = false">Anulo</Button>
-                <Button variant="primary" :loading="lineForm.processing" @click="submitLine">Shto</Button>
+                <Button variant="outline" @click="closeLineModal">Anulo</Button>
+                <Button variant="primary" :loading="lineForm.processing" @click="submitLine">
+                    {{ lineForm.type === 'discount' ? 'Apliko zbritjen' : 'Shto në llogari' }}
+                </Button>
             </template>
         </Modal>
 
         <!-- Record payment modal -->
-        <Modal :show="showPayModal" title="Regjistro pagese" max-width="sm" @close="showPayModal = false">
+        <Modal :show="showPayModal" title="Regjistro pagesë" max-width="sm" @close="showPayModal = false">
             <form @submit.prevent="submitPay" class="space-y-4">
                 <FormGroup label="Shuma" :error="payForm.errors.amount" required>
                     <TextInput type="number" step="0.01" min="0.01" v-model="payForm.amount" placeholder="0.00" :error="payForm.errors.amount" />
                 </FormGroup>
-                <FormGroup label="Menyra" :error="payForm.errors.method" required>
+                <FormGroup label="Mënyra" :error="payForm.errors.method" required>
                     <Select v-model="payForm.method" :options="methodOptions" :error="payForm.errors.method" />
                 </FormGroup>
             </form>

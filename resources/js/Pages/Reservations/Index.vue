@@ -18,7 +18,7 @@ import { channelOptions } from '@/channels';
 import ReservationCreateModal from '@/Components/Reservations/ReservationCreateModal.vue';
 import MoveRoomModal from '@/Components/Reservations/MoveRoomModal.vue';
 import ReservationEditModal from '@/Components/Reservations/ReservationEditModal.vue';
-import { Eye, Pencil, Ban, ArrowRightLeft } from 'lucide-vue-next';
+import { Eye, Pencil, Ban, ArrowRightLeft, ChevronLeft, ChevronRight } from 'lucide-vue-next';
 
 const menuItemClass = 'flex w-full items-center gap-2.5 px-3 py-2 text-left text-body-sm text-neutral-700 transition-colors hover:bg-neutral-50 no-underline';
 
@@ -28,6 +28,7 @@ const props = defineProps({
     guests: Array,
     filters: Object,
     stats: Object,
+    latestReservationId: [Number, String],
     channelFees: { type: Object, default: () => ({}) },
 });
 
@@ -58,6 +59,18 @@ const statusFilterOptions = [
     { value: 'cancelled', label: 'Anulluar' },
 ];
 
+const perPageOptions = [
+    { value: 25, label: '25' },
+    { value: 50, label: '50' },
+    { value: 100, label: '100' },
+];
+
+const sortOptions = [
+    { value: 'latest', label: 'Rezervimet e fundit' },
+    { value: 'checkin', label: 'Check-in më i afërt' },
+    { value: 'checkout', label: 'Check-out më i afërt' },
+];
+
 const roomOptions = props.rooms.map((r) => ({
     value: r.id,
     label: `${r.room_number} — ${r.room_type?.name} (€${r.room_type?.base_price})`,
@@ -70,19 +83,58 @@ const guestOptions = computed(() => props.guests.map((g) => ({
 
 const filterStatus = ref(props.filters?.status || '');
 const searchQuery = ref(props.filters?.search || '');
+const perPage = ref(Number(props.filters?.per_page || props.reservations?.per_page || 25));
+const sortBy = ref(props.filters?.sort || 'latest');
+
+function listParams() {
+    const params = {
+        per_page: Number(perPage.value),
+        sort: sortBy.value,
+    };
+    if (filterStatus.value) params.status = filterStatus.value;
+    if (searchQuery.value.trim()) params.search = searchQuery.value.trim();
+    return params;
+}
 
 function applyFilters() {
-    const params = {};
-    if (filterStatus.value) params.status = filterStatus.value;
-    if (searchQuery.value) params.search = searchQuery.value;
-    router.get(route('reservations.index'), params, { preserveState: true });
+    router.get(route('reservations.index'), listParams(), { preserveState: true });
 }
 
 function clearFilters() {
     filterStatus.value = '';
     searchQuery.value = '';
-    router.get(route('reservations.index'), {}, { preserveState: true });
+    router.get(route('reservations.index'), listParams(), { preserveState: true });
 }
+
+function changePerPage() {
+    router.get(route('reservations.index'), listParams(), {
+        preserveState: true,
+        preserveScroll: true,
+    });
+}
+
+function changeSort() {
+    router.get(route('reservations.index'), listParams(), {
+        preserveState: true,
+        preserveScroll: true,
+    });
+}
+
+function goToPage(url) {
+    if (!url) return;
+    const page = Number(new URL(url, window.location.origin).searchParams.get('page') || 1);
+    router.get(route('reservations.index'), { ...listParams(), page }, {
+        preserveState: true,
+        preserveScroll: true,
+    });
+}
+
+watch(() => props.filters, (filters) => {
+    filterStatus.value = filters?.status || '';
+    searchQuery.value = filters?.search || '';
+    perPage.value = Number(filters?.per_page || props.reservations?.per_page || 25);
+    sortBy.value = filters?.sort || 'latest';
+});
 
 function openEdit(res) {
     selectedRes.value = res;
@@ -134,6 +186,22 @@ function formatDate(d) {
     if (!d) return '—';
     return new Date(d).toLocaleDateString('sq-AL', { day: '2-digit', month: 'short', year: 'numeric' });
 }
+
+function formatReceivedAt(d) {
+    if (!d) return '—';
+    return new Date(d).toLocaleString('sq-AL', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function isLatest(reservation) {
+    return props.latestReservationId != null
+        && Number(reservation.id) === Number(props.latestReservationId);
+}
 </script>
 
 <template>
@@ -171,6 +239,18 @@ function formatDate(d) {
                 <Select v-model="filterStatus" :options="statusFilterOptions" placeholder="Statusi..." @change="applyFilters" />
             </div>
             <Button v-if="filterStatus || searchQuery" variant="ghost" size="sm" @click="clearFilters">Pastro</Button>
+            <div class="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+                <label class="whitespace-nowrap text-small text-neutral-500" for="reservations-sort">Rendit sipas</label>
+                <div class="min-w-56 flex-1 sm:flex-none">
+                    <Select
+                        id="reservations-sort"
+                        v-model="sortBy"
+                        :options="sortOptions"
+                        placeholder=""
+                        @change="changeSort"
+                    />
+                </div>
+            </div>
         </div>
 
         <!-- Table -->
@@ -184,17 +264,28 @@ function formatDate(d) {
                                 <th class="px-5 py-3 text-left text-label text-neutral-600">Dhoma</th>
                                 <th class="px-5 py-3 text-left text-label text-neutral-600">Check-in</th>
                                 <th class="px-5 py-3 text-left text-label text-neutral-600">Check-out</th>
+                                <th class="px-5 py-3 text-left text-label text-neutral-600">Marrë më</th>
                                 <th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th>
                                 <th class="px-5 py-3 text-right text-label text-neutral-600">Total</th>
                                 <th class="px-5 py-3 text-right text-label text-neutral-600">Veprime</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-neutral-100">
-                            <tr v-for="res in reservations.data" :key="res.id" class="hover:bg-neutral-50 transition-colors duration-100">
+                            <tr
+                                v-for="res in reservations.data"
+                                :key="res.id"
+                                :class="[
+                                    'transition-colors duration-100 hover:bg-neutral-50',
+                                    isLatest(res) && 'bg-accent-50/60',
+                                ]"
+                            >
                                 <td class="px-5 py-3">
-                                    <p class="text-body-sm text-primary-900 font-medium">
-                                        {{ res.guest?.first_name }} {{ res.guest?.last_name }}
-                                    </p>
+                                    <div class="flex items-center gap-2">
+                                        <p class="text-body-sm text-primary-900 font-medium">
+                                            {{ res.guest?.first_name }} {{ res.guest?.last_name }}
+                                        </p>
+                                        <Badge v-if="isLatest(res)" variant="accent" size="sm" class="whitespace-nowrap">Më i fundit</Badge>
+                                    </div>
                                 </td>
                                 <td class="px-5 py-3 text-body-sm text-neutral-600">
                                     {{ res.room?.room_number }}
@@ -202,6 +293,7 @@ function formatDate(d) {
                                 </td>
                                 <td class="px-5 py-3 text-body-sm text-neutral-700">{{ formatDate(res.check_in_date) }}</td>
                                 <td class="px-5 py-3 text-body-sm text-neutral-700">{{ formatDate(res.check_out_date) }}</td>
+                                <td class="px-5 py-3 text-small text-neutral-500 whitespace-nowrap">{{ formatReceivedAt(res.created_at) }}</td>
                                 <td class="px-5 py-3">
                                     <Badge :variant="statusBadge[res.status]?.variant" dot>
                                         {{ statusBadge[res.status]?.label }}
@@ -240,18 +332,47 @@ function formatDate(d) {
                 </div>
 
                 <!-- Pagination -->
-                <div v-if="reservations.last_page > 1" class="flex items-center justify-between border-t border-neutral-200 bg-neutral-50 px-5 py-3">
-                    <p class="text-small text-neutral-500">{{ reservations.from }}–{{ reservations.to }} nga {{ reservations.total }}</p>
-                    <div class="flex gap-1">
+                <div v-if="reservations.total > 0" class="flex flex-col gap-3 border-t border-neutral-200 bg-neutral-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <label class="text-small text-neutral-500" for="reservations-per-page">Rreshta për faqe</label>
+                        <div class="w-20">
+                            <Select
+                                id="reservations-per-page"
+                                v-model="perPage"
+                                :options="perPageOptions"
+                                placeholder=""
+                                @change="changePerPage"
+                            />
+                        </div>
+                        <p class="text-small text-neutral-500">
+                            {{ reservations.from }}–{{ reservations.to }} nga {{ reservations.total }}
+                        </p>
+                    </div>
+
+                    <div class="flex items-center gap-2 sm:justify-end">
                         <Button
-                            v-for="link in reservations.links"
-                            :key="link.label"
                             size="sm"
-                            :variant="link.active ? 'primary' : 'ghost'"
-                            :disabled="!link.url"
-                            @click="link.url && router.get(link.url, {}, { preserveState: true })"
-                            v-html="link.label"
-                        />
+                            variant="outline"
+                            :disabled="!reservations.prev_page_url"
+                            aria-label="Faqja e mëparshme"
+                            @click="goToPage(reservations.prev_page_url)"
+                        >
+                            <ChevronLeft class="h-4 w-4" :stroke-width="1.8" />
+                            Mbrapa
+                        </Button>
+                        <span class="min-w-20 text-center text-small text-neutral-500">
+                            {{ reservations.current_page }} / {{ reservations.last_page }}
+                        </span>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="!reservations.next_page_url"
+                            aria-label="Faqja tjetër"
+                            @click="goToPage(reservations.next_page_url)"
+                        >
+                            Para
+                            <ChevronRight class="h-4 w-4" :stroke-width="1.8" />
+                        </Button>
                     </div>
                 </div>
             </Card>

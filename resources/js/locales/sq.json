@@ -7,6 +7,12 @@
         "contact": "Kontakt",
         "reserve": "Rezervo Tani"
     },
+    "sidebar": {
+        "open": "Hap",
+        "close": "Mbyll",
+        "openMenu": "Hap menunë",
+        "closeMenu": "Mbyll menunë"
+    },
     "footer": {
         "blurb": "Nje shtepi e madhe mbi detin Jon. Qetesi, gur i bardhe dhe mikpritje e vertete ne Ksamil.",
         "nav": "Navigim",

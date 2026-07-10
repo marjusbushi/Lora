@@ -75,4 +75,50 @@ class NotificationTest extends TestCase
             ->assertOk()
             ->assertJsonPath('count', 1);
     }
+
+    public function test_bell_endpoint_also_lists_confirmed_ota_style_reservations(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $reservation = $this->makeReservation('confirmed');
+
+        $this->actingAs($admin)
+            ->getJson(route('notifications.reservations'))
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('reservations.0.id', $reservation->id);
+    }
+
+    public function test_bell_endpoint_does_not_list_cancelled_reservations(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->makeReservation('cancelled');
+
+        $this->actingAs($admin)
+            ->getJson(route('notifications.reservations'))
+            ->assertOk()
+            ->assertJsonPath('count', 0);
+    }
+
+    public function test_bell_keeps_same_creator_ota_and_exposes_source_context(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $reservation = $this->makeReservation('confirmed');
+        $reservation->update(['created_by' => $admin->id, 'channel' => 'booking.com']);
+
+        $this->actingAs($admin)
+            ->getJson(route('notifications.reservations'))
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('reservations.0.channel', 'booking.com')
+            ->assertJsonPath('reservations.0.created_by', $admin->id);
+    }
 }

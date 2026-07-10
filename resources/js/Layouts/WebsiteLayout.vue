@@ -122,7 +122,7 @@ function isActive(href) {
                         :class="['md:hidden p-2 transition-colors', solid ? 'text-ink' : 'text-bone']"
                         :aria-expanded="mobileMenu"
                         aria-controls="site-mobile-menu"
-                        :aria-label="mobileMenu ? 'Mbyll menunë' : 'Hap menunë'"
+                        :aria-label="mobileMenu ? $t('sidebar.closeMenu') : $t('sidebar.openMenu')"
                         @click="mobileMenu = !mobileMenu"
                         @keydown.escape="closeMenu"
                     >

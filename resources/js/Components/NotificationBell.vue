@@ -1,62 +1,98 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import { router } from '@inertiajs/vue3';
-import { Bell } from 'lucide-vue-next';
+import { router, usePage } from '@inertiajs/vue3';
+import { Bell, Volume2, VolumeX } from 'lucide-vue-next';
+
+const currentUserId = Number(usePage().props.auth.user?.id || 0);
+const LAST_ID_KEY = `notif_last_received_reservation_id_v2:${currentUserId}`;
+const UNREAD_IDS_KEY = `notif_unread_reservation_ids_v2:${currentUserId}`;
+const SOUND_KEY = `notif_reservation_sound_enabled:${currentUserId}`;
 
 const open = ref(false);
 const count = ref(0);
 const items = ref([]);
 const toast = ref(null); // { guest, room }
+const soundEnabled = ref(localStorage.getItem(SOUND_KEY) !== '0');
 let timer = null;
 let toastTimer = null;
-let first = true;
+let polling = false;
 
-const LS_KEY = 'notif_last_seen_reservation_id';
+const unreadIds = new Set();
 
-function lastSeen() {
-    const v = Number(localStorage.getItem(LS_KEY));
-    return Number.isFinite(v) ? v : 0;
+function lastReceived() {
+    const raw = localStorage.getItem(LAST_ID_KEY);
+    if (raw === null) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : 0;
 }
 
-// Per-browser set of reservation ids the user has acknowledged (clicked).
-// Once acknowledged, a reservation leaves the bell and stops counting toward
-// the badge — so a notification no longer stays "always active" after a click.
-const LS_SEEN = 'notif_seen_reservation_ids';
-const seen = new Set();
-
-function loadSeen() {
+function loadUnread() {
     try {
-        const arr = JSON.parse(localStorage.getItem(LS_SEEN) || '[]');
-        if (Array.isArray(arr)) arr.forEach((id) => seen.add(Number(id)));
+        const arr = JSON.parse(localStorage.getItem(UNREAD_IDS_KEY) || '[]');
+        if (Array.isArray(arr)) arr.forEach((id) => unreadIds.add(Number(id)));
     } catch (e) { /* corrupt value — ignore */ }
 }
-function saveSeen() {
-    try { localStorage.setItem(LS_SEEN, JSON.stringify([...seen])); } catch (e) { /* ignore */ }
+function saveUnread() {
+    try { localStorage.setItem(UNREAD_IDS_KEY, JSON.stringify([...unreadIds])); } catch (e) { /* ignore */ }
 }
 function markSeen(id) {
-    if (!seen.has(id)) { seen.add(id); saveSeen(); }
+    if (unreadIds.delete(Number(id))) saveUnread();
+}
+
+function getAudioContext() {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    if (!window.__reservationNotificationAudioContext) {
+        window.__reservationNotificationAudioContext = new Ctx();
+    }
+    return window.__reservationNotificationAudioContext;
+}
+
+async function unlockAudio() {
+    try {
+        const ctx = getAudioContext();
+        if (ctx && ctx.state !== 'running') await ctx.resume();
+    } catch (e) { /* browser policy / unsupported audio */ }
+}
+
+function playDing(ctx) {
+    const notes = [880, 1320];
+    notes.forEach((freq, i) => {
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.type = 'sine';
+        oscillator.frequency.value = freq;
+        const start = ctx.currentTime + i * 0.16;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.16, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.32);
+        oscillator.start(start);
+        oscillator.stop(start + 0.34);
+    });
 }
 
 function ding() {
+    if (!soundEnabled.value) return;
     try {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (!Ctx) return;
-        const ctx = new Ctx();
-        const notes = [880, 1320];
-        notes.forEach((freq, i) => {
-            const o = ctx.createOscillator();
-            const g = ctx.createGain();
-            o.connect(g); g.connect(ctx.destination);
-            o.type = 'sine';
-            o.frequency.value = freq;
-            const t = ctx.currentTime + i * 0.16;
-            g.gain.setValueAtTime(0.0001, t);
-            g.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
-            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
-            o.start(t);
-            o.stop(t + 0.34);
-        });
-    } catch (e) { /* sound blocked until user interacts — fine */ }
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        if (ctx.state === 'suspended') {
+            ctx.resume().then(() => playDing(ctx)).catch(() => {});
+            return;
+        }
+        playDing(ctx);
+    } catch (e) { /* browser policy / unsupported audio */ }
+}
+
+async function toggleSound() {
+    soundEnabled.value = !soundEnabled.value;
+    localStorage.setItem(SOUND_KEY, soundEnabled.value ? '1' : '0');
+    if (soundEnabled.value) {
+        await unlockAudio();
+        ding();
+    }
 }
 
 function showToast(res) {
@@ -66,38 +102,56 @@ function showToast(res) {
 }
 
 async function poll() {
+    if (polling) return;
+    polling = true;
     try {
         const r = await fetch('/pms/notifications/reservations', { headers: { Accept: 'application/json' } });
         if (!r.ok) return;
         const data = await r.json();
         const all = data.reservations || [];
 
-        // Prune the seen-set to ids the server still returns, so it can't grow
-        // unbounded and a confirmed/deleted reservation drops off on its own.
+        // Keep a small durable unread set across Inertia navigations and reloads.
         const liveIds = new Set(all.map((x) => x.id));
-        let pruned = false;
-        seen.forEach((id) => { if (!liveIds.has(id)) { seen.delete(id); pruned = true; } });
-        if (pruned) saveSeen();
-
-        // The bell only shows what the user hasn't acknowledged yet.
-        const unseen = all.filter((x) => !seen.has(x.id));
-        items.value = unseen;
-        count.value = unseen.length;
+        let unreadChanged = false;
+        unreadIds.forEach((id) => {
+            if (!liveIds.has(id)) {
+                unreadIds.delete(id);
+                unreadChanged = true;
+            }
+        });
 
         const maxId = all.length ? Math.max(...all.map((x) => x.id)) : 0;
-        if (first) {
-            // baseline — don't alert for reservations that already existed
-            if (maxId > lastSeen()) localStorage.setItem(LS_KEY, String(maxId));
-            first = false;
+        const previousMax = lastReceived();
+        if (previousMax === null) {
+            // First visit establishes a baseline, without ringing for old bookings.
+            localStorage.setItem(LAST_ID_KEY, String(maxId));
+            if (unreadChanged) saveUnread();
+            items.value = all.filter((x) => unreadIds.has(x.id));
+            count.value = items.value.length;
             return;
         }
-        if (maxId > lastSeen()) {
-            const fresh = all.find((x) => x.id === maxId);
-            localStorage.setItem(LS_KEY, String(maxId));
+
+        const fresh = all.filter((x) =>
+            x.id > previousMax
+            && !(x.channel === 'manual' && Number(x.created_by) === currentUserId)
+        );
+        if (fresh.length) {
+            fresh.forEach((x) => unreadIds.add(x.id));
+            unreadChanged = true;
+        }
+        if (maxId > previousMax) localStorage.setItem(LAST_ID_KEY, String(maxId));
+        if (unreadChanged) saveUnread();
+
+        items.value = all.filter((x) => unreadIds.has(x.id));
+        count.value = items.value.length;
+
+        if (fresh.length) {
+            const newest = fresh.reduce((latest, item) => item.id > latest.id ? item : latest);
             ding();
-            if (fresh && !seen.has(fresh.id)) showToast(fresh);
+            showToast(newest);
         }
     } catch (e) { /* offline / ignore */ }
+    finally { polling = false; }
 }
 
 function goTo(id) {
@@ -113,13 +167,18 @@ function goTo(id) {
 }
 
 onMounted(() => {
-    loadSeen();
+    loadUnread();
+    // Browsers allow later notification sounds after one user gesture resumes audio.
+    window.addEventListener('pointerdown', unlockAudio, { capture: true });
+    window.addEventListener('keydown', unlockAudio, { capture: true });
     poll();
-    timer = setInterval(poll, 20000);
+    timer = setInterval(poll, 10000);
 });
 onUnmounted(() => {
     clearInterval(timer);
     clearTimeout(toastTimer);
+    window.removeEventListener('pointerdown', unlockAudio, true);
+    window.removeEventListener('keydown', unlockAudio, true);
 });
 </script>
 
@@ -128,7 +187,7 @@ onUnmounted(() => {
         <button
             type="button"
             class="relative rounded-md p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
-            :aria-label="`Rezervime te reja: ${count}`"
+            :aria-label="`Rezervime të reja: ${count}`"
             @click="open = !open"
         >
             <Bell class="h-5 w-5" :stroke-width="1.6" />
@@ -140,9 +199,21 @@ onUnmounted(() => {
         <!-- Dropdown -->
         <div v-if="open" class="fixed inset-0 z-40" @click="open = false" />
         <div v-if="open" class="absolute right-0 mt-2 w-80 z-50 rounded-lg bg-white shadow-dropdown border border-neutral-200 overflow-hidden">
-            <div class="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
-                <span class="text-body-sm font-medium text-primary-900">Rezervime te reja</span>
-                <span class="text-tiny text-neutral-400">{{ count }} ne pritje</span>
+            <div class="px-4 py-3 border-b border-neutral-100 flex items-center justify-between gap-3">
+                <div>
+                    <span class="block text-body-sm font-medium text-primary-900">Rezervime të reja</span>
+                    <span class="block text-tiny text-neutral-400">{{ count }} pa lexuar</span>
+                </div>
+                <button
+                    type="button"
+                    class="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700"
+                    :title="soundEnabled ? 'Çaktivizo tingullin' : 'Aktivizo tingullin'"
+                    :aria-label="soundEnabled ? 'Çaktivizo tingullin' : 'Aktivizo tingullin'"
+                    @click="toggleSound"
+                >
+                    <Volume2 v-if="soundEnabled" class="h-4 w-4" :stroke-width="1.7" />
+                    <VolumeX v-else class="h-4 w-4" :stroke-width="1.7" />
+                </button>
             </div>
             <div class="max-h-80 overflow-y-auto">
                 <button
@@ -160,11 +231,11 @@ onUnmounted(() => {
                     </div>
                 </button>
                 <div v-if="!items.length" class="px-4 py-8 text-center text-body-sm text-neutral-400">
-                    Asnje rezervim i ri.
+                    Asnjë rezervim i ri.
                 </div>
             </div>
             <a href="/pms/reservations" class="block px-4 py-2.5 text-center text-body-sm text-accent-700 hover:bg-neutral-50 border-t border-neutral-100 no-underline">
-                Shiko te gjitha rezervimet
+                Shiko të gjitha rezervimet
             </a>
         </div>
 

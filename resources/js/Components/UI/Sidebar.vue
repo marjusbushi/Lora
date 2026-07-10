@@ -1,7 +1,9 @@
 <script setup>
+import { computed } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
+import { useI18n } from 'vue-i18n';
 
-defineProps({
+const props = defineProps({
     collapsed: {
         type: Boolean,
         default: false,
@@ -11,11 +13,21 @@ defineProps({
         required: true,
         // Each: { label: string, href: string, icon?: string, routeName?: string, children?: array }
     },
+    dismissible: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const emit = defineEmits(['toggle']);
 
 const page = usePage();
+const { t } = useI18n();
+const toggleText = computed(() => props.collapsed ? t('sidebar.open') : t('sidebar.close'));
+const toggleLabel = computed(() => {
+    if (props.dismissible) return t('sidebar.closeMenu');
+    return props.collapsed ? t('sidebar.openMenu') : t('sidebar.closeMenu');
+});
 
 function isActive(item) {
     if (item.routeName) {
@@ -24,7 +36,8 @@ function isActive(item) {
     // `match` lets a nav item link to a sub-page (e.g. /reservations/calendar)
     // while staying highlighted across the whole section (/reservations*).
     const base = item.match || item.href;
-    return page.url === base || page.url.startsWith(base + '/');
+    const currentPath = page.url.split('?')[0].split('#')[0];
+    return currentPath === base || currentPath.startsWith(base + '/');
 }
 </script>
 
@@ -73,11 +86,11 @@ function isActive(item) {
                     'flex items-center w-full rounded-md py-2 px-2 text-neutral-400 hover:text-neutral-100 hover:bg-primary-800/60 transition-colors duration-150',
                     collapsed ? 'justify-center' : 'justify-between',
                 ]"
-                :title="collapsed ? 'Hap menun' : 'Mbyll menun'"
-                :aria-label="collapsed ? 'Hap menun' : 'Mbyll menun'"
+                :title="toggleLabel"
+                :aria-label="toggleLabel"
                 @click="emit('toggle')"
             >
-                <span v-if="!collapsed" class="text-body-sm whitespace-nowrap">Mbyll menun</span>
+                <span v-if="!collapsed" class="text-body-sm whitespace-nowrap">{{ toggleText }}</span>
                 <svg
                     class="h-5 w-5 shrink-0 transition-transform duration-250"
                     :class="collapsed && 'rotate-180'"

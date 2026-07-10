@@ -7,6 +7,12 @@
         "contact": "Contact",
         "reserve": "Book Now"
     },
+    "sidebar": {
+        "open": "Open",
+        "close": "Close",
+        "openMenu": "Open menu",
+        "closeMenu": "Close menu"
+    },
     "footer": {
         "blurb": "A grand house above the Ionian Sea. Calm, white stone and true hospitality in Ksamil.",
         "nav": "Navigation",
