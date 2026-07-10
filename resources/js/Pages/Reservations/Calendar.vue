@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Button from '@/Components/UI/Button.vue';
@@ -31,6 +31,35 @@ const selectedReservation = ref(null);
 const perms = usePage().props.auth.user?.permissions || [];
 const canCreate = perms.includes('create_reservations');
 const canUpdate = perms.includes('update_reservations');
+
+const savedRoomSort = typeof window !== 'undefined' ? window.localStorage.getItem('calendarRoomSort') : null;
+const roomSort = ref(['number', 'type'].includes(savedRoomSort) ? savedRoomSort : 'number');
+const roomCollator = new Intl.Collator('sq-AL', { numeric: true, sensitivity: 'base' });
+
+watch(roomSort, (value) => {
+    if (typeof window !== 'undefined') window.localStorage.setItem('calendarRoomSort', value);
+});
+
+const sortedRooms = computed(() => {
+    return [...(props.rooms || [])].sort((a, b) => {
+        if (roomSort.value === 'type') {
+            const typeA = a.room_type?.name?.trim() || '';
+            const typeB = b.room_type?.name?.trim() || '';
+
+            if (!typeA && typeB) return 1;
+            if (typeA && !typeB) return -1;
+
+            const typeComparison = roomCollator.compare(typeA, typeB);
+            if (typeComparison !== 0) return typeComparison;
+
+            const typeIdComparison = roomCollator.compare(String(a.room_type_id ?? ''), String(b.room_type_id ?? ''));
+            if (typeIdComparison !== 0) return typeIdComparison;
+        }
+
+        const roomComparison = roomCollator.compare(String(a.room_number ?? ''), String(b.room_number ?? ''));
+        return roomComparison !== 0 ? roomComparison : Number(a.id) - Number(b.id);
+    });
+});
 
 // Generate 14 days array
 const days = computed(() => {
@@ -336,13 +365,32 @@ function getRoomCalendarCells(room) {
             </div>
         </div>
 
-        <!-- Month label -->
-        <p class="text-label text-neutral-500 uppercase tracking-wider mb-3">{{ monthLabel }}</p>
+        <!-- Month label and room order -->
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p class="text-label text-neutral-500 uppercase tracking-wider">{{ monthLabel }}</p>
+            <div class="flex items-center gap-2">
+                <span class="whitespace-nowrap text-small text-neutral-500">Rendit dhomat</span>
+                <div class="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5" role="group" aria-label="Rendit dhomat">
+                    <button
+                        type="button"
+                        :aria-pressed="roomSort === 'number'"
+                        :class="['rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/50', roomSort === 'number' ? 'bg-primary-900 text-white' : 'text-neutral-500 hover:text-neutral-800']"
+                        @click="roomSort = 'number'"
+                    >Numri</button>
+                    <button
+                        type="button"
+                        :aria-pressed="roomSort === 'type'"
+                        :class="['rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/50', roomSort === 'type' ? 'bg-primary-900 text-white' : 'text-neutral-500 hover:text-neutral-800']"
+                        @click="roomSort = 'type'"
+                    >Tipologjia</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Calendar grid — slides horizontally when changing week -->
         <div class="relative overflow-hidden">
         <Transition :name="slideDir === 'next' ? 'cal-next' : 'cal-prev'">
-        <div :key="startDate" class="bg-white rounded-lg border border-neutral-200 max-h-[calc(100vh-13rem)] overflow-auto overscroll-contain">
+        <div :key="startDate" class="bg-white rounded-lg border border-neutral-200 max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain">
             <table class="w-full border-collapse" style="min-width: 900px;">
                 <!-- Day headers -->
                 <thead>
@@ -367,7 +415,7 @@ function getRoomCalendarCells(room) {
 
                 <!-- Room rows -->
                 <tbody @mousedown="onGridDown" @mouseover="onGridOver">
-                    <tr v-for="room in rooms" :key="room.id" class="group">
+                    <tr v-for="room in sortedRooms" :key="room.id" class="group">
                         <!-- Room label -->
                         <td class="sticky left-0 z-10 bg-white border-b border-r border-neutral-200 px-3 py-2 group-hover:bg-neutral-50 transition-colors">
                             <p class="text-body-sm text-primary-900 font-medium">{{ room.room_number }}</p>
