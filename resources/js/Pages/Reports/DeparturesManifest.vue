@@ -3,6 +3,8 @@ import { Link } from '@inertiajs/vue3';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { AlertTriangle, CalendarCheck, ReceiptText, Utensils } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -19,26 +21,20 @@ const statusBadge = {
 };
 
 const fmt = (d) => d ? new Date(d).toLocaleDateString('sq-AL', { day: '2-digit', month: 'short' }) : '—';
+
+const kpis = [
+    { label: 'Nisje', value: () => props.totals?.count ?? 0, tone: 'accent', icon: CalendarCheck, detail: 'Dhomat që duhen liruar' },
+    { label: 'Bilanc i hapur', value: () => money(props.totals?.outstanding), tone: () => Number(props.totals?.outstanding ?? 0) > 0 ? 'error' : 'success', icon: ReceiptText, detail: 'Për t’u arkëtuar para nisjes' },
+    { label: 'Me detyrim', value: () => props.rows.filter((row) => Number(row.balance ?? 0) > 0).length, tone: 'warning', icon: AlertTriangle },
+    { label: 'POS të hapura', value: () => props.rows.reduce((sum, row) => sum + Number(row.open_pos_count ?? 0), 0), tone: 'neutral', icon: Utensils },
+];
 </script>
 
 <template>
     <ReportShell title="Manifesti i Nisjeve" route-name="reports.departuresManifest" :filters="filters">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ totals?.count ?? 0 }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Nisje</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3" :class="(totals?.outstanding ?? 0) > 0 ? 'text-error-600' : 'text-primary-900'">{{ money(totals?.outstanding) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Bilanc i Hapur</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
-        <Card :padding="false">
+        <Card :padding="false" class="mt-5">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">

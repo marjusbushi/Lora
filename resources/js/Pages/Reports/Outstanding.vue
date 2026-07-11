@@ -3,6 +3,8 @@ import { Link } from '@inertiajs/vue3';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { AlertTriangle, ReceiptText } from 'lucide-vue-next';
 
 const props = defineProps({
     rows: { type: Array, default: () => [] },
@@ -18,19 +20,18 @@ const statusBadge = {
     checked_out: { variant: 'neutral', label: 'Larguar' },
 };
 const fmt = (d) => d ? new Date(d).toLocaleDateString('sq-AL', { day: '2-digit', month: 'short' }) : '—';
+
+const kpis = [
+    { label: 'Borxhi total', value: () => money(props.total), tone: props.total > 0 ? 'error' : 'success', icon: AlertTriangle, detail: 'Për t’u arkëtuar' },
+    { label: 'Qëndrime me detyrim', value: () => props.rows.length, tone: props.rows.length ? 'warning' : 'success', icon: ReceiptText },
+];
 </script>
 
 <template>
     <ReportShell title="Bilance të Papaguara">
-        <Card class="mb-4 bg-error-50/50 ring-1 ring-error-200/40">
-            <div class="flex items-center justify-between">
-                <p class="text-body-sm text-neutral-600">Borxhi total i papaguar</p>
-                <p class="text-h2 text-error-600">{{ money(total) }}</p>
-            </div>
-            <p class="text-tiny text-neutral-500 mt-1">{{ rows.length }} qëndrim(e) me balancë të hapur</p>
-        </Card>
+        <ReportKpiGrid :items="kpis" />
 
-        <Card :padding="false">
+        <Card :padding="false" class="mt-5">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">

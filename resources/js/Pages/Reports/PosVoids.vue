@@ -2,6 +2,8 @@
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { Ban, ReceiptText } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -15,26 +17,18 @@ const money = (v) =>
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     })}`;
+
+const kpis = [
+    { label: 'Porosi të anuluara', value: () => props.summary.count ?? 0, tone: 'error', icon: Ban },
+    { label: 'Vlera e anuluar', value: () => money(props.summary.total), tone: 'warning', icon: ReceiptText, detail: 'Shitje të humbura' },
+];
 </script>
 
 <template>
     <ReportShell title="Anulime & Voids POS" route-name="reports.posVoids" :filters="filters">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ summary.count ?? 0 }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Porosi të anuluara</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ money(summary.total) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Vlera e anuluar</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
-        <Card>
+        <Card class="mt-5">
             <div v-if="rows.length" class="overflow-x-auto">
                 <table class="w-full">
                     <thead class="bg-neutral-50">

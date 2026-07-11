@@ -2,6 +2,8 @@
 import { Link } from '@inertiajs/vue3';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { BedDouble, CalendarDays, Users, UserRound } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -13,26 +15,21 @@ const props = defineProps({
 const fmt = (d) => d
     ? new Date(d).toLocaleDateString('sq-AL', { weekday: 'short', day: '2-digit', month: 'short' })
     : '—';
+
+const totalNights = () => props.rows.reduce((sum, row) => sum + Number(row.nights ?? 0), 0);
+const kpis = [
+    { label: 'Dhoma të zëna', value: () => props.summary?.count ?? 0, tone: 'accent', icon: BedDouble },
+    { label: 'Persona gjithsej', value: () => props.summary?.pax ?? 0, tone: 'info', icon: Users },
+    { label: 'Mesatarja për dhomë', value: () => props.summary?.count ? (Number(props.summary.pax ?? 0) / Number(props.summary.count)).toLocaleString('sq-AL', { maximumFractionDigits: 1 }) : '0', tone: 'neutral', icon: UserRound },
+    { label: 'Netë të rezervuara', value: totalNights, tone: 'success', icon: CalendarDays },
+];
 </script>
 
 <template>
     <ReportShell title="Mysafirë në Shtëpi" :filters="null">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ summary?.count ?? 0 }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Dhoma të zëna</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ summary?.pax ?? 0 }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Persona gjithsej</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
-        <Card :padding="false">
+        <Card :padding="false" class="mt-5">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">

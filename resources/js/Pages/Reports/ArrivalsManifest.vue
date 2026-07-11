@@ -3,7 +3,9 @@ import { Link } from '@inertiajs/vue3';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import { channelMeta } from '@/channels';
+import { Banknote, BedDouble, CalendarCheck, Users } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -21,38 +23,20 @@ const statusBadge = {
 };
 
 const fmt = (d) => d ? new Date(d).toLocaleDateString('sq-AL', { weekday: 'short', day: '2-digit', month: 'short' }) : '—';
+
+const kpis = [
+    { label: 'Mbërritje', value: () => props.totals?.count ?? 0, tone: 'accent', icon: CalendarCheck, detail: 'Rezervime në periudhë' },
+    { label: 'Persona', value: () => props.totals?.pax ?? 0, tone: 'info', icon: Users, detail: 'Të rritur dhe fëmijë' },
+    { label: 'Netë gjithsej', value: () => props.totals?.nights ?? 0, tone: 'neutral', icon: BedDouble },
+    { label: 'Të ardhura pritura', value: () => money(props.totals?.revenue), tone: 'success', icon: Banknote },
+];
 </script>
 
 <template>
     <ReportShell title="Manifesti i Mbërritjeve" route-name="reports.arrivalsManifest" :filters="filters">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ totals?.count ?? 0 }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Mbërritje</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ totals?.nights ?? 0 }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Net gjithsej</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ totals?.pax ?? 0 }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Persona</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ money(totals?.revenue) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Të ardhura pritura</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
-        <Card :padding="false">
+        <Card :padding="false" class="mt-5">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">

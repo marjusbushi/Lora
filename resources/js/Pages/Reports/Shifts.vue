@@ -2,6 +2,8 @@
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { Banknote, CreditCard, Scale, WalletCards } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -20,11 +22,19 @@ function overShortLabel(v) {
     if (Math.abs(n) < 0.01) return 'Përputhet';
     return n < 0 ? `Mungesë ${money(Math.abs(n))}` : `Tepricë ${money(n)}`;
 }
+
+const kpis = [
+    { label: 'Turne të mbyllura', value: () => props.shifts.length, tone: 'neutral', icon: WalletCards },
+    { label: 'Kesh', value: () => money(props.totals?.cash), tone: 'success', icon: Banknote },
+    { label: 'Kartë', value: () => money(props.totals?.card), tone: 'info', icon: CreditCard },
+    { label: 'Diferenca', value: () => money(props.totals?.over_short), tone: () => Math.abs(Number(props.totals?.over_short ?? 0)) < 0.01 ? 'success' : 'error', icon: Scale },
+];
 </script>
 
 <template>
     <ReportShell title="Z-Report / Mbyllje Turni" route-name="reports.shifts" :filters="filters">
-        <Card :padding="false">
+        <ReportKpiGrid :items="kpis" />
+        <Card :padding="false" class="mt-5">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">

@@ -20,10 +20,26 @@ use Spatie\Permission\PermissionRegistrar;
 
 class UserController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $tenantId = app(TenantContext::class)->id();
-        $users = User::withoutGlobalScope('tenant_membership')
+        $roles = Role::query()
+            ->where('team_id', $tenantId)
+            ->orderBy('name');
+        $roleNames = (clone $roles)->pluck('name');
+
+        $searchInput = $request->input('search', '');
+        $roleInput = $request->input('role', '');
+        $statusInput = $request->input('status', '');
+        $filters = [
+            'search' => is_string($searchInput) ? mb_substr(trim($searchInput), 0, 100) : '',
+            'role' => is_string($roleInput) && $roleNames->contains($roleInput) ? $roleInput : '',
+            'status' => is_string($statusInput) && in_array($statusInput, ['active', 'inactive'], true)
+                ? $statusInput
+                : '',
+        ];
+
+        $userQuery = User::withoutGlobalScope('tenant_membership')
             ->withTrashed()
             ->join('tenant_user', function ($join) use ($tenantId) {
                 $join->on('tenant_user.user_id', '=', 'users.id')
@@ -33,18 +49,50 @@ class UserController extends Controller
                 'users.id', 'users.name', 'users.email', 'users.created_at', 'users.deleted_at',
                 'tenant_user.is_active as membership_active',
             )
-            ->with('roles:id,name')
+            ->with('roles:id,name');
+
+        if ($filters['search'] !== '') {
+            $userQuery->where(function ($query) use ($filters) {
+                $needle = '%'.$filters['search'].'%';
+                $query->where('users.name', 'like', $needle)
+                    ->orWhere('users.email', 'like', $needle);
+            });
+        }
+
+        if ($filters['role'] !== '') {
+            $userQuery->whereHas('roles', fn ($query) => $query
+                ->where('roles.name', $filters['role'])
+                ->where('roles.team_id', $tenantId));
+        }
+
+        if ($filters['status'] !== '') {
+            $userQuery->where('tenant_user.is_active', $filters['status'] === 'active');
+        }
+
+        $users = $userQuery
             ->orderByDesc('tenant_user.is_active')
             ->orderBy('users.name')
-            ->paginate(15);
+            ->paginate(15)
+            ->withQueryString();
 
-        $roles = Role::query()
-            ->where('team_id', $tenantId)
-            ->orderBy('name');
+        $membershipStats = DB::table('tenant_user')
+            ->where('tenant_id', $tenantId)
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw('SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active')
+            ->first();
+        $total = (int) ($membershipStats->total ?? 0);
+        $active = (int) ($membershipStats->active ?? 0);
 
         return Inertia::render('Users/Index', [
             'users' => $users,
-            'roles' => (clone $roles)->pluck('name'),
+            'roles' => $roleNames,
+            'filters' => $filters,
+            'stats' => [
+                'total' => $total,
+                'active' => $active,
+                'inactive' => max(0, $total - $active),
+                'roles' => $roleNames->count(),
+            ],
             'permissionModules' => $this->permissionModules(),
             'rolesDetailed' => (clone $roles)->with('permissions:id,name')->get()->map(fn ($r) => [
                 'id' => $r->id,

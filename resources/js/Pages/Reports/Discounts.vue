@@ -2,6 +2,8 @@
 import { Link } from '@inertiajs/vue3';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { CirclePercent, ReceiptText } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -12,19 +14,18 @@ const props = defineProps({
 
 const money = (v) => `${props.currency}${Number(v ?? 0).toLocaleString('sq-AL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmt = (d) => d ? new Date(d).toLocaleDateString('sq-AL', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
+const kpis = [
+    { label: 'Zbritje totale', value: () => money(props.total), tone: 'warning', icon: CirclePercent, detail: 'Të ardhura të lëshuara' },
+    { label: 'Veprime me zbritje', value: () => props.rows.length, tone: 'neutral', icon: ReceiptText },
+];
 </script>
 
 <template>
     <ReportShell title="Zbritje të Dhëna" route-name="reports.discounts" :filters="filters">
-        <Card class="mb-4">
-            <div class="flex items-center justify-between">
-                <p class="text-body-sm text-neutral-600">Zbritje totale të dhëna në periudhë</p>
-                <p class="text-h2 text-warning-600">{{ money(total) }}</p>
-            </div>
-            <p class="text-tiny text-neutral-500 mt-1">{{ rows.length }} zbritje</p>
-        </Card>
+        <ReportKpiGrid :items="kpis" />
 
-        <Card :padding="false">
+        <Card :padding="false" class="mt-5">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">

@@ -2,6 +2,8 @@
 import { computed } from 'vue';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { Banknote, CalendarDays, Clock3, ReceiptText } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: { type: Object, default: null },
@@ -22,37 +24,18 @@ const pct = (v, max) => (Number(max) > 0 ? Math.round((Number(v ?? 0) / Number(m
 
 // Hours with at least one order — keep the bar list readable.
 const activeHours = computed(() => props.byHour.filter((r) => Number(r.count ?? 0) > 0));
+
+const kpis = [
+    { label: 'Të ardhura', value: () => money(props.summary.total_revenue), tone: 'accent', icon: Banknote },
+    { label: 'Porosi', value: () => qty(props.summary.order_count), tone: 'info', icon: ReceiptText },
+    { label: 'Ditë aktive', value: () => qty(props.summary.days), tone: 'neutral', icon: CalendarDays },
+    { label: 'Orë aktive', value: () => qty(activeHours.value.length), tone: 'success', icon: Clock3 },
+];
 </script>
 
 <template>
     <ReportShell title="Shitjet POS sipas Orës & Ditës" route-name="reports.posHourly" :filters="filters">
-        <!-- Summary KPIs -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ qty(summary.order_count) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Porosi</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ money(summary.total_revenue) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Të ardhura</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ qty(summary.days) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Ditë</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ qty(activeHours.length) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Orë aktive</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
         <!-- By hour -->
         <Card :padding="false" class="mt-6">

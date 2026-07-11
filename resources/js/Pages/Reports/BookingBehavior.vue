@@ -1,7 +1,9 @@
 <script setup>
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import { channelMeta } from '@/channels';
+import { CalendarClock, CalendarDays, Radio, ReceiptText } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -12,37 +14,18 @@ const props = defineProps({
 
 const num = (v, d = 1) =>
     Number(v ?? 0).toLocaleString('sq-AL', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+const kpis = [
+    { label: 'Rezervime', value: () => Number(props.summary.count ?? 0).toLocaleString('sq-AL'), tone: 'accent', icon: ReceiptText },
+    { label: 'Lead-time mesatar', value: () => `${num(props.summary.avg_lead)} ditë`, tone: 'info', icon: CalendarClock, detail: 'Nga rezervimi te hyrja' },
+    { label: 'Qëndrim mesatar', value: () => `${num(props.summary.avg_los)} netë`, tone: 'success', icon: CalendarDays },
+    { label: 'Kanale aktive', value: () => props.rows.length, tone: 'neutral', icon: Radio },
+];
 </script>
 
 <template>
     <ReportShell title="Sjellja e Rezervimit" route-name="reports.bookingBehavior" :filters="filters">
-        <!-- KPI grid -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ Number(summary.count ?? 0).toLocaleString('sq-AL') }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Rezervime</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ num(summary.avg_lead) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Lead-time mesatar (ditë)</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ num(summary.avg_los) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Qëndrim mesatar (netë)</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ rows.length }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Kanale</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
         <!-- Per-channel table -->
         <Card class="mt-6 overflow-hidden !p-0">

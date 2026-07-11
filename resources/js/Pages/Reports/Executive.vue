@@ -2,6 +2,10 @@
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import ReportBarList from '@/Components/UI/ReportBarList.vue';
+import { computed } from 'vue';
+import { Banknote, BedDouble, ChartNoAxesCombined, Percent } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -20,34 +24,40 @@ const statusBadge = {
     cancelled: { variant: 'error', label: 'Anulluar' },
 };
 
-const kpis = [
-    { label: 'Të ardhura totale', value: () => money(props.summary.total_revenue), accent: true },
-    { label: 'Të ardhura dhomash', value: () => money(props.summary.room_revenue) },
-    { label: 'Të ardhura bar/restorant', value: () => money(props.summary.pos_revenue) },
-    { label: 'Mbushja', value: () => `${props.summary.occupancy}%` },
-    { label: 'ADR (çmimi mesatar/natë)', value: () => money(props.summary.adr) },
-    { label: 'RevPAR', value: () => money(props.summary.revpar) },
-    { label: 'Netë të shitura', value: () => props.summary.nights_sold },
-    { label: 'Rezervime', value: () => props.summary.reservation_count },
-    { label: 'Komisioni OTA', value: () => money(props.summary.commission) },
-    { label: 'Neto pas komisionit', value: () => money(props.summary.net_room_revenue) },
-    { label: 'TVSH (e përfshirë)', value: () => money(props.summary.vat) },
-    { label: 'Neto pa TVSH', value: () => money(props.summary.net_revenue) },
+const primaryKpis = [
+    { label: 'Të ardhura totale', value: () => money(props.summary.total_revenue), tone: 'accent', icon: Banknote, detail: 'Dhoma + bar/restorant' },
+    { label: 'Mbushja', value: () => `${props.summary.occupancy}%`, tone: 'info', icon: BedDouble, detail: `${props.summary.nights_sold ?? 0} netë të shitura` },
+    { label: 'ADR', value: () => money(props.summary.adr), tone: 'neutral', icon: ChartNoAxesCombined, detail: 'Çmimi mesatar për natë' },
+    { label: 'RevPAR', value: () => money(props.summary.revpar), tone: 'success', icon: Percent, detail: 'Të ardhura për dhomë të disponueshme' },
 ];
+
+const secondaryKpis = [
+    { label: 'Rezervime', value: () => props.summary.reservation_count },
+    { label: 'Komisioni OTA', value: () => money(props.summary.commission), tone: 'warning' },
+    { label: 'Neto pas komisionit', value: () => money(props.summary.net_room_revenue), tone: 'success' },
+    { label: 'TVSH e përfshirë', value: () => money(props.summary.vat) },
+];
+
+const revenueMix = computed(() => [
+    { key: 'rooms', label: 'Dhoma', value: Number(props.summary.room_revenue ?? 0), display: money(props.summary.room_revenue), barClass: 'bg-accent-600' },
+    { key: 'pos', label: 'Bar & restorant', value: Number(props.summary.pos_revenue ?? 0), display: money(props.summary.pos_revenue), barClass: 'bg-info-500' },
+]);
 </script>
 
 <template>
     <ReportShell title="Pasqyra Ekzekutive" route-name="reports.executive" :filters="filters">
-        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-            <Card v-for="k in kpis" :key="k.label">
-                <div class="text-center">
-                    <p :class="['text-h3 truncate', k.accent ? 'text-accent-600' : 'text-primary-900']">{{ k.value() }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">{{ k.label }}</p>
-                </div>
-            </Card>
+        <ReportKpiGrid :items="primaryKpis" />
+
+        <div class="mt-4">
+            <ReportKpiGrid :items="secondaryKpis" />
         </div>
 
-        <div class="mt-6">
+        <div class="mt-6 grid gap-4 xl:grid-cols-[minmax(280px,0.7fr)_1.3fr]">
+            <ReportBarList
+                title="Përbërja e të ardhurave"
+                description="Nga cilat operacione vjen xhiroja e periudhës."
+                :rows="revenueMix"
+            />
             <Card :padding="false">
                 <div class="px-5 py-4 border-b border-neutral-200">
                     <h3 class="text-label text-neutral-600 uppercase tracking-wider">Sipas statusit (hyrje në periudhë)</h3>

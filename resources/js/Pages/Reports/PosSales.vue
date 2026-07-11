@@ -1,6 +1,10 @@
 <script setup>
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import ReportBarList from '@/Components/UI/ReportBarList.vue';
+import { computed } from 'vue';
+import { Banknote, CalendarDays, ReceiptText, ShoppingBasket } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: { type: Object, default: null },
@@ -15,37 +19,28 @@ const qty = (v) => Number(v ?? 0).toLocaleString('sq-AL');
 
 const catTotalQty = () => props.byCategory.reduce((s, r) => s + Number(r.qty ?? 0), 0);
 const catTotalRevenue = () => props.byCategory.reduce((s, r) => s + Number(r.revenue ?? 0), 0);
+
+const kpis = [
+    { label: 'Të ardhura', value: () => money(props.summary.total_revenue), tone: 'accent', icon: Banknote },
+    { label: 'Porosi', value: () => qty(props.summary.order_count), tone: 'info', icon: ReceiptText },
+    { label: 'Mesatare për porosi', value: () => money(props.summary.avg_ticket), tone: 'success', icon: ShoppingBasket },
+    { label: 'Ditë aktive', value: () => qty(props.summary.days), tone: 'neutral', icon: CalendarDays },
+];
+
+const categoryBars = computed(() => props.byCategory.map((row) => ({
+    key: row.category,
+    label: row.category,
+    value: Number(row.revenue ?? 0),
+    display: money(row.revenue),
+    detail: `${qty(row.qty)} artikuj`,
+})));
 </script>
 
 <template>
     <ReportShell title="Shitjet POS (Kategori & Artikull)" route-name="reports.posSales" :filters="filters">
-        <!-- Summary KPIs -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ qty(summary.order_count) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Porosi</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ money(summary.total_revenue) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Të ardhura</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ money(summary.avg_ticket) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Mesatare/porosi</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ qty(summary.days) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Ditë</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
+
+        <ReportBarList class="mt-5" title="Performanca sipas kategorisë" description="Kategoritë që sjellin më shumë të ardhura." :rows="categoryBars" />
 
         <!-- By category -->
         <Card :padding="false" class="mt-6">

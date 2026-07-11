@@ -2,6 +2,8 @@
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { BedDouble, BrushCleaning, CircleCheck, Wrench } from 'lucide-vue-next';
 
 const props = defineProps({
     rows: { type: Array, default: () => [] },
@@ -19,23 +21,23 @@ const statusMeta = {
 const meta = (s) => statusMeta[s] ?? { label: s, variant: 'neutral', color: 'text-neutral-600' };
 
 const tiles = [
-    { key: 'available' },
-    { key: 'occupied' },
-    { key: 'cleaning' },
-    { key: 'maintenance' },
+    { key: 'available', label: 'Të lira', tone: 'success', icon: CircleCheck },
+    { key: 'occupied', label: 'Të zëna', tone: 'info', icon: BedDouble },
+    { key: 'cleaning', label: 'Në pastrim', tone: 'warning', icon: BrushCleaning },
+    { key: 'maintenance', label: 'Mirëmbajtje', tone: 'error', icon: Wrench },
 ];
+
+const kpis = tiles.map((tile) => ({
+    label: tile.label,
+    value: () => props.counts[tile.key] ?? 0,
+    tone: tile.tone,
+    icon: tile.icon,
+}));
 </script>
 
 <template>
     <ReportShell title="Statusi i Dhomave" :filters="null">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card v-for="t in tiles" :key="t.key">
-                <div class="text-center">
-                    <p :class="['text-h3', meta(t.key).color]">{{ counts[t.key] ?? 0 }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">{{ meta(t.key).label }}</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
         <div class="mt-6">
             <Card :padding="false">

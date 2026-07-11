@@ -2,6 +2,8 @@
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { CheckCircle2, ClipboardList, Clock3, Gauge } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -33,22 +35,16 @@ const typeLabel = (t) => ({
 }[t] || t || '—');
 
 const kpis = [
-    { label: 'Detyra gjithsej', value: () => props.summary.total ?? 0, accent: true },
-    { label: 'Përfunduar', value: () => props.summary.completed ?? 0 },
-    { label: 'Në pritje', value: () => props.summary.pending ?? 0 },
+    { label: 'Detyra gjithsej', value: () => props.summary.total ?? 0, tone: 'accent', icon: ClipboardList },
+    { label: 'Përfunduar', value: () => props.summary.completed ?? 0, tone: 'success', icon: CheckCircle2 },
+    { label: 'Në pritje', value: () => props.summary.pending ?? 0, tone: 'warning', icon: Clock3 },
+    { label: 'Norma e përfundimit', value: () => props.summary.total ? `${Math.round((Number(props.summary.completed ?? 0) / Number(props.summary.total)) * 100)}%` : '0%', tone: 'info', icon: Gauge },
 ];
 </script>
 
 <template>
     <ReportShell title="Raporti i Pastrimit" route-name="reports.housekeepingReport" :filters="filters">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card v-for="k in kpis" :key="k.label">
-                <div class="text-center">
-                    <p :class="['text-h3 truncate', k.accent ? 'text-accent-600' : 'text-primary-900']">{{ k.value() }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">{{ k.label }}</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
         <div class="mt-6">
             <Card :padding="false">

@@ -3,6 +3,8 @@ import { Link } from '@inertiajs/vue3';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { CirclePercent, RefreshCcw, Users } from 'lucide-vue-next';
 
 const props = defineProps({
     rows: { type: Array, default: () => [] },
@@ -19,22 +21,15 @@ const fmtDate = (d) => {
 };
 
 const kpis = [
-    { label: 'Mysafirë gjithsej', value: () => props.summary.total_guests ?? 0 },
-    { label: 'Mysafirë kthyes', value: () => props.summary.repeat_guests ?? 0, accent: true },
-    { label: 'Norma e kthimit', value: () => `${Number(props.summary.repeat_rate ?? 0).toLocaleString('sq-AL')}%` },
+    { label: 'Mysafirë gjithsej', value: () => props.summary.total_guests ?? 0, tone: 'neutral', icon: Users },
+    { label: 'Mysafirë kthyes', value: () => props.summary.repeat_guests ?? 0, tone: 'success', icon: RefreshCcw, detail: 'Kanë qëndruar të paktën dy herë' },
+    { label: 'Norma e kthimit', value: () => `${Number(props.summary.repeat_rate ?? 0).toLocaleString('sq-AL')}%`, tone: 'accent', icon: CirclePercent },
 ];
 </script>
 
 <template>
     <ReportShell title="Mysafirë Kthyes &amp; Top" :filters="null">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card v-for="k in kpis" :key="k.label">
-                <div class="text-center">
-                    <p :class="['text-h3 truncate', k.accent ? 'text-accent-600' : 'text-primary-900']">{{ k.value() }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">{{ k.label }}</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
         <div class="mt-6">
             <Card :padding="false">

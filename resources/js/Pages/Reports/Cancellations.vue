@@ -1,7 +1,9 @@
 <script setup>
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import { channelMeta } from '@/channels';
+import { AlertTriangle, Ban, CirclePercent, WalletCards } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -14,23 +16,16 @@ const props = defineProps({
 const money = (v) => `${props.currency}${Number(v ?? 0).toLocaleString('sq-AL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const kpis = [
-    { label: 'Anulime', value: () => props.summary.cancelled_count },
-    { label: 'Vlera e anuluar', value: () => money(props.summary.cancelled_value), accent: true },
-    { label: 'Norma e anulimit', value: () => `${props.summary.cancellation_rate}%` },
-    { label: 'Mundësi no-show', value: () => props.summary.no_show_count },
+    { label: 'Anulime', value: () => props.summary.cancelled_count, tone: 'error', icon: Ban, detail: () => `${props.summary.total_count ?? 0} rezervime në bazë` },
+    { label: 'Vlera e anuluar', value: () => money(props.summary.cancelled_value), tone: 'warning', icon: WalletCards },
+    { label: 'Norma e anulimit', value: () => `${props.summary.cancellation_rate}%`, tone: 'neutral', icon: CirclePercent },
+    { label: 'Mundësi no-show', value: () => props.summary.no_show_count, tone: 'warning', icon: AlertTriangle, detail: 'Kërkojnë verifikim' },
 ];
 </script>
 
 <template>
     <ReportShell title="Anulime & No-Show" route-name="reports.cancellations" :filters="filters">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card v-for="k in kpis" :key="k.label">
-                <div class="text-center">
-                    <p :class="['text-h3 truncate', k.accent ? 'text-accent-600' : 'text-primary-900']">{{ k.value() }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">{{ k.label }}</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
         <p class="mt-2 text-tiny text-neutral-500">
             Norma e anulimit = anulime ÷ {{ summary.total_count }} rezervime me hyrje në këtë periudhë.

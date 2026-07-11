@@ -1,7 +1,11 @@
 <script setup>
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import { channelMeta } from '@/channels';
+import { computed } from 'vue';
+import { Banknote, CalendarCheck, HandCoins, Percent } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -11,11 +15,33 @@ const props = defineProps({
 });
 
 const money = (v) => `${props.currency}${Number(v ?? 0).toLocaleString('sq-AL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const commissionRate = () => Number(props.totals?.revenue ?? 0) > 0
+    ? `${((Number(props.totals?.commission ?? 0) / Number(props.totals.revenue)) * 100).toLocaleString('sq-AL', { maximumFractionDigits: 1 })}%`
+    : '0%';
+
+const kpis = [
+    { label: 'Rezervime', value: () => props.totals?.count ?? 0, tone: 'info', icon: CalendarCheck, detail: `${props.totals?.nights ?? 0} netë` },
+    { label: 'Të ardhura bruto', value: () => money(props.totals?.revenue), tone: 'accent', icon: Banknote },
+    { label: 'Komision', value: () => money(props.totals?.commission), tone: 'warning', icon: Percent, detail: () => commissionRate() },
+    { label: 'Të ardhura neto', value: () => money(props.totals?.net), tone: 'success', icon: HandCoins },
+];
+
+const channelBars = computed(() => props.rows.map((row) => ({
+    key: row.channel,
+    label: channelMeta(row.channel).label,
+    value: Number(row.revenue ?? 0),
+    display: money(row.revenue),
+    detail: `${row.count ?? 0} rezervime · neto ${money(row.net)}`,
+})));
 </script>
 
 <template>
     <ReportShell title="Prodhimi sipas Kanaleve" route-name="reports.channels" :filters="filters">
-        <Card :padding="false">
+        <ReportKpiGrid :items="kpis" />
+        <div class="mt-5 grid gap-4 xl:grid-cols-[minmax(280px,0.65fr)_1.35fr]">
+            <ReportBarList title="Kontributi sipas kanalit" description="Të ardhurat bruto që sjell çdo burim rezervimi." :rows="channelBars" />
+            <Card :padding="false">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">
@@ -56,6 +82,7 @@ const money = (v) => `${props.currency}${Number(v ?? 0).toLocaleString('sq-AL', 
                 </table>
             </div>
             <div v-if="!rows.length" class="px-6 py-10 text-center text-body-sm text-neutral-500">Asnjë rezervim në këtë periudhë.</div>
-        </Card>
+            </Card>
+        </div>
     </ReportShell>
 </template>

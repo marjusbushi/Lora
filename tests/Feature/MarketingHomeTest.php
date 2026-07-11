@@ -14,7 +14,7 @@ class MarketingHomeTest extends TestCase
 
     public function test_lora_product_hosts_render_the_tenantless_marketing_page(): void
     {
-        foreach (['lorapms.com', 'www.lorapms.com', 'staging.lorapms.com'] as $host) {
+        foreach (['lorapms.com', 'staging.lorapms.com'] as $host) {
             $this->get("https://{$host}/")
                 ->assertOk()
                 ->assertSee('Lora PMS — Menaxho hotelin. Jo kaosin.', false)
@@ -24,6 +24,13 @@ class MarketingHomeTest extends TestCase
                     ->where('settings.hotel_name', 'Lora PMS')
                     ->where('tenant', null));
         }
+    }
+
+    public function test_www_lora_host_redirects_to_the_canonical_product_domain(): void
+    {
+        $this->get('https://www.lorapms.com/?source=website')
+            ->assertStatus(308)
+            ->assertRedirect('https://lorapms.com/?source=website');
     }
 
     public function test_unknown_unmapped_host_stays_closed(): void

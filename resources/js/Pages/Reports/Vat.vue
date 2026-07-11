@@ -1,6 +1,8 @@
 <script setup>
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { Banknote, CirclePercent, HandCoins, ReceiptText } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -20,10 +22,10 @@ const monthLabel = (m) => {
 };
 
 const kpis = [
-    { label: 'Bruto (me TVSH)', value: () => money(props.summary.gross), accent: true },
-    { label: `TVSH (${props.summary.rate ?? 20}%)`, value: () => money(props.summary.vat) },
-    { label: 'Neto (pa TVSH)', value: () => money(props.summary.net) },
-    { label: 'Norma e TVSH-së', value: () => `${props.summary.rate ?? 20}%` },
+    { label: 'Bruto me TVSH', value: () => money(props.summary.gross), tone: 'accent', icon: ReceiptText },
+    { label: 'TVSH për deklarim', value: () => money(props.summary.vat), tone: 'warning', icon: Banknote, detail: () => `Norma ${props.summary.rate ?? 20}%` },
+    { label: 'Neto pa TVSH', value: () => money(props.summary.net), tone: 'success', icon: HandCoins },
+    { label: 'Norma e TVSH-së', value: () => `${props.summary.rate ?? 20}%`, tone: 'neutral', icon: CirclePercent },
 ];
 
 const showMonthly = () => props.rows.length > 1;
@@ -31,14 +33,7 @@ const showMonthly = () => props.rows.length > 1;
 
 <template>
     <ReportShell title="Raport TVSH" route-name="reports.vat" :filters="filters">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card v-for="k in kpis" :key="k.label">
-                <div class="text-center">
-                    <p :class="['text-h3 truncate', k.accent ? 'text-accent-600' : 'text-primary-900']">{{ k.value() }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">{{ k.label }}</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
         <p class="mt-3 text-body-sm text-neutral-500">
             TVSH-ja është e përfshirë në çmim (norma shqiptare). Bruto = të ardhura dhomash + bar/restorant.

@@ -1,6 +1,10 @@
 <script setup>
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import ReportBarList from '@/Components/UI/ReportBarList.vue';
+import { computed } from 'vue';
+import { Banknote, CreditCard, Hotel, WalletCards } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -17,44 +21,35 @@ function fmtDate(d) {
     const [y, m, day] = String(d).split('-');
     return `${day}/${m}/${y}`;
 }
+
+const kpis = [
+    { label: 'Total i arkëtuar', value: () => money(props.totals?.total), tone: 'accent', icon: WalletCards, detail: 'Cash-flow real i periudhës' },
+    { label: 'Kesh', value: () => money(props.totals?.cash), tone: 'success', icon: Banknote },
+    { label: 'Kartë', value: () => money(props.totals?.card), tone: 'info', icon: CreditCard },
+    { label: 'Faturë dhome', value: () => money(props.totals?.room_charge), tone: 'neutral', icon: Hotel },
+];
+
+const methodBars = computed(() => props.byMethod.map((method) => ({
+    key: method.method,
+    label: method.label,
+    value: Number(method.amount ?? 0),
+    display: money(method.amount),
+    barClass: method.method === 'cash' ? 'bg-success-500' : method.method === 'card' ? 'bg-info-500' : 'bg-accent-500',
+})));
 </script>
 
 <template>
     <ReportShell title="Arkëtime & Cash" route-name="reports.payments" :filters="filters">
-        <!-- KPI grid: cash, card, room-charge, total -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-success-700">{{ money(totals?.cash) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Kesh</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ money(totals?.card) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Kartë</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ money(totals?.room_charge) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Faturë dhome</p>
-                </div>
-            </Card>
-            <Card>
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900">{{ money(totals?.total) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">Total i arkëtuar</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
         <p class="text-body-sm text-neutral-500 mt-2 mb-4">
             Ky raport tregon paratë e <span class="font-medium text-neutral-700">arkëtuara realisht</span> (cash-flow) në periudhë — i ndryshëm nga të ardhurat e faturuara.
         </p>
 
         <!-- Collected by method -->
-        <Card :padding="false" class="mb-4">
+        <div class="mb-4 grid gap-4 xl:grid-cols-[minmax(280px,0.65fr)_1.35fr]">
+            <ReportBarList title="Mix i arkëtimeve" description="Shpërndarja e cash-flow sipas mënyrës së pagesës." :rows="methodBars" />
+            <Card :padding="false">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">
@@ -78,7 +73,8 @@ function fmtDate(d) {
                 </table>
             </div>
             <div v-if="!byMethod.length" class="px-6 py-10 text-center text-body-sm text-neutral-500">Asnjë të dhënë.</div>
-        </Card>
+            </Card>
+        </div>
 
         <!-- Per-day breakdown -->
         <Card :padding="false">

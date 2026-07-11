@@ -2,6 +2,8 @@
 import { Link } from '@inertiajs/vue3';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import { Banknote, BedDouble, RefreshCcw, Users } from 'lucide-vue-next';
 
 const props = defineProps({
     rows: { type: Array, default: () => [] },
@@ -18,23 +20,16 @@ const fmtDate = (d) => {
 };
 
 const kpis = [
-    { label: 'Mysafirë gjithsej', value: () => props.summary.total_guests ?? 0, accent: true },
-    { label: 'Mysafirë të përsëritur', value: () => props.summary.repeat_guests ?? 0 },
-    { label: 'Netë gjithsej', value: () => props.summary.total_nights ?? 0 },
-    { label: 'Të ardhura gjithsej', value: () => money(props.summary.total_revenue) },
+    { label: 'Mysafirë gjithsej', value: () => props.summary.total_guests ?? 0, tone: 'accent', icon: Users },
+    { label: 'Mysafirë të përsëritur', value: () => props.summary.repeat_guests ?? 0, tone: 'success', icon: RefreshCcw },
+    { label: 'Netë gjithsej', value: () => props.summary.total_nights ?? 0, tone: 'info', icon: BedDouble },
+    { label: 'Të ardhura gjithsej', value: () => money(props.summary.total_revenue), tone: 'neutral', icon: Banknote },
 ];
 </script>
 
 <template>
     <ReportShell title="Direktoria e Mysafirëve" route-name="reports.guests" :filters="null">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Card v-for="k in kpis" :key="k.label">
-                <div class="text-center">
-                    <p :class="['text-h3 truncate', k.accent ? 'text-accent-600' : 'text-primary-900']">{{ k.value() }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">{{ k.label }}</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
 
         <div class="mt-6">
             <Card :padding="false">

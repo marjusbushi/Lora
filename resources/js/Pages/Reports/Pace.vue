@@ -1,6 +1,10 @@
 <script setup>
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import ReportBarList from '@/Components/UI/ReportBarList.vue';
+import { computed } from 'vue';
+import { Banknote, BedDouble, CalendarClock, ReceiptText } from 'lucide-vue-next';
 
 const props = defineProps({
     horizons: { type: Array, default: () => [] },
@@ -20,19 +24,27 @@ const totals = () => ({
     bookings: props.next14.reduce((s, r) => s + Number(r.rooms ?? 0), 0),
     revenue: props.next14.reduce((s, r) => s + Number(r.revenue ?? 0), 0),
 });
+
+const kpis = [
+    { label: 'Rezervime · 14 ditë', value: () => totals().bookings, tone: 'accent', icon: ReceiptText },
+    { label: 'Të ardhura · 14 ditë', value: () => money(totals().revenue), tone: 'success', icon: Banknote },
+    { label: 'Netë · 30 ditë', value: () => props.horizons.find((item) => item.days === 30)?.nights ?? 0, tone: 'info', icon: BedDouble },
+    { label: 'ADR · 30 ditë', value: () => money(props.horizons.find((item) => item.days === 30)?.adr), tone: 'neutral', icon: CalendarClock },
+];
+
+const horizonBars = computed(() => props.horizons.map((item) => ({
+    key: item.days,
+    label: `${item.days} ditët e ardhshme`,
+    value: Number(item.revenue ?? 0),
+    display: money(item.revenue),
+    detail: `${item.bookings ?? 0} rezervime · ${item.nights ?? 0} netë`,
+})));
 </script>
 
 <template>
     <ReportShell title="Tempo & Pickup" route-name="reports.pace" :filters="null">
-        <!-- KPI: revenue on-the-books per horizon -->
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <Card v-for="h in horizons" :key="h.days">
-                <div class="text-center">
-                    <p class="text-h3 text-primary-900 truncate">{{ money(h.revenue) }}</p>
-                    <p class="text-tiny text-neutral-500 uppercase tracking-wider mt-1">{{ h.days }} ditë</p>
-                </div>
-            </Card>
-        </div>
+        <ReportKpiGrid :items="kpis" />
+        <ReportBarList class="mt-5" title="Të ardhura në libër sipas horizontit" description="Sa vlerë është rezervuar tashmë për secilën dritare të ardhshme." :rows="horizonBars" />
 
         <!-- Horizon breakdown table -->
         <div class="mt-6">
