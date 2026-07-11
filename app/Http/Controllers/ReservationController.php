@@ -12,6 +12,7 @@ use App\Models\PosOrder;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Setting;
+use App\Services\AuditTimeline;
 use App\Services\RoomPricing;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -197,7 +198,7 @@ class ReservationController extends Controller
         ]);
     }
 
-    public function show(Reservation $reservation): Response
+    public function show(Reservation $reservation, AuditTimeline $timeline): Response
     {
         $reservation->load([
             'room:id,room_number,room_type_id',
@@ -228,6 +229,14 @@ class ReservationController extends Controller
             ->where('status', 'open')
             ->select('id', 'table_number', 'total_amount', 'created_at')
             ->orderByDesc('created_at')
+            ->get();
+
+        $history = AuditLog::query()
+            ->with('causer:id,name')
+            ->where('subject_type', Reservation::class)
+            ->where('subject_id', $reservation->id)
+            ->latest('id')
+            ->limit(50)
             ->get();
 
         return Inertia::render('Reservations/Show', [
@@ -280,6 +289,7 @@ class ReservationController extends Controller
                 'date' => $p->created_at?->toDateString(),
             ]),
             'openPosOrders' => $openPosOrders,
+            'history' => $timeline->entries($history),
             'currency' => Setting::get('financial.default_currency_symbol', '€'),
         ]);
     }
@@ -610,8 +620,6 @@ class ReservationController extends Controller
 
         $reservation->refresh()->loadMissing('room');
 
-        AuditLog::record('reservation.check_in', $reservation, ['room' => $reservation->room->room_number]);
-
         return back()->with('success', "Check-in per dhomen {$reservation->room->room_number} u krye.");
     }
 
@@ -687,11 +695,6 @@ class ReservationController extends Controller
                 'room_id' => "Dhoma {$newRoom->room_number} nuk eshte e lire per keto data.",
             ]);
         }
-
-        AuditLog::record('reservation.move_room', $reservation, [
-            'from' => $oldRoom?->room_number,
-            'to' => $newRoom->room_number,
-        ]);
 
         return back()->with('success', "Mysafiri u zhvendos te dhoma {$newRoom->room_number}.");
     }
@@ -779,11 +782,6 @@ class ReservationController extends Controller
             }
         });
 
-        AuditLog::record('reservation.check_out', $reservation, [
-            'room' => $roomNumber,
-            'missing_room_id' => $roomNumber === null ? $reservation->room_id : null,
-        ]);
-
         $message = $roomNumber
             ? "Check-out per dhomen {$roomNumber} u krye."
             : 'Check-out u krye. Dhoma e vjeter e lidhur me rezervimin nuk ekziston me.';
@@ -831,8 +829,6 @@ class ReservationController extends Controller
         }
 
         $reservation->update(['status' => 'cancelled']);
-
-        AuditLog::record('reservation.cancel', $reservation);
 
         return back()->with('success', 'Rezervimi u anulua.');
     }

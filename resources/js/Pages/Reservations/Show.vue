@@ -12,6 +12,7 @@ import DatePicker from '@/Components/UI/DatePicker.vue';
 import Select from '@/Components/UI/Select.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
+import AuditTimeline from '@/Components/AuditTimeline.vue';
 import { channelMeta } from '@/channels';
 import { ArrowLeft } from 'lucide-vue-next';
 
@@ -20,6 +21,7 @@ const props = defineProps({
     folio: Object,
     payments: Array,
     openPosOrders: Array,
+    history: { type: Array, default: () => [] },
     currency: { type: String, default: '€' },
 });
 
@@ -353,6 +355,14 @@ function settleAndCheckout(method) {
                 </div>
             </Card>
         </div>
+
+        <Card class="mt-6" :padding="false">
+            <div class="border-b border-neutral-200 px-5 py-4">
+                <h3 class="text-label uppercase tracking-wider text-neutral-600">Historia e rezervimit</h3>
+                <p class="mt-0.5 text-tiny text-neutral-400">Kush e krijoi, çfarë ndryshoi dhe kur ndodhi.</p>
+            </div>
+            <AuditTimeline :entries="history" />
+        </Card>
 
         <!-- Add a hotel charge to the guest account. Food/drinks come from POS. -->
         <Modal

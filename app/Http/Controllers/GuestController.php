@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\GuestStoreRequest;
 use App\Http\Requests\GuestUpdateRequest;
+use App\Models\AuditLog;
 use App\Models\Guest;
 use App\Models\GuestDocument;
 use App\Models\Reservation;
+use App\Services\AuditTimeline;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -284,7 +286,7 @@ class GuestController extends Controller
         ]);
     }
 
-    public function show(Guest $guest): Response
+    public function show(Guest $guest, AuditTimeline $timeline): Response
     {
         $guest->load([
             'reservations' => fn ($q) => $q
@@ -293,6 +295,40 @@ class GuestController extends Controller
         ]);
 
         $stays = $guest->reservations;
+        $stayIds = $stays->pluck('id');
+
+        $historyLogs = AuditLog::query()
+            ->with('causer:id,name')
+            ->where(function ($query) use ($guest, $stayIds) {
+                $query->where(function ($guestLogs) use ($guest) {
+                    $guestLogs->where('subject_type', Guest::class)
+                        ->where('subject_id', $guest->id);
+                });
+
+                if ($stayIds->isNotEmpty()) {
+                    $query->orWhere(function ($reservationLogs) use ($stayIds) {
+                        $reservationLogs->where('subject_type', Reservation::class)
+                            ->whereIn('subject_id', $stayIds);
+                    });
+                }
+            })
+            ->latest('id')
+            ->limit(50)
+            ->get();
+
+        $staySubjects = $stays->mapWithKeys(fn (Reservation $reservation) => [
+            $reservation->id => [
+                'label' => "Rezervimi #{$reservation->id} · Dhoma ".($reservation->room?->room_number ?? '—'),
+                'url' => route('reservations.show', $reservation->id),
+            ],
+        ]);
+        $historySubjects = $historyLogs->mapWithKeys(function (AuditLog $log) use ($staySubjects) {
+            if ($log->subject_type !== Reservation::class) {
+                return [];
+            }
+
+            return [$log->id => $staySubjects->get($log->subject_id)];
+        })->filter()->all();
 
         // Possible duplicates — same email / phone / document_number (excluding self).
         $duplicates = collect();
@@ -353,6 +389,7 @@ class GuestController extends Controller
                 'url' => route('guests.documents.show', $d->id),
             ]),
             'duplicates' => $duplicates,
+            'history' => $timeline->entries($historyLogs, $historySubjects),
         ]);
     }
 

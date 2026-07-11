@@ -9,6 +9,7 @@ import Badge from '@/Components/UI/Badge.vue';
 import Select from '@/Components/UI/Select.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
+import AuditTimeline from '@/Components/AuditTimeline.vue';
 import { FileText, Image as ImageIcon, Trash2, Eye, Upload } from 'lucide-vue-next';
 import { countryName } from '@/countries';
 
@@ -18,6 +19,7 @@ const props = defineProps({
     stats: Object,
     duplicates: Array,
     documents: { type: Array, default: () => [] },
+    history: { type: Array, default: () => [] },
 });
 
 const toasts = ref(null);
@@ -241,6 +243,14 @@ function formatDate(d) {
                 </div>
             </Card>
         </div>
+
+        <Card class="mt-6" :padding="false">
+            <div class="border-b border-neutral-200 px-5 py-4">
+                <h3 class="text-label uppercase tracking-wider text-neutral-600">Historia e veprimeve</h3>
+                <p class="mt-0.5 text-tiny text-neutral-400">Ndryshimet e profilit dhe veprimet e të gjitha rezervimeve të këtij mysafiri.</p>
+            </div>
+            <AuditTimeline :entries="history" />
+        </Card>
 
         <ToastContainer ref="toasts" />
     </AppLayout>

@@ -4,6 +4,8 @@ namespace App\Observers;
 
 use App\Jobs\PushRoomTypeAri;
 use App\Mail\NewReservationMail;
+use App\Models\AuditLog;
+use App\Models\Guest;
 use App\Models\Reservation;
 use App\Models\ReservationStatusLog;
 use App\Models\Room;
@@ -21,6 +23,9 @@ class ReservationObserver
     public function created(Reservation $reservation): void
     {
         $this->logStatus($reservation, null, (string) $reservation->status);
+        AuditLog::record('reservation.created', $reservation, [
+            'changes' => $this->changes($reservation, true),
+        ]);
 
         $to = Setting::get('hotel.email');
         if (! $to) {
@@ -31,7 +36,7 @@ class ReservationObserver
             $reservation->loadMissing(['guest', 'room.roomType']);
             Mail::to($to)->send(new NewReservationMail($reservation));
         } catch (\Throwable $e) {
-            Log::warning('New-reservation email failed: ' . $e->getMessage());
+            Log::warning('New-reservation email failed: '.$e->getMessage());
         }
     }
 
@@ -48,6 +53,13 @@ class ReservationObserver
                 (string) $reservation->getOriginal('status'),
                 (string) $reservation->status,
             );
+        }
+
+        $changes = $this->changes($reservation);
+        if ($changes !== []) {
+            AuditLog::record($this->auditAction($reservation), $reservation, [
+                'changes' => $changes,
+            ]);
         }
     }
 
@@ -79,7 +91,81 @@ class ReservationObserver
 
     public function deleted(Reservation $reservation): void
     {
+        AuditLog::record('reservation.deleted', $reservation, [
+            'changes' => $this->changes($reservation, true),
+        ]);
         $this->syncChannel($reservation);
+    }
+
+    /** @return array<string, array{from:mixed,to:mixed,from_label?:string,to_label?:string}> */
+    private function changes(Reservation $reservation, bool $created = false): array
+    {
+        $fields = [
+            'room_id', 'guest_id', 'check_in_date', 'check_out_date', 'status',
+            'total_amount', 'adults', 'children', 'notes', 'channel', 'channel_ref',
+            'payment_collect', 'eta', 'etd', 'early_check_in', 'late_check_out', 'no_show_at',
+        ];
+
+        $changes = [];
+        foreach ($fields as $field) {
+            if (! $created && ! $reservation->wasChanged($field)) {
+                continue;
+            }
+
+            $to = $this->auditValue($reservation->getAttribute($field));
+            if ($created && $to === null) {
+                continue;
+            }
+
+            $changes[$field] = [
+                'from' => $created ? null : $this->auditValue($reservation->getOriginal($field)),
+                'to' => $to,
+            ];
+        }
+
+        if (isset($changes['room_id'])) {
+            $roomIds = array_filter([$changes['room_id']['from'], $changes['room_id']['to']]);
+            $roomLabels = Room::withTrashed()->whereKey($roomIds)->pluck('room_number', 'id');
+            $changes['room_id']['from_label'] = $roomLabels[$changes['room_id']['from']] ?? null;
+            $changes['room_id']['to_label'] = $roomLabels[$changes['room_id']['to']] ?? null;
+        }
+
+        if (isset($changes['guest_id'])) {
+            $guestIds = array_filter([$changes['guest_id']['from'], $changes['guest_id']['to']]);
+            $guestLabels = Guest::withTrashed()->whereKey($guestIds)->get()
+                ->mapWithKeys(fn (Guest $guest) => [$guest->id => $guest->full_name]);
+            $changes['guest_id']['from_label'] = $guestLabels[$changes['guest_id']['from']] ?? null;
+            $changes['guest_id']['to_label'] = $guestLabels[$changes['guest_id']['to']] ?? null;
+        }
+
+        return $changes;
+    }
+
+    private function auditAction(Reservation $reservation): string
+    {
+        if ($reservation->wasChanged('status')) {
+            return match ($reservation->status) {
+                'checked_in' => 'reservation.check_in',
+                'checked_out' => 'reservation.check_out',
+                'cancelled' => 'reservation.cancel',
+                default => 'reservation.updated',
+            };
+        }
+
+        if ($reservation->wasChanged('room_id')) {
+            return 'reservation.move_room';
+        }
+
+        return 'reservation.updated';
+    }
+
+    private function auditValue(mixed $value): mixed
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format(str_contains($value->format('c'), 'T00:00:00') ? 'Y-m-d' : 'Y-m-d H:i:s');
+        }
+
+        return $value;
     }
 
     private function syncChannel(Reservation $reservation): void
