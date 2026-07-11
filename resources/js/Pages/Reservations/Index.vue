@@ -172,7 +172,7 @@ function doCheckIn(res) {
     router.post(route('reservations.check-in', res.id), {}, {
         preserveScroll: true,
         onSuccess: () => toasts.value?.success(`Check-in: ${res.guest?.first_name} ${res.guest?.last_name}`),
-        onError: () => toasts.value?.error('Check-in deshtoi.'),
+        onError: (errors) => toasts.value?.error(errors.check_in || 'Check-in dështoi.'),
     });
 }
 

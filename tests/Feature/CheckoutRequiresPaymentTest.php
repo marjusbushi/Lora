@@ -95,4 +95,20 @@ class CheckoutRequiresPaymentTest extends TestCase
         // No extra payment was created — it was already settled.
         $this->assertSame(1, $res->payments()->count());
     }
+
+    public function test_checkout_succeeds_when_an_old_reservations_room_was_deleted(): void
+    {
+        $res = $this->checkedInStay(100);
+        $deletedRoomId = $res->room_id;
+        $res->room->delete();
+
+        $this->actingAs($this->staff())
+            ->post(route('reservations.check-out', $res->id), ['settle_method' => 'cash'])
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $this->assertSame('checked_out', $res->fresh()->status);
+        $this->assertEqualsWithDelta(100.0, (float) $res->payments()->sum('amount'), 0.001);
+        $this->assertDatabaseMissing('cleaning_tasks', ['room_id' => $deletedRoomId]);
+    }
 }

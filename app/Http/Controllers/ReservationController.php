@@ -48,10 +48,17 @@ class ReservationController extends Controller
         }
 
         if ($request->filled('search')) {
-            $search = $request->search;
-            $query->whereHas('guest', function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%");
+            $searchTerms = collect(preg_split('/\s+/u', trim((string) $request->search)))
+                ->filter()
+                ->take(6);
+
+            $query->whereHas('guest', function ($guestQuery) use ($searchTerms) {
+                foreach ($searchTerms as $term) {
+                    $guestQuery->where(function ($fieldQuery) use ($term) {
+                        $fieldQuery->where('first_name', 'like', "%{$term}%")
+                            ->orWhere('last_name', 'like', "%{$term}%");
+                    });
+                }
             });
         }
 
@@ -591,7 +598,9 @@ class ReservationController extends Controller
                     ->exists();
             if ($roomNotReady) {
                 throw ValidationException::withMessages([
-                    'check_in' => 'Dhoma duhet te jete e lire, e pastruar dhe pa detyre pastrimi te hapur para check-in.',
+                    'check_in' => $room
+                        ? "Dhoma {$room->room_number} eshte ende ne pastrim ose nuk eshte e lire. Perfundo pastrimin te Housekeeping para check-in."
+                        : 'Dhoma e lidhur me rezervimin nuk ekziston me. Cakto nje dhome tjeter para check-in.',
                 ]);
             }
 
@@ -726,7 +735,14 @@ class ReservationController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($reservation, $data, $outstanding) {
+        $roomNumber = null;
+
+        DB::transaction(function () use ($reservation, $data, $outstanding, &$roomNumber) {
+            // The linked room may have been soft-deleted after an old reservation was created.
+            // Checkout must still close the guest safely instead of crashing with a 500.
+            $room = Room::query()->lockForUpdate()->find($reservation->room_id);
+            $roomNumber = $room?->room_number;
+
             // Record a payment for whatever is still owed, with the chosen method, before flipping status.
             if (! empty($data['settle_method']) && $outstanding > 0) {
                 $reservation->payments()->create([
@@ -742,11 +758,11 @@ class ReservationController extends Controller
             }
 
             $reservation->update(['status' => 'checked_out']);
-            $reservation->room->update(['status' => 'cleaning']);
+            $room?->update(['status' => 'cleaning']);
 
             // Auto-create a housekeeping task so the cleaning board reflects the checkout
             // (activates the housekeeping.auto_create_on_checkout setting, previously dead).
-            if (Setting::get('housekeeping.auto_create_on_checkout', true)) {
+            if ($room && Setting::get('housekeeping.auto_create_on_checkout', true)) {
                 $alreadyOpen = CleaningTask::where('room_id', $reservation->room_id)
                     ->where('type', 'checkout_clean')
                     ->whereIn('status', ['pending', 'in_progress'])
@@ -763,9 +779,16 @@ class ReservationController extends Controller
             }
         });
 
-        AuditLog::record('reservation.check_out', $reservation, ['room' => $reservation->room->room_number]);
+        AuditLog::record('reservation.check_out', $reservation, [
+            'room' => $roomNumber,
+            'missing_room_id' => $roomNumber === null ? $reservation->room_id : null,
+        ]);
 
-        return back()->with('success', "Check-out per dhomen {$reservation->room->room_number} u krye.");
+        $message = $roomNumber
+            ? "Check-out per dhomen {$roomNumber} u krye."
+            : 'Check-out u krye. Dhoma e vjeter e lidhur me rezervimin nuk ekziston me.';
+
+        return back()->with('success', $message);
     }
 
     /**

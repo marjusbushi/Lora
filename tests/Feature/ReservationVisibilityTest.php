@@ -86,6 +86,36 @@ class ReservationVisibilityTest extends TestCase
                     ->etc()));
     }
 
+    public function test_list_searches_a_guest_by_full_name(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $type = RoomType::create(['name' => 'Std', 'base_price' => 100, 'max_occupancy' => 3, 'amenities' => []]);
+        $room = Room::create(['room_type_id' => $type->id, 'room_number' => '510', 'floor' => 5, 'status' => 'available']);
+
+        foreach ([['Arben', 'Hoxha'], ['Arben', 'Dervishi']] as [$firstName, $lastName]) {
+            $guest = Guest::create(['first_name' => $firstName, 'last_name' => $lastName]);
+            Reservation::create([
+                'room_id' => $room->id,
+                'guest_id' => $guest->id,
+                'created_by' => $admin->id,
+                'check_in_date' => today()->addDay()->toDateString(),
+                'check_out_date' => today()->addDays(2)->toDateString(),
+                'status' => 'confirmed',
+                'total_amount' => 100,
+                'adults' => 1,
+            ]);
+        }
+
+        $this->actingAs($admin)->get(route('reservations.index', ['search' => 'Arben Hoxha']))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('filters.search', 'Arben Hoxha')
+                ->has('reservations.data', 1)
+                ->where('reservations.data.0.guest.first_name', 'Arben')
+                ->where('reservations.data.0.guest.last_name', 'Hoxha'));
+    }
+
     public function test_list_puts_the_most_recently_received_reservation_first(): void
     {
         $this->seed(RolePermissionSeeder::class);
