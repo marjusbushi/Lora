@@ -2,9 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TenantAwareJob;
 use App\Models\ChannelMapping;
 use App\Models\RoomType;
 use App\Services\ChannelSync;
+use App\Services\ChannexClient;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -22,7 +24,7 @@ use Illuminate\Foundation\Queue\Queueable;
  */
 class PushRoomTypeAri implements ShouldQueue
 {
-    use Queueable;
+    use Queueable, TenantAwareJob;
 
     public int $tries = 3;
 
@@ -37,7 +39,9 @@ class PushRoomTypeAri implements ShouldQueue
         public int $roomTypeId,
         public ?string $from = null,
         public ?string $to = null,
-    ) {}
+    ) {
+        $this->captureTenant();
+    }
 
     public function handle(ChannelSync $sync): void
     {
@@ -69,7 +73,7 @@ class PushRoomTypeAri implements ShouldQueue
         CarbonInterface|string|null $from = null,
         CarbonInterface|string|null $to = null,
     ): int {
-        if (! config('services.channex.api_key')) {
+        if (! app(ChannexClient::class)->configured()) {
             return 0;
         }
 

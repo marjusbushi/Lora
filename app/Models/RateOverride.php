@@ -2,14 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * A price for ONE date + room type, overriding the seasonal/base price for that night.
  * Created when the owner accepts a Smart Pricing suggestion (or sets a date price by hand).
  */
-class RateOverride extends Model
+class RateOverride extends TenantModel
 {
     protected $fillable = [
         'date',

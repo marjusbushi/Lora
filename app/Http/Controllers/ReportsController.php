@@ -12,6 +12,7 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
+use App\Tenancy\TenantContext;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -261,6 +262,7 @@ class ReportsController extends Controller
             ->join('menu_items as mi', 'mi.id', '=', 'oi.menu_item_id')
             ->leftJoin('menu_categories as mc', 'mc.id', '=', 'mi.menu_category_id')
             ->whereIn('oi.pos_order_id', $orderIds)
+            ->where('oi.tenant_id', app(TenantContext::class)->id())
             ->groupBy('mc.name')
             ->select(
                 DB::raw("COALESCE(mc.name, 'Pa kategori') as category"),
@@ -280,6 +282,7 @@ class ReportsController extends Controller
             ->join('menu_items as mi', 'mi.id', '=', 'oi.menu_item_id')
             ->leftJoin('menu_categories as mc', 'mc.id', '=', 'mi.menu_category_id')
             ->whereIn('oi.pos_order_id', $orderIds)
+            ->where('oi.tenant_id', app(TenantContext::class)->id())
             ->groupBy('mi.name', 'mc.name')
             ->select(
                 'mi.name as item',

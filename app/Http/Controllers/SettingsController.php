@@ -13,6 +13,7 @@ use App\Models\RoomType;
 use App\Models\RoomTypeImage;
 use App\Models\Setting;
 use App\Services\PricingRulesVersion;
+use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -50,7 +51,7 @@ class SettingsController extends Controller
     public function storeFloor(Request $request): RedirectResponse
     {
         $request->validate([
-            'number' => ['required', 'integer', 'min:0', 'max:255', 'unique:floors,number'],
+            'number' => ['required', 'integer', 'min:0', 'max:255', TenantRule::unique('floors', 'number')],
             'name' => ['required', 'string', 'max:100'],
         ]);
 
@@ -62,7 +63,7 @@ class SettingsController extends Controller
     public function updateFloor(Request $request, Floor $floor): RedirectResponse
     {
         $request->validate([
-            'number' => ['required', 'integer', 'min:0', 'max:255', 'unique:floors,number,'.$floor->id],
+            'number' => ['required', 'integer', 'min:0', 'max:255', TenantRule::unique('floors', 'number')->ignore($floor->id)],
             'name' => ['required', 'string', 'max:100'],
         ]);
 
@@ -303,7 +304,7 @@ class SettingsController extends Controller
     public function storeRoomType(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:room_types,name'],
+            'name' => ['required', 'string', 'max:255', TenantRule::unique('room_types', 'name')],
             'description' => ['nullable', 'string', 'max:500'],
             'base_price' => ['required', 'numeric', 'min:0'],
             'min_price' => ['nullable', 'numeric', 'min:0.01'],
@@ -331,7 +332,7 @@ class SettingsController extends Controller
     public function updateRoomType(Request $request, RoomType $roomType): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:room_types,name,'.$roomType->id],
+            'name' => ['required', 'string', 'max:255', TenantRule::unique('room_types', 'name')->ignore($roomType->id)],
             'description' => ['nullable', 'string', 'max:500'],
             'base_price' => ['required', 'numeric', 'min:0'],
             'min_price' => ['nullable', 'numeric', 'min:0.01'],
@@ -390,7 +391,7 @@ class SettingsController extends Controller
     public function storeAmenity(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:100', 'unique:amenities,name'],
+            'name' => ['required', 'string', 'max:100', TenantRule::unique('amenities', 'name')],
         ]);
 
         Amenity::create([
@@ -413,7 +414,7 @@ class SettingsController extends Controller
     public function storeMenuCategory(Request $request): RedirectResponse
     {
         $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:menu_categories,name'],
+            'name' => ['required', 'string', 'max:255', TenantRule::unique('menu_categories', 'name')],
         ]);
 
         $maxOrder = MenuCategory::max('sort_order') ?? 0;
@@ -425,7 +426,7 @@ class SettingsController extends Controller
     public function updateMenuCategory(Request $request, MenuCategory $menuCategory): RedirectResponse
     {
         $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:menu_categories,name,'.$menuCategory->id],
+            'name' => ['required', 'string', 'max:255', TenantRule::unique('menu_categories', 'name')->ignore($menuCategory->id)],
         ]);
 
         $menuCategory->update(['name' => $request->name]);
@@ -448,7 +449,7 @@ class SettingsController extends Controller
     public function storeMenuItem(Request $request): RedirectResponse
     {
         $request->validate([
-            'menu_category_id' => ['required', 'exists:menu_categories,id'],
+            'menu_category_id' => ['required', TenantRule::exists('menu_categories')],
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0.01'],
             'image' => ['nullable', 'image', 'max:2048'],
@@ -549,7 +550,7 @@ class SettingsController extends Controller
     {
         $request->validate([
             'image_ids' => ['required', 'array'],
-            'image_ids.*' => ['exists:room_type_images,id'],
+            'image_ids.*' => [TenantRule::exists('room_type_images')],
         ]);
 
         foreach ($request->image_ids as $index => $id) {

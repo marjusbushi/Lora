@@ -10,15 +10,16 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Models\WebsiteSearchLog;
 use App\Services\PokClient;
+use App\Services\PokConfiguration;
 use App\Services\PokPayments;
 use App\Services\PublicRoomPricing;
 use App\Services\RoomPricing;
+use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -90,7 +91,7 @@ class WebsiteController extends Controller
         $request->validate([
             'check_in' => ['required', 'date', 'after_or_equal:today'],
             'check_out' => ['required', 'date', 'after:check_in'],
-            'room_type_id' => ['nullable', 'exists:room_types,id'],
+            'room_type_id' => ['nullable', TenantRule::exists('room_types')],
         ]);
 
         $query = Room::select('id', 'room_number', 'room_type_id', 'floor')
@@ -150,7 +151,7 @@ class WebsiteController extends Controller
     public function availability(Request $request)
     {
         $request->validate([
-            'room_type_id' => ['nullable', 'exists:room_types,id'],
+            'room_type_id' => ['nullable', TenantRule::exists('room_types')],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
         ]);
@@ -203,7 +204,7 @@ class WebsiteController extends Controller
         }
 
         $request->validate([
-            'room_id' => ['required', 'exists:rooms,id'],
+            'room_id' => ['required', TenantRule::exists('rooms')],
             'check_in' => ['required', 'date', 'after_or_equal:today'],
             'check_out' => ['required', 'date', 'after:check_in'],
             'first_name' => ['required', 'string', 'max:255'],
@@ -235,13 +236,7 @@ class WebsiteController extends Controller
         // index still counts it — so it would try to re-INSERT and 500 with a duplicate-key on
         // EVERY public booking. Looking up including trashed rows finds it; restore() un-trashes
         // it so the funnel self-heals instead of going down.
-        $creator = User::withTrashed()->firstOrCreate(
-            ['email' => 'system@villamucho.local'],
-            ['name' => 'Website Booking', 'password' => Str::random(40)]
-        );
-        if ($creator->trashed()) {
-            $creator->restore();
-        }
+        $creator = User::systemForCurrentTenant();
 
         try {
             // Lock the room row + re-check availability INSIDE the transaction so two
@@ -382,7 +377,7 @@ class WebsiteController extends Controller
     {
         return [
             'orderId' => $reservation->pok_order_id,
-            'env' => config('services.pok.production') ? 'production' : 'staging',
+            'env' => app(PokConfiguration::class)->get('production', false) ? 'production' : 'staging',
             'amount' => (float) $reservation->total_amount,
             'currency' => Setting::get('financial.default_currency_symbol', '€'),
             'guestName' => session('book_guest_name'),
@@ -396,7 +391,7 @@ class WebsiteController extends Controller
             // POK's own hosted card page for this order — a silent fallback the SDK onError path
             // redirects to (no longer a visible competing button). The guest pays here and POK
             // returns them to pay.show.
-            'payUrl' => rtrim(config('services.pok.production') ? 'https://pay.pokpay.io' : 'https://pay-staging.pokpay.io', '/').'/sdk-orders/'.$reservation->pok_order_id,
+            'payUrl' => rtrim(app(PokConfiguration::class)->payUrl(), '/').'/sdk-orders/'.$reservation->pok_order_id,
             'roomName' => $reservation->room?->roomType?->name,
             'nights' => (int) now()->parse($reservation->check_in_date)->diffInDays($reservation->check_out_date),
             'adults' => (int) $reservation->adults,

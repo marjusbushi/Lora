@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class Amenity extends Model
+class Amenity extends TenantModel
 {
     protected $fillable = ['name', 'sort_order'];
 

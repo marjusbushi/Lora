@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class ReservationStatusLog extends Model
+class ReservationStatusLog extends TenantModel
 {
     /**
      * Append-only audit trail of reservation status transitions.

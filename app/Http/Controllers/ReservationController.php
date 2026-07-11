@@ -14,6 +14,7 @@ use App\Models\Room;
 use App\Models\Setting;
 use App\Services\AuditTimeline;
 use App\Services\RoomPricing;
+use App\Tenancy\TenantRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -410,14 +411,14 @@ class ReservationController extends Controller
         // Staff may back-date a booking (walk-in that already arrived, historical
         // entry) — no after_or_equal:today here. The PUBLIC website stays future-only.
         $data = $request->validate([
-            'guest_id' => ['required', 'exists:guests,id'],
+            'guest_id' => ['required', TenantRule::exists('guests')],
             'check_in_date' => ['required', 'date'],
             'check_out_date' => ['required', 'date', 'after:check_in_date'],
             'status' => ['sometimes', 'in:pending,confirmed'],
             'channel' => ['sometimes', 'nullable', Rule::in(Reservation::CHANNELS)],
             'notes' => ['nullable', 'string', 'max:1000'],
             'rooms' => ['required', 'array', 'min:1'],
-            'rooms.*.room_id' => ['required', 'exists:rooms,id'],
+            'rooms.*.room_id' => ['required', TenantRule::exists('rooms')],
             'rooms.*.adults' => ['required', 'integer', 'min:1', 'max:20'],
             'rooms.*.children' => ['sometimes', 'integer', 'min:0', 'max:20'],
             'rooms.*.total_amount' => ['nullable', 'numeric', 'min:0'],
@@ -558,7 +559,7 @@ class ReservationController extends Controller
     public function quote(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'room_id' => ['required', 'exists:rooms,id'],
+            'room_id' => ['required', TenantRule::exists('rooms')],
             'check_in' => ['required', 'date'],
             'check_out' => ['required', 'date', 'after:check_in'],
         ]);
@@ -641,7 +642,7 @@ class ReservationController extends Controller
         }
 
         $data = $request->validate([
-            'room_id' => ['required', 'exists:rooms,id'],
+            'room_id' => ['required', TenantRule::exists('rooms')],
         ]);
 
         if ((int) $data['room_id'] === (int) $reservation->room_id) {

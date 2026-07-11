@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -13,7 +12,7 @@ use Illuminate\Support\Collection;
  * One source of truth for both the deterministic engine (uplift_pct) and the
  * Gemini context (Copa 2 / Copa 4).
  */
-class PricingEvent extends Model
+class PricingEvent extends TenantModel
 {
     protected $fillable = [
         'name',

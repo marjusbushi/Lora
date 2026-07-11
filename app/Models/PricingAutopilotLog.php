@@ -2,10 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
 /** One row per autopilot price change — the owner's audit + 1-tap revert. */
-class PricingAutopilotLog extends Model
+class PricingAutopilotLog extends TenantModel
 {
     protected $fillable = [
         'room_type_id',

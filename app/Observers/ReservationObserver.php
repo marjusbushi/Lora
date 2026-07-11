@@ -10,6 +10,7 @@ use App\Models\Reservation;
 use App\Models\ReservationStatusLog;
 use App\Models\Room;
 use App\Models\Setting;
+use App\Services\ChannexClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -171,7 +172,7 @@ class ReservationObserver
     private function syncChannel(Reservation $reservation): void
     {
         // Only when Channex is wired up — never queue no-op jobs otherwise.
-        if (! config('services.channex.api_key')) {
+        if (! app(ChannexClient::class)->configured()) {
             return;
         }
 

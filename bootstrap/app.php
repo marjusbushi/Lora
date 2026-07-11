@@ -1,6 +1,9 @@
 <?php
 
+use App\Console\TenantCommandRunner;
+use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ResolveTenant;
 use App\Models\ChannelSyncLog;
 use App\Models\WebsiteSearchLog;
 use Illuminate\Console\Scheduling\Schedule;
@@ -8,6 +11,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
@@ -21,9 +25,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
+            ResolveTenant::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
+
+        // Tenant resolution needs the session/auth user, but must happen before
+        // implicit route-model binding so a foreign tenant ID can never bind.
+        $middleware->prependToPriorityList(SubstituteBindings::class, ResolveTenant::class);
 
         // Channex + POK post webhooks server-to-server (no CSRF token). Channex uses a
         // shared-secret header; POK re-verifies every event via getOrder (never trusts the body).
@@ -33,6 +42,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
+            'super_admin' => EnsureSuperAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -42,19 +52,31 @@ return Application::configure(basePath: dirname(__DIR__))
         // Retention: channel sync audit (90d) + website search demand log (2y).
         $schedule->command('model:prune', ['--model' => [ChannelSyncLog::class, WebsiteSearchLog::class]])->daily();
         // Catch-up: re-pull any OTA booking a missed webhook left unacknowledged.
-        $schedule->command('channex:pull-bookings')->everyFifteenMinutes()->withoutOverlapping();
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run(
+            'channex:pull-bookings',
+            requiresChannex: true,
+        ))->name('tenants:channex:pull-bookings')->everyFifteenMinutes()->withoutOverlapping();
         // On-the-books snapshot per future date × room type (pickup-pace history).
         // Runs before the 04:00 ARI push so both see the same overnight state.
-        $schedule->command('pricing:snapshot')->dailyAt('03:30');
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run('pricing:snapshot'))
+            ->name('tenants:pricing:snapshot')->dailyAt('03:30');
         // Nightly safety-net: re-push availability + rates in case a real-time push was missed.
-        $schedule->command('channex:push-ari --queue --reconcile-fixed')->dailyAt('04:00')->withoutOverlapping()->onOneServer();
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run(
+            'channex:push-ari',
+            ['--queue' => true, '--reconcile-fixed' => true],
+            requiresChannex: true,
+        ))->name('tenants:channex:push-ari')->dailyAt('04:00')->withoutOverlapping()->onOneServer();
         // Free abandoned holds: cancel pending direct bookings whose POK payment never completed.
-        $schedule->command('pok:release-unpaid')->everyFiveMinutes()->withoutOverlapping();
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run('pok:release-unpaid'))
+            ->name('tenants:pok:release-unpaid')->everyFiveMinutes()->withoutOverlapping();
         // Guarded auto-pricing (owner-enabled only), between snapshot and ARI push.
-        $schedule->command('pricing:autopilot')->dailyAt('03:45')->withoutOverlapping()->onOneServer();
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run('pricing:autopilot'))
+            ->name('tenants:pricing:autopilot')->dailyAt('03:45')->withoutOverlapping()->onOneServer();
         // Monday-morning pricing narrative for the owner (skips if Gemini unset).
-        $schedule->command('pricing:weekly-report')->weeklyOn(1, '07:00');
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run('pricing:weekly-report'))
+            ->name('tenants:pricing:weekly-report')->weeklyOn(1, '07:00');
         // Midnight: archive inspected cleaning tasks so the board shows only the day's live work.
-        $schedule->command('housekeeping:archive-inspected')->daily();
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run('housekeeping:archive-inspected'))
+            ->name('tenants:housekeeping:archive-inspected')->daily();
     })
     ->create();

@@ -43,8 +43,7 @@ class ImportBookingCsv extends Command
 
         // withTrashed: resolve the system user even if soft-deleted (see submitBooking) so a
         // CSV import is attributed to it, not silently to the first admin.
-        $creator = User::withTrashed()->where('email', 'system@villamucho.local')->value('id')
-            ?? User::orderBy('id')->value('id');
+        $creator = User::systemForCurrentTenant()->id;
 
         // room_number -> Room, and a per-type pool of rooms for free-room assignment.
         $roomsByNumber = Room::with('roomType')->get()->keyBy(fn ($r) => trim((string) $r->room_number));

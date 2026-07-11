@@ -537,10 +537,7 @@ class OtaSellWindowTest extends TestCase
     {
         Artisan::call('schedule:list');
         $event = collect(app(Schedule::class)->events())->first(
-            fn ($candidate) => str_contains(
-                (string) $candidate->command,
-                'channex:push-ari --queue --reconcile-fixed',
-            ),
+            fn ($candidate) => $candidate->description === 'tenants:channex:push-ari',
         );
 
         $this->assertNotNull($event);

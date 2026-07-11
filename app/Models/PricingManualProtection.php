@@ -2,10 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
 /** Owner intent to keep a date on its normal rate, without a fake override. */
-class PricingManualProtection extends Model
+class PricingManualProtection extends TenantModel
 {
     protected $fillable = ['room_type_id', 'date', 'created_by', 'reason'];
 

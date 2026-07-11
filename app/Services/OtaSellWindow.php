@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ChannelMapping;
 use App\Models\Setting;
+use App\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Closure;
@@ -37,6 +38,8 @@ class OtaSellWindow
 
     public const MAX_STATE_LENGTH_DAYS = 730;
 
+    public function __construct(private readonly ChannexConfiguration $configuration) {}
+
     public function today(): CarbonImmutable
     {
         return CarbonImmutable::today();
@@ -51,7 +54,7 @@ class OtaSellWindow
     {
         return min(
             self::MAX_STATE_LENGTH_DAYS,
-            max(100, (int) config('services.channex.state_length_days', self::DEFAULT_STATE_LENGTH_DAYS)),
+            max(100, (int) $this->configuration->get('state_length_days', self::DEFAULT_STATE_LENGTH_DAYS)),
         );
     }
 
@@ -138,7 +141,9 @@ class OtaSellWindow
      */
     public function withAriLock(Closure $callback): mixed
     {
-        return Cache::lock(self::ARI_LOCK, self::ARI_LOCK_SECONDS)->block(30, $callback);
+        $tenantId = app(TenantContext::class)->id() ?? 'global';
+
+        return Cache::lock(self::ARI_LOCK.':'.$tenantId, self::ARI_LOCK_SECONDS)->block(30, $callback);
     }
 
     /**
@@ -179,6 +184,7 @@ class OtaSellWindow
         }
 
         Setting::query()->insertOrIgnore([
+            'tenant_id' => app(TenantContext::class)->idOrDefault(),
             'group' => 'channex',
             'key' => 'sell_window_version',
             'value' => '0',

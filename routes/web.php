@@ -17,6 +17,7 @@ use App\Http\Controllers\RoomController;
 use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SmartPricingController;
+use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebsiteController;
 use Illuminate\Http\Request;
@@ -56,6 +57,15 @@ Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->mi
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])->name('dashboard');
+
+Route::middleware(['auth', 'verified', 'super_admin'])
+    ->prefix('super-admin')
+    ->name('super-admin.')
+    ->group(function () {
+        Route::get('/tenants', [SuperAdminTenantController::class, 'index'])->name('tenants.index');
+        Route::post('/tenants', [SuperAdminTenantController::class, 'store'])->name('tenants.store');
+        Route::post('/tenants/{tenant}/switch', [SuperAdminTenantController::class, 'switch'])->name('tenants.switch');
+    });
 
 // Internal component gallery (dev reference) — no data, but staff-only (not public).
 Route::get('/design-system', function () {

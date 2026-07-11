@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Tenancy\TenantContext;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -18,32 +19,33 @@ use RuntimeException;
  */
 class PokClient
 {
-    private const TOKEN_CACHE_KEY = 'pok.access_token';
+    public function __construct(
+        private readonly PokConfiguration $configuration,
+        private readonly TenantContext $context,
+    ) {}
 
     public function configured(): bool
     {
-        return (bool) (config('services.pok.key_id')
-            && config('services.pok.key_secret')
-            && config('services.pok.merchant_id'));
+        return $this->configuration->configured();
     }
 
     private function base(): string
     {
-        return rtrim((string) config('services.pok.base_url'), '/');
+        return rtrim((string) $this->configuration->get('base_url'), '/');
     }
 
     private function merchantId(): string
     {
-        return (string) config('services.pok.merchant_id');
+        return (string) $this->configuration->get('merchant_id');
     }
 
     /** Bearer access token from POK, cached just under its ~1h TTL. */
     public function token(): string
     {
-        return Cache::remember(self::TOKEN_CACHE_KEY, now()->addMinutes(50), function () {
+        return Cache::remember($this->tokenCacheKey(), now()->addMinutes(50), function () {
             $res = Http::asJson()->timeout(20)->post($this->base().'/auth/sdk/login', [
-                'keyId' => config('services.pok.key_id'),
-                'keySecret' => config('services.pok.key_secret'),
+                'keyId' => $this->configuration->get('key_id'),
+                'keySecret' => $this->configuration->get('key_secret'),
             ]);
 
             if (! $res->successful()) {
@@ -67,11 +69,16 @@ class PokClient
 
         $res = $call();
         if ($res->status() === 401) {
-            Cache::forget(self::TOKEN_CACHE_KEY);
+            Cache::forget($this->tokenCacheKey());
             $res = $call();
         }
 
         return $res;
+    }
+
+    private function tokenCacheKey(): string
+    {
+        return 'pok.access_token.tenant.'.($this->context->id() ?? 'legacy');
     }
 
     /**

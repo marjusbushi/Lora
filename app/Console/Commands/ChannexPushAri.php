@@ -7,6 +7,7 @@ use App\Jobs\ReconcileOtaSellWindow;
 use App\Models\ChannelMapping;
 use App\Models\RoomType;
 use App\Services\ChannelSync;
+use App\Services\ChannexClient;
 use App\Services\OtaSellWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
@@ -25,10 +26,10 @@ class ChannexPushAri extends Command
 
     protected $description = 'Push availability + rates for all Channex-mapped room types';
 
-    public function handle(ChannelSync $sync, OtaSellWindow $sellWindow): int
+    public function handle(ChannelSync $sync, OtaSellWindow $sellWindow, ChannexClient $channex): int
     {
-        if (! config('services.channex.api_key')) {
-            $this->error('CHANNEX_API_KEY is not set (.env).');
+        if (! $channex->configured()) {
+            $this->error('Channex is not configured for this hotel.');
 
             return self::FAILURE;
         }

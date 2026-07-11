@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
 
-class ChannelSyncLog extends Model
+class ChannelSyncLog extends TenantModel
 {
     use Prunable;
 

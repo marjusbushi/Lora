@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class PosShift extends Model
+class PosShift extends TenantModel
 {
     protected $fillable = [
         'user_id',

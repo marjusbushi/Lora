@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
 
 /**
@@ -10,7 +9,7 @@ use Illuminate\Database\Eloquent\Prunable;
  * how many rooms came back, and whether the visitor was turned away (denied).
  * Append-only, PII-free. Pruned after 2 years.
  */
-class WebsiteSearchLog extends Model
+class WebsiteSearchLog extends TenantModel
 {
     use Prunable;
 

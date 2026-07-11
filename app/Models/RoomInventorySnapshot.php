@@ -2,14 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
 /**
  * One row per (snapshot_date × stay_date × room_type): how many rooms of the
  * type were on the books for that future night, as seen on snapshot_date.
  * Written nightly by `pricing:snapshot` — the raw feed for pickup-pace pricing.
  */
-class RoomInventorySnapshot extends Model
+class RoomInventorySnapshot extends TenantModel
 {
     protected $fillable = [
         'snapshot_date',

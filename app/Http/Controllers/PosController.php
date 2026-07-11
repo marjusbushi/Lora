@@ -11,10 +11,10 @@ use App\Models\PosOrderItem;
 use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Setting;
+use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -69,7 +69,7 @@ class PosController extends Controller
 
         return Inertia::render('Pos/Index', [
             'orders' => $query->paginate(15),
-            'menu' => MenuCategory::with(['items' => fn($q) => $q->where('is_available', true)])
+            'menu' => MenuCategory::with(['items' => fn ($q) => $q->where('is_available', true)])
                 ->orderBy('sort_order')
                 ->get(),
             'activeReservations' => $activeReservations,
@@ -90,16 +90,17 @@ class PosController extends Controller
     {
         $request->validate([
             'table_number' => ['nullable', 'string', 'max:10'],
-            'reservation_id' => ['nullable', 'exists:reservations,id'],
+            'reservation_id' => ['nullable', TenantRule::exists('reservations')],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.menu_item_id' => ['required', 'exists:menu_items,id'],
+            'items.*.menu_item_id' => ['required', TenantRule::exists('menu_items')],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:50'],
         ]);
 
         // No order without an open cash-drawer shift for the acting user.
         $shift = PosShift::currentFor(auth()->id());
-        if (!$shift) {
+        if (! $shift) {
             AuditLog::record('pos.shift.blocked', null, ['attempted_action' => 'store']);
+
             return back()->with('error', 'Hap nje turn para se te krijosh porosi.');
         }
 
@@ -140,7 +141,7 @@ class PosController extends Controller
             'reservation_id' => [
                 'nullable',
                 'required_if:payment_method,room_charge',
-                Rule::exists('reservations', 'id')->where(fn ($q) => $q->where('status', 'checked_in')),
+                TenantRule::exists('reservations')->where('status', 'checked_in'),
             ],
         ]);
 
@@ -150,8 +151,9 @@ class PosController extends Controller
 
         // A sale only finalizes inside the acting user's open shift (cash hits a live drawer).
         $shift = PosShift::currentFor(auth()->id());
-        if (!$shift) {
+        if (! $shift) {
             AuditLog::record('pos.shift.blocked', $posOrder, ['attempted_action' => 'complete']);
+
             return back()->with('error', 'Hap nje turn para se te mbyllesh porosine.');
         }
 
@@ -179,7 +181,7 @@ class PosController extends Controller
                 FolioItem::create([
                     'reservation_id' => $reservationId,
                     'pos_order_id' => $posOrder->id,
-                    'description' => "POS Porosi #{$posOrder->id}" . ($posOrder->table_number ? " (Tavolina {$posOrder->table_number})" : ''),
+                    'description' => "POS Porosi #{$posOrder->id}".($posOrder->table_number ? " (Tavolina {$posOrder->table_number})" : ''),
                     'amount' => $posOrder->total_amount,
                     'type' => $posOrder->items->first()?->menuItem?->category?->name === 'Pije' ? 'bar' : 'restaurant',
                     'charge_date' => today(),
@@ -204,8 +206,9 @@ class PosController extends Controller
 
         // Voiding a ticket is a cash-control event — only inside the acting user's open shift.
         $shift = PosShift::currentFor(auth()->id());
-        if (!$shift) {
+        if (! $shift) {
             AuditLog::record('pos.shift.blocked', $posOrder, ['attempted_action' => 'cancel']);
+
             return back()->with('error', 'Hap nje turn para se te anulosh porosine.');
         }
 

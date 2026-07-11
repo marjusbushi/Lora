@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class PosOrderItem extends Model
+class PosOrderItem extends TenantModel
 {
     protected $fillable = ['pos_order_id', 'menu_item_id', 'quantity', 'unit_price', 'total_price'];
 

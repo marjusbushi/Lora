@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CleaningTask;
 use App\Models\Room;
 use App\Models\User;
+use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -57,10 +58,10 @@ class CleaningTaskController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'room_id' => ['required', 'exists:rooms,id'],
+            'room_id' => ['required', TenantRule::exists('rooms')],
             'type' => ['required', 'in:checkout_clean,stayover_clean,deep_clean,inspection'],
             'priority' => ['sometimes', 'in:normal,urgent'],
-            'assigned_to' => ['nullable', 'exists:users,id'],
+            'assigned_to' => ['nullable', TenantRule::userExists()],
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -202,7 +203,7 @@ class CleaningTaskController extends Controller
     public function assign(Request $request, CleaningTask $cleaningTask): RedirectResponse
     {
         $request->validate([
-            'assigned_to' => ['required', 'exists:users,id'],
+            'assigned_to' => ['required', TenantRule::userExists()],
         ]);
 
         $cleaningTask->update(['assigned_to' => $request->assigned_to]);

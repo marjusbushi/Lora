@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Tenancy\TenantRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class GuestStoreRequest extends FormRequest
 {
@@ -24,10 +24,10 @@ class GuestStoreRequest extends FormRequest
         return [
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255', Rule::unique('guests', 'email')->whereNull('deleted_at')],
+            'email' => ['nullable', 'email', 'max:255', TenantRule::unique('guests', 'email')->whereNull('deleted_at')],
             'phone' => ['nullable', 'string', 'max:30'],
             'document_type' => ['nullable', 'in:id_card,passport,drivers_license'],
-            'document_number' => ['nullable', 'string', 'max:50', Rule::unique('guests', 'document_number')],
+            'document_number' => ['nullable', 'string', 'max:50', TenantRule::unique('guests', 'document_number')],
             'nationality' => ['nullable', 'string', 'max:3'],
             'date_of_birth' => ['nullable', 'date', 'before:today'],
             'preferences' => ['nullable', 'array'],

@@ -12,6 +12,7 @@ use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Setting;
+use App\Services\ChannexConfiguration;
 use App\Services\OtaSellWindow;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -529,8 +530,7 @@ class DashboardController extends Controller
     /** @return array<string, mixed> */
     private function otaHealth(OtaSellWindow $sellWindow): array
     {
-        $configured = filled(config('services.channex.api_key'))
-            && filled(config('services.channex.property_id'));
+        $configured = app(ChannexConfiguration::class)->configured();
 
         $summaryError = false;
         try {

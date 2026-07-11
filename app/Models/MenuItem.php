@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class MenuItem extends Model
+class MenuItem extends TenantModel
 {
     protected $fillable = ['menu_category_id', 'name', 'price', 'cost_price', 'is_available', 'image_path'];
 

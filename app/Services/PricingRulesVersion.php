@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Setting;
+use App\Tenancy\TenantContext;
 
 /** DB-backed mutex/version for every persisted input that changes engine output. */
 class PricingRulesVersion
@@ -27,6 +28,7 @@ class PricingRulesVersion
         // Self-heal older or partially migrated installations. The unique
         // (group, key) index makes this safe when two requests race to create it.
         Setting::query()->insertOrIgnore([
+            'tenant_id' => app(TenantContext::class)->idOrDefault(),
             'group' => 'pricing',
             'key' => 'rules_version',
             'value' => '0',

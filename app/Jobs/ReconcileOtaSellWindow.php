@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TenantAwareJob;
 use App\Models\ChannelMapping;
 use App\Models\RoomType;
 use App\Services\OtaSellWindow;
@@ -16,7 +17,7 @@ use Illuminate\Support\Facades\Bus;
  */
 class ReconcileOtaSellWindow implements ShouldQueue
 {
-    use Queueable;
+    use Queueable, TenantAwareJob;
 
     public int $tries = 3;
 
@@ -28,7 +29,9 @@ class ReconcileOtaSellWindow implements ShouldQueue
     public function __construct(
         public int $version,
         public string $target,
-    ) {}
+    ) {
+        $this->captureTenant();
+    }
 
     public function handle(OtaSellWindow $sellWindow): void
     {

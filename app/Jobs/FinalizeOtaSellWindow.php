@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TenantAwareJob;
 use App\Models\ChannelMapping;
 use App\Services\ChannelSync;
 use App\Services\ChannexClient;
@@ -14,7 +15,7 @@ use RuntimeException;
 /** Read availability and rates back from Channex, then mark the revision delivered. */
 class FinalizeOtaSellWindow implements ShouldQueue
 {
-    use Queueable;
+    use Queueable, TenantAwareJob;
 
     public int $tries = 3;
 
@@ -27,7 +28,9 @@ class FinalizeOtaSellWindow implements ShouldQueue
     public function __construct(
         public int $version,
         public string $target,
-    ) {}
+    ) {
+        $this->captureTenant();
+    }
 
     public function handle(
         OtaSellWindow $sellWindow,

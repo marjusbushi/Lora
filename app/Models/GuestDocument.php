@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class GuestDocument extends Model
+class GuestDocument extends TenantModel
 {
     protected $fillable = [
         'guest_id',

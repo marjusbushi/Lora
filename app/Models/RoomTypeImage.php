@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class RoomTypeImage extends Model
+class RoomTypeImage extends TenantModel
 {
     protected $fillable = ['room_type_id', 'path', 'sort_order'];
 

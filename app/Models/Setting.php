@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Tenancy\TenantContext;
 use Illuminate\Support\Facades\Cache;
 
-class Setting extends Model
+class Setting extends TenantModel
 {
     protected $fillable = ['group', 'key', 'value', 'type'];
 
@@ -18,7 +18,7 @@ class Setting extends Model
 
         $setting = static::where('group', $group)->where('key', $key)->first();
 
-        if (!$setting) {
+        if (! $setting) {
             return $default;
         }
 
@@ -39,7 +39,7 @@ class Setting extends Model
             ['value' => $storedValue, 'type' => $type]
         );
 
-        Cache::forget('app.settings');
+        Cache::forget(self::cacheKey());
     }
 
     /**
@@ -49,7 +49,7 @@ class Setting extends Model
     {
         return static::where('group', $group)
             ->get()
-            ->mapWithKeys(fn($s) => [$s->key => self::castValue($s->value, $s->type)])
+            ->mapWithKeys(fn ($s) => [$s->key => self::castValue($s->value, $s->type)])
             ->toArray();
     }
 
@@ -60,13 +60,15 @@ class Setting extends Model
     {
         return static::all()
             ->groupBy('group')
-            ->map(fn($items) => $items->mapWithKeys(fn($s) => [$s->key => self::castValue($s->value, $s->type)]))
+            ->map(fn ($items) => $items->mapWithKeys(fn ($s) => [$s->key => self::castValue($s->value, $s->type)]))
             ->toArray();
     }
 
     private static function castValue(?string $value, string $type): mixed
     {
-        if ($value === null) return null;
+        if ($value === null) {
+            return null;
+        }
 
         return match ($type) {
             'number' => is_numeric($value) ? (float) $value : $value,
@@ -74,5 +76,10 @@ class Setting extends Model
             'json' => json_decode($value, true) ?? [],
             default => $value,
         };
+    }
+
+    public static function cacheKey(): string
+    {
+        return 'app.settings.'.(app(TenantContext::class)->id() ?? 'global');
     }
 }

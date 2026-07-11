@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class CleaningTask extends Model
+class CleaningTask extends TenantModel
 {
     protected $fillable = [
         'room_id',

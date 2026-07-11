@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class ChannelMapping extends Model
+class ChannelMapping extends TenantModel
 {
     protected $fillable = [
         'channel',

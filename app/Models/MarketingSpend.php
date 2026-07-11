@@ -3,9 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 
-class MarketingSpend extends Model
+class MarketingSpend extends TenantModel
 {
     use HasFactory;
 

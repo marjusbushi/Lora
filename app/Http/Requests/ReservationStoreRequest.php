@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Reservation;
 use App\Models\Room;
+use App\Tenancy\TenantRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -25,8 +26,8 @@ class ReservationStoreRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'room_id' => ['required', 'exists:rooms,id'],
-            'guest_id' => ['required', 'exists:guests,id'],
+            'room_id' => ['required', TenantRule::exists('rooms')],
+            'guest_id' => ['required', TenantRule::exists('guests')],
             'check_in_date' => ['required', 'date'],
             'check_out_date' => ['required', 'date', 'after:check_in_date'],
             'status' => ['sometimes', 'in:pending,confirmed'],

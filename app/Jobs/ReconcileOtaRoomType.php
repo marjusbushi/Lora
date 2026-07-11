@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TenantAwareJob;
 use App\Models\RoomType;
 use App\Services\ChannelSync;
 use App\Services\OtaSellWindow;
@@ -13,7 +14,7 @@ use RuntimeException;
 /** Apply one revision to one mapped room type in a short, retryable job. */
 class ReconcileOtaRoomType implements ShouldQueue
 {
-    use Queueable;
+    use Queueable, TenantAwareJob;
 
     public int $tries = 3;
 
@@ -27,7 +28,9 @@ class ReconcileOtaRoomType implements ShouldQueue
         public int $roomTypeId,
         public int $version,
         public string $target,
-    ) {}
+    ) {
+        $this->captureTenant();
+    }
 
     public function handle(ChannelSync $sync, OtaSellWindow $sellWindow): void
     {

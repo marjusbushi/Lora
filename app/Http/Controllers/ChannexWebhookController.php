@@ -19,7 +19,7 @@ class ChannexWebhookController extends Controller
     {
         // FAIL CLOSED: an unset secret disables the endpoint entirely — never
         // accept an anonymous caller on a public money + PII route.
-        $secret = (string) config('services.channex.webhook_secret');
+        $secret = $channex->webhookSecret();
         if ($secret === '' || ! hash_equals($secret, (string) $request->header('X-Channex-Webhook-Secret'))) {
             return response('forbidden', 403);
         }

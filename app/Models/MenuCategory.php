@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class MenuCategory extends Model
+class MenuCategory extends TenantModel
 {
     protected $fillable = ['name', 'sort_order', 'outlet'];
 

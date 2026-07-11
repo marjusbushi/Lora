@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class PosOrder extends Model
+class PosOrder extends TenantModel
 {
     protected $fillable = [
         'reservation_id',

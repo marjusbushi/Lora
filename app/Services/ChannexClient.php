@@ -38,11 +38,15 @@ class ChannexClient
 
     protected string $propertyId;
 
-    public function __construct()
+    protected string $webhookSecret;
+
+    public function __construct(?ChannexConfiguration $configuration = null)
     {
-        $this->apiKey = (string) config('services.channex.api_key');
-        $this->baseUrl = rtrim((string) config('services.channex.base_url'), '/');
-        $this->propertyId = (string) config('services.channex.property_id');
+        $configuration ??= app(ChannexConfiguration::class);
+        $this->apiKey = (string) $configuration->get('api_key', '');
+        $this->baseUrl = rtrim((string) $configuration->get('base_url', 'https://app.channex.io/api/v1'), '/');
+        $this->propertyId = (string) $configuration->get('property_id', '');
+        $this->webhookSecret = (string) $configuration->get('webhook_secret', '');
     }
 
     public function configured(): bool
@@ -53,6 +57,11 @@ class ChannexClient
     public function propertyId(): string
     {
         return $this->propertyId;
+    }
+
+    public function webhookSecret(): string
+    {
+        return $this->webhookSecret;
     }
 
     /** €80.00 -> 8000. Channex stores rates in minor currency units. */

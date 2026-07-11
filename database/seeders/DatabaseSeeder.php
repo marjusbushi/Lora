@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'marjusbushi@zeroabsolute.com',
             'password' => bcrypt('Zero.Absolute1'),
         ]);
+        $superAdmin->forceFill(['is_super_admin' => true])->save();
         $superAdmin->assignRole('admin');
 
         // Demo Admin

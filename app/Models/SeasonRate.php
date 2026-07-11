@@ -2,9 +2,7 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class SeasonRate extends Model
+class SeasonRate extends TenantModel
 {
     protected $fillable = ['season_id', 'room_type_id', 'price'];
 

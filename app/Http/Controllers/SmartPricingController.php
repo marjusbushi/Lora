@@ -17,6 +17,7 @@ use App\Services\PricingEngine;
 use App\Services\PricingRulesVersion;
 use App\Services\RoomPricing;
 use App\Services\SmartPricing;
+use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -136,7 +137,7 @@ class SmartPricingController extends Controller
     {
         $data = $request->validate([
             'date' => ['required', 'date'],
-            'room_type_id' => ['required', 'exists:room_types,id'],
+            'room_type_id' => ['required', TenantRule::exists('room_types')],
             // Missing price means "accept the engine suggestion"; the server
             // recomputes it now so a stale browser object is never trusted.
             'price' => ['nullable', 'numeric', 'min:0.01', 'max:1000000'],
@@ -205,7 +206,7 @@ class SmartPricingController extends Controller
     {
         $data = $request->validate([
             'date' => ['required', 'date'],
-            'room_type_id' => ['required', 'exists:room_types,id'],
+            'room_type_id' => ['required', TenantRule::exists('room_types')],
         ]);
 
         $removed = DB::transaction(function () use ($data) {
@@ -317,7 +318,7 @@ class SmartPricingController extends Controller
     public function applyRange(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'room_type_id' => ['required', 'exists:room_types,id'],
+            'room_type_id' => ['required', TenantRule::exists('room_types')],
             'date_from' => ['required', 'date'],
             'date_to' => ['required', 'date', 'after_or_equal:date_from'],
         ]);
@@ -381,7 +382,7 @@ class SmartPricingController extends Controller
         }
         $data = $request->validate([
             'date' => ['required', 'date'],
-            'room_type_id' => ['required', 'exists:room_types,id'],
+            'room_type_id' => ['required', TenantRule::exists('room_types')],
         ]);
 
         try {
@@ -545,7 +546,7 @@ class SmartPricingController extends Controller
         $data = $request->validate([
             'question' => ['required', 'string', 'max:500'],
             'month' => ['required', 'date'],
-            'room_type_id' => ['nullable', 'exists:room_types,id'],
+            'room_type_id' => ['nullable', TenantRule::exists('room_types')],
         ]);
 
         try {

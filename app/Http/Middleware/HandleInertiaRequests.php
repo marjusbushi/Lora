@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Setting;
+use App\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
@@ -32,6 +33,7 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $tenant = app(TenantContext::class)->tenant();
 
         return [
             ...parent::share($request),
@@ -42,11 +44,19 @@ class HandleInertiaRequests extends Middleware
                     'email' => $user->email,
                     'role' => $user->getRoleNames()->first(),
                     'permissions' => $user->getAllPermissions()->pluck('name'),
+                    'is_super_admin' => $user->is_super_admin,
                 ] : null,
             ],
+            'tenant' => $tenant ? [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'slug' => $tenant->slug,
+                'timezone' => $tenant->timezone,
+                'currency' => $tenant->currency,
+            ] : null,
             // Cached so the shared prop costs one cache lookup, not 6 SELECTs per request.
             // Invalidated in Setting::set().
-            'settings' => Cache::rememberForever('app.settings', fn() => [
+            'settings' => Cache::rememberForever(Setting::cacheKey(), fn () => [
                 'hotel_name' => Setting::get('hotel.name', 'Hotel'),
                 'currency' => Setting::get('hotel.currency', 'EUR'),
                 'currency_symbol' => Setting::get('financial.default_currency_symbol', '€'),
@@ -63,8 +73,8 @@ class HandleInertiaRequests extends Middleware
                 'maps_url' => Setting::get('hotel.maps_url'),
             ]),
             'flash' => [
-                'success' => fn() => $request->session()->get('success'),
-                'error' => fn() => $request->session()->get('error'),
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
             ],
         ];
     }

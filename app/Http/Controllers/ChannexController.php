@@ -6,6 +6,7 @@ use App\Jobs\PushRoomTypeAri;
 use App\Jobs\ReconcileOtaSellWindow;
 use App\Models\AuditLog;
 use App\Models\Setting;
+use App\Services\ChannexClient;
 use App\Services\OtaSellWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -19,11 +20,11 @@ class ChannexController extends Controller
      * Manual "Sync now": queue a full availability + rate push for every
      * Channex-mapped room type. The actual pushes run on the queue worker.
      */
-    public function sync(OtaSellWindow $sellWindow): RedirectResponse
+    public function sync(OtaSellWindow $sellWindow, ChannexClient $channex): RedirectResponse
     {
         if ($sellWindow->configuredUntil()) {
             $count = $sellWindow->summary()['room_type_count'];
-            if (! config('services.channex.api_key') || $count === 0) {
+            if (! $channex->configured() || $count === 0) {
                 return back()->with('error', 'Channex nuk eshte konfiguruar ose s\'ka dhoma te lidhura me kanalin.');
             }
 

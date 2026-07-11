@@ -6,6 +6,7 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomInventorySnapshot;
 use App\Models\RoomType;
+use App\Tenancy\TenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -43,6 +44,7 @@ class PricingSnapshot extends Command
 
         $rows = [];
         $now = now();
+        $tenantId = app(TenantContext::class)->idOrDefault();
 
         foreach ($types as $typeId) {
             $typeRooms = $rooms->get($typeId, collect());
@@ -58,6 +60,7 @@ class PricingSnapshot extends Command
                     ->pluck('room_id')->unique()->count();
 
                 $rows[] = [
+                    'tenant_id' => $tenantId,
                     'snapshot_date' => $today->toDateString(),
                     'stay_date' => $night,
                     'room_type_id' => $typeId,
@@ -74,7 +77,7 @@ class PricingSnapshot extends Command
         foreach (array_chunk($rows, 500) as $chunk) {
             RoomInventorySnapshot::upsert(
                 $chunk,
-                ['snapshot_date', 'stay_date', 'room_type_id'],
+                ['tenant_id', 'snapshot_date', 'stay_date', 'room_type_id'],
                 ['total_rooms', 'out_of_order', 'booked', 'available', 'updated_at'],
             );
         }
