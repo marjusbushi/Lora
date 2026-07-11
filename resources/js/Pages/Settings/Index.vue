@@ -1,5 +1,6 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import { usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import HotelTab from './Tabs/HotelTab.vue';
@@ -25,19 +26,21 @@ const props = defineProps({
 
 const toasts = ref(null);
 const activeTab = ref('hotel');
+const modules = computed(() => usePage().props.modules || {});
 
-const tabs = [
+const allTabs = [
     { id: 'hotel', label: 'Hotel Info' },
     { id: 'website', label: 'Faqja Web' },
     { id: 'about', label: 'Faqja: Rreth Nesh' },
     { id: 'room-types', label: 'Tipet e dhomave' },
     { id: 'amenities', label: 'Pajisjet' },
     { id: 'floors', label: 'Katet' },
-    { id: 'menu', label: 'Menu POS' },
-    { id: 'housekeeping', label: 'Housekeeping' },
+    { id: 'menu', label: 'Menu POS', module: 'pos' },
+    { id: 'housekeeping', label: 'Housekeeping', module: 'housekeeping' },
     { id: 'financial', label: 'Financiare' },
     { id: 'ai', label: 'Asistenti AI' },
 ];
+const tabs = computed(() => allTabs.filter((tab) => !tab.module || modules.value[tab.module] === true));
 </script>
 
 <template>

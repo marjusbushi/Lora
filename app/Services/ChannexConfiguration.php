@@ -10,7 +10,10 @@ class ChannexConfiguration
 {
     private ?array $resolved = null;
 
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(
+        private readonly TenantContext $context,
+        private readonly TenantBillingService $billing,
+    ) {}
 
     public function all(): array
     {
@@ -23,6 +26,10 @@ class ChannexConfiguration
         if ($this->context->id() === null
             || (app()->environment('testing') && config('services.channex.testing_legacy_fallback', true))) {
             return $this->resolved = $this->legacyConfig();
+        }
+
+        if (! $this->billing->enabled(TenantBillingService::CHANNEL_MANAGER, $this->context->tenant())) {
+            return $this->resolved = $this->emptyConfig();
         }
 
         $integration = TenantIntegration::query()

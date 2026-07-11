@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
+use App\Services\TenantBillingService;
 use App\Services\TenantRoleService;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
@@ -18,11 +19,15 @@ use Inertia\Response;
 
 class TenantController extends Controller
 {
-    public function index(): Response
+    public function index(TenantBillingService $billing): Response
     {
         return Inertia::render('SuperAdmin/Tenants/Index', [
             'tenants' => Tenant::query()
-                ->with(['domains' => fn ($query) => $query->orderByDesc('is_primary')])
+                ->with([
+                    'domains' => fn ($query) => $query->orderByDesc('is_primary'),
+                    'subscription',
+                    'moduleEntitlements',
+                ])
                 ->withCount('users')
                 ->orderBy('name')
                 ->get()
@@ -38,13 +43,17 @@ class TenantController extends Controller
                     'primary_domain' => $tenant->domains->firstWhere('is_primary', true)?->domain,
                     'domains' => $tenant->domains->pluck('domain'),
                     'created_at' => $tenant->created_at?->toIso8601String(),
+                    'billing' => $billing->summary($tenant),
                 ]),
             'currentTenantId' => app(TenantContext::class)->id(),
         ]);
     }
 
-    public function store(Request $request, TenantRoleService $tenantRoles): RedirectResponse
-    {
+    public function store(
+        Request $request,
+        TenantRoleService $tenantRoles,
+        TenantBillingService $billing,
+    ): RedirectResponse {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'slug' => ['required', 'string', 'max:80', 'alpha_dash:ascii', Rule::unique('tenants', 'slug')],
@@ -59,7 +68,7 @@ class TenantController extends Controller
             return back()->withErrors(['primary_domain' => 'Ky domain perdoret nga nje hotel tjeter.']);
         }
 
-        $tenant = DB::transaction(function () use ($data, $domain, $request, $tenantRoles) {
+        $tenant = DB::transaction(function () use ($data, $domain, $request, $tenantRoles, $billing) {
             $tenant = Tenant::create([
                 'uuid' => (string) Str::uuid(),
                 'name' => $data['name'],
@@ -111,6 +120,7 @@ class TenantController extends Controller
             ]);
 
             $tenantRoles->provision($tenant, $request->user());
+            $billing->provision($tenant);
 
             return $tenant;
         });
@@ -121,6 +131,40 @@ class TenantController extends Controller
         ]);
 
         return back()->with('success', 'Hoteli u krijua. Tani mund te kalosh ne tenantin e ri.');
+    }
+
+    public function updateSubscription(
+        Request $request,
+        Tenant $tenant,
+        TenantBillingService $billing,
+        TenantContext $context,
+    ): RedirectResponse {
+        $moduleCodes = array_keys($billing->catalog());
+        $rules = [
+            'status' => ['required', Rule::in(['trialing', 'active', 'past_due', 'suspended', 'canceled'])],
+            'billing_cycle' => ['required', Rule::in(['monthly', 'annual'])],
+            'current_period_ends_at' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+            'modules' => ['required', 'array:'.implode(',', $moduleCodes)],
+        ];
+
+        foreach ($moduleCodes as $code) {
+            $rules["modules.{$code}.enabled"] = ['required', 'boolean'];
+            $rules["modules.{$code}.quantity"] = ['required', 'integer', 'min:1', 'max:10000'];
+        }
+
+        $data = $request->validate($rules);
+        $before = $billing->summary($tenant);
+        $billing->update($tenant, $data);
+        $tenant->unsetRelation('subscription')->unsetRelation('moduleEntitlements');
+        $after = $billing->summary($tenant);
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.subscription.update', $tenant, [
+            'before' => $before,
+            'after' => $after,
+        ]));
+
+        return back()->with('success', "Abonimi i {$tenant->name} u përditësua.");
     }
 
     public function switch(Request $request, Tenant $tenant): RedirectResponse

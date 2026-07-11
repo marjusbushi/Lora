@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Setting;
+use App\Services\TenantBillingService;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -34,6 +35,7 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $tenant = app(TenantContext::class)->tenant();
+        $billingAccess = $tenant ? app(TenantBillingService::class)->accessSnapshot($tenant) : null;
         $settings = $tenant
             ? Cache::rememberForever(Setting::cacheKey(), fn () => [
                 'hotel_name' => Setting::get('hotel.name', 'Hotel'),
@@ -86,6 +88,12 @@ class HandleInertiaRequests extends Middleware
                 'timezone' => $tenant->timezone,
                 'currency' => $tenant->currency,
             ] : null,
+            'subscription' => $billingAccess ? [
+                'status' => $billingAccess['status'],
+                'billing_cycle' => $billingAccess['billing_cycle'],
+                'current_period_ends_at' => $billingAccess['current_period_ends_at'],
+            ] : null,
+            'modules' => $billingAccess['modules'] ?? [],
             // Cached so the shared prop costs one cache lookup, not 6 SELECTs per request.
             // Invalidated in Setting::set().
             'settings' => $settings,

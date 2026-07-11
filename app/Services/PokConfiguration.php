@@ -10,7 +10,10 @@ class PokConfiguration
 {
     private ?array $resolved = null;
 
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(
+        private readonly TenantContext $context,
+        private readonly TenantBillingService $billing,
+    ) {}
 
     public function all(): array
     {
@@ -21,6 +24,10 @@ class PokConfiguration
         if ($this->context->id() === null
             || (app()->environment('testing') && config('services.pok.testing_legacy_fallback', true))) {
             return $this->resolved = $this->legacyConfig();
+        }
+
+        if (! $this->billing->enabled(TenantBillingService::BOOKING_ENGINE, $this->context->tenant())) {
+            return $this->resolved = $this->emptyConfig();
         }
 
         $integration = TenantIntegration::query()

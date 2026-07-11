@@ -1,12 +1,14 @@
 <script setup>
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
+import { computed } from 'vue';
 import { Users, BedDouble, Coffee } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { amenityIcon } from '@/Components/Website/amenities';
 
 const { t } = useI18n();
+const bookingEnabled = computed(() => usePage().props.modules?.booking_engine === true);
 
 defineProps({ roomTypes: Array });
 
@@ -70,7 +72,7 @@ const hasFromPrice = (room) => room?.from_price !== null
                                     </div>
                                 </div>
 
-                                <Link :href="`/book?room_type=${room.id}`" class="btn-reserve mt-8 w-full">
+                                <Link v-if="bookingEnabled" :href="`/book?room_type=${room.id}`" class="btn-reserve mt-8 w-full">
                                     {{ $t('rooms.card.reserve', { name: room.name }) }}
                                 </Link>
                             </div>
