@@ -2,10 +2,12 @@
 
 use App\Console\TenantCommandRunner;
 use App\Http\Middleware\EnsureSuperAdmin;
+use App\Http\Middleware\EnsureTenantModuleEnabled;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResolveTenant;
 use App\Models\ChannelSyncLog;
 use App\Models\WebsiteSearchLog;
+use App\Services\TenantBillingService;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -43,6 +45,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
             'super_admin' => EnsureSuperAdmin::class,
+            'module' => EnsureTenantModuleEnabled::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -55,6 +58,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->call(fn () => app(TenantCommandRunner::class)->run(
             'channex:pull-bookings',
             requiresChannex: true,
+            requiredModule: TenantBillingService::CHANNEL_MANAGER,
         ))->name('tenants:channex:pull-bookings')->everyFifteenMinutes()->withoutOverlapping();
         // On-the-books snapshot per future date × room type (pickup-pace history).
         // Runs before the 04:00 ARI push so both see the same overnight state.
@@ -65,18 +69,31 @@ return Application::configure(basePath: dirname(__DIR__))
             'channex:push-ari',
             ['--queue' => true, '--reconcile-fixed' => true],
             requiresChannex: true,
+            requiredModule: TenantBillingService::CHANNEL_MANAGER,
         ))->name('tenants:channex:push-ari')->dailyAt('04:00')->withoutOverlapping()->onOneServer();
         // Free abandoned holds: cancel pending direct bookings whose POK payment never completed.
-        $schedule->call(fn () => app(TenantCommandRunner::class)->run('pok:release-unpaid'))
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run(
+            'pok:release-unpaid',
+            requiredModule: TenantBillingService::BOOKING_ENGINE,
+        ))
             ->name('tenants:pok:release-unpaid')->everyFiveMinutes()->withoutOverlapping();
         // Guarded auto-pricing (owner-enabled only), between snapshot and ARI push.
-        $schedule->call(fn () => app(TenantCommandRunner::class)->run('pricing:autopilot'))
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run(
+            'pricing:autopilot',
+            requiredModule: TenantBillingService::SMART_PRICING,
+        ))
             ->name('tenants:pricing:autopilot')->dailyAt('03:45')->withoutOverlapping()->onOneServer();
         // Monday-morning pricing narrative for the owner (skips if Gemini unset).
-        $schedule->call(fn () => app(TenantCommandRunner::class)->run('pricing:weekly-report'))
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run(
+            'pricing:weekly-report',
+            requiredModule: TenantBillingService::SMART_PRICING,
+        ))
             ->name('tenants:pricing:weekly-report')->weeklyOn(1, '07:00');
         // Midnight: archive inspected cleaning tasks so the board shows only the day's live work.
-        $schedule->call(fn () => app(TenantCommandRunner::class)->run('housekeeping:archive-inspected'))
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run(
+            'housekeeping:archive-inspected',
+            requiredModule: TenantBillingService::HOUSEKEEPING,
+        ))
             ->name('tenants:housekeeping:archive-inspected')->daily();
     })
     ->create();

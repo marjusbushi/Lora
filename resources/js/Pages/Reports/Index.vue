@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import {
@@ -32,7 +32,11 @@ import {
 
 defineProps({ currency: { type: String, default: '€' } });
 
-const categories = [
+const page = usePage();
+const activeModules = computed(() => page.props.modules || {});
+const hasModule = (module) => !module || activeModules.value[module] === true;
+
+const allCategories = [
     { key: 'all', label: 'Të gjitha' },
     { key: 'finance', label: 'Financë' },
     { key: 'reservations', label: 'Rezervime' },
@@ -40,6 +44,7 @@ const categories = [
     { key: 'guests', label: 'Mysafirë' },
     { key: 'pos', label: 'POS' },
 ];
+const categories = computed(() => allCategories.filter((category) => category.key !== 'pos' || hasModule('pos')));
 
 const groups = [
     {
@@ -73,7 +78,7 @@ const groups = [
             { name: 'Manifesti i mbërritjeve', desc: 'Mysafirët që priten të mbërrijnë.', to: 'reports.arrivalsManifest', icon: UserRoundCheck },
             { name: 'Manifesti i nisjeve', desc: 'Nisjet dhe balancat që duhen mbyllur.', to: 'reports.departuresManifest', icon: CalendarCheck },
             { name: 'Statusi i dhomave', desc: 'Gjendja aktuale e çdo dhome.', to: 'reports.roomStatus', icon: BedDouble },
-            { name: 'Raporti i pastrimit', desc: 'Ngarkesa dhe produktiviteti i housekeeping.', to: 'reports.housekeepingReport', icon: Sparkles },
+            { name: 'Raporti i pastrimit', desc: 'Ngarkesa dhe produktiviteti i housekeeping.', to: 'reports.housekeepingReport', icon: Sparkles, module: 'housekeeping' },
             { name: 'Mysafirë në hotel', desc: 'Lista e mysafirëve aktualisht brenda.', to: 'reports.inHouse', icon: House },
         ],
     },
@@ -105,6 +110,7 @@ const groups = [
         key: 'pos',
         name: 'Bar & restorant',
         category: 'pos',
+        module: 'pos',
         icon: Utensils,
         reports: [
             { name: 'Shitjet sipas kategorisë', desc: 'Të ardhurat dhe sasitë sipas artikullit.', to: 'reports.posSales', icon: ShoppingBasket },
@@ -115,7 +121,11 @@ const groups = [
     },
 ];
 
-const allReports = groups.flatMap((group) => group.reports.map((report) => ({ ...report, category: group.category })));
+const allReports = computed(() => groups
+    .filter((group) => hasModule(group.module))
+    .flatMap((group) => group.reports
+        .filter((report) => hasModule(report.module))
+        .map((report) => ({ ...report, category: group.category }))));
 const quickRouteNames = ['reports.executive', 'reports.arrivalsManifest', 'reports.departuresManifest', 'reports.outstanding'];
 const query = ref('');
 const activeCategory = ref('all');
@@ -124,10 +134,12 @@ const recentRouteNames = ref([]);
 const normalizedQuery = computed(() => query.value.trim().toLocaleLowerCase('sq-AL'));
 
 const visibleGroups = computed(() => groups
+    .filter((group) => hasModule(group.module))
     .filter((group) => activeCategory.value === 'all' || group.category === activeCategory.value)
     .map((group) => ({
         ...group,
         reports: group.reports.filter((report) => {
+            if (!hasModule(report.module)) return false;
             if (!normalizedQuery.value) return true;
             return `${report.name} ${report.desc}`.toLocaleLowerCase('sq-AL').includes(normalizedQuery.value);
         }),
@@ -135,12 +147,12 @@ const visibleGroups = computed(() => groups
     .filter((group) => group.reports.length));
 
 const quickReports = computed(() => quickRouteNames
-    .map((routeName) => allReports.find((report) => report.to === routeName))
+    .map((routeName) => allReports.value.find((report) => report.to === routeName))
     .filter(Boolean));
 
 const recentReports = computed(() => {
     const routes = recentRouteNames.value.length ? recentRouteNames.value : quickRouteNames;
-    return routes.map((routeName) => allReports.find((report) => report.to === routeName)).filter(Boolean).slice(0, 4);
+    return routes.map((routeName) => allReports.value.find((report) => report.to === routeName)).filter(Boolean).slice(0, 4);
 });
 
 function rememberReport(report) {
@@ -152,7 +164,7 @@ function rememberReport(report) {
 onMounted(() => {
     try {
         const stored = JSON.parse(window.localStorage.getItem('pms-recent-reports') || '[]');
-        if (Array.isArray(stored)) recentRouteNames.value = stored.filter((routeName) => allReports.some((report) => report.to === routeName));
+        if (Array.isArray(stored)) recentRouteNames.value = stored.filter((routeName) => allReports.value.some((report) => report.to === routeName));
     } catch {
         recentRouteNames.value = [];
     }

@@ -32,8 +32,10 @@ const showPayModal = ref(false);
 const showInvoice = ref(false);
 const checkoutMode = ref(false);
 
-const perms = usePage().props.auth.user?.permissions || [];
+const page = usePage();
+const perms = page.props.auth.user?.permissions || [];
 const canUpdate = perms.includes('update_reservations');
+const housekeepingEnabled = computed(() => page.props.modules?.housekeeping === true);
 
 // Front desk asks housekeeping for a daily (stayover) clean while the guest is in-house.
 const requestingCleaning = ref(false);
@@ -189,7 +191,7 @@ function settleAndCheckout(method) {
                 <Button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" variant="success" @click="showPayModal = true">Regjistro pagesë</Button>
                 <Button variant="outline" @click="openInvoice">Fature</Button>
                 <Button
-                    v-if="canUpdate && reservation.status === 'checked_in'"
+                    v-if="canUpdate && housekeepingEnabled && reservation.status === 'checked_in'"
                     variant="outline"
                     :loading="requestingCleaning"
                     @click="requestCleaning"

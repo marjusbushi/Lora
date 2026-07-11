@@ -39,17 +39,17 @@ Route::get('/', function (Request $request) {
     return app(WebsiteController::class)->home();
 })->name('website.home');
 Route::get('/rooms', [WebsiteController::class, 'rooms'])->name('website.rooms');
-Route::get('/book', [WebsiteController::class, 'bookingForm'])->name('website.book');
-Route::post('/book/check', [WebsiteController::class, 'checkAvailability'])->middleware('throttle:30,1')->name('website.book.check');
-Route::get('/book/availability', [WebsiteController::class, 'availability'])->middleware('throttle:60,1')->name('website.book.availability');
-Route::post('/book', [WebsiteController::class, 'submitBooking'])->middleware('throttle:10,1')->name('website.book.submit');
-Route::get('/book/confirmation/{token}', [WebsiteController::class, 'bookingConfirmation'])->name('website.booking.confirmation');
+Route::get('/book', [WebsiteController::class, 'bookingForm'])->middleware('module:booking_engine')->name('website.book');
+Route::post('/book/check', [WebsiteController::class, 'checkAvailability'])->middleware(['module:booking_engine', 'throttle:30,1'])->name('website.book.check');
+Route::get('/book/availability', [WebsiteController::class, 'availability'])->middleware(['module:booking_engine', 'throttle:60,1'])->name('website.book.availability');
+Route::post('/book', [WebsiteController::class, 'submitBooking'])->middleware(['module:booking_engine', 'throttle:10,1'])->name('website.book.submit');
+Route::get('/book/confirmation/{token}', [WebsiteController::class, 'bookingConfirmation'])->middleware('module:booking_engine')->name('website.booking.confirmation');
 
 // POK card payment (embedded) for a pending website booking.
-Route::get('/book/pay/{token}', [WebsiteController::class, 'bookingPayment'])->name('website.pay.show');
-Route::post('/book/pay/{token}', [WebsiteController::class, 'confirmPayment'])->middleware('throttle:20,1')->name('website.pay.confirm');
+Route::get('/book/pay/{token}', [WebsiteController::class, 'bookingPayment'])->middleware('module:booking_engine')->name('website.pay.show');
+Route::post('/book/pay/{token}', [WebsiteController::class, 'confirmPayment'])->middleware(['module:booking_engine', 'throttle:20,1'])->name('website.pay.confirm');
 // POK server-to-server webhook (CSRF-excluded in bootstrap/app.php; verifies via getOrder, never trusts the body).
-Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware('throttle:120,1')->name('website.pay.webhook');
+Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware(['module:booking_engine', 'throttle:120,1'])->name('website.pay.webhook');
 
 Route::get('/about', [WebsiteController::class, 'about'])->name('website.about');
 Route::get('/contact', [WebsiteController::class, 'contact'])->name('website.contact');
@@ -57,7 +57,7 @@ Route::post('/contact', [WebsiteController::class, 'submitContact'])->middleware
 
 // Inbound Channex booking webhook (server-to-server; CSRF-excluded in bootstrap/app.php).
 // Auth is a shared secret header validated in the controller — Channex has no HMAC.
-Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->middleware('throttle:120,1')->name('channex.webhook');
+Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->middleware(['module:channel_manager', 'throttle:120,1'])->name('channex.webhook');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])->name('dashboard');
@@ -68,6 +68,7 @@ Route::middleware(['auth', 'verified', 'super_admin'])
     ->group(function () {
         Route::get('/tenants', [SuperAdminTenantController::class, 'index'])->name('tenants.index');
         Route::post('/tenants', [SuperAdminTenantController::class, 'store'])->name('tenants.store');
+        Route::put('/tenants/{tenant}/subscription', [SuperAdminTenantController::class, 'updateSubscription'])->name('tenants.subscription.update');
         Route::post('/tenants/{tenant}/switch', [SuperAdminTenantController::class, 'switch'])->name('tenants.switch');
     });
 
@@ -122,7 +123,7 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::post('/reservations/{reservation}/check-in', [ReservationController::class, 'checkIn'])->middleware('permission:update_reservations')->name('reservations.check-in');
         Route::post('/reservations/{reservation}/check-out', [ReservationController::class, 'checkOut'])->middleware('permission:update_reservations')->name('reservations.check-out');
         // Front desk asks housekeeping for a stayover (daily) clean while the guest is in-house.
-        Route::post('/reservations/{reservation}/request-cleaning', [ReservationController::class, 'requestCleaning'])->middleware('permission:update_reservations')->name('reservations.request-cleaning');
+        Route::post('/reservations/{reservation}/request-cleaning', [ReservationController::class, 'requestCleaning'])->middleware(['module:housekeeping', 'permission:update_reservations'])->name('reservations.request-cleaning');
         Route::post('/reservations/{reservation}/cancel', [ReservationController::class, 'cancel'])->middleware('permission:update_reservations')->name('reservations.cancel');
         Route::post('/reservations/{reservation}/move-room', [ReservationController::class, 'moveRoom'])->middleware('permission:update_reservations')->name('reservations.move-room');
         Route::post('/reservations/{reservation}/folio', [ReservationController::class, 'addFolioLine'])->middleware('permission:update_reservations')->name('reservations.folio.add');
@@ -130,7 +131,7 @@ Route::middleware('auth')->prefix('pms')->group(function () {
     });
 
     // Housekeeping
-    Route::middleware('permission:view_housekeeping')->group(function () {
+    Route::middleware(['module:housekeeping', 'permission:view_housekeeping'])->group(function () {
         Route::get('/housekeeping', [CleaningTaskController::class, 'index'])->name('housekeeping.index');
         Route::get('/housekeeping/{cleaningTask}/clean', [CleaningTaskController::class, 'clean'])->name('housekeeping.clean');
         Route::post('/housekeeping', [CleaningTaskController::class, 'store'])->middleware('permission:create_housekeeping')->name('housekeeping.store');
@@ -141,7 +142,7 @@ Route::middleware('auth')->prefix('pms')->group(function () {
     });
 
     // POS Bar/Restaurant
-    Route::middleware('permission:view_pos_orders')->group(function () {
+    Route::middleware(['module:pos', 'permission:view_pos_orders'])->group(function () {
         Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
         Route::post('/pos', [PosController::class, 'store'])->middleware('permission:create_pos_orders')->name('pos.store');
         Route::post('/pos/{posOrder}/complete', [PosController::class, 'complete'])->middleware('permission:update_pos_orders')->name('pos.complete');
@@ -160,7 +161,7 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::get('/reports/outstanding', [ReportsController::class, 'outstanding'])->name('reports.outstanding');
         Route::get('/reports/shifts', [ReportsController::class, 'shifts'])->name('reports.shifts');
         Route::get('/reports/guests', [ReportsController::class, 'guests'])->name('reports.guests');
-        Route::get('/reports/pos-sales', [ReportsController::class, 'posSales'])->name('reports.posSales');
+        Route::get('/reports/pos-sales', [ReportsController::class, 'posSales'])->middleware('module:pos')->name('reports.posSales');
         Route::get('/reports/arrivals', [ReportsController::class, 'arrivalsManifest'])->name('reports.arrivalsManifest');
         Route::get('/reports/departures', [ReportsController::class, 'departuresManifest'])->name('reports.departuresManifest');
         Route::get('/reports/pace', [ReportsController::class, 'pace'])->name('reports.pace');
@@ -171,11 +172,11 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::get('/reports/repeat-guests', [ReportsController::class, 'repeatGuests'])->name('reports.repeatGuests');
         Route::get('/reports/nationality', [ReportsController::class, 'nationality'])->name('reports.nationality');
         Route::get('/reports/booking-behavior', [ReportsController::class, 'bookingBehavior'])->name('reports.bookingBehavior');
-        Route::get('/reports/pos-hourly', [ReportsController::class, 'posHourly'])->name('reports.posHourly');
-        Route::get('/reports/pos-payment-mix', [ReportsController::class, 'posPaymentMix'])->name('reports.posPaymentMix');
-        Route::get('/reports/pos-voids', [ReportsController::class, 'posVoids'])->name('reports.posVoids');
+        Route::get('/reports/pos-hourly', [ReportsController::class, 'posHourly'])->middleware('module:pos')->name('reports.posHourly');
+        Route::get('/reports/pos-payment-mix', [ReportsController::class, 'posPaymentMix'])->middleware('module:pos')->name('reports.posPaymentMix');
+        Route::get('/reports/pos-voids', [ReportsController::class, 'posVoids'])->middleware('module:pos')->name('reports.posVoids');
         Route::get('/reports/room-status', [ReportsController::class, 'roomStatus'])->name('reports.roomStatus');
-        Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->name('reports.housekeepingReport');
+        Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->middleware('module:housekeeping')->name('reports.housekeepingReport');
         Route::get('/reports/in-house', [ReportsController::class, 'inHouse'])->name('reports.inHouse');
         Route::get('/reports/discounts', [ReportsController::class, 'discounts'])->name('reports.discounts');
     });
@@ -204,35 +205,39 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::delete('/pricing/seasons/{season}', [PricingController::class, 'destroySeason'])->name('pricing.seasons.destroy');
         Route::post('/pricing/rates', [PricingController::class, 'saveRates'])->name('pricing.rates.save');
 
-        // Çmim Inteligjent — occupancy-based price suggestions (suggest-only; Apply writes a date override)
-        Route::get('/pricing/smart', [SmartPricingController::class, 'index'])->name('pricing.smart.index');
-        Route::post('/pricing/smart/apply', [SmartPricingController::class, 'apply'])->name('pricing.smart.apply');
-        Route::post('/pricing/smart/remove', [SmartPricingController::class, 'remove'])->name('pricing.smart.remove');
-        // AI Pricing Assistant — generate a reasoned plan (JSON) + apply one recommendation
-        Route::post('/pricing/smart/apply-range', [SmartPricingController::class, 'applyRange'])->name('pricing.smart.apply-range');
-        Route::post('/pricing/smart/explain', [SmartPricingController::class, 'explain'])->name('pricing.smart.explain');
-        Route::post('/pricing/smart/ask', [SmartPricingController::class, 'ask'])->name('pricing.smart.ask');
-        Route::post('/pricing/smart/events/suggest', [SmartPricingController::class, 'suggestEvents'])->name('pricing.smart.events.suggest');
-        Route::post('/pricing/smart/events', [SmartPricingController::class, 'approveEvent'])->name('pricing.smart.events.approve');
-        Route::put('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'updateEvent'])->name('pricing.smart.events.update');
-        Route::delete('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'destroyEvent'])->name('pricing.smart.events.destroy');
-        Route::post('/pricing/smart/report', [SmartPricingController::class, 'generateReport'])->name('pricing.smart.report');
-        Route::post('/pricing/smart/autopilot', [SmartPricingController::class, 'updateAutopilot'])->name('pricing.smart.autopilot');
-        Route::post('/pricing/smart/autopilot/revert/{log}', [SmartPricingController::class, 'revertAutopilot'])->name('pricing.smart.autopilot.revert');
-        Route::post('/pricing/smart/strategy', [SmartPricingController::class, 'updateStrategy'])->name('pricing.smart.strategy');
-        Route::put('/pricing/smart/bounds/{roomType}', [SmartPricingController::class, 'updateBounds'])->name('pricing.smart.bounds');
+        Route::middleware('module:smart_pricing')->group(function () {
+            // Çmim Inteligjent — occupancy-based price suggestions (suggest-only; Apply writes a date override)
+            Route::get('/pricing/smart', [SmartPricingController::class, 'index'])->name('pricing.smart.index');
+            Route::post('/pricing/smart/apply', [SmartPricingController::class, 'apply'])->name('pricing.smart.apply');
+            Route::post('/pricing/smart/remove', [SmartPricingController::class, 'remove'])->name('pricing.smart.remove');
+            // AI Pricing Assistant — generate a reasoned plan (JSON) + apply one recommendation
+            Route::post('/pricing/smart/apply-range', [SmartPricingController::class, 'applyRange'])->name('pricing.smart.apply-range');
+            Route::post('/pricing/smart/explain', [SmartPricingController::class, 'explain'])->name('pricing.smart.explain');
+            Route::post('/pricing/smart/ask', [SmartPricingController::class, 'ask'])->name('pricing.smart.ask');
+            Route::post('/pricing/smart/events/suggest', [SmartPricingController::class, 'suggestEvents'])->name('pricing.smart.events.suggest');
+            Route::post('/pricing/smart/events', [SmartPricingController::class, 'approveEvent'])->name('pricing.smart.events.approve');
+            Route::put('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'updateEvent'])->name('pricing.smart.events.update');
+            Route::delete('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'destroyEvent'])->name('pricing.smart.events.destroy');
+            Route::post('/pricing/smart/report', [SmartPricingController::class, 'generateReport'])->name('pricing.smart.report');
+            Route::post('/pricing/smart/autopilot', [SmartPricingController::class, 'updateAutopilot'])->name('pricing.smart.autopilot');
+            Route::post('/pricing/smart/autopilot/revert/{log}', [SmartPricingController::class, 'revertAutopilot'])->name('pricing.smart.autopilot.revert');
+            Route::post('/pricing/smart/strategy', [SmartPricingController::class, 'updateStrategy'])->name('pricing.smart.strategy');
+            Route::put('/pricing/smart/bounds/{roomType}', [SmartPricingController::class, 'updateBounds'])->name('pricing.smart.bounds');
+        });
 
         // Channel manager (Channex) — manual full re-sync
-        Route::post('/channex/sync', [ChannexController::class, 'sync'])->name('channex.sync');
-        Route::post('/channex/sell-window/preview', [ChannexController::class, 'previewSellWindow'])->name('channex.sell-window.preview');
-        Route::put('/channex/sell-window', [ChannexController::class, 'updateSellWindow'])->name('channex.sell-window.update');
+        Route::middleware('module:channel_manager')->group(function () {
+            Route::post('/channex/sync', [ChannexController::class, 'sync'])->name('channex.sync');
+            Route::post('/channex/sell-window/preview', [ChannexController::class, 'previewSellWindow'])->name('channex.sell-window.preview');
+            Route::put('/channex/sell-window', [ChannexController::class, 'updateSellWindow'])->name('channex.sell-window.update');
+        });
 
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
         Route::put('/settings/hotel', [SettingsController::class, 'updateHotel'])->name('settings.hotel');
         Route::post('/settings/website', [SettingsController::class, 'updateWebsite'])->name('settings.website');
         Route::post('/settings/about', [SettingsController::class, 'updateAbout'])->name('settings.about');
         Route::put('/settings/financial', [SettingsController::class, 'updateFinancial'])->name('settings.financial');
-        Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->name('settings.housekeeping');
+        Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->middleware('module:housekeeping')->name('settings.housekeeping');
         Route::put('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai');
 
         // Settings: Room Types
@@ -255,13 +260,15 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::post('/settings/room-types/{roomType}/images/reorder', [SettingsController::class, 'reorderRoomTypeImages'])->name('settings.room-types.images.reorder');
 
         // Settings: Menu
-        Route::post('/settings/menu-categories', [SettingsController::class, 'storeMenuCategory'])->name('settings.menu-categories.store');
-        Route::put('/settings/menu-categories/{menuCategory}', [SettingsController::class, 'updateMenuCategory'])->name('settings.menu-categories.update');
-        Route::delete('/settings/menu-categories/{menuCategory}', [SettingsController::class, 'destroyMenuCategory'])->name('settings.menu-categories.destroy');
-        Route::post('/settings/menu-items', [SettingsController::class, 'storeMenuItem'])->name('settings.menu-items.store');
-        Route::put('/settings/menu-items/{menuItem}', [SettingsController::class, 'updateMenuItem'])->name('settings.menu-items.update');
-        Route::patch('/settings/menu-items/{menuItem}/toggle', [SettingsController::class, 'toggleMenuItem'])->name('settings.menu-items.toggle');
-        Route::delete('/settings/menu-items/{menuItem}', [SettingsController::class, 'destroyMenuItem'])->name('settings.menu-items.destroy');
+        Route::middleware('module:pos')->group(function () {
+            Route::post('/settings/menu-categories', [SettingsController::class, 'storeMenuCategory'])->name('settings.menu-categories.store');
+            Route::put('/settings/menu-categories/{menuCategory}', [SettingsController::class, 'updateMenuCategory'])->name('settings.menu-categories.update');
+            Route::delete('/settings/menu-categories/{menuCategory}', [SettingsController::class, 'destroyMenuCategory'])->name('settings.menu-categories.destroy');
+            Route::post('/settings/menu-items', [SettingsController::class, 'storeMenuItem'])->name('settings.menu-items.store');
+            Route::put('/settings/menu-items/{menuItem}', [SettingsController::class, 'updateMenuItem'])->name('settings.menu-items.update');
+            Route::patch('/settings/menu-items/{menuItem}/toggle', [SettingsController::class, 'toggleMenuItem'])->name('settings.menu-items.toggle');
+            Route::delete('/settings/menu-items/{menuItem}', [SettingsController::class, 'destroyMenuItem'])->name('settings.menu-items.destroy');
+        });
     });
 });
 
