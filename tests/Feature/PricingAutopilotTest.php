@@ -155,10 +155,20 @@ class PricingAutopilotTest extends TestCase
     {
         $this->enable();
         $failDate = Carbon::tomorrow()->addDay()->toDateString();
-        DB::unprepared("CREATE TRIGGER fail_second_autopilot_write
-            BEFORE INSERT ON rate_overrides
-            WHEN date(NEW.date) = '{$failDate}'
-            BEGIN SELECT RAISE(ABORT, 'forced batch failure'); END;");
+        if (DB::getDriverName() === 'mysql') {
+            DB::unprepared("CREATE TRIGGER fail_second_autopilot_write
+                BEFORE INSERT ON rate_overrides FOR EACH ROW
+                BEGIN
+                    IF DATE(NEW.date) = '{$failDate}' THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced batch failure';
+                    END IF;
+                END");
+        } else {
+            DB::unprepared("CREATE TRIGGER fail_second_autopilot_write
+                BEFORE INSERT ON rate_overrides
+                WHEN date(NEW.date) = '{$failDate}'
+                BEGIN SELECT RAISE(ABORT, 'forced batch failure'); END;");
+        }
 
         $failed = false;
         try {

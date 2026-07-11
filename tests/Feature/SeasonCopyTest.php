@@ -384,14 +384,26 @@ class SeasonCopyTest extends TestCase
         $preview = $this->preview(2026, 2027, 0);
         $beforeVersion = $preview['rules_version'];
 
-        DB::unprepared(<<<'SQL'
-            CREATE TRIGGER fail_season_copy_audit
-            BEFORE INSERT ON audit_logs
-            WHEN NEW.action = 'pricing.seasons_copy'
-            BEGIN
-                SELECT RAISE(ABORT, 'forced audit failure');
-            END;
-        SQL);
+        if (DB::getDriverName() === 'mysql') {
+            DB::unprepared(<<<'SQL'
+                CREATE TRIGGER fail_season_copy_audit
+                BEFORE INSERT ON audit_logs FOR EACH ROW
+                BEGIN
+                    IF NEW.action = 'pricing.seasons_copy' THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced audit failure';
+                    END IF;
+                END
+            SQL);
+        } else {
+            DB::unprepared(<<<'SQL'
+                CREATE TRIGGER fail_season_copy_audit
+                BEFORE INSERT ON audit_logs
+                WHEN NEW.action = 'pricing.seasons_copy'
+                BEGIN
+                    SELECT RAISE(ABORT, 'forced audit failure');
+                END;
+            SQL);
+        }
 
         $this->actingAs($this->admin)
             ->postJson(route('pricing.seasons.copy.apply'), [
