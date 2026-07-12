@@ -1,5 +1,5 @@
 <script setup>
-import AppLayout from '@/Layouts/AppLayout.vue';
+import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Button from '@/Components/UI/Button.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
@@ -87,11 +87,11 @@ function statusLabel(status) {
 <template>
     <Head title="Super Admin — Hotelet" />
 
-    <AppLayout>
+    <SuperAdminLayout title="Hotelet & abonimet — Lora Control Panel">
         <div class="mx-auto max-w-7xl space-y-6">
             <PageHeader
                 title="Super Admin — Hotelet"
-                :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Super Admin' }]"
+                :breadcrumbs="[{ label: 'Control Panel', href: '/super-admin' }, { label: 'Hotelet & abonimet' }]"
             />
 
             <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -305,5 +305,5 @@ function statusLabel(status) {
                 </section>
             </div>
         </Teleport>
-    </AppLayout>
+    </SuperAdminLayout>
 </template>

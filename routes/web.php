@@ -17,6 +17,7 @@ use App\Http\Controllers\RoomController;
 use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SmartPricingController;
+use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebsiteController;
@@ -30,6 +31,10 @@ use Inertia\Inertia;
 Route::get('/', function (Request $request) {
     if (in_array(strtolower($request->getHost()), config('lora.marketing_hosts', []), true)) {
         return Inertia::render('Marketing/Home');
+    }
+
+    if (in_array(strtolower($request->getHost()), config('lora.dedicated_control_panel_hosts', []), true)) {
+        return redirect()->route($request->user()?->is_super_admin ? 'super-admin.dashboard' : 'login');
     }
 
     if (str_starts_with($request->getHost(), 'admin.')) {
@@ -60,12 +65,13 @@ Route::post('/contact', [WebsiteController::class, 'submitContact'])->middleware
 Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->middleware(['module:channel_manager', 'throttle:120,1'])->name('channex.webhook');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified'])->name('dashboard');
+    ->middleware(['auth', 'verified', 'dedicated_control_redirect'])->name('dashboard');
 
-Route::middleware(['auth', 'verified', 'super_admin'])
+Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
     ->prefix('super-admin')
     ->name('super-admin.')
     ->group(function () {
+        Route::get('/', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/tenants', [SuperAdminTenantController::class, 'index'])->name('tenants.index');
         Route::post('/tenants', [SuperAdminTenantController::class, 'store'])->name('tenants.store');
         Route::put('/tenants/{tenant}/subscription', [SuperAdminTenantController::class, 'updateSubscription'])->name('tenants.subscription.update');

@@ -19,7 +19,7 @@ use Inertia\Response;
 
 class TenantController extends Controller
 {
-    public function index(TenantBillingService $billing): Response
+    public function index(Request $request, TenantBillingService $billing): Response
     {
         return Inertia::render('SuperAdmin/Tenants/Index', [
             'tenants' => Tenant::query()
@@ -45,7 +45,7 @@ class TenantController extends Controller
                     'created_at' => $tenant->created_at?->toIso8601String(),
                     'billing' => $billing->summary($tenant),
                 ]),
-            'currentTenantId' => app(TenantContext::class)->id(),
+            'currentTenantId' => $request->user()->current_tenant_id,
         ]);
     }
 
@@ -53,6 +53,7 @@ class TenantController extends Controller
         Request $request,
         TenantRoleService $tenantRoles,
         TenantBillingService $billing,
+        TenantContext $context,
     ): RedirectResponse {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -125,10 +126,10 @@ class TenantController extends Controller
             return $tenant;
         });
 
-        AuditLog::record('tenant.create', null, [
+        $context->run($tenant, fn () => AuditLog::record('tenant.create', $tenant, [
             'tenant_id' => $tenant->id,
             'tenant_name' => $tenant->name,
-        ]);
+        ]));
 
         return back()->with('success', 'Hoteli u krijua. Tani mund te kalosh ne tenantin e ri.');
     }
@@ -176,7 +177,7 @@ class TenantController extends Controller
             'current_tenant_id' => $tenant->id,
         ]);
 
-        return redirect()->route('dashboard')->with('success', "Kalove te {$tenant->name}.");
+        return redirect()->away($this->tenantDashboardUrl($tenant));
     }
 
     private function normalizeDomain(?string $domain): ?string
@@ -189,5 +190,21 @@ class TenantController extends Controller
         $host = parse_url(str_contains($value, '://') ? $value : 'https://'.$value, PHP_URL_HOST);
 
         return is_string($host) && $host !== '' ? $host : null;
+    }
+
+    private function tenantDashboardUrl(Tenant $tenant): string
+    {
+        $domains = $tenant->domains()->orderByDesc('is_primary')->get();
+        $domain = $domains->first(fn (TenantDomain $item) => str_starts_with($item->domain, 'admin.'))?->domain
+            ?? $domains->firstWhere('is_primary', true)?->domain
+            ?? $domains->first()?->domain;
+
+        if (! $domain) {
+            return route('dashboard');
+        }
+
+        $local = $domain === 'localhost' || str_ends_with($domain, '.test');
+
+        return ($local ? 'http://' : 'https://').$domain.'/dashboard';
     }
 }
