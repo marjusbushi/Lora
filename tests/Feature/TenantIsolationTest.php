@@ -15,7 +15,6 @@ use App\Services\ChannexConfiguration;
 use App\Tenancy\TenantContext;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class TenantIsolationTest extends TestCase
@@ -86,7 +85,7 @@ class TenantIsolationTest extends TestCase
             ->assertNotFound();
     }
 
-    public function test_only_super_admin_can_create_and_switch_tenants(): void
+    public function test_hotel_application_does_not_expose_lora_control_panel_routes(): void
     {
         $default = Tenant::query()->sole();
         app(TenantContext::class)->set($default);
@@ -97,42 +96,24 @@ class TenantIsolationTest extends TestCase
         app(TenantContext::class)->clear();
 
         $this->actingAs($regularUser)
-            ->get(route('super-admin.tenants.index'))
-            ->assertForbidden();
+            ->get('/super-admin/tenants')
+            ->assertNotFound();
 
         $this->actingAs($superAdmin)
-            ->get(route('super-admin.tenants.index'))
-            ->assertOk();
+            ->get('/super-admin/tenants')
+            ->assertNotFound();
 
         $this->actingAs($superAdmin)
-            ->post(route('super-admin.tenants.store'), [
+            ->post('/super-admin/tenants', [
                 'name' => 'Hotel Riviera',
                 'slug' => 'hotel-riviera',
                 'primary_domain' => 'riviera.lorapms.test',
                 'timezone' => 'Europe/Tirane',
                 'currency' => 'EUR',
             ])
-            ->assertRedirect();
+            ->assertNotFound();
 
-        $tenant = Tenant::query()->where('slug', 'hotel-riviera')->firstOrFail();
-
-        $this->assertDatabaseHas('tenant_user', [
-            'tenant_id' => $tenant->id,
-            'user_id' => $superAdmin->id,
-            'is_owner' => true,
-        ]);
-
-        app(TenantContext::class)->set($tenant);
-        $this->assertSame(5, Role::query()->where('team_id', $tenant->id)->count());
-        $this->assertTrue($superAdmin->unsetRelation('roles')->hasRole('admin'));
-        app(TenantContext::class)->clear();
-
-        $this->actingAs($superAdmin)
-            ->post(route('super-admin.tenants.switch', $tenant))
-            ->assertRedirect(route('dashboard'))
-            ->assertSessionHas('tenant_id', $tenant->id);
-
-        $this->assertSame($tenant->id, $superAdmin->fresh()->current_tenant_id);
+        $this->assertDatabaseMissing('tenants', ['slug' => 'hotel-riviera']);
     }
 
     public function test_validation_rejects_room_and_guest_ids_from_another_tenant(): void
