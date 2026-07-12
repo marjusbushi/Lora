@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\PushRoomTypeAri;
 use App\Models\Amenity;
 use App\Models\CleaningTask;
 use App\Models\Floor;
@@ -271,7 +272,13 @@ class SettingsController extends Controller
             PricingRulesVersion::increment($version);
         });
 
-        return back()->with('success', 'Programet OTA u ruajtën. Përditëso modifier-at e kanaleve në Channex sipas vlerave të shfaqura.');
+        // The programs feed ChannelSync's per-channel rate compensation, so a
+        // changed percentage must re-push every mapped room type's rates —
+        // otherwise the OTAs keep selling on the OLD factor until the nightly
+        // full sync. No-op when Channex is not configured.
+        PushRoomTypeAri::dispatchAllMapped();
+
+        return back()->with('success', 'Programet OTA u ruajtën — çmimet e kanaleve po ridërgohen në Channex.');
     }
 
     // --- Housekeeping ---

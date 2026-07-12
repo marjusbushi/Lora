@@ -66,7 +66,7 @@ function submit() {
                         <h4 class="text-body font-bold text-primary-900">Booking.com</h4>
                         <p class="text-tiny text-neutral-500">Uljet kombinohen me shumëzim, jo me mbledhje.</p>
                     </div>
-                    <span class="text-tiny font-bold rounded-full bg-info-50 text-info-700 px-2.5 py-1">Modifier Channex +{{ booking.modifier }}%</span>
+                    <span class="text-tiny font-bold rounded-full bg-info-50 text-info-700 px-2.5 py-1">Aplikohet vetë: +{{ booking.modifier }}%</span>
                 </div>
 
                 <div class="grid sm:grid-cols-2 gap-4">
@@ -97,7 +97,7 @@ function submit() {
                         <h4 class="text-body font-bold text-primary-900">Expedia</h4>
                         <p class="text-tiny text-neutral-500">Member Price dhe Mobile Price mbrohen veçmas nga Booking.</p>
                     </div>
-                    <span class="text-tiny font-bold rounded-full bg-info-50 text-info-700 px-2.5 py-1">Modifier Channex +{{ expedia.modifier }}%</span>
+                    <span class="text-tiny font-bold rounded-full bg-info-50 text-info-700 px-2.5 py-1">Aplikohet vetë: +{{ expedia.modifier }}%</span>
                 </div>
 
                 <div class="grid sm:grid-cols-2 gap-4">
