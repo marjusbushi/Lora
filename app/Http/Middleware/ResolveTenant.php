@@ -22,15 +22,22 @@ class ResolveTenant
             return redirect()->away($canonicalUrl, Response::HTTP_PERMANENTLY_REDIRECT);
         }
 
-        // The Lora PMS product website is deliberately tenantless. Exact host
-        // allow-listing prevents an unknown hotel domain from bypassing tenant
-        // resolution while keeping the product homepage independent from hotel
-        // data. Other routes on the same host (login/PMS) still resolve tenant.
-        $tenantlessProductRoute = $request->routeIs('website.home')
-            || $request->routeIs('login', 'password.*');
+        $productHome = $request->routeIs('website.home')
+            && ($this->isMarketingHost($request) || $this->isDedicatedControlPanelHost($request));
+        $productAuth = ($request->is('login')
+            || $request->routeIs('login', 'logout', 'password.*', 'verification.*'))
+            && ($this->isMarketingHost($request) || $this->isControlPanelHost($request));
+        $controlPlane = $request->routeIs('super-admin.*')
+            && $this->isControlPanelHost($request);
 
-        if ($tenantlessProductRoute && $this->isMarketingHost($request)) {
-            return $next($request);
+        if ($productHome || $productAuth || $controlPlane) {
+            $this->context->clear();
+
+            try {
+                return $next($request);
+            } finally {
+                $this->context->clear();
+            }
         }
 
         $tenant = $this->resolve($request);
@@ -53,6 +60,24 @@ class ResolveTenant
         return in_array(
             strtolower($request->getHost()),
             config('lora.marketing_hosts', []),
+            true,
+        );
+    }
+
+    private function isControlPanelHost(Request $request): bool
+    {
+        return in_array(
+            strtolower($request->getHost()),
+            config('lora.control_panel_hosts', []),
+            true,
+        );
+    }
+
+    private function isDedicatedControlPanelHost(Request $request): bool
+    {
+        return in_array(
+            strtolower($request->getHost()),
+            config('lora.dedicated_control_panel_hosts', []),
             true,
         );
     }

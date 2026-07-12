@@ -129,7 +129,7 @@ class TenantIsolationTest extends TestCase
 
         $this->actingAs($superAdmin)
             ->post(route('super-admin.tenants.switch', $tenant))
-            ->assertRedirect(route('dashboard'))
+            ->assertRedirect('http://riviera.lorapms.test/dashboard')
             ->assertSessionHas('tenant_id', $tenant->id);
 
         $this->assertSame($tenant->id, $superAdmin->fresh()->current_tenant_id);

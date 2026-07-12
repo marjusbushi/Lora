@@ -1,9 +1,11 @@
 <?php
 
 use App\Console\TenantCommandRunner;
+use App\Http\Middleware\EnsureControlPanelHost;
 use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\EnsureTenantModuleEnabled;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RedirectDedicatedControlPanel;
 use App\Http\Middleware\ResolveTenant;
 use App\Models\ChannelSyncLog;
 use App\Models\WebsiteSearchLog;
@@ -45,6 +47,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
             'super_admin' => EnsureSuperAdmin::class,
+            'control_panel_host' => EnsureControlPanelHost::class,
+            'dedicated_control_redirect' => RedirectDedicatedControlPanel::class,
             'module' => EnsureTenantModuleEnabled::class,
         ]);
     })
