@@ -358,6 +358,27 @@ const dows = ['Hë', 'Ma', 'Më', 'En', 'Pr', 'Sh', 'Di'];
 const monthLabel = computed(() =>
     props.month ? new Date(props.month + 'T00:00:00').toLocaleDateString('sq-AL', { month: 'long', year: 'numeric' }) : '',
 );
+// Rate shopping: our price vs the market median (competitors' CHEAPEST room).
+function marketDelta(d) {
+    const m = props.market[d.date];
+    if (!m || !d.current_price) return null;
+    return Math.round(((d.current_price - m.median) / m.median) * 100);
+}
+function marketTone(d) {
+    const delta = marketDelta(d);
+    if (delta === null) return '';
+    if (delta > 8) return 'bg-warning-50 text-warning-700 border border-warning-200';
+    if (delta < -8) return 'bg-info-50 text-info-700 border border-info-200';
+    return 'bg-success-50 text-success-700 border border-success-200';
+}
+function marketBadge(d) {
+    const delta = marketDelta(d);
+    if (delta === null) return null;
+    if (delta > 8) return { cls: 'bg-warning-100 text-warning-700', text: '▲ ' + delta + '% mbi tregun' };
+    if (delta < -8) return { cls: 'bg-info-100 text-info-700', text: '▼ ' + Math.abs(delta) + '% nën tregun' };
+    return { cls: 'bg-success-100 text-success-700', text: '≈ Në linjë me tregun' };
+}
+
 const leadingBlanks = computed(() => (props.days.length ? props.days[0].dow - 1 : 0));
 const actionableCount = computed(() => props.days.filter((d) => d.actionable && !d.is_past).length);
 
@@ -559,8 +580,13 @@ function syncLabel(ts) {
                                 {{ d.adjustment_pct > 0 ? '▲' : '▼' }} {{ currency }}{{ fmtPrice(d.suggested_price) }}<span v-if="d.clamped" :title="'I ndalur te kufiri ' + (d.clamped === 'max' ? 'maksimal' : 'minimal')"> 🔒</span>
                             </div>
 
-                            <!-- rate shopping: market median for the date (display only) -->
-                            <div v-if="market[d.date]" class="mt-0.5 text-[10px] text-neutral-500 tabular-nums leading-none" :title="'Tregu: ' + market[d.date].count + ' konkurrentë, ' + currency + market[d.date].min + '–' + currency + market[d.date].max">
+                            <!-- rate shopping: market median pill, coloured by our position -->
+                            <div
+                                v-if="market[d.date]"
+                                class="mt-1 inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-[10px] font-semibold tabular-nums leading-none"
+                                :class="marketTone(d)"
+                                :title="'Tregu (çmimi më i lirë i ' + market[d.date].count + ' konkurrentëve): ' + currency + market[d.date].min + '–' + currency + market[d.date].max"
+                            >
                                 ⌂ {{ currency }}{{ fmtPrice(market[d.date].median) }}
                             </div>
 
@@ -577,7 +603,7 @@ function syncLabel(ts) {
                         <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-warning-100 border border-warning-200 mr-1.5 align-[-1px]" />Po mbushet</span>
                         <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-error-100 border border-error-200 mr-1.5 align-[-1px]" />Plot</span>
                         <span><span class="text-error-600 font-bold mr-1">⚑</span>Festë</span>
-                        <span v-if="marketEnabled"><span class="font-bold mr-1">⌂</span>Tregu (mediana e konkurrentëve)</span>
+                        <span v-if="marketEnabled"><span class="font-bold mr-1">⌂</span>Tregu — mediana e çmimeve më të lira të konkurrentëve</span>
                         <span><i class="inline-block w-2 h-2 rounded-full bg-info-500 mr-1.5 align-[0px]" />Çmim i vendosur nga ti</span>
                     </div>
 
@@ -631,6 +657,28 @@ function syncLabel(ts) {
                                         <div class="flex justify-between gap-3"><span class="text-neutral-500">Neto pas komisionit</span><b class="tabular-nums">{{ currency }}{{ fmtPrice(ota.estimated_net) }}</b></div>
                                     </div>
                                 </div>
+                            </div>
+
+                            <!-- TREGU — competitor entry prices for this date (display only) -->
+                            <div v-if="market[selected.date]" class="rounded-xl border border-neutral-200 bg-white p-3">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <p class="text-tiny font-bold uppercase tracking-wide text-neutral-400">⌂ Tregu i zonës · {{ market[selected.date].count }} konkurrentë</p>
+                                    <span class="text-tiny text-neutral-400">çmimi më i lirë i secilit hotel</span>
+                                </div>
+                                <div class="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2">
+                                    <div>
+                                        <span class="text-tiny text-neutral-500">Mediana</span>
+                                        <div class="text-h4 font-extrabold text-primary-900 tabular-nums leading-tight">{{ currency }}{{ fmtPrice(market[selected.date].median) }}</div>
+                                    </div>
+                                    <div>
+                                        <span class="text-tiny text-neutral-500">Nga – deri</span>
+                                        <div class="text-body-sm font-semibold text-neutral-600 tabular-nums leading-tight mt-1">{{ currency }}{{ fmtPrice(market[selected.date].min) }} – {{ currency }}{{ fmtPrice(market[selected.date].max) }}</div>
+                                    </div>
+                                    <span v-if="marketBadge(selected)" class="text-small font-bold px-2.5 py-1 rounded-lg" :class="marketBadge(selected).cls">
+                                        {{ marketBadge(selected).text }}
+                                    </span>
+                                </div>
+                                <p class="text-tiny text-neutral-400 mt-2">Krahasim informues me dhomat standarde — nuk ndikon sugjerimet. Për tipet e mëdha (p.sh. Apartment) tregu i dhomave hyrëse s'është i krahasueshëm.</p>
                             </div>
 
                             <!-- PSE KY ÇMIM? — the factor breakdown, plain Albanian -->

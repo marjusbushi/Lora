@@ -45,7 +45,7 @@ function submit() {
             <div>
                 <h3 class="text-h4 text-primary-900">Çmimet e Tregut (konkurrentët)</h3>
                 <p class="text-tiny text-neutral-500 mt-1">
-                    Merr çmimet e hoteleve konkurrente të zonës dhe i shfaq te Çmim Inteligjent si "Tregu".
+                    Merr çmimet e hoteleve konkurrente të zonës (çmimin MË TË LIRË të secilit — dhomën e tyre hyrëse) dhe i shfaq te Çmim Inteligjent si "Tregu".
                     Nuk i ndryshon çmimet e tua — vetëm të informon. Kur është OFF, s'bëhet asnjë thirrje (zero kosto).
                 </p>
             </div>
