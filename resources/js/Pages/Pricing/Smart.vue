@@ -14,6 +14,7 @@ const props = defineProps({
     days: { type: Array, default: () => [] },            // engine rows + dow/is_weekend/holiday
     market: { type: Object, default: () => ({}) },       // rate shopping: date => {median,min,max,count}
     marketEnabled: { type: Boolean, default: false },
+    marketComparable: { type: Boolean, default: true }, // false for large units (Apartment) — entry-price market not comparable
     month: { type: String, default: '' },
     prevMonth: { type: String, default: '' },
     nextMonth: { type: String, default: '' },
@@ -582,7 +583,7 @@ function syncLabel(ts) {
 
                             <!-- rate shopping: market median pill, coloured by our position -->
                             <div
-                                v-if="market[d.date]"
+                                v-if="marketComparable && market[d.date]"
                                 class="mt-1 inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-[10px] font-semibold tabular-nums leading-none"
                                 :class="marketTone(d)"
                                 :title="'Tregu (çmimi më i lirë i ' + market[d.date].count + ' konkurrentëve): ' + currency + market[d.date].min + '–' + currency + market[d.date].max"
@@ -603,7 +604,7 @@ function syncLabel(ts) {
                         <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-warning-100 border border-warning-200 mr-1.5 align-[-1px]" />Po mbushet</span>
                         <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-error-100 border border-error-200 mr-1.5 align-[-1px]" />Plot</span>
                         <span><span class="text-error-600 font-bold mr-1">⚑</span>Festë</span>
-                        <span v-if="marketEnabled"><span class="font-bold mr-1">⌂</span>Tregu — mediana e çmimeve më të lira të konkurrentëve</span>
+                        <span v-if="marketEnabled && marketComparable"><span class="font-bold mr-1">⌂</span>Tregu — mediana e çmimeve më të lira të konkurrentëve</span>
                         <span><i class="inline-block w-2 h-2 rounded-full bg-info-500 mr-1.5 align-[0px]" />Çmim i vendosur nga ti</span>
                     </div>
 
@@ -660,7 +661,7 @@ function syncLabel(ts) {
                             </div>
 
                             <!-- TREGU — competitor entry prices for this date (display only) -->
-                            <div v-if="market[selected.date]" class="rounded-xl border border-neutral-200 bg-white p-3">
+                            <div v-if="marketComparable && market[selected.date]" class="rounded-xl border border-neutral-200 bg-white p-3">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <p class="text-tiny font-bold uppercase tracking-wide text-neutral-400">⌂ Tregu i zonës · {{ market[selected.date].count }} konkurrentë</p>
                                     <span class="text-tiny text-neutral-400">çmimi më i lirë i secilit hotel</span>
@@ -678,7 +679,7 @@ function syncLabel(ts) {
                                         {{ marketBadge(selected).text }}
                                     </span>
                                 </div>
-                                <p class="text-tiny text-neutral-400 mt-2">Krahasim informues me dhomat standarde — nuk ndikon sugjerimet. Për tipet e mëdha (p.sh. Apartment) tregu i dhomave hyrëse s'është i krahasueshëm.</p>
+                                <p class="text-tiny text-neutral-400 mt-2">Krahasim informues — nuk i ndikon sugjerimet e motorit.</p>
                             </div>
 
                             <!-- PSE KY ÇMIM? — the factor breakdown, plain Albanian -->

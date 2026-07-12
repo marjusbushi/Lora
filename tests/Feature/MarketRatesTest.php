@@ -190,6 +190,7 @@ class MarketRatesTest extends TestCase
                 ->has('market')
                 ->where('market.2026-07-20.median', 90)
                 ->where('market.2026-07-20.count', 1)
+                ->where('marketComparable', true)
                 ->has('days'));
     }
 }

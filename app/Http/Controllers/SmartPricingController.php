@@ -58,7 +58,7 @@ class SmartPricingController extends Controller
     {
         // min/max MUST ride along: the engine clamps off these attributes, and
         // a partial model would silently read them as null (no clamp at all).
-        $types = RoomType::orderBy('name')->get(['id', 'name', 'base_price', 'min_price', 'max_price']);
+        $types = RoomType::orderBy('name')->get(['id', 'name', 'base_price', 'min_price', 'max_price', 'max_occupancy']);
 
         $base = [
             'roomTypes' => $types->map(fn ($t) => [
@@ -136,6 +136,9 @@ class SmartPricingController extends Controller
             // only — the engine's suggestions are computed without it.
             'market' => MarketRates::summaryForRange($from, $to),
             'marketEnabled' => MarketRates::enabled(),
+            // The market series is each competitor's CHEAPEST room — a fair
+            // comparison only for standard-capacity types, not large units.
+            'marketComparable' => (int) $selected->max_occupancy <= 3,
         ]));
     }
 
