@@ -59,12 +59,12 @@ function isActive(item) {
         </div>
 
         <!-- Navigation -->
-        <nav class="flex min-h-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden px-2.5 py-2">
+        <nav class="flex min-h-0 flex-1 flex-col justify-evenly overflow-hidden px-3 py-2">
             <template v-for="item in items" :key="item.href">
                 <Link
                     :href="item.href"
                     :class="[
-                        'flex items-center rounded-md px-3 py-2 text-[13px] leading-4 transition-colors duration-150 no-underline',
+                        'flex items-center rounded-md px-3 py-2.5 text-body-sm leading-5 transition-colors duration-150 no-underline',
                         collapsed ? 'justify-center' : 'gap-3',
                         isActive(item)
                             ? 'bg-accent-600/15 text-accent-400 font-medium'
@@ -73,7 +73,7 @@ function isActive(item) {
                     :title="collapsed ? item.label : undefined"
                 >
                     <!-- Icon placeholder — accepts SVG string or slot -->
-                    <span class="h-[18px] w-[18px] shrink-0 flex items-center justify-center" v-html="item.icon" />
+                    <span class="h-5 w-5 shrink-0 flex items-center justify-center" v-html="item.icon" />
                     <span v-if="!collapsed" class="whitespace-nowrap">{{ item.label }}</span>
                 </Link>
             </template>
