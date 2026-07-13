@@ -216,13 +216,6 @@ class ReservationController extends Controller
             ->orderBy('last_name')
             ->get();
 
-        $today = now()->toDateString();
-        $activeToday = Reservation::query()
-            ->whereNotIn('status', ['cancelled', 'checked_out'])
-            ->whereDate('check_in_date', '<=', $today)
-            ->whereDate('check_out_date', '>', $today)
-            ->count();
-
         return Inertia::render('Reservations/Calendar', [
             'rooms' => $rooms,
             'reservations' => $reservations,
@@ -230,13 +223,6 @@ class ReservationController extends Controller
             'startDate' => $startDate,
             'endDate' => $endDate,
             'visibleDays' => $visibleDays,
-            'stats' => [
-                'arrivals_today' => Reservation::whereDate('check_in_date', $today)
-                    ->whereNotIn('status', ['cancelled'])->count(),
-                'departures_today' => Reservation::whereDate('check_out_date', $today)
-                    ->whereNotIn('status', ['cancelled'])->count(),
-                'available_today' => max(0, $rooms->count() - $activeToday),
-            ],
             'channelFees' => Setting::get('financial.channel_fees', []),
         ]);
     }

@@ -43,7 +43,6 @@ const props = defineProps({
     startDate: String,
     endDate: String,
     visibleDays: { type: Number, default: 14 },
-    stats: { type: Object, default: () => ({}) },
     channelFees: { type: Object, default: () => ({}) },
 });
 
@@ -164,9 +163,12 @@ const occupiedRoomNights = computed(() => (props.reservations || []).reduce((tot
 const occupancy = computed(() => props.rooms?.length
     ? Math.round((occupiedRoomNights.value / (props.rooms.length * props.visibleDays)) * 100)
     : 0);
-const arrivals = computed(() => Number(props.stats?.arrivals_today) || 0);
-const departures = computed(() => Number(props.stats?.departures_today) || 0);
-const availableToday = computed(() => Number(props.stats?.available_today) || 0);
+const operationalDate = computed(() => days.value.some((day) => day.isToday)
+    ? new Date().toISOString().split('T')[0]
+    : props.startDate);
+const arrivals = computed(() => (props.reservations || []).filter((reservation) => reservation.check_in_date === operationalDate.value).length);
+const departures = computed(() => (props.reservations || []).filter((reservation) => reservation.check_out_date === operationalDate.value).length);
+const availableToday = computed(() => Math.max(0, (props.rooms?.length || 0) - (props.reservations || []).filter((reservation) => reservation.check_in_date <= operationalDate.value && reservation.check_out_date > operationalDate.value).length));
 const dateRangeLabel = computed(() => {
     const first = new Date(`${props.startDate}T12:00:00`);
     const last = new Date(`${props.endDate}T12:00:00`);

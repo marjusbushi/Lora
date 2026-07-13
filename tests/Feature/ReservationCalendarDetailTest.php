@@ -47,9 +47,6 @@ class ReservationCalendarDetailTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('Reservations/Calendar')
                 ->where('visibleDays', 14)
-                ->has('stats', fn (AssertableInertia $stats) => $stats
-                    ->hasAll(['arrivals_today', 'departures_today', 'available_today'])
-                )
                 ->has('reservations.0', fn (AssertableInertia $r) => $r
                     ->where('adults', 2)
                     ->where('children', 1)
