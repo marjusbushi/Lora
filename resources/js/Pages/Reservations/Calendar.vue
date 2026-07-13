@@ -1,7 +1,7 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
@@ -10,29 +10,17 @@ import ReservationCreateModal from '@/Components/Reservations/ReservationCreateM
 import MoveRoomModal from '@/Components/Reservations/MoveRoomModal.vue';
 import ReservationEditModal from '@/Components/Reservations/ReservationEditModal.vue';
 import { channelMeta } from '@/channels';
+import { Link } from '@inertiajs/vue3';
 import {
     ArrowLeftRight,
-    BedDouble,
     CalendarDays,
-    CheckCircle2,
-    ChevronDown,
-    ChevronLeft,
-    ChevronRight,
-    ChevronUp,
-    CircleDollarSign,
     Clock3,
     CreditCard,
     ExternalLink,
-    Filter,
-    List,
-    LogIn,
-    LogOut,
     Mail,
     MessageSquare,
     Pencil,
     Phone,
-    Plus,
-    Search,
     X,
 } from 'lucide-vue-next';
 
@@ -42,7 +30,6 @@ const props = defineProps({
     guests: Array,
     startDate: String,
     endDate: String,
-    visibleDays: { type: Number, default: 14 },
     channelFees: { type: Object, default: () => ({}) },
 });
 
@@ -54,11 +41,6 @@ const showEditModal = ref(false);
 const selectedReservation = ref(null);
 const detailScroll = ref(null);
 const detailCloseButton = ref(null);
-const dateHeaderTrack = ref(null);
-const filterInput = ref(null);
-const showSummary = ref(false);
-const query = ref('');
-const statusFilter = ref('all');
 
 const perms = usePage().props.auth.user?.permissions || [];
 const canCreate = perms.includes('create_reservations');
@@ -93,18 +75,17 @@ const sortedRooms = computed(() => {
     });
 });
 
-// Generate the active 7/14/30-day range returned by the backend.
+// Generate 14 days array
 const days = computed(() => {
     const result = [];
     const start = new Date(props.startDate);
-    for (let i = 0; i < props.visibleDays; i++) {
+    for (let i = 0; i < 14; i++) {
         const d = new Date(start);
         d.setDate(d.getDate() + i);
         result.push({
             date: d.toISOString().split('T')[0],
             day: d.getDate(),
             weekday: d.toLocaleDateString(getIntlLocale(), { weekday: 'short' }),
-            month: d.toLocaleDateString(getIntlLocale(), { month: 'short' }),
             isToday: d.toISOString().split('T')[0] === new Date().toISOString().split('T')[0],
             isWeekend: d.getDay() === 0 || d.getDay() === 6,
         });
@@ -112,82 +93,53 @@ const days = computed(() => {
     return result;
 });
 
+const monthLabel = computed(() => {
+    const start = new Date(props.startDate);
+    const end = new Date(props.endDate);
+    const startMonth = start.toLocaleDateString(getIntlLocale(), { month: 'long', year: 'numeric' });
+    const endMonth = end.toLocaleDateString(getIntlLocale(), { month: 'long', year: 'numeric' });
+    return startMonth === endMonth ? startMonth : `${start.toLocaleDateString(getIntlLocale(), { month: 'short' })} — ${end.toLocaleDateString(getIntlLocale(), { month: 'short', year: 'numeric' })}`;
+});
+
 const statusColors = {
-    pending: 'border-amber-300 bg-amber-100 text-amber-950 hover:bg-amber-200',
-    confirmed: 'border-sky-300 bg-sky-100 text-sky-950 hover:bg-sky-200',
-    checked_in: 'border-emerald-300 bg-emerald-100 text-emerald-950 hover:bg-emerald-200',
-    checked_out: 'border-neutral-300 bg-neutral-100 text-neutral-700 hover:bg-neutral-200',
+    pending: 'bg-warning-200 border-warning-400 text-warning-800',
+    confirmed: 'bg-info-200 border-info-400 text-info-800',
+    checked_in: 'bg-accent-200 border-accent-500 text-accent-900',
+    checked_out: 'bg-neutral-200 border-neutral-400 text-neutral-600',
 };
 
-const groupedRooms = computed(() => sortedRooms.value.reduce((groups, room) => {
-    const floor = room.floor ?? 0;
-    (groups[floor] ||= []).push(room);
-    return groups;
-}, {}));
-
-const filteredReservations = computed(() => (props.reservations || []).filter((reservation) => {
-    const guest = `${reservation.guest?.first_name || ''} ${reservation.guest?.last_name || ''}`.trim().toLowerCase();
-    const matchesQuery = !query.value || guest.includes(query.value.trim().toLowerCase());
-    const matchesStatus = statusFilter.value === 'all' || reservation.status === statusFilter.value;
-    return matchesQuery && matchesStatus;
-}));
-
-function reservationsFor(roomId) {
-    return filteredReservations.value.filter((reservation) => reservation.room_id === roomId);
+// Get reservation for a room on a specific date
+function getReservation(roomId, date) {
+    return props.reservations.find(r =>
+        r.room_id === roomId &&
+        r.check_in_date <= date &&
+        r.check_out_date > date
+    );
 }
 
-function dayOffset(value) {
-    return Math.round((new Date(`${value}T12:00:00`) - new Date(`${props.startDate}T12:00:00`)) / 86400000);
+// Check if date is check-in day for a reservation
+function isCheckInDay(reservation, date) {
+    return reservation.check_in_date === date;
 }
 
-function reservationStyle(reservation) {
-    const start = Math.max(0, dayOffset(reservation.check_in_date));
-    const end = Math.min(props.visibleDays, dayOffset(reservation.check_out_date));
-    if (end <= 0 || start >= props.visibleDays) return { display: 'none' };
-    return {
-        left: `calc(${(start / props.visibleDays) * 100}% + 3px)`,
-        width: `calc(${((end - start) / props.visibleDays) * 100}% - 6px)`,
-    };
+// Get span (days) for a reservation block starting from a date
+function getReservationSpan(reservation, fromDate) {
+    const end = new Date(reservation.check_out_date);
+    const from = new Date(fromDate);
+    const lastDay = new Date(props.endDate);
+    if (end <= lastDay) {
+        return Math.ceil((end - from) / (1000 * 60 * 60 * 24));
+    }
+    // continues past the visible window — the guest still occupies the last column
+    return Math.ceil((lastDay - from) / (1000 * 60 * 60 * 24)) + 1;
 }
 
-function isOccupied(roomId, date) {
-    return (props.reservations || []).some((reservation) => reservation.room_id === roomId
-        && reservation.check_in_date <= date && reservation.check_out_date > date);
-}
+// Direction the grid slides when the week changes: 'next' = forward, 'prev' = backward
+const slideDir = ref('next');
 
-const occupiedRoomNights = computed(() => (props.reservations || []).reduce((total, reservation) => {
-    const start = Math.max(0, dayOffset(reservation.check_in_date));
-    const end = Math.min(props.visibleDays, dayOffset(reservation.check_out_date));
-    return total + Math.max(0, end - start);
-}, 0));
-const occupancy = computed(() => props.rooms?.length
-    ? Math.round((occupiedRoomNights.value / (props.rooms.length * props.visibleDays)) * 100)
-    : 0);
-const operationalDate = computed(() => days.value.some((day) => day.isToday)
-    ? new Date().toISOString().split('T')[0]
-    : props.startDate);
-const arrivals = computed(() => (props.reservations || []).filter((reservation) => reservation.check_in_date === operationalDate.value).length);
-const departures = computed(() => (props.reservations || []).filter((reservation) => reservation.check_out_date === operationalDate.value).length);
-const availableToday = computed(() => Math.max(0, (props.rooms?.length || 0) - (props.reservations || []).filter((reservation) => reservation.check_in_date <= operationalDate.value && reservation.check_out_date > operationalDate.value).length));
-const dateRangeLabel = computed(() => {
-    const first = new Date(`${props.startDate}T12:00:00`);
-    const last = new Date(`${props.endDate}T12:00:00`);
-    return `${first.toLocaleDateString(getIntlLocale(), { day: 'numeric', month: 'short' })} – ${last.toLocaleDateString(getIntlLocale(), { day: 'numeric', month: 'short', year: 'numeric' })}`;
-});
-const calendarTrackWidth = computed(() => `${props.visibleDays * 76}px`);
-const calendarBodyWidth = computed(() => `${192 + (props.visibleDays * 76)}px`);
-
-function syncDateHeader(event) {
-    if (dateHeaderTrack.value) dateHeaderTrack.value.style.transform = `translateX(-${event.currentTarget.scrollLeft}px)`;
-}
-
-function goToWeek(startStr, direction, daysCount = props.visibleDays) {
-    router.get(route('reservations.calendar'), { start: startStr, days: daysCount }, { preserveState: true, preserveScroll: true });
-}
-
-function setVisibleDays(daysCount) {
-    if (daysCount !== 14) return;
-    goToWeek(props.startDate, 1, 14);
+function goToWeek(startStr, direction) {
+    slideDir.value = direction >= 0 ? 'next' : 'prev';
+    router.get(route('reservations.calendar'), { start: startStr }, { preserveState: true, preserveScroll: true });
 }
 
 function navigate(direction) {
@@ -320,8 +272,8 @@ function isInDrag(roomId, date) {
 // Event delegation on the grid: robust across fast drags, and it naturally stops
 // at a reservation block (those cells carry no data-date), keeping the range contiguous.
 function cellFrom(e) {
-    const cell = e.target.closest('[data-date]');
-    return cell && !cell.disabled ? { roomId: Number(cell.dataset.room), date: cell.dataset.date } : null;
+    const td = e.target.closest('td[data-date]');
+    return td ? { roomId: Number(td.dataset.room), date: td.dataset.date } : null;
 }
 function onGridDown(e) {
     const c = cellFrom(e);
@@ -395,140 +347,182 @@ function doCheckOut(res) {
     });
 }
 
+// Build calendar grid - for each room, pre-calculate which cells are occupied
+function getRoomCalendarCells(room) {
+    const cells = [];
+    let skipUntil = null;
+
+    for (const day of days.value) {
+        if (skipUntil && day.date < skipUntil) {
+            continue; // skip — covered by colspan
+        }
+        skipUntil = null;
+
+        const res = getReservation(room.id, day.date);
+        if (res && isCheckInDay(res, day.date)) {
+            const span = getReservationSpan(res, day.date);
+            cells.push({ type: 'reservation', reservation: res, span, date: day.date });
+            const skipDate = new Date(day.date);
+            skipDate.setDate(skipDate.getDate() + span);
+            skipUntil = skipDate.toISOString().split('T')[0];
+        } else if (res) {
+            // mid-reservation — already covered by previous colspan from earlier start
+            // but if reservation started before our view, we need to show it
+            const viewStart = new Date(props.startDate);
+            const resStart = new Date(res.check_in_date);
+            if (resStart < viewStart && day.date === days.value[0].date) {
+                const span = getReservationSpan(res, day.date);
+                cells.push({ type: 'reservation', reservation: res, span, date: day.date });
+                const skipDate = new Date(day.date);
+                skipDate.setDate(skipDate.getDate() + span);
+                skipUntil = skipDate.toISOString().split('T')[0];
+            } else {
+                continue;
+            }
+        } else {
+            cells.push({ type: 'empty', date: day.date, roomId: room.id });
+        }
+    }
+    return cells;
+}
 </script>
 
 <template>
-    <Head :title="$t('admin.calendarPreview.title')" />
     <AppLayout>
-        <div class="pb-10">
-            <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <!-- Header -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+            <div>
                 <div class="flex items-center gap-3">
-                    <span class="grid h-11 w-11 place-items-center rounded-xl bg-accent-100 text-accent-700"><CalendarDays class="h-5 w-5" /></span>
-                    <div>
-                        <h1 class="text-h2 text-primary-900">{{ $t('admin.calendarPreview.title') }}</h1>
-                        <p class="mt-0.5 text-body-sm text-neutral-500">{{ $t('admin.calendarPreview.subtitle') }}</p>
-                    </div>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <Link :href="route('reservations.index')" class="no-underline"><Button variant="outline" size="sm"><List class="h-4 w-4" />{{ $t('admin.generated.k_8ad6f4281da4') }}</Button></Link>
-                    <Button variant="outline" size="sm" @click="showSummary = !showSummary"><ChevronUp v-if="showSummary" class="h-4 w-4" /><ChevronDown v-else class="h-4 w-4" />{{ showSummary ? $t('admin.calendarPreview.hideSummary') : $t('admin.calendarPreview.showSummary') }}</Button>
-                    <Button variant="outline" size="sm" @click="filterInput?.focus()"><Filter class="h-4 w-4" />{{ $t('admin.calendarPreview.filters') }}</Button>
-                    <Button v-if="canCreate" size="sm" @click="openCreate(null, new Date().toISOString().split('T')[0])"><Plus class="h-4 w-4" />{{ $t('admin.calendarPreview.newReservation') }}</Button>
+                    <h1 class="text-h2 text-primary-900">{{ $t('admin.generated.k_eb3d197bf264') }}</h1>
                 </div>
             </div>
-
-            <div v-if="!showSummary" class="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.occupancy') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ occupancy }}%</p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-accent-50 text-accent-700"><BedDouble class="h-4 w-4" /></span></div>
-                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.arrivalsToday') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ arrivals }}</p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-info-50 text-info-700"><LogIn class="h-4 w-4" /></span></div>
-                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.departuresToday') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ departures }}</p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-warning-50 text-warning-700"><LogOut class="h-4 w-4" /></span></div>
-                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.availableTonight') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ availableToday }} <span class="text-tiny font-medium text-neutral-400">/ {{ rooms.length }}</span></p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-success-50 text-success-700"><CheckCircle2 class="h-4 w-4" /></span></div>
+            <div class="flex items-center gap-2">
+                <Link :href="route('reservations.index')" class="no-underline">
+                    <Button variant="outline" size="sm">{{ $t('admin.generated.k_8ad6f4281da4') }}</Button>
+                </Link>
+                <Button variant="outline" size="sm" @click="navigate(-1)">{{ $t('admin.generated.k_fe085fc2cb10') }}</Button>
+                <Button variant="ghost" size="sm" @click="goToToday">{{ $t('admin.generated.k_6538d1136795') }}</Button>
+                <Button variant="outline" size="sm" @click="navigate(1)">{{ $t('admin.generated.k_b46636dde7af') }}</Button>
+                <Button v-if="canCreate" variant="primary" size="sm" @click="openCreate(null, new Date().toISOString().split('T')[0])">{{ $t('admin.generated.k_fb45801b58c0') }}</Button>
             </div>
+        </div>
 
-            <div v-else class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.occupancy') }}</p><BedDouble class="h-4 w-4 text-accent-600" /></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ occupancy }}%</p><div class="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-100"><div class="h-full rounded-full bg-accent-500" :style="{ width: `${occupancy}%` }" /></div></div>
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.arrivalsToday') }}</p><LogIn class="h-4 w-4 text-info-600" /></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ arrivals }}</p></div>
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.departuresToday') }}</p><LogOut class="h-4 w-4 text-warning-600" /></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ departures }}</p></div>
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.availableTonight') }}</p><CheckCircle2 class="h-4 w-4 text-success-600" /></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ availableToday }} <span class="text-body-sm font-medium text-neutral-400">/ {{ rooms.length }}</span></p><p class="mt-1 text-tiny text-success-700">{{ $t('admin.calendarPreview.readyToSell') }}</p></div>
+        <!-- Month label and room order -->
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p class="text-label text-neutral-500 uppercase tracking-wider">{{ monthLabel }}</p>
+            <div class="flex items-center gap-2">
+                <span class="whitespace-nowrap text-small text-neutral-500">{{ $t('admin.generated.k_d27e193601ff') }}</span>
+                <div class="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5" role="group" :aria-label="$t('admin.generated.k_96f31a0be77c')">
+                    <button
+                        type="button"
+                        :aria-pressed="roomSort === 'number'"
+                        :class="['rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/50', roomSort === 'number' ? 'bg-primary-900 text-white' : 'text-neutral-500 hover:text-neutral-800']"
+                        @click="roomSort = 'number'"
+                    >{{ $t('admin.generated.k_fa144b375912') }}</button>
+                    <button
+                        type="button"
+                        :aria-pressed="roomSort === 'type'"
+                        :class="['rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/50', roomSort === 'type' ? 'bg-primary-900 text-white' : 'text-neutral-500 hover:text-neutral-800']"
+                        @click="roomSort = 'type'"
+                    >{{ $t('admin.generated.k_e129e8dfc500') }}</button>
+                </div>
             </div>
+        </div>
 
-            <section class="rounded-xl border border-neutral-200 bg-white shadow-card">
-                <div class="flex flex-col gap-3 border-b border-neutral-200 p-3 xl:flex-row xl:items-center xl:justify-between">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <div class="flex items-center rounded-lg border border-neutral-200 bg-white p-0.5">
-                            <button type="button" class="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100" @click="navigate(-1)"><ChevronLeft class="h-4 w-4" /></button>
-                            <button type="button" class="min-w-44 px-3 text-body-sm font-bold text-primary-900" @click="goToToday">{{ dateRangeLabel }}</button>
-                            <button type="button" class="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100" @click="navigate(1)"><ChevronRight class="h-4 w-4" /></button>
-                        </div>
-                        <button type="button" class="h-9 rounded-lg border border-neutral-200 px-3 text-body-sm font-medium text-neutral-600 hover:bg-neutral-50" @click="goToToday">{{ $t('admin.calendarPreview.today') }}</button>
-                        <div class="inline-flex rounded-lg bg-neutral-100 p-0.5">
-                            <button v-for="count in [7, 14, 30]" :key="count" type="button" :disabled="count !== 14" class="rounded-md px-3 py-1.5 text-tiny font-semibold transition disabled:cursor-not-allowed disabled:opacity-40" :class="visibleDays === count ? 'bg-white text-primary-900 shadow-sm' : 'text-neutral-500'" @click="setVisibleDays(count)">{{ count }}d</button>
-                        </div>
-                        <div class="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5" role="group" :aria-label="$t('admin.generated.k_96f31a0be77c')">
-                            <button type="button" :aria-pressed="roomSort === 'number'" class="rounded-md px-2.5 py-1.5 text-tiny font-semibold transition" :class="roomSort === 'number' ? 'bg-primary-900 text-white' : 'text-neutral-500'" @click="roomSort = 'number'">{{ $t('admin.generated.k_fa144b375912') }}</button>
-                            <button type="button" :aria-pressed="roomSort === 'type'" class="rounded-md px-2.5 py-1.5 text-tiny font-semibold transition" :class="roomSort === 'type' ? 'bg-primary-900 text-white' : 'text-neutral-500'" @click="roomSort = 'type'">{{ $t('admin.generated.k_e129e8dfc500') }}</button>
-                        </div>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <label class="relative min-w-52 flex-1 xl:flex-none">
-                            <Search class="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
-                            <input ref="filterInput" v-model="query" type="search" class="h-9 w-full rounded-lg border-neutral-200 pl-9 pr-3 text-body-sm focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('admin.calendarPreview.searchGuest')" />
-                        </label>
-                        <select v-model="statusFilter" class="h-9 rounded-lg border-neutral-200 py-1.5 pl-3 pr-8 text-body-sm text-neutral-600 focus:border-accent-500 focus:ring-accent-500">
-                            <option value="all">{{ $t('admin.calendarPreview.allStatuses') }}</option>
-                            <option value="checked_in">{{ $t('admin.calendarPreview.inHouse') }}</option>
-                            <option value="confirmed">{{ $t('admin.calendarPreview.confirmed') }}</option>
-                            <option value="pending">{{ $t('admin.calendarPreview.pending') }}</option>
-                            <option value="checked_out">{{ $t('admin.generated.k_75cbe57f73eb') }}</option>
-                        </select>
-                    </div>
-                </div>
+        <!-- Calendar grid — slides horizontally when changing week -->
+        <div class="relative overflow-hidden">
+        <Transition :name="slideDir === 'next' ? 'cal-next' : 'cal-prev'">
+        <div :key="startDate" class="bg-white rounded-lg border border-neutral-200 max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain">
+            <table class="w-full border-collapse" style="min-width: 900px;">
+                <!-- Day headers -->
+                <thead>
+                    <tr>
+                        <th class="sticky top-0 left-0 z-30 bg-neutral-50 border-b border-r border-neutral-200 px-3 py-2 text-left text-label text-neutral-600 w-28">{{ $t('admin.generated.k_a1206af0984a') }}</th>
+                        <th
+                            v-for="day in days"
+                            :key="day.date"
+                            :class="[
+                                'sticky top-0 z-20 border-b border-r border-neutral-200 px-1 py-2 text-center min-w-[56px]',
+                                day.isToday ? 'bg-accent-50' : day.isWeekend ? 'bg-neutral-100' : 'bg-neutral-50',
+                            ]"
+                        >
+                            <p class="text-tiny text-neutral-400 uppercase">{{ day.weekday }}</p>
+                            <p :class="[
+                                'text-body-sm font-medium mt-0.5',
+                                day.isToday ? 'text-accent-700' : 'text-neutral-700',
+                            ]">{{ day.day }}</p>
+                        </th>
+                    </tr>
+                </thead>
 
-                <div class="sticky top-16 z-40 flex border-b border-neutral-300 bg-white shadow-[0_6px_14px_-10px_rgba(15,23,42,0.45)]">
-                    <div class="z-50 flex w-48 shrink-0 items-center border-r border-neutral-200 bg-white px-4 py-3 text-tiny font-bold uppercase tracking-wider text-neutral-500">{{ $t('admin.calendarPreview.room') }}</div>
-                    <div class="min-w-0 flex-1 overflow-hidden">
-                        <div ref="dateHeaderTrack" class="grid min-w-full will-change-transform" :style="{ minWidth: calendarTrackWidth, gridTemplateColumns: `repeat(${visibleDays}, minmax(76px, 1fr))` }">
-                            <div v-for="day in days" :key="day.date" class="border-r border-neutral-200 px-2 py-2 text-center" :class="day.isToday ? 'bg-accent-50' : day.isWeekend ? 'bg-neutral-100/80' : ''">
-                                <p class="text-[10px] font-bold uppercase tracking-wide text-neutral-400">{{ day.weekday }}</p>
-                                <p class="mx-auto mt-1 grid h-7 w-7 place-items-center rounded-full text-body-sm font-bold" :class="day.isToday ? 'bg-accent-600 text-white' : 'text-neutral-700'">{{ day.day }}</p>
-                                <p class="mt-0.5 text-[10px] text-neutral-400">{{ day.month }}</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Room rows -->
+                <tbody @mousedown="onGridDown" @mouseover="onGridOver">
+                    <tr v-for="room in sortedRooms" :key="room.id" class="group">
+                        <!-- Room label -->
+                        <td class="sticky left-0 z-10 bg-white border-b border-r border-neutral-200 px-3 py-2 group-hover:bg-neutral-50 transition-colors">
+                            <p class="text-body-sm text-primary-900 font-medium">{{ room.room_number }}</p>
+                            <p class="text-tiny text-neutral-400">{{ room.room_type?.name }}</p>
+                            <span v-if="room.status === 'maintenance'" class="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-tiny bg-warning-100 text-warning-800" :title="$t('admin.generated.k_d00b57c2ba36')">{{ $t('admin.generated.k_b751d73e5e72') }}</span>
+                        </td>
 
-                <div class="overflow-x-auto overflow-y-visible overscroll-x-contain" @scroll.passive="syncDateHeader">
-                    <div :style="{ minWidth: calendarBodyWidth }">
-                        <template v-for="(floorRooms, floor) in groupedRooms" :key="floor">
-                            <div class="sticky left-0 z-20 flex h-8 items-center border-b border-neutral-200 bg-primary-50 px-4 text-tiny font-bold uppercase tracking-wider text-primary-700">{{ $t('admin.calendarPreview.floor') }} {{ floor }} · {{ floorRooms.length }} {{ $t('admin.calendarPreview.rooms') }}</div>
-                            <div v-for="room in floorRooms" :key="room.id" class="group flex border-b border-neutral-200 last:border-b-0">
-                                <div class="sticky left-0 z-20 flex h-16 w-48 shrink-0 items-center justify-between border-r border-neutral-200 bg-white px-4 group-hover:bg-neutral-50">
-                                    <div class="min-w-0"><p class="text-body-sm font-extrabold text-primary-900">{{ room.room_number }}</p><p class="mt-0.5 max-w-32 truncate text-[11px] text-neutral-400">{{ room.room_type?.name }}</p></div>
-                                    <span class="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white" :class="room.status === 'maintenance' ? 'bg-neutral-400' : 'bg-success-500'" />
-                                </div>
-                                <div class="relative grid h-16 min-w-0 flex-1" :style="{ minWidth: calendarTrackWidth, gridTemplateColumns: `repeat(${visibleDays}, minmax(76px, 1fr))` }" @mousedown="onGridDown" @mouseover="onGridOver">
-                                    <button
-                                        v-for="day in days"
-                                        :key="day.date"
-                                        type="button"
-                                        :data-date="day.date"
-                                        :data-room="room.id"
-                                        :disabled="isOccupied(room.id, day.date) || !canCreate"
-                                        class="border-r border-neutral-100 transition disabled:cursor-default"
-                                        :class="[
-                                            day.isToday ? 'bg-accent-50/40' : day.isWeekend ? 'bg-neutral-50' : '',
-                                            !isOccupied(room.id, day.date) && canCreate ? 'hover:bg-accent-50' : '',
-                                            isInDrag(room.id, day.date) ? 'bg-accent-100' : '',
-                                        ]"
-                                        :aria-label="`${room.room_number} ${day.date}`"
-                                    />
-                                    <button
-                                        v-for="reservation in reservationsFor(room.id)"
-                                        :key="reservation.id"
-                                        type="button"
-                                        class="absolute top-2 z-10 h-12 overflow-hidden rounded-lg border px-2.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                                        :class="statusColors[reservation.status]"
-                                        :style="reservationStyle(reservation)"
-                                        @click="openDetail(reservation)"
-                                    >
-                                        <span class="flex items-center gap-1.5 truncate text-[11px] font-extrabold"><span class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ backgroundColor: channelMeta(reservation.channel).color }" />{{ reservation.guest?.first_name }} {{ reservation.guest?.last_name }}</span>
-                                        <span class="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-75"><span class="truncate">{{ channelMeta(reservation.channel).label }}</span><CircleDollarSign class="h-3 w-3 shrink-0" :class="Number(reservation.paid_amount) >= Number(reservation.total_amount) ? 'text-success-700' : 'text-warning-700'" /></span>
-                                    </button>
-                                </div>
-                            </div>
+                        <!-- Calendar cells -->
+                        <template v-for="cell in getRoomCalendarCells(room)" :key="cell.date">
+                            <!-- Reservation block -->
+                            <td
+                                v-if="cell.type === 'reservation'"
+                                :colspan="cell.span"
+                                class="border-b border-r border-neutral-200 p-0.5 h-12"
+                            >
+                                <button
+                                    :class="[
+                                        'w-full h-full rounded-md border px-2 py-1 text-left cursor-pointer transition-all duration-100 hover:shadow-md truncate',
+                                        statusColors[cell.reservation.status],
+                                    ]"
+                                    @click="openDetail(cell.reservation)"
+                                >
+                                    <p class="text-tiny font-medium truncate">{{ cell.reservation.guest?.first_name }} {{ cell.reservation.guest?.last_name }}</p>
+                                    <p class="text-tiny opacity-70">€{{ cell.reservation.total_amount }}</p>
+                                </button>
+                            </td>
+
+                            <!-- Empty cell — click for 1 night, or drag across days for a range -->
+                            <td
+                                v-else
+                                :data-date="cell.date"
+                                :data-room="cell.roomId"
+                                class="border-b border-r border-neutral-200 p-0.5 h-12 select-none"
+                                :class="[
+                                    canCreate && 'cursor-pointer hover:bg-accent-50/50',
+                                    isInDrag(cell.roomId, cell.date) && 'bg-accent-100',
+                                ]"
+                            >
+                            </td>
                         </template>
-                    </div>
-                </div>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        </Transition>
+        </div>
 
-                <div class="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-4 py-3">
-                    <div class="flex flex-wrap items-center gap-4 text-tiny text-neutral-500">
-                        <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded bg-emerald-200 ring-1 ring-emerald-300" />{{ $t('admin.calendarPreview.inHouse') }}</span>
-                        <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded bg-sky-200 ring-1 ring-sky-300" />{{ $t('admin.calendarPreview.confirmed') }}</span>
-                        <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded bg-amber-200 ring-1 ring-amber-300" />{{ $t('admin.calendarPreview.pending') }}</span>
-                        <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded bg-neutral-200 ring-1 ring-neutral-300" />{{ $t('admin.generated.k_75cbe57f73eb') }}</span>
-                    </div>
-                    <p class="text-tiny text-neutral-400">{{ $t('admin.calendarPreview.dragHint') }}</p>
-                </div>
-            </section>
+        <!-- Legend -->
+        <div class="mt-4 flex flex-wrap gap-4">
+            <div class="flex items-center gap-1.5">
+                <div class="h-3 w-6 rounded-sm bg-warning-200 border border-warning-400"></div>
+                <span class="text-tiny text-neutral-500">{{ $t('admin.generated.k_61e9368aebf5') }}</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <div class="h-3 w-6 rounded-sm bg-info-200 border border-info-400"></div>
+                <span class="text-tiny text-neutral-500">{{ $t('admin.generated.k_8285dafa3dd1') }}</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <div class="h-3 w-6 rounded-sm bg-accent-200 border border-accent-500"></div>
+                <span class="text-tiny text-neutral-500">{{ $t('admin.generated.k_d7c217631347') }}</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <div class="h-3 w-6 rounded-sm bg-neutral-200 border border-neutral-400"></div>
+                <span class="text-tiny text-neutral-500">{{ $t('admin.generated.k_75cbe57f73eb') }}</span>
+            </div>
         </div>
 
         <!-- Reservation detail side drawer -->
@@ -700,11 +694,48 @@ function doCheckOut(res) {
 .drawer-fade-leave-to {
     opacity: 0;
 }
+/* Week-change slide: the leaving grid overlaps the entering one so they cross, not stack */
+.cal-next-enter-active,
+.cal-next-leave-active,
+.cal-prev-enter-active,
+.cal-prev-leave-active {
+    transition: transform 420ms cubic-bezier(0.4, 0, 0.2, 1), opacity 420ms ease;
+    will-change: transform, opacity;
+}
+.cal-next-leave-active,
+.cal-prev-leave-active {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+}
+/* Pas (forward): new week comes in from the right, old exits left */
+.cal-next-enter-from {
+    transform: translateX(100%);
+    opacity: 0;
+}
+.cal-next-leave-to {
+    transform: translateX(-100%);
+    opacity: 0;
+}
+/* Para (backward): new week comes in from the left, old exits right */
+.cal-prev-enter-from {
+    transform: translateX(-100%);
+    opacity: 0;
+}
+.cal-prev-leave-to {
+    transform: translateX(100%);
+    opacity: 0;
+}
 @media (prefers-reduced-motion: reduce) {
     .drawer-slide-enter-active,
     .drawer-slide-leave-active,
     .drawer-fade-enter-active,
-    .drawer-fade-leave-active {
+    .drawer-fade-leave-active,
+    .cal-next-enter-active,
+    .cal-next-leave-active,
+    .cal-prev-enter-active,
+    .cal-prev-leave-active {
         transition: opacity 150ms ease;
         transform: none !important;
     }
