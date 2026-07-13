@@ -13,6 +13,7 @@ import {
 const props = defineProps({
     stats: Object,
     moduleAdoption: Array,
+    needsAttention: Array,
     recentTenants: Array,
 });
 
@@ -41,6 +42,14 @@ function statusLabel(status) {
         trialing: 'Provë', active: 'Aktiv', past_due: 'Pagesë e vonuar',
         suspended: 'Pezulluar', canceled: 'Anuluar', inactive: 'Joaktiv',
     }[status] || status;
+}
+
+function attentionClass(severity) {
+    return {
+        danger: 'border-red-200 bg-red-50 text-red-700',
+        warning: 'border-amber-200 bg-amber-50 text-amber-700',
+        info: 'border-neutral-200 bg-neutral-50 text-neutral-600',
+    }[severity] || 'border-neutral-200 bg-neutral-50 text-neutral-600';
 }
 </script>
 
@@ -71,6 +80,34 @@ function statusLabel(status) {
                         </span>
                     </div>
                 </article>
+            </section>
+
+            <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+                <div class="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
+                    <div>
+                        <h2 class="font-semibold text-neutral-900">Kërkojnë vëmendje</h2>
+                        <p class="mt-1 text-xs text-neutral-500">Pagesa të vonuara, hotele të pezulluara, ose abonime që mbarojnë brenda 14 ditësh.</p>
+                    </div>
+                    <span v-if="needsAttention.length" class="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">{{ needsAttention.length }}</span>
+                </div>
+
+                <ul v-if="needsAttention.length" class="divide-y divide-neutral-100">
+                    <li v-for="item in needsAttention" :key="item.id" class="flex items-center justify-between gap-3 px-5 py-3">
+                        <div class="flex min-w-0 items-center gap-3">
+                            <span class="h-2 w-2 shrink-0 rounded-full" :class="item.severity === 'danger' ? 'bg-red-500' : (item.severity === 'warning' ? 'bg-amber-500' : 'bg-neutral-400')" />
+                            <Link :href="`/super-admin/tenants/${item.id}`" class="truncate text-sm font-medium text-neutral-900 no-underline hover:text-emerald-700">{{ item.name }}</Link>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <span class="rounded-full border px-2 py-0.5 text-xs font-medium" :class="attentionClass(item.severity)">{{ item.reason }}</span>
+                            <span v-if="item.date" class="hidden text-xs text-neutral-400 sm:inline">{{ date(item.date) }}</span>
+                        </div>
+                    </li>
+                </ul>
+
+                <div v-else class="flex flex-col items-center gap-1 px-5 py-10 text-center">
+                    <p class="text-sm font-medium text-emerald-700">Gjithçka në rregull ✓</p>
+                    <p class="text-xs text-neutral-500">Asnjë hotel s'kërkon veprim tani.</p>
+                </div>
             </section>
 
             <div class="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">

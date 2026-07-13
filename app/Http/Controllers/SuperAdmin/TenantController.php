@@ -56,6 +56,83 @@ class TenantController extends Controller
         ]);
     }
 
+    public function show(Tenant $tenant, TenantBillingService $billing, TenantContext $context): Response
+    {
+        $tenant->load(['domains' => fn ($query) => $query->orderByDesc('is_primary')]);
+        $summary = $billing->summary($tenant);
+
+        $memberPivots = DB::table('tenant_user')->where('tenant_id', $tenant->id)->get()->keyBy('user_id');
+
+        // Roles are per-team (per hotel): read them INSIDE this tenant's context
+        // and reset the cached relation first, or Spatie returns another hotel's
+        // role for a shared user (lesson #105).
+        $members = $context->run($tenant, function () use ($memberPivots) {
+            return User::withoutGlobalScopes()
+                ->whereIn('id', $memberPivots->keys()->all())
+                ->orderBy('name')
+                ->get()
+                ->map(function (User $user) use ($memberPivots) {
+                    $user->unsetRelation('roles');
+                    $pivot = $memberPivots[$user->id];
+
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'is_owner' => (bool) $pivot->is_owner,
+                        'is_active' => (bool) $pivot->is_active,
+                        'is_super_admin' => (bool) $user->is_super_admin,
+                        'role' => $user->getRoleNames()->first(),
+                    ];
+                })
+                ->values();
+        });
+
+        $activity = AuditLog::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->where('action', 'like', 'tenant.%')
+            ->with('causer:id,name')
+            ->orderByDesc('id')
+            ->limit(15)
+            ->get()
+            ->map(fn (AuditLog $log) => [
+                'id' => $log->id,
+                'action' => $log->action,
+                'actor' => $log->causer?->name ?? 'Sistemi',
+                'created_at' => $log->created_at?->toIso8601String(),
+            ]);
+
+        $mrrCents = ! in_array($summary['status'], ['active', 'trialing'], true)
+            ? 0
+            : ($summary['billing_cycle'] === 'annual'
+                ? (int) round(($summary['annual_cents'] ?? 0) / 12)
+                : ($summary['monthly_fixed_cents'] ?? 0));
+
+        return Inertia::render('SuperAdmin/Tenants/Show', [
+            'tenant' => [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'slug' => $tenant->slug,
+                'status' => $tenant->status,
+                'timezone' => $tenant->timezone,
+                'currency' => $tenant->currency,
+                'created_at' => $tenant->created_at?->toIso8601String(),
+                'primary_domain' => $tenant->domains->firstWhere('is_primary', true)?->domain,
+                'domains' => $tenant->domains->map(fn (TenantDomain $domain) => [
+                    'id' => $domain->id,
+                    'domain' => $domain->domain,
+                    'is_primary' => (bool) $domain->is_primary,
+                ])->values(),
+                'billing' => $summary,
+                'mrr_cents' => $mrrCents,
+                'integrations' => $this->integrationSummaries($tenant),
+            ],
+            'members' => $members,
+            'activity' => $activity,
+            'currentTenantId' => request()->user()->current_tenant_id,
+        ]);
+    }
+
     public function store(
         Request $request,
         TenantRoleService $tenantRoles,

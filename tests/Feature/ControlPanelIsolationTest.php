@@ -5,7 +5,11 @@ namespace Tests\Feature;
 use App\Models\AuditLog;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
+use App\Models\TenantIntegration;
 use App\Models\User;
+use App\Services\TenantBillingService;
+use App\Services\TenantRoleService;
+use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -187,5 +191,75 @@ class ControlPanelIsolationTest extends TestCase
         $this->actingAs($user)
             ->get('https://admin.lorapms.test/super-admin/activity')
             ->assertForbidden();
+    }
+    public function test_tenant_detail_page_shows_members_domains_and_integrations_to_super_admin(): void
+    {
+        $tenant = Tenant::factory()->create(['name' => 'Hotel Detail']);
+        app(TenantBillingService::class)->provision($tenant, enableAll: true);
+        app(TenantRoleService::class)->provision($tenant);
+        TenantDomain::query()->create(['tenant_id' => $tenant->id, 'domain' => 'detail.test', 'is_primary' => true]);
+
+        // A member with a role IN THIS hotel.
+        $context = app(TenantContext::class);
+        $context->set($tenant);
+        $member = User::factory()->create();
+        $tenant->users()->syncWithoutDetaching([$member->id => ['is_owner' => true, 'is_active' => true]]);
+        $member->unsetRelation('roles')->assignRole('manager');
+        $context->clear();
+
+        // A Channex integration with a secret that must NEVER reach the page.
+        TenantIntegration::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'provider' => 'channex', 'enabled' => true,
+            'credentials' => ['api_key' => 'super-secret-key'],
+            'configuration' => ['property_id' => 'PROP-DETAIL'],
+        ]);
+
+        // Super admin belongs to the DEFAULT hotel, not this one — so members = the one real member.
+        $superAdmin = User::factory()->create(['is_super_admin' => true]);
+
+        $response = $this->actingAs($superAdmin)
+            ->get("https://admin.lorapms.test/super-admin/tenants/{$tenant->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SuperAdmin/Tenants/Show')
+                ->where('tenant.name', 'Hotel Detail')
+                ->where('tenant.integrations.channex.enabled', true)
+                ->where('tenant.integrations.channex.has_api_key', true)
+                ->has('members', 1)
+                ->where('members.0.role', 'manager')      // this hotel's role, not another's
+                ->where('members.0.is_owner', true));
+
+        $this->assertStringNotContainsString('super-secret-key', $response->getContent());
+    }
+
+    public function test_tenant_detail_page_is_forbidden_for_a_hotel_admin(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $user = User::factory()->create(['is_super_admin' => false]);
+
+        $this->actingAs($user)
+            ->get("https://admin.lorapms.test/super-admin/tenants/{$tenant->id}")
+            ->assertForbidden();
+    }
+    public function test_dashboard_flags_hotels_that_need_attention(): void
+    {
+        // A suspended hotel.
+        $suspended = Tenant::factory()->create(['name' => 'Hotel Suspended', 'status' => 'suspended']);
+
+        // A hotel whose subscription is past due.
+        $pastDue = Tenant::factory()->create(['name' => 'Hotel PastDue', 'status' => 'active']);
+        app(TenantBillingService::class)->provision($pastDue);
+        $pastDue->subscription->update(['status' => 'past_due']);
+
+        // The default hotel is active + healthy → must NOT be flagged.
+        $superAdmin = User::factory()->create(['is_super_admin' => true]);
+
+        $this->actingAs($superAdmin)
+            ->get('https://admin.lorapms.test/super-admin')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SuperAdmin/Dashboard')
+                ->has('needsAttention', 2)
+                ->where('needsAttention.0.severity', 'danger'));
     }
 }

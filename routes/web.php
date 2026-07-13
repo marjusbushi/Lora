@@ -74,6 +74,7 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
         Route::get('/', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/activity', [SuperAdminDashboardController::class, 'activity'])->name('activity');
         Route::get('/tenants', [SuperAdminTenantController::class, 'index'])->name('tenants.index');
+        Route::get('/tenants/{tenant}', [SuperAdminTenantController::class, 'show'])->name('tenants.show');
         Route::post('/tenants', [SuperAdminTenantController::class, 'store'])->name('tenants.store');
         Route::put('/tenants/{tenant}/subscription', [SuperAdminTenantController::class, 'updateSubscription'])->name('tenants.subscription.update');
         Route::post('/tenants/{tenant}/switch', [SuperAdminTenantController::class, 'switch'])->name('tenants.switch');

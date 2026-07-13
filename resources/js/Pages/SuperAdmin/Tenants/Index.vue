@@ -2,7 +2,7 @@
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Button from '@/Components/UI/Button.vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 
 const props = defineProps({
@@ -227,7 +227,7 @@ function statusLabel(status) {
                             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div class="min-w-0 flex-1">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <h3 class="font-semibold text-neutral-900">{{ tenant.name }}</h3>
+                                    <Link :href="route('super-admin.tenants.show', tenant.id)" class="font-semibold text-neutral-900 no-underline hover:text-emerald-700">{{ tenant.name }}</Link>
                                     <span v-if="tenant.id === currentTenantId" class="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">Aktual</span>
                                     <span class="rounded-full px-2 py-0.5 text-xs font-medium" :class="tenantStatusClass(tenant.status)">{{ tenantStatusLabel(tenant.status) }}</span>
                                     <span
