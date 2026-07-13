@@ -35,6 +35,8 @@ class GuestMessagingTest extends TestCase
     private function fakeChannex(): void
     {
         Http::fake([
+            'https://staging.channex.io/api/v1/message_threads/*/close' => Http::response(['data' => ['attributes' => ['is_closed' => true]]], 200),
+            'https://staging.channex.io/api/v1/message_threads/*/open' => Http::response(['data' => ['attributes' => ['is_closed' => false]]], 200),
             'https://staging.channex.io/api/v1/message_threads/*/messages' => Http::response(['data' => ['id' => 'MSG-ECHO']], 200),
             'https://staging.channex.io/api/v1/message_threads/*' => Http::response(['data' => ['attributes' => [
                 'title' => 'John Guest', 'channel' => 'booking.com', 'status' => 'open',
@@ -326,6 +328,49 @@ class GuestMessagingTest extends TestCase
         $this->assertSame($reservation->id, $thread->reservation_id);
         // …and the reservation is stamped so the next lookup skips the API.
         $this->assertSame('BK-9', $reservation->fresh()->channex_booking_id);
+    }
+
+    public function test_closing_and_reopening_a_conversation_syncs_with_channex(): void
+    {
+        $this->fakeChannex();
+
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($home);
+        $context->set($home);
+        $thread = MessageThread::create(['channex_thread_id' => 'TH-1', 'channel' => 'booking.com', 'guest_name' => 'Ana']);
+        $admin = User::factory()->create(['current_tenant_id' => $home->id]);
+        $admin->assignRole('admin');
+        $context->clear();
+
+        $this->actingAs($admin)->withSession(['tenant_id' => $home->id])
+            ->post(route('messages.close', $thread->id))
+            ->assertRedirect();
+        Http::assertSent(fn ($r) => str_contains($r->url(), '/message_threads/TH-1/close'));
+        $this->assertSame('closed', $thread->fresh()->status);
+
+        $this->actingAs($admin)->withSession(['tenant_id' => $home->id])
+            ->post(route('messages.reopen', $thread->id))
+            ->assertRedirect();
+        Http::assertSent(fn ($r) => str_contains($r->url(), '/message_threads/TH-1/open'));
+        $this->assertSame('open', $thread->fresh()->status);
+    }
+
+    public function test_a_guest_message_reopens_a_closed_conversation(): void
+    {
+        $this->fakeChannex();
+
+        $context = app(TenantContext::class);
+        $context->set(Tenant::query()->sole());
+        $thread = MessageThread::create(['channex_thread_id' => 'TH-1', 'status' => 'closed']);
+        $context->clear();
+
+        $this->postJson('/channex/webhook', ['event' => 'message', 'payload' => $this->messagePayload()],
+            ['X-Channex-Webhook-Secret' => 'topsecret'])->assertOk();
+
+        // The conversation is back in the Active tab — the message never hides.
+        $this->assertSame('open', $thread->fresh()->status);
+        $this->assertSame(1, $thread->fresh()->unread_count);
     }
 
     public function test_pull_messages_heals_an_existing_thread_missing_its_channel(): void

@@ -81,10 +81,47 @@ class MessagesController extends Controller
                 'preview' => $t->last_message_preview,
                 'last_message_at' => $t->last_message_at?->toIso8601String(),
                 'unread' => $t->unread_count,
+                'status' => $t->status,
             ]),
             'selected' => $selected,
             'quickReplies' => $this->quickReplies(),
         ]);
+    }
+
+    /** Close a finished conversation — it moves to the "Të mbyllura" tab (Channex-synced). */
+    public function close(MessageThread $thread, ChannexClient $channex): RedirectResponse
+    {
+        if ($thread->channex_thread_id) {
+            try {
+                $channex->closeMessageThread($thread->channex_thread_id);
+            } catch (\Throwable $e) {
+                report($e);
+
+                return back()->with('error', 'Nuk u mbyll dot në Channex. Provo sërish.');
+            }
+        }
+
+        $thread->forceFill(['status' => 'closed'])->save();
+
+        return back()->with('success', 'Biseda u mbyll.');
+    }
+
+    /** Reopen a closed conversation (Channex-synced). */
+    public function reopen(MessageThread $thread, ChannexClient $channex): RedirectResponse
+    {
+        if ($thread->channex_thread_id) {
+            try {
+                $channex->openMessageThread($thread->channex_thread_id);
+            } catch (\Throwable $e) {
+                report($e);
+
+                return back()->with('error', 'Nuk u rihap dot në Channex. Provo sërish.');
+            }
+        }
+
+        $thread->forceFill(['status' => 'open'])->save();
+
+        return back()->with('success', 'Biseda u rihap.');
     }
 
     /** Save the hotel's own quick-reply templates (per-tenant Setting). */

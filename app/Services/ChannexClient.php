@@ -347,6 +347,28 @@ class ChannexClient
         return $resp->successful() ? $resp->json('data') : null;
     }
 
+    /** Close a guest-message thread on Channex (mirrors our 'closed' status). */
+    public function closeMessageThread(string $id): void
+    {
+        $resp = $this->http()->post("{$this->baseUrl}/message_threads/{$id}/close");
+        $this->log('push', 'close_thread', ['thread_id' => $id], $resp);
+
+        if (! $resp->successful()) {
+            throw new RuntimeException("Channex close thread {$id} failed: HTTP {$resp->status()}");
+        }
+    }
+
+    /** Reopen a closed guest-message thread on Channex. */
+    public function openMessageThread(string $id): void
+    {
+        $resp = $this->http()->post("{$this->baseUrl}/message_threads/{$id}/open");
+        $this->log('push', 'open_thread', ['thread_id' => $id], $resp);
+
+        if (! $resp->successful()) {
+            throw new RuntimeException("Channex open thread {$id} failed: HTTP {$resp->status()}");
+        }
+    }
+
     /** Fetch one guest-message thread (title = guest name, channel, status). */
     public function getMessageThread(string $id): ?array
     {

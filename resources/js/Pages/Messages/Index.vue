@@ -80,6 +80,18 @@ function pickQuick(text) {
     quickOpen.value = false;
 }
 
+// Active / Closed tabs, mirroring Channex: a finished conversation is closed
+// (synced to Channex) and moves to the "Të mbyllura" tab.
+const statusTab = ref('open'); // open | closed
+function closeThread() {
+    if (!props.selected) return;
+    router.post(route('messages.close', props.selected.id), {}, { preserveScroll: true });
+}
+function reopenThread() {
+    if (!props.selected) return;
+    router.post(route('messages.reopen', props.selected.id), {}, { preserveScroll: true });
+}
+
 // Mobile is master-detail like WhatsApp: the list OR the chat, never stacked.
 const mobileChatOpen = ref(false);
 
@@ -93,9 +105,11 @@ function openMobileMenu() {
 }
 
 const filteredThreads = computed(() => {
-    if (filter.value === 'all') return props.threads;
-    if (filter.value === 'unread') return props.threads.filter((t) => t.unread > 0);
-    return props.threads.filter((t) => (t.channel || '').startsWith(filter.value));
+    const inTab = props.threads.filter((t) =>
+        statusTab.value === 'closed' ? t.status === 'closed' : t.status !== 'closed');
+    if (filter.value === 'all') return inTab;
+    if (filter.value === 'unread') return inTab.filter((t) => t.unread > 0);
+    return inTab.filter((t) => (t.channel || '').startsWith(filter.value));
 });
 
 function time(value) {
@@ -190,6 +204,12 @@ function statusLabel(s) {
                                 <svg v-else class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3.75a.75.75 0 00-1.264-.546L5.203 6.5H3.167a.75.75 0 00-.7.48A6.985 6.985 0 002 9.5c0 .887.165 1.737.468 2.52.111.29.39.48.7.48h2.035l3.533 3.296A.75.75 0 0010 15.25V3.75zM13.28 7.22a.75.75 0 10-1.06 1.06L13.94 10l-1.72 1.72a.75.75 0 101.06 1.06L15 11.06l1.72 1.72a.75.75 0 101.06-1.06L16.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L15 8.94l-1.72-1.72z" clip-rule="evenodd" opacity=".4"/></svg>
                             </button>
                         </div>
+                        <div class="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-neutral-100 p-1">
+                            <button v-for="tab in [['open','Aktive'],['closed','Të mbyllura']]" :key="tab[0]" type="button"
+                                class="rounded-md py-1.5 text-[12px] font-semibold transition"
+                                :class="statusTab === tab[0] ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'"
+                                @click="statusTab = tab[0]">{{ tab[1] }}</button>
+                        </div>
                         <div class="relative mt-3">
                             <svg class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" /></svg>
                             <input placeholder="Kërko mysafir…" class="w-full rounded-lg border-neutral-200 bg-neutral-50 py-1.5 pl-9 pr-3 text-[12.5px]" />
@@ -235,15 +255,26 @@ function statusLabel(s) {
                                 <p class="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-400">
                                     <span class="rounded px-1.5 py-0.5 text-[9.5px] font-bold" :class="chan(selected.channel).badge">{{ chan(selected.channel).label }}</span>
                                     <span v-if="selected.reservation">· {{ selected.reservation.ref }}</span>
+                                    <span v-if="selected.status === 'closed'" class="rounded bg-neutral-200 px-1.5 py-0.5 text-[9.5px] font-bold text-neutral-600">E MBYLLUR</span>
                                 </p>
                             </div>
+                            <div class="ml-auto flex shrink-0 items-center gap-2">
+                            <button v-if="selected.status !== 'closed'" type="button" @click="closeThread" title="Mbyll bisedën — kalon te 'Të mbyllura'"
+                                class="grid h-9 w-9 place-items-center rounded-lg border border-neutral-200 text-neutral-500 transition hover:border-[#83dcb2] hover:bg-[#f2faf6] hover:text-[#0c5a3e]">
+                                <svg class="h-[18px] w-[18px]" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" /></svg>
+                            </button>
+                            <button v-else type="button" @click="reopenThread" title="Rihap bisedën"
+                                class="grid h-9 w-9 place-items-center rounded-lg border border-amber-200 bg-amber-50 text-amber-600 transition hover:bg-amber-100">
+                                <svg class="h-[18px] w-[18px]" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H4.233a.75.75 0 00-.75.75v4a.75.75 0 001.5 0v-2.146l.312.311a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.455-8.174a.75.75 0 00-1.5 0v2.146l-.312-.311a7 7 0 00-11.712 3.138.75.75 0 001.449.39 5.5 5.5 0 019.201-2.466l.312.311h-2.433a.75.75 0 000 1.5h3.999a.75.75 0 00.75-.75v-4z" clip-rule="evenodd" /></svg>
+                            </button>
                             <button type="button" @click="togglePanel"
                                 :title="panelOpen ? 'Mbyll panelin e mysafirit' : 'Hap panelin e mysafirit'"
-                                class="ml-auto hidden h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition lg:inline-flex"
+                                class="hidden h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition lg:inline-flex"
                                 :class="panelOpen ? 'border-[#83dcb2] bg-[#f2faf6] text-[#0c5a3e]' : 'border-neutral-200 text-neutral-500 hover:bg-neutral-50'">
                                 <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" /></svg>
                                 Mysafiri
                             </button>
+                            </div>
                         </div>
 
                         <div ref="chatBox" class="flex-1 space-y-2 overflow-y-auto overscroll-contain px-5 py-5">
@@ -264,7 +295,12 @@ function statusLabel(s) {
                             </template>
                         </div>
 
-                        <template v-if="selected.can_reply">
+                        <div v-if="selected.status === 'closed'" class="flex items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-4 py-3">
+                            <p class="text-[12px] text-neutral-500">Bisedë e mbyllur.</p>
+                            <button type="button" @click="reopenThread"
+                                class="rounded-lg bg-[#15855c] px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-[#0c5a3e]">Rihap bisedën</button>
+                        </div>
+                        <template v-else-if="selected.can_reply">
                             <form class="relative flex items-end gap-2 border-t border-neutral-200 bg-white p-2.5" @submit.prevent="sendReply">
                                 <!-- Quick-reply picker (WhatsApp-style, above the composer) -->
                                 <div v-if="quickOpen" class="fixed inset-0 z-10" @click="quickOpen = false" />

@@ -83,6 +83,11 @@ class ChannexMessageImporter
                 $thread->last_message_at = now();
                 if ($sender === Message::SENDER_GUEST) {
                     $thread->unread_count++;
+                    // A guest writing into a closed conversation reopens it —
+                    // otherwise the message would hide in the "closed" tab.
+                    if ($thread->status === 'closed') {
+                        $thread->status = 'open';
+                    }
                 }
                 $thread->save();
             }
@@ -129,7 +134,11 @@ class ChannexMessageImporter
             $thread = MessageThread::firstOrNew(['channex_thread_id' => $threadId]);
             $thread->channel = $thread->channel ?: $this->channelFrom($attr);
             $thread->guest_name = $thread->guest_name ?: ($attr['title'] ?? ($attr['guest_name'] ?? null));
-            $thread->status = $thread->status ?: ($attr['status'] ?? 'open');
+            // The thread API carries the state as is_closed; only fill when we
+            // have no local status yet — a re-run must not override reception's
+            // own close/reopen decisions.
+            $thread->status = $thread->status
+                ?: ($attr['status'] ?? (($attr['is_closed'] ?? false) ? 'closed' : 'open'));
             $thread->channex_booking_id = $thread->channex_booking_id ?: $bookingId;
             if (! $thread->reservation_id && $thread->channex_booking_id) {
                 $thread->reservation_id = $this->resolveReservationId((string) $thread->channex_booking_id);
