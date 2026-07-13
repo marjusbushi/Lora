@@ -12,6 +12,8 @@ import AmenitiesTab from './Tabs/AmenitiesTab.vue';
 import MenuTab from './Tabs/MenuTab.vue';
 import HousekeepingTab from './Tabs/HousekeepingTab.vue';
 import FinancialTab from './Tabs/FinancialTab.vue';
+import PricingProgramsTab from './Tabs/PricingProgramsTab.vue';
+import MarketRatesTab from './Tabs/MarketRatesTab.vue';
 import AiTab from './Tabs/AiTab.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 
@@ -38,6 +40,8 @@ const allTabs = [
     { id: 'menu', label: 'Menu POS', module: 'pos' },
     { id: 'housekeeping', label: 'Housekeeping', module: 'housekeeping' },
     { id: 'financial', label: 'Financiare' },
+    { id: 'pricing-programs', label: 'Çmimet & OTA' },
+    { id: 'market-rates', label: 'Çmimet e Tregut' },
     { id: 'ai', label: 'Asistenti AI' },
 ];
 const tabs = computed(() => allTabs.filter((tab) => !tab.module || modules.value[tab.module] === true));
@@ -81,6 +85,8 @@ const tabs = computed(() => allTabs.filter((tab) => !tab.module || modules.value
                 <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :toasts="toasts" />
                 <HousekeepingTab v-else-if="activeTab === 'housekeeping'" :settings="settings.housekeeping || {}" :checklist-defaults="checklistDefaults" :toasts="toasts" />
                 <FinancialTab v-else-if="activeTab === 'financial'" :settings="settings.financial || {}" :toasts="toasts" />
+                <PricingProgramsTab v-else-if="activeTab === 'pricing-programs'" :settings="settings.pricing_programs || {}" :financial="settings.financial || {}" :toasts="toasts" />
+                <MarketRatesTab v-else-if="activeTab === 'market-rates'" :settings="settings.market_rates || {}" :toasts="toasts" />
                 <AiTab v-else-if="activeTab === 'ai'" :settings="settings.ai || {}" :toasts="toasts" />
             </div>
         </div>

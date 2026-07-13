@@ -9,6 +9,7 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\Tenant;
+use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
 use App\Services\ChannexConfiguration;
@@ -84,6 +85,43 @@ class TenantIsolationTest extends TestCase
         $this->actingAs($admin)
             ->get(route('guests.show', $foreignGuest))
             ->assertNotFound();
+    }
+
+    public function test_hotel_application_does_not_expose_lora_control_panel_routes(): void
+    {
+        $default = Tenant::query()->sole();
+        TenantDomain::query()->create([
+            'tenant_id' => $default->id,
+            'domain' => 'admin.villamucho.test',
+            'is_primary' => false,
+        ]);
+
+        app(TenantContext::class)->set($default);
+
+        $superAdmin = User::factory()->create(['is_super_admin' => true]);
+        $regularUser = User::factory()->create();
+
+        app(TenantContext::class)->clear();
+
+        $this->actingAs($regularUser)
+            ->get('https://admin.villamucho.test/super-admin/tenants')
+            ->assertForbidden();
+
+        $this->actingAs($superAdmin)
+            ->get('https://admin.villamucho.test/super-admin/tenants')
+            ->assertRedirect(config('lora.control_panel_url').'/super-admin/tenants');
+
+        $this->actingAs($superAdmin)
+            ->post('https://admin.villamucho.test/super-admin/tenants', [
+                'name' => 'Hotel Riviera',
+                'slug' => 'hotel-riviera',
+                'primary_domain' => 'riviera.lorapms.test',
+                'timezone' => 'Europe/Tirane',
+                'currency' => 'EUR',
+            ])
+            ->assertNotFound();
+
+        $this->assertDatabaseMissing('tenants', ['slug' => 'hotel-riviera']);
     }
 
     public function test_only_super_admin_can_create_and_switch_tenants(): void

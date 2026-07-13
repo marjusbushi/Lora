@@ -4,20 +4,24 @@ namespace App\Console\Commands;
 
 use App\Models\Room;
 use App\Models\RoomType;
+use App\Services\ChannelSync;
 use App\Services\ChannexClient;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
 /**
- * Create a Channex room type + per_room rate plan for each PMS room type that
- * does not have one yet, so a FRESH property (e.g. the new production account)
- * has the structure that channex:link-rooms needs to map against.
+ * Create a Channex room type + its rate plans for each PMS room type that does
+ * not have them yet, so a FRESH property (e.g. the new production account) has
+ * the structure that channex:link-rooms needs to map against. THREE rate plans
+ * per room type: the BASE plan (canonical PMS price) plus one per OTA channel
+ * (Booking.com / Expedia) that carries the program-compensated price so member
+ * promotions land back on the PMS price (see ChannelSync::pushRatesForMapping).
  *
  * IDEMPOTENT + re-runnable: it matches existing Channex room types by
- * (case-insensitive) title and skips creating them, and skips a rate plan when
- * the room type already has one — so a re-run after a partial failure is a safe
- * no-op for what already exists. It does NOT write channel_mappings (that stays
- * channex:link-rooms' job) and does NOT push ARI.
+ * (case-insensitive) title and skips creating them, and ensures each rate-plan
+ * ROLE independently by title — so a re-run after a partial failure only fills
+ * the gaps. It does NOT write channel_mappings (that stays channex:link-rooms'
+ * job) and does NOT push ARI.
  *
  *   php artisan channex:bootstrap-rooms --dry   # preview, no writes
  *   php artisan channex:bootstrap-rooms         # create what's missing
@@ -26,7 +30,7 @@ class ChannexBootstrapRooms extends Command
 {
     protected $signature = 'channex:bootstrap-rooms {--dry : Show what would be created without creating}';
 
-    protected $description = 'Create a Channex room type + per_room rate plan for each PMS room type that lacks one (idempotent)';
+    protected $description = 'Create a Channex room type + base and per-channel rate plans for each PMS room type (idempotent)';
 
     public function handle(ChannexClient $channex): int
     {
@@ -48,13 +52,21 @@ class ChannexBootstrapRooms extends Command
             return self::FAILURE;
         }
 
-        // Existing Channex room types keyed by normalized title, and the set of
-        // room-type ids that already own at least one rate plan.
+        // Existing Channex room types keyed by normalized title, and each room
+        // type's existing rate-plan titles (lowercased) so every plan ROLE
+        // (base / Booking.com / Expedia) is ensured independently.
         $existingByTitle = $existingRoomTypes->keyBy(fn ($rt) => Str::lower(trim($rt['attributes']['title'] ?? '')));
-        $roomTypeIdsWithRatePlan = $ratePlans
-            ->pluck('relationships.room_type.data.id')
-            ->filter()
-            ->flip();
+        $planTitlesByRoomType = [];
+        foreach ($ratePlans as $rp) {
+            $rtId = $rp['relationships']['room_type']['data']['id'] ?? null;
+            if ($rtId) {
+                $planTitlesByRoomType[$rtId][] = Str::lower(trim($rp['attributes']['title'] ?? ''));
+            }
+        }
+        $channelTitles = [
+            Str::lower(ChannelSync::RATE_PLAN_TITLE_BOOKING),
+            Str::lower(ChannelSync::RATE_PLAN_TITLE_EXPEDIA),
+        ];
 
         $dry = (bool) $this->option('dry');
         $rtCreated = 0;
@@ -85,23 +97,35 @@ class ChannexBootstrapRooms extends Command
                 }
             }
 
-            // Ensure a per_room rate plan exists for this room type. A room type we
-            // just created (or that has none) needs one; an existing one is skipped.
-            $hasRatePlan = $channexRoomTypeId && $roomTypeIdsWithRatePlan->has($channexRoomTypeId);
-            if ($hasRatePlan) {
-                continue;
-            }
-            if ($dry) {
-                $this->line(sprintf('      + would create rate plan (occ=%d)', $occ));
+            // Ensure the three rate-plan roles for this room type, each matched
+            // by title so a re-run only fills what's missing. The BASE role also
+            // accepts any pre-existing non-channel plan (prod's original
+            // "Standard Rate") so legacy setups aren't duplicated.
+            $titles = $channexRoomTypeId ? ($planTitlesByRoomType[$channexRoomTypeId] ?? []) : [];
+            $hasBase = array_diff($titles, $channelTitles) !== [];
+            $roles = [
+                [$hasBase, ChannelSync::RATE_PLAN_TITLE_BASE, 'base'],
+                [in_array($channelTitles[0], $titles, true), ChannelSync::RATE_PLAN_TITLE_BOOKING, 'booking.com'],
+                [in_array($channelTitles[1], $titles, true), ChannelSync::RATE_PLAN_TITLE_EXPEDIA, 'expedia'],
+            ];
 
-                continue;
-            }
-            if ($channexRoomTypeId) {
-                $rpId = $channex->createRatePlan($channexRoomTypeId, $occ);
+            foreach ($roles as [$exists, $planTitle, $role]) {
+                if ($exists) {
+                    continue;
+                }
+                if ($dry) {
+                    $this->line(sprintf('      + would create rate plan [%s] "%s" (occ=%d)', $role, $planTitle, $occ));
+
+                    continue;
+                }
+                if (! $channexRoomTypeId) {
+                    continue;
+                }
+                $rpId = $channex->createRatePlan($channexRoomTypeId, $occ, $planTitle);
                 if ($rpId) {
                     $rpCreated++;
                 } else {
-                    $this->error("    FAILED to create rate plan for \"{$title}\" (see channel_sync_logs)");
+                    $this->error("    FAILED to create rate plan [{$role}] for \"{$title}\" (see channel_sync_logs)");
                 }
             }
         }

@@ -93,6 +93,10 @@ return Application::configure(basePath: dirname(__DIR__))
             requiredModule: TenantBillingService::SMART_PRICING,
         ))
             ->name('tenants:pricing:weekly-report')->weeklyOn(1, '07:00');
+        // Competitor-price snapshot (rate shopping) — a no-op unless the owner
+        // enabled it in Settings; the command itself honours the frequency.
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run('market:fetch-rates', ['--scheduled' => true]))
+            ->name('tenants:market:fetch-rates')->dailyAt('05:30')->withoutOverlapping()->onOneServer();
         // Midnight: archive inspected cleaning tasks so the board shows only the day's live work.
         $schedule->call(fn () => app(TenantCommandRunner::class)->run(
             'housekeeping:archive-inspected',

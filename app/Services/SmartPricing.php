@@ -51,6 +51,7 @@ class SmartPricing
                     'clamped' => $day['clamped'],
                     'has_override' => $day['has_override'],
                     'days_until' => $day['days_until'],
+                    'ota_prices' => OtaPricingPrograms::quote((float) $day['suggested_price']),
                 ];
             }
         }
@@ -77,7 +78,7 @@ class SmartPricing
             // badge and the engine. Context-only events stay visible but do
             // not enter the factor breakdown.
             $row['holiday'] = collect($row['events'] ?? [])->pluck('name')->implode(' · ') ?: null;
-            $days[] = $row;
+            $days[] = OtaPricingPrograms::decorate($row);
         }
 
         return $days;

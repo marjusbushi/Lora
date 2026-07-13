@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\PushRoomTypeAri;
 use App\Models\Amenity;
 use App\Models\CleaningTask;
 use App\Models\Floor;
@@ -33,6 +34,17 @@ class SettingsController extends Controller
             'gemini_configured' => ! empty($aiKey) || ! empty(config('services.gemini.key')),
             'gemini_key_hint' => $aiKey ? str_repeat('•', 6).substr((string) $aiKey, -4) : null,
             'gemini_from_env' => empty($aiKey) && ! empty(config('services.gemini.key')),
+        ];
+
+        // Rate shopping (market_rates): same rule — never ship the raw key.
+        $marketKey = trim((string) ($settings['market_rates']['api_key'] ?? ''));
+        $settings['market_rates'] = [
+            'enabled' => (bool) ($settings['market_rates']['enabled'] ?? false),
+            'configured' => $marketKey !== '',
+            'api_key_hint' => $marketKey !== '' ? str_repeat('•', 6).substr($marketKey, -4) : null,
+            'competitors' => \App\Services\MarketRates::competitors(),
+            'frequency' => \App\Services\MarketRates::frequency(),
+            'search_query' => \App\Services\MarketRates::searchQuery(),
         ];
 
         return Inertia::render('Settings/Index', [
@@ -244,6 +256,42 @@ class SettingsController extends Controller
         return back()->with('success', 'Konfigurimet financiare u ruajten.');
     }
 
+    // --- OTA pricing programs (Booking.com / Expedia) ---
+    public function updatePricingPrograms(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'booking_genius_enabled' => ['required', 'boolean'],
+            'booking_genius_pct' => ['required', 'numeric', 'min:0', 'max:50'],
+            'booking_mobile_enabled' => ['required', 'boolean'],
+            'booking_mobile_pct' => ['required', 'numeric', 'min:0', 'max:50'],
+            'booking_preferred_enabled' => ['required', 'boolean'],
+            'expedia_member_enabled' => ['required', 'boolean'],
+            'expedia_member_pct' => ['required', 'numeric', 'min:0', 'max:50'],
+            'expedia_mobile_enabled' => ['required', 'boolean'],
+            'expedia_mobile_pct' => ['required', 'numeric', 'min:0', 'max:50'],
+        ]);
+
+        DB::transaction(function () use ($data) {
+            $version = PricingRulesVersion::lock();
+            foreach ($data as $key => $value) {
+                Setting::set(
+                    "pricing_programs.{$key}",
+                    is_bool($value) ? ($value ? '1' : '0') : round((float) $value, 2),
+                    is_bool($value) ? 'boolean' : 'number',
+                );
+            }
+            PricingRulesVersion::increment($version);
+        });
+
+        // The programs feed ChannelSync's per-channel rate compensation, so a
+        // changed percentage must re-push every mapped room type's rates —
+        // otherwise the OTAs keep selling on the OLD factor until the nightly
+        // full sync. No-op when Channex is not configured.
+        PushRoomTypeAri::dispatchAllMapped();
+
+        return back()->with('success', 'Programet OTA u ruajtën — çmimet e kanaleve po ridërgohen në Channex.');
+    }
+
     // --- Housekeeping ---
     public function updateHousekeeping(Request $request): RedirectResponse
     {
@@ -298,6 +346,45 @@ class SettingsController extends Controller
         Setting::set('ai.gemini_key', $key, 'text');
 
         return back()->with('success', 'Çelësi AI u ruajt. Asistenti i çmimeve tani është aktiv.');
+    }
+
+    // --- Market rates (rate shopping — competitor prices, Phase 1) ---
+    public function updateMarketRates(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'api_key' => ['nullable', 'string', 'max:200'],
+            'clear_key' => ['nullable', 'boolean'],
+            'competitors' => ['required', 'array', 'min:1', 'max:30'],
+            // nullable: blank rows become null via ConvertEmptyStringsToNull —
+            // the sanitize step below drops them rather than failing the save.
+            'competitors.*' => ['nullable', 'string', 'max:120'],
+            'frequency' => ['required', 'in:daily,3x_week'],
+            'search_query' => ['required', 'string', 'max:120'],
+        ]);
+
+        // Trim + drop blank rows server-side (don't trust the client list).
+        $competitors = collect($data['competitors'])
+            ->map(fn ($c) => trim((string) $c))
+            ->filter(fn ($c) => $c !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        Setting::set('market_rates.enabled', $data['enabled'] ? '1' : '0', 'boolean');
+        Setting::set('market_rates.competitors', $competitors, 'json');
+        Setting::set('market_rates.frequency', $data['frequency'], 'text');
+        Setting::set('market_rates.search_query', trim($data['search_query']), 'text');
+
+        if ($request->boolean('clear_key')) {
+            Setting::set('market_rates.api_key', '', 'text');
+        } elseif (trim((string) ($data['api_key'] ?? '')) !== '') {
+            // An empty field means "keep the stored key" — the form never
+            // receives the real key back, only a masked hint.
+            Setting::set('market_rates.api_key', trim($data['api_key']), 'text');
+        }
+
+        return back()->with('success', 'Çmimet e tregut u ruajtën.');
     }
 
     // --- Room Types CRUD ---

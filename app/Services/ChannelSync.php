@@ -22,6 +22,18 @@ class ChannelSync
     /** Default sync window: today .. today + this many days (inclusive). */
     public const WINDOW_DAYS = 365;
 
+    /**
+     * Channex rate plan titles per role. The base plan carries the canonical
+     * PMS price; the per-channel plans carry the program-compensated price
+     * (see pushRatesForMapping). bootstrap-rooms creates them by these titles
+     * and link-rooms classifies existing plans by them — keep in sync.
+     */
+    public const RATE_PLAN_TITLE_BASE = 'Standard Rate';
+
+    public const RATE_PLAN_TITLE_BOOKING = 'Standard Rate - Booking.com';
+
+    public const RATE_PLAN_TITLE_EXPEDIA = 'Standard Rate - Expedia';
+
     public function __construct(
         protected ChannexClient $channex,
         protected OtaSellWindow $sellWindow,
@@ -86,12 +98,8 @@ class ChannelSync
                 pmsRoomTypeId: $roomType->id,
             );
 
-            if ($mapping->channex_rate_plan_id && $range !== null) {
-                $ok = $this->channex->pushRateRanges(
-                    $mapping->channex_rate_plan_id,
-                    $this->toRanges($this->priceByDate($roomType, $effectiveFrom, $effectiveTo), 'rate'),
-                    pmsRoomTypeId: $roomType->id,
-                ) && $ok;
+            if ($range !== null) {
+                $ok = $this->pushRatesForMapping($mapping, $roomType, $effectiveFrom, $effectiveTo) && $ok;
             }
 
             // A rejected push (4xx / exhausted 5xx) must SURFACE so the queued
@@ -161,12 +169,8 @@ class ChannelSync
                 pmsRoomTypeId: $roomType->id,
             );
 
-            if ($mapping->channex_rate_plan_id && $sellThrough->gte($today)) {
-                $ok = $this->channex->pushRateRanges(
-                    $mapping->channex_rate_plan_id,
-                    $this->toRanges($this->priceByDate($roomType, $today, $sellThrough), 'rate'),
-                    pmsRoomTypeId: $roomType->id,
-                ) && $ok;
+            if ($sellThrough->gte($today)) {
+                $ok = $this->pushRatesForMapping($mapping, $roomType, $today, $sellThrough) && $ok;
             }
 
             if (! $ok) {
@@ -216,6 +220,45 @@ class ChannelSync
         }
 
         return $out;
+    }
+
+    /**
+     * Push nightly rates over [from, to] to every mapped rate plan of this room
+     * type: the BASE plan gets the canonical PMS price; the per-channel plans
+     * (Booking.com / Expedia) get the price divided by that channel's discount
+     * factor from OtaPricingPrograms — so after the OTA applies its member/
+     * mobile promotions, the guest sees the PMS price again. A factor of 1
+     * (no programs enabled) pushes the base price unchanged; an unmapped
+     * channel plan is skipped (single-plan behaviour is preserved).
+     */
+    protected function pushRatesForMapping(ChannelMapping $mapping, RoomType $roomType, CarbonInterface $from, CarbonInterface $to): bool
+    {
+        $prices = $this->priceByDate($roomType, $from, $to);
+        $programs = OtaPricingPrograms::settings();
+
+        $plans = [
+            [$mapping->channex_rate_plan_id, 1.0],
+            [$mapping->channex_booking_rate_plan_id, (float) $programs['booking']['discount_factor']],
+            [$mapping->channex_expedia_rate_plan_id, (float) $programs['expedia']['discount_factor']],
+        ];
+
+        $ok = true;
+        foreach ($plans as [$planId, $factor]) {
+            if (! $planId) {
+                continue;
+            }
+            $adjusted = abs($factor - 1.0) < 1e-9
+                ? $prices
+                : array_map(fn (float $p) => round($p / $factor, 2), $prices);
+
+            $ok = $this->channex->pushRateRanges(
+                $planId,
+                $this->toRanges($adjusted, 'rate'),
+                pmsRoomTypeId: $roomType->id,
+            ) && $ok;
+        }
+
+        return $ok;
     }
 
     /**

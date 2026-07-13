@@ -9,6 +9,7 @@ use App\Models\Guest;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
+use App\Models\Setting;
 use App\Models\Season;
 use App\Models\SeasonRate;
 use App\Models\User;
@@ -564,5 +565,113 @@ class ChannelSyncTest extends TestCase
         Queue::assertPushed(PushRoomTypeAri::class, fn ($job) => $job->roomTypeId === $type->id
             && $job->from === CarbonImmutable::today()->toDateString()        // floored at today
             && $job->to === CarbonImmutable::today()->addDay()->toDateString()); // last night = check_out - 1
+    }
+
+    // -- OTA price parity: per-channel rate plans get compensated prices -------
+
+    private function mapWithChannelPlans(RoomType $type): void
+    {
+        ChannelMapping::create([
+            'channel' => 'channex',
+            'room_type_id' => $type->id,
+            'channex_property_id' => 'PROP-1',
+            'channex_room_type_id' => 'RT-1',
+            'channex_rate_plan_id' => 'RP-BASE',
+            'channex_booking_rate_plan_id' => 'RP-BOOK',
+            'channex_expedia_rate_plan_id' => 'RP-EXP',
+        ]);
+    }
+
+    private function enablePrograms(): void
+    {
+        Setting::set('pricing_programs.booking_genius_enabled', '1', 'boolean');
+        Setting::set('pricing_programs.booking_genius_pct', 15, 'number');
+        Setting::set('pricing_programs.expedia_member_enabled', '1', 'boolean');
+        Setting::set('pricing_programs.expedia_member_pct', 10, 'number');
+    }
+
+    /** cents pushed to one rate plan id, or null if that plan got no push */
+    private function pushedCents(string $planId): ?int
+    {
+        foreach (Http::recorded() as [$req]) {
+            if ($req->method() === 'POST' && str_contains($req->url(), '/restrictions')) {
+                $v = $req->data()['values'][0] ?? [];
+                if (($v['rate_plan_id'] ?? null) === $planId) {
+                    return (int) $v['rate'];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public function test_push_sends_compensated_rates_to_channel_plans(): void
+    {
+        $type = $this->type('Std', 80);
+        $this->rooms($type, 2);
+        $this->mapWithChannelPlans($type);
+        $this->enablePrograms(); // Genius 15% / Member 10%
+        Http::fake(['*availability*' => Http::response(['data' => []]), '*restrictions*' => Http::response(['data' => []])]);
+
+        $ok = app(ChannelSync::class)->pushRoomType($type, CarbonImmutable::parse('2026-07-01'), CarbonImmutable::parse('2026-07-03'));
+
+        $this->assertTrue($ok);
+        $this->assertSame(8000, $this->pushedCents('RP-BASE'), 'base plan keeps the canonical PMS price');
+        $this->assertSame(9412, $this->pushedCents('RP-BOOK'), '80/0.85=94.12 so Genius -15% lands back on 80');
+        $this->assertSame(8889, $this->pushedCents('RP-EXP'), '80/0.90=88.89 so Member -10% lands back on 80');
+    }
+
+    public function test_channel_plans_receive_base_price_when_no_programs_enabled(): void
+    {
+        $type = $this->type('Std', 80);
+        $this->rooms($type, 2);
+        $this->mapWithChannelPlans($type); // programs NOT enabled -> factor 1.0
+        Http::fake(['*availability*' => Http::response(['data' => []]), '*restrictions*' => Http::response(['data' => []])]);
+
+        app(ChannelSync::class)->pushRoomType($type, CarbonImmutable::parse('2026-07-01'), CarbonImmutable::parse('2026-07-02'));
+
+        $this->assertSame(8000, $this->pushedCents('RP-BASE'));
+        $this->assertSame(8000, $this->pushedCents('RP-BOOK'));
+        $this->assertSame(8000, $this->pushedCents('RP-EXP'));
+    }
+
+    public function test_unmapped_channel_plans_keep_single_rate_push(): void
+    {
+        $type = $this->type('Std', 80);
+        $this->rooms($type, 2);
+        $this->map($type, 'RT-1', 'RP-BASE'); // legacy mapping: no channel plans
+        $this->enablePrograms();
+        Http::fake(['*availability*' => Http::response(['data' => []]), '*restrictions*' => Http::response(['data' => []])]);
+
+        app(ChannelSync::class)->pushRoomType($type, CarbonImmutable::parse('2026-07-01'), CarbonImmutable::parse('2026-07-02'));
+
+        $rateCalls = collect(Http::recorded())
+            ->filter(fn ($pair) => $pair[0]->method() === 'POST' && str_contains($pair[0]->url(), '/restrictions'))
+            ->count();
+        $this->assertSame(1, $rateCalls, 'only the base plan is pushed when channel plans are unmapped');
+        $this->assertSame(8000, $this->pushedCents('RP-BASE'));
+    }
+
+    public function test_saving_pricing_programs_redispatches_ari_push(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $type = $this->type();
+        $this->map($type, 'RT-1', 'RP-1');
+
+        $this->actingAs($admin)->put(route('settings.pricing-programs'), [
+            'booking_genius_enabled' => true,
+            'booking_genius_pct' => 15,
+            'booking_mobile_enabled' => false,
+            'booking_mobile_pct' => 10,
+            'booking_preferred_enabled' => true,
+            'expedia_member_enabled' => true,
+            'expedia_member_pct' => 10,
+            'expedia_mobile_enabled' => false,
+            'expedia_mobile_pct' => 10,
+        ])->assertRedirect();
+
+        Queue::assertPushed(PushRoomTypeAri::class, fn ($job) => $job->roomTypeId === $type->id);
     }
 }

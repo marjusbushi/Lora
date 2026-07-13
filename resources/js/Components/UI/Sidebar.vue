@@ -44,12 +44,12 @@ function isActive(item) {
 <template>
     <aside
         :class="[
-            'flex flex-col bg-primary-950 text-neutral-300 transition-all duration-250 h-screen sticky top-0',
+            'flex h-dvh flex-col overflow-hidden bg-primary-950 text-neutral-300 transition-all duration-250 sticky top-0',
             collapsed ? 'w-[68px]' : 'w-[260px]',
         ]"
     >
         <!-- Logo area -->
-        <div :class="['flex items-center h-16 border-b border-primary-800/50', collapsed ? 'justify-center px-0' : 'px-4']">
+        <div :class="['flex h-14 shrink-0 items-center border-b border-primary-800/50', collapsed ? 'justify-center px-0' : 'px-4']">
             <Link href="/" class="flex items-center gap-3 text-white no-underline hover:text-white">
                 <div class="h-8 w-8 rounded-md bg-accent-600 flex items-center justify-center shrink-0">
                     <span class="text-white font-semibold text-label">{{ (page.props.settings?.hotel_name || 'Hotel').charAt(0) }}</span>
@@ -59,12 +59,12 @@ function isActive(item) {
         </div>
 
         <!-- Navigation -->
-        <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        <nav class="flex min-h-0 flex-1 flex-col justify-evenly overflow-hidden px-3 py-2">
             <template v-for="item in items" :key="item.href">
                 <Link
                     :href="item.href"
                     :class="[
-                        'flex items-center rounded-md px-3 py-2.5 text-body-sm transition-colors duration-150 no-underline',
+                        'flex items-center rounded-md px-3 py-2.5 text-body-sm leading-5 transition-colors duration-150 no-underline',
                         collapsed ? 'justify-center' : 'gap-3',
                         isActive(item)
                             ? 'bg-accent-600/15 text-accent-400 font-medium'
@@ -80,10 +80,10 @@ function isActive(item) {
         </nav>
 
         <!-- Collapse toggle -->
-        <div class="border-t border-primary-800/50 px-3 py-3">
+        <div class="shrink-0 border-t border-primary-800/50 px-2.5 py-2">
             <button
                 :class="[
-                    'flex items-center w-full rounded-md py-2 px-2 text-neutral-400 hover:text-neutral-100 hover:bg-primary-800/60 transition-colors duration-150',
+                    'flex items-center w-full rounded-md py-1.5 px-2 text-neutral-400 hover:text-neutral-100 hover:bg-primary-800/60 transition-colors duration-150',
                     collapsed ? 'justify-center' : 'justify-between',
                 ]"
                 :title="toggleLabel"

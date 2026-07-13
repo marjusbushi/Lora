@@ -13,6 +13,8 @@ use App\Models\RateOverride;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Services\AiPricing;
+use App\Services\MarketRates;
+use App\Services\OtaPricingPrograms;
 use App\Services\PricingEngine;
 use App\Services\PricingRulesVersion;
 use App\Services\RoomPricing;
@@ -66,6 +68,7 @@ class SmartPricingController extends Controller
             ])->values(),
             'strategy' => PricingEngine::strategy(),
             'currency' => Setting::get('financial.default_currency_symbol', '€'),
+            'otaPrograms' => OtaPricingPrograms::settings(),
             'aiConfigured' => AiPricing::configured(),
             // Page-level OTA sync pulse (pushes are per-type full-window, so a
             // per-date pushed/pending status does not exist in the data model).
@@ -129,6 +132,10 @@ class SmartPricingController extends Controller
             'prevMonth' => $from->copy()->subMonth()->toDateString(),
             'nextMonth' => $from->copy()->addMonth()->toDateString(),
             'days' => SmartPricing::calendar($selected, $from, $to),
+            // Rate shopping (Phase 1): market median/min/max per date, DISPLAY
+            // only — the engine's suggestions are computed without it.
+            'market' => MarketRates::summaryForRange($from, $to),
+            'marketEnabled' => MarketRates::enabled(),
         ]));
     }
 
