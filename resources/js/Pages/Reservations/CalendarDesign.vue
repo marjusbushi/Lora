@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import {
     ArrowLeft,
@@ -38,6 +38,8 @@ const query = ref('');
 const statusFilter = ref('all');
 const selectedReservation = ref(null);
 const dateHeaderTrack = ref(null);
+const detailScroll = ref(null);
+const detailCloseButton = ref(null);
 
 const rooms = [
     { id: 1, number: '101', type: 'Deluxe Sea View', floor: 1, housekeeping: 'clean' },
@@ -174,8 +176,11 @@ function resetToday() {
     anchorDate.value = startOfDay(new Date());
 }
 
-function selectReservation(reservation) {
+async function selectReservation(reservation) {
     selectedReservation.value = reservation;
+    await nextTick();
+    if (detailScroll.value) detailScroll.value.scrollTop = 0;
+    detailCloseButton.value?.focus({ preventScroll: true });
 }
 
 const selectedMeta = computed(() => selectedReservation.value ? reservationMeta[selectedReservation.value.id] || {} : {});
@@ -367,11 +372,11 @@ function formatDate(value) {
                             <h2 class="mt-1 truncate text-h3 text-primary-900">{{ selectedReservation.guest }}</h2>
                             <p class="mt-1 flex items-center gap-1.5 text-tiny text-neutral-400"><Hash class="h-3.5 w-3.5" /> {{ selectedMeta.reference }}</p>
                         </div>
-                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-neutral-400 hover:bg-neutral-100" @click="selectedReservation = null"><X class="h-5 w-5" /></button>
+                        <button ref="detailCloseButton" type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-neutral-400 hover:bg-neutral-100" @click="selectedReservation = null"><X class="h-5 w-5" /></button>
                     </div>
                 </div>
 
-                <div class="flex-1 space-y-5 overflow-y-auto p-5">
+                <div ref="detailScroll" class="flex-1 space-y-5 overflow-y-auto p-5">
                     <section>
                         <div class="mb-2 flex items-center justify-between"><h3 class="text-body-sm font-bold text-primary-900">{{ $t('admin.calendarPreview.guestDetails') }}</h3><span class="text-tiny text-neutral-400">{{ selectedMeta.country }}</span></div>
                         <div class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
