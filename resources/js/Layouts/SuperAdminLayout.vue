@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     Building2,
@@ -8,6 +8,7 @@ import {
     ListChecks,
     LogOut,
     Menu,
+    PanelLeftClose,
     ShieldCheck,
     X,
 } from 'lucide-vue-next';
@@ -16,7 +17,16 @@ defineProps({ title: { type: String, default: 'Lora Control Panel' } });
 
 const page = usePage();
 const mobileOpen = ref(false);
+const sidebarCollapsed = ref(
+    typeof window !== 'undefined' && localStorage.getItem('superAdminSidebarCollapsed') === '1',
+);
 const user = computed(() => page.props.auth?.user || {});
+
+watch(sidebarCollapsed, (collapsed) => {
+    if (typeof window !== 'undefined') {
+        localStorage.setItem('superAdminSidebarCollapsed', collapsed ? '1' : '0');
+    }
+});
 
 const navigation = [
     { label: 'Përmbledhje', href: '/super-admin', match: '/super-admin', exact: true, icon: LayoutDashboard },
@@ -37,15 +47,18 @@ function isActive(item) {
         <div v-if="mobileOpen" class="fixed inset-0 z-40 bg-neutral-950/45 lg:hidden" @click="mobileOpen = false" />
 
         <aside
-            class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-[#123d32] text-white transition-transform duration-200 lg:translate-x-0"
-            :class="mobileOpen ? 'translate-x-0' : '-translate-x-full'"
+            class="fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-[#123d32] text-white transition-[width,transform] duration-200 lg:translate-x-0"
+            :class="[
+                mobileOpen ? 'translate-x-0' : '-translate-x-full',
+                sidebarCollapsed ? 'lg:w-20' : 'lg:w-72',
+            ]"
         >
-            <div class="flex h-20 items-center justify-between border-b border-white/10 px-6">
-                <Link href="/super-admin" class="flex items-center gap-3 text-white no-underline">
+            <div class="flex h-20 items-center justify-between border-b border-white/10 px-6" :class="sidebarCollapsed && 'lg:justify-center lg:px-0'">
+                <Link href="/super-admin" class="flex items-center gap-3 text-white no-underline" :title="sidebarCollapsed ? 'Lora PMS Control Panel' : undefined">
                     <span class="grid h-10 w-10 place-items-center rounded-2xl bg-[#7ed6ad] text-[#123d32]">
                         <ShieldCheck class="h-5 w-5" :stroke-width="2" />
                     </span>
-                    <span>
+                    <span :class="sidebarCollapsed && 'lg:hidden'">
                         <span class="block text-lg font-semibold tracking-tight">Lora PMS</span>
                         <span class="block text-[11px] font-medium uppercase tracking-[0.18em] text-white/50">Control Panel</span>
                     </span>
@@ -61,23 +74,38 @@ function isActive(item) {
                     :key="item.href"
                     :href="item.href"
                     class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium no-underline transition"
-                    :class="isActive(item) ? 'bg-white text-[#123d32] shadow-sm' : 'text-white/70 hover:bg-white/10 hover:text-white'"
+                    :class="[
+                        isActive(item) ? 'bg-white text-[#123d32] shadow-sm' : 'text-white/70 hover:bg-white/10 hover:text-white',
+                        sidebarCollapsed && 'lg:justify-center lg:px-0',
+                    ]"
+                    :title="sidebarCollapsed ? item.label : undefined"
                     @click="mobileOpen = false"
                 >
-                    <component :is="item.icon" class="h-5 w-5" :stroke-width="1.8" />
-                    {{ item.label }}
+                    <component :is="item.icon" class="h-5 w-5 shrink-0" :stroke-width="1.8" />
+                    <span :class="sidebarCollapsed && 'lg:hidden'">{{ item.label }}</span>
                 </Link>
             </nav>
 
-            <div class="border-t border-white/10 p-4">
-                <a href="https://lorapms.com" target="_blank" rel="noopener" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white/60 no-underline hover:bg-white/10 hover:text-white">
+            <div class="space-y-1 border-t border-white/10 p-4" :class="sidebarCollapsed && 'lg:px-3'">
+                <a href="https://lorapms.com" target="_blank" rel="noopener" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white/60 no-underline hover:bg-white/10 hover:text-white" :class="sidebarCollapsed && 'lg:justify-center lg:px-0'" :title="sidebarCollapsed ? 'Faqja prezantuese' : undefined">
                     <ExternalLink class="h-5 w-5" :stroke-width="1.8" />
-                    Faqja prezantuese
+                    <span :class="sidebarCollapsed && 'lg:hidden'">Faqja prezantuese</span>
                 </a>
+                <button
+                    type="button"
+                    class="hidden w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white/60 transition hover:bg-white/10 hover:text-white lg:flex"
+                    :class="sidebarCollapsed ? 'justify-center px-0' : 'justify-between'"
+                    :aria-label="sidebarCollapsed ? 'Hap menunë' : 'Mbyll menunë'"
+                    :title="sidebarCollapsed ? 'Hap menunë' : 'Mbyll menunë'"
+                    @click="sidebarCollapsed = !sidebarCollapsed"
+                >
+                    <span v-if="!sidebarCollapsed">Mbyll</span>
+                    <PanelLeftClose class="h-5 w-5 shrink-0 transition-transform" :class="sidebarCollapsed && 'rotate-180'" :stroke-width="1.8" />
+                </button>
             </div>
         </aside>
 
-        <div class="lg:pl-72">
+        <div class="transition-[padding] duration-200" :class="sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-72'">
             <header class="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-neutral-200 bg-white/95 px-4 backdrop-blur sm:px-8">
                 <button class="rounded-xl p-2 text-neutral-600 hover:bg-neutral-100 lg:hidden" @click="mobileOpen = true">
                     <Menu class="h-6 w-6" />

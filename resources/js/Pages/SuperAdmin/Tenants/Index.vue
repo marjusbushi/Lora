@@ -3,7 +3,19 @@ import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Button from '@/Components/UI/Button.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Globe, Plug, CreditCard, Check } from 'lucide-vue-next';
+import {
+    Building2,
+    Check,
+    CircleAlert,
+    CreditCard,
+    Download,
+    ExternalLink,
+    Globe,
+    Plug,
+    Search,
+    Users,
+    X,
+} from 'lucide-vue-next';
 import { ref, computed } from 'vue';
 
 const props = defineProps({
@@ -135,14 +147,78 @@ function switchTenant(tenant) {
 }
 
 const search = ref('');
+const statusFilter = ref('all');
+const billingCycle = ref('');
+const sortOrder = ref('mrr');
+const selectedTenant = ref(null);
+
+function moduleEnabled(tenant, code) {
+    return Boolean(tenant.billing?.modules?.[code]?.enabled);
+}
+
+function monthlyMrr(tenant) {
+    if (tenant.status !== 'active' || !['active', 'trialing'].includes(tenant.billing?.status)) return 0;
+    return tenant.billing.billing_cycle === 'annual'
+        ? Math.round(Number(tenant.billing.annual_cents || 0) / 12)
+        : Number(tenant.billing.monthly_fixed_cents || 0);
+}
+
+function tenantHealth(tenant) {
+    const status = hotelStatus(tenant);
+    if (status.tone !== 'ok') return { ...status, detail: 'Kontrollo abonimin ose statusin' };
+
+    const missing = [];
+    if (!tenant.primary_domain) missing.push('domain');
+    if (moduleEnabled(tenant, 'channel_manager')
+        && (!tenant.integrations?.channex?.enabled || !tenant.integrations?.channex?.has_api_key)) missing.push('Channex');
+    if (moduleEnabled(tenant, 'booking_engine')
+        && (!tenant.integrations?.pok?.enabled || !tenant.integrations?.pok?.has_key_id)) missing.push('POK');
+
+    return missing.length
+        ? { label: 'Kërkon vëmendje', tone: 'attention', detail: `Mungon: ${missing.join(', ')}` }
+        : { label: 'Në rregull', tone: 'ok', detail: 'Konfigurimi është i plotë' };
+}
+
+const summary = computed(() => ({
+    active: props.tenants.filter((tenant) => tenant.status === 'active').length,
+    users: props.tenants.reduce((total, tenant) => total + Number(tenant.users_count || 0), 0),
+    mrr: props.tenants.reduce((total, tenant) => total + monthlyMrr(tenant), 0),
+    attention: props.tenants.filter((tenant) => tenant.status !== 'suspended' && tenantHealth(tenant).tone !== 'ok').length,
+    suspended: props.tenants.filter((tenant) => tenant.status === 'suspended').length,
+}));
+
+const statusChips = computed(() => [
+    { key: 'all', label: 'Të gjithë', count: props.tenants.length },
+    { key: 'healthy', label: 'Në rregull', count: props.tenants.filter((tenant) => tenantHealth(tenant).tone === 'ok').length },
+    { key: 'attention', label: 'Kërkojnë vëmendje', count: summary.value.attention },
+    { key: 'suspended', label: 'Të pezulluar', count: summary.value.suspended },
+]);
+
 const filteredTenants = computed(() => {
     const q = search.value.trim().toLowerCase();
-    if (!q) return props.tenants;
-    return props.tenants.filter((t) =>
-        [t.name, t.slug, t.primary_domain, ...(t.domains || []).map((d) => d.domain)]
+    const rows = props.tenants.filter((tenant) => {
+        const matchesSearch = !q || [tenant.name, tenant.slug, tenant.primary_domain, ...(tenant.domains || []).map((domain) => domain.domain)]
             .filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(q)),
-    );
+            .some((value) => String(value).toLowerCase().includes(q));
+        const health = tenantHealth(tenant);
+        const matchesStatus = statusFilter.value === 'all'
+            || (statusFilter.value === 'healthy' && health.tone === 'ok')
+            || (statusFilter.value === 'attention' && tenant.status !== 'suspended' && health.tone !== 'ok')
+            || (statusFilter.value === 'suspended' && tenant.status === 'suspended');
+
+        return matchesSearch
+            && matchesStatus
+            && (!billingCycle.value || tenant.billing?.billing_cycle === billingCycle.value);
+    });
+
+    return [...rows].sort((left, right) => {
+        if (sortOrder.value === 'name') return left.name.localeCompare(right.name, 'sq');
+        if (sortOrder.value === 'attention') {
+            return Number(tenantHealth(right).tone !== 'ok') - Number(tenantHealth(left).tone !== 'ok')
+                || left.name.localeCompare(right.name, 'sq');
+        }
+        return monthlyMrr(right) - monthlyMrr(left) || left.name.localeCompare(right.name, 'sq');
+    });
 });
 
 function toggleStatus(tenant) {
@@ -156,22 +232,38 @@ function toggleStatus(tenant) {
     }, { preserveScroll: true });
 }
 
-function tenantStatusClass(status) {
-    return status === 'active'
-        ? 'bg-success-50 text-success-700'
-        : 'bg-red-50 text-red-700';
-}
-
-function tenantStatusLabel(status) {
-    return status === 'active' ? 'Aktiv' : (status === 'suspended' ? 'Pezulluar' : status);
-}
-
 const openMenuId = ref(null);
 function toggleMenu(id) { openMenuId.value = openMenuId.value === id ? null : id; }
 function closeMenu() { openMenuId.value = null; }
 
 function enabledCount(tenant) {
     return Object.values(tenant.billing.modules).filter((m) => m.enabled).length;
+}
+
+function initials(name) {
+    return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+}
+
+function exportTenants() {
+    const header = ['Hoteli', 'Domain', 'Abonimi', 'Përdorues', 'Module', 'MRR EUR', 'Shëndeti', 'Statusi'];
+    const rows = filteredTenants.value.map((tenant) => [
+        tenant.name,
+        tenant.primary_domain || '',
+        tenant.billing?.billing_cycle === 'annual' ? 'Vjetore' : 'Mujore',
+        tenant.users_count,
+        enabledCount(tenant),
+        (monthlyMrr(tenant) / 100).toFixed(2),
+        tenantHealth(tenant).label,
+        hotelStatus(tenant).label,
+    ]);
+    const csv = [header, ...rows]
+        .map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(','))
+        .join('\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    link.download = `lora-hotelet-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
 }
 
 function shortDate(value) {
@@ -195,10 +287,10 @@ function hotelStatus(tenant) {
 }
 
 function statusPillClass(tone) {
-    return { ok: 'bg-emerald-50 text-emerald-700', warn: 'bg-amber-50 text-amber-700', bad: 'bg-red-50 text-red-700' }[tone] || 'bg-neutral-100 text-neutral-600';
+    return { ok: 'bg-emerald-50 text-emerald-700', attention: 'bg-amber-50 text-amber-700', warn: 'bg-amber-50 text-amber-700', bad: 'bg-red-50 text-red-700' }[tone] || 'bg-neutral-100 text-neutral-600';
 }
 function statusDotClass(tone) {
-    return { ok: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-red-500' }[tone] || 'bg-neutral-400';
+    return { ok: 'bg-emerald-500', attention: 'bg-amber-500', warn: 'bg-amber-500', bad: 'bg-red-500' }[tone] || 'bg-neutral-400';
 }
 
 function openBilling(tenant) {
@@ -251,100 +343,253 @@ function statusLabel(status) {
     <Head title="Super Admin — Hotelet" />
 
     <SuperAdminLayout title="Hotelet & abonimet — Lora Control Panel">
-        <div class="mx-auto max-w-7xl space-y-6">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <PageHeader
-                    title="Super Admin — Hotelet"
-                    :breadcrumbs="[{ label: 'Control Panel', href: '/super-admin' }, { label: 'Hotelet & abonimet' }]"
-                />
+        <div class="mx-auto max-w-[1480px] space-y-6">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <PageHeader
+                        title="Hotelet & abonimet"
+                        :breadcrumbs="[{ label: 'Control Panel', href: '/super-admin' }, { label: 'Hotelet & abonimet' }]"
+                    />
+                    <p class="mt-1 text-sm text-neutral-500">Menaxho tenantët, të ardhurat dhe shëndetin e platformës.</p>
+                </div>
                 <Button variant="primary" @click="openCreate">+ Shto hotel</Button>
             </div>
 
-            <section class="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-                    <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <section class="grid gap-4 md:grid-cols-3">
+                <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
+                    <div class="flex items-start justify-between gap-4">
                         <div>
-                            <h2 class="text-lg font-semibold text-neutral-900">Hotelet</h2>
-                            <p class="mt-1 text-sm text-neutral-500">Çdo hotel ka të dhënat, settings dhe domain-et e veta.</p>
+                            <p class="text-sm font-medium text-neutral-500">Hotele aktive</p>
+                            <p class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900">{{ summary.active }}</p>
+                            <p class="mt-1 text-xs text-neutral-400">{{ summary.users }} përdorues në platformë</p>
                         </div>
-                        <input
-                            v-if="tenants.length"
-                            v-model="search"
-                            type="search"
-                            placeholder="Kërko emër / domain…"
-                            class="w-full rounded-lg border-neutral-300 text-sm sm:w-56"
-                        />
+                        <span class="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><Building2 class="h-5 w-5" /></span>
                     </div>
+                </article>
+                <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <p class="text-sm font-medium text-neutral-500">MRR i vlerësuar</p>
+                            <p class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900">{{ money(summary.mrr, 'EUR') }}</p>
+                            <p class="mt-1 text-xs text-neutral-400">Nga abonimet aktive</p>
+                        </div>
+                        <span class="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-700"><CreditCard class="h-5 w-5" /></span>
+                    </div>
+                </article>
+                <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <p class="text-sm font-medium text-neutral-500">Kërkojnë vëmendje</p>
+                            <p class="mt-3 text-3xl font-semibold tracking-tight" :class="summary.attention ? 'text-amber-700' : 'text-neutral-900'">{{ summary.attention }}</p>
+                            <p class="mt-1 text-xs text-neutral-400">Abonime, domain-e ose integrime</p>
+                        </div>
+                        <span class="grid h-11 w-11 place-items-center rounded-xl bg-amber-50 text-amber-700"><CircleAlert class="h-5 w-5" /></span>
+                    </div>
+                </article>
+            </section>
 
-                    <div v-if="filteredTenants.length" class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="border-b border-neutral-200 text-left text-[11px] uppercase tracking-wide text-neutral-400">
-                                    <th class="px-5 py-3 font-semibold">Hoteli</th>
-                                    <th class="px-3 py-3 text-right font-semibold">Përdorues</th>
-                                    <th class="px-3 py-3 font-semibold">Modulet</th>
-                                    <th class="px-3 py-3 text-right font-semibold">Plani</th>
-                                    <th class="px-3 py-3 font-semibold">Statusi</th>
-                                    <th class="px-5 py-3 text-right font-semibold">Veprime</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-neutral-100">
-                                <tr v-for="tenant in filteredTenants" :key="tenant.id" class="hover:bg-neutral-50/60">
-                                    <td class="px-5 py-3">
-                                        <div class="flex items-center gap-2">
-                                            <Link :href="route('super-admin.tenants.show', tenant.id)" class="font-semibold text-neutral-900 no-underline hover:text-emerald-700">{{ tenant.name }}</Link>
-                                            <span v-if="tenant.id === currentTenantId" class="rounded bg-primary-50 px-1.5 py-0.5 text-[10px] font-bold text-primary-700">AKTUAL</span>
+            <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
+                <div class="flex flex-col gap-4 border-b border-neutral-200 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <h2 class="text-lg font-semibold text-neutral-900">Portofoli i hoteleve</h2>
+                        <p class="mt-1 text-sm text-neutral-500">Pamje e përmbledhur e përdorimit dhe konfigurimit.</p>
+                    </div>
+                    <Button v-if="tenants.length" variant="outline" class="gap-2" @click="exportTenants">
+                        <Download class="h-4 w-4" /> Eksporto CSV
+                    </Button>
+                </div>
+
+                <div v-if="tenants.length" class="space-y-4 border-b border-neutral-100 px-5 py-4">
+                    <div class="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_190px_190px]">
+                        <label class="relative block">
+                            <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                            <input v-model="search" type="search" placeholder="Kërko hotel, slug ose domain…" class="w-full rounded-xl border-neutral-300 py-2.5 pl-10 pr-3 text-sm" />
+                        </label>
+                        <select v-model="billingCycle" class="rounded-xl border-neutral-300 py-2.5 text-sm text-neutral-700">
+                            <option value="">Të gjitha pagesat</option>
+                            <option value="monthly">Mujore</option>
+                            <option value="annual">Vjetore</option>
+                        </select>
+                        <select v-model="sortOrder" class="rounded-xl border-neutral-300 py-2.5 text-sm text-neutral-700">
+                            <option value="mrr">Rendit: MRR</option>
+                            <option value="name">Rendit: Emri</option>
+                            <option value="attention">Rendit: Vëmendja</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button
+                            v-for="chip in statusChips"
+                            :key="chip.key"
+                            type="button"
+                            class="rounded-full border px-3 py-1.5 text-xs font-medium transition"
+                            :class="statusFilter === chip.key ? 'border-[#123d32] bg-[#123d32] text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50'"
+                            @click="statusFilter = chip.key"
+                        >
+                            {{ chip.label }} · {{ chip.count }}
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="filteredTenants.length" class="overflow-x-auto">
+                    <table class="w-full min-w-[920px] text-sm">
+                        <thead>
+                            <tr class="border-b border-neutral-200 bg-neutral-50/70 text-left text-[11px] uppercase tracking-[0.08em] text-neutral-400">
+                                <th class="px-5 py-3 font-semibold">Hoteli</th>
+                                <th class="px-4 py-3 font-semibold">Abonimi</th>
+                                <th class="px-4 py-3 font-semibold">Përdorimi</th>
+                                <th class="px-4 py-3 font-semibold">Shëndeti</th>
+                                <th class="px-4 py-3 font-semibold">Statusi</th>
+                                <th class="px-5 py-3 text-right font-semibold">Veprime</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-neutral-100">
+                            <tr v-for="tenant in filteredTenants" :key="tenant.id" class="cursor-pointer transition hover:bg-emerald-50/30" @click="selectedTenant = tenant">
+                                <td class="px-5 py-4">
+                                    <div class="flex items-center gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e8f3ef] text-xs font-bold text-[#24624f]">{{ initials(tenant.name) }}</span>
+                                        <div class="min-w-0">
+                                            <div class="flex items-center gap-2">
+                                                <Link :href="route('super-admin.tenants.show', tenant.id)" class="truncate font-semibold text-neutral-900 no-underline hover:text-emerald-700" @click.stop>{{ tenant.name }}</Link>
+                                                <span v-if="tenant.id === currentTenantId" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">AKTUAL</span>
+                                            </div>
+                                            <p class="mt-0.5 max-w-[280px] truncate text-xs text-neutral-400">{{ tenant.primary_domain || tenant.slug }} · {{ tenant.timezone }}</p>
                                         </div>
-                                        <p class="mt-0.5 text-xs text-neutral-400">{{ tenant.primary_domain || tenant.slug }} · {{ tenant.timezone }} · {{ tenant.currency }}</p>
-                                    </td>
-                                    <td class="px-3 py-3 text-right tabular-nums text-neutral-700">{{ tenant.users_count }}</td>
-                                    <td class="px-3 py-3 text-neutral-600"><span class="font-semibold text-neutral-900">{{ enabledCount(tenant) }}</span> {{ enabledCount(tenant) === 1 ? 'modul' : 'module' }}</td>
-                                    <td class="px-3 py-3 text-right">
-                                        <div class="font-semibold tabular-nums text-neutral-900">{{ tenant.billing.billing_cycle === 'annual' ? money(tenant.billing.annual_cents, tenant.billing.currency) : money(tenant.billing.monthly_fixed_cents, tenant.billing.currency) }}</div>
-                                        <div class="text-[10px] text-neutral-400">{{ tenant.billing.billing_cycle === 'annual' ? '/ vit' : '/ muaj' }}</div>
-                                    </td>
-                                    <td class="px-3 py-3">
-                                        <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium" :class="statusPillClass(hotelStatus(tenant).tone)">
-                                            <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(hotelStatus(tenant).tone)" />
-                                            {{ hotelStatus(tenant).label }}
-                                        </span>
-                                    </td>
-                                    <td class="px-5 py-3">
-                                        <div class="flex items-center justify-end gap-2">
-                                            <Button
-                                                size="sm"
-                                                :variant="tenant.id === currentTenantId ? 'outline' : 'primary'"
-                                                :disabled="tenant.id === currentTenantId || tenant.status !== 'active'"
-                                                @click="switchTenant(tenant)"
-                                            >
-                                                {{ tenant.id === currentTenantId ? 'Në përdorim' : 'Hap' }}
-                                            </Button>
-                                            <div class="relative">
-                                                <button type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-neutral-200 text-lg leading-none text-neutral-500 hover:bg-neutral-50" @click.stop="toggleMenu(tenant.id)">⋯</button>
-                                                <div v-if="openMenuId === tenant.id" class="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-xl border border-neutral-200 bg-white py-1 text-left shadow-lg">
-                                                    <button type="button" class="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="closeMenu(); openBilling(tenant)">Abonimi</button>
-                                                    <button type="button" class="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="closeMenu(); openConfig(tenant)">Konfigurimi</button>
-                                                    <button type="button" class="block w-full px-4 py-2 text-left text-sm hover:bg-neutral-50" :class="tenant.status === 'active' ? 'text-red-600' : 'text-success-700'" @click="closeMenu(); toggleStatus(tenant)">{{ tenant.status === 'active' ? 'Pezullo' : 'Aktivizo' }}</button>
-                                                </div>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-4">
+                                    <p class="font-semibold tabular-nums text-neutral-900">{{ money(monthlyMrr(tenant), tenant.billing.currency) }} <span class="text-xs font-normal text-neutral-400">/ muaj</span></p>
+                                    <p class="mt-0.5 text-xs text-neutral-500">{{ tenant.billing.billing_cycle === 'annual' ? 'Faturim vjetor' : 'Faturim mujor' }}</p>
+                                </td>
+                                <td class="px-4 py-4">
+                                    <p class="font-medium text-neutral-800"><Users class="mr-1 inline h-3.5 w-3.5 text-neutral-400" />{{ tenant.users_count }} përdorues</p>
+                                    <p class="mt-0.5 text-xs text-neutral-500">{{ enabledCount(tenant) }} {{ enabledCount(tenant) === 1 ? 'modul aktiv' : 'module aktive' }}</p>
+                                </td>
+                                <td class="px-4 py-4">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="statusPillClass(tenantHealth(tenant).tone)">
+                                        <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(tenantHealth(tenant).tone)" />
+                                        {{ tenantHealth(tenant).label }}
+                                    </span>
+                                    <p class="mt-1 max-w-[210px] truncate text-[11px] text-neutral-400">{{ tenantHealth(tenant).detail }}</p>
+                                </td>
+                                <td class="px-4 py-4">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="statusPillClass(hotelStatus(tenant).tone)">
+                                        <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(hotelStatus(tenant).tone)" />
+                                        {{ hotelStatus(tenant).label }}
+                                    </span>
+                                </td>
+                                <td class="px-5 py-4" @click.stop>
+                                    <div class="flex items-center justify-end gap-2">
+                                        <Button
+                                            size="sm"
+                                            :variant="tenant.id === currentTenantId ? 'outline' : 'primary'"
+                                            :disabled="tenant.id === currentTenantId || tenant.status !== 'active'"
+                                            @click="switchTenant(tenant)"
+                                        >
+                                            {{ tenant.id === currentTenantId ? 'Aktual' : 'Hap' }}
+                                        </Button>
+                                        <div class="relative">
+                                            <button type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-neutral-200 text-lg leading-none text-neutral-500 hover:bg-neutral-50" aria-label="Veprime të tjera" @click.stop="toggleMenu(tenant.id)">⋯</button>
+                                            <div v-if="openMenuId === tenant.id" class="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-xl border border-neutral-200 bg-white py-1 text-left shadow-lg">
+                                                <button type="button" class="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="closeMenu(); openBilling(tenant)">Abonimi</button>
+                                                <button type="button" class="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="closeMenu(); openConfig(tenant)">Konfigurimi</button>
+                                                <button type="button" class="block w-full px-4 py-2 text-left text-sm hover:bg-neutral-50" :class="tenant.status === 'active' ? 'text-red-600' : 'text-success-700'" @click="closeMenu(); toggleStatus(tenant)">{{ tenant.status === 'active' ? 'Pezullo' : 'Aktivizo' }}</button>
                                             </div>
                                         </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
 
-                    <div v-else-if="tenants.length" class="px-5 py-12 text-center text-sm text-neutral-500">
-                        Asnjë hotel nuk përputhet me “{{ search }}”.
-                    </div>
-                    <div v-else class="px-5 py-16 text-center">
-                        <p class="text-sm font-medium text-neutral-700">Ende asnjë hotel</p>
-                        <p class="mt-1 text-xs text-neutral-500">Krijo hotelin e parë të platformës.</p>
-                        <Button variant="primary" class="mt-4" @click="openCreate">+ Shto hotel</Button>
-                    </div>
-                </section>
+                <div v-else-if="tenants.length" class="px-5 py-14 text-center">
+                    <p class="text-sm font-medium text-neutral-700">Nuk u gjet asnjë hotel</p>
+                    <p class="mt-1 text-xs text-neutral-500">Ndrysho kërkimin ose filtrat e zgjedhur.</p>
+                </div>
+                <div v-else class="px-5 py-16 text-center">
+                    <p class="text-sm font-medium text-neutral-700">Ende asnjë hotel</p>
+                    <p class="mt-1 text-xs text-neutral-500">Krijo hotelin e parë të platformës.</p>
+                    <Button variant="primary" class="mt-4" @click="openCreate">+ Shto hotel</Button>
+                </div>
+
+                <div v-if="tenants.length" class="border-t border-neutral-100 px-5 py-3 text-xs text-neutral-400">
+                    Po shfaqen {{ filteredTenants.length }} nga {{ tenants.length }} hotele
+                </div>
+            </section>
 
             <div v-if="openMenuId" class="fixed inset-0 z-40" @click="closeMenu" />
         </div>
+
+        <Teleport to="body">
+            <div v-if="selectedTenant" class="fixed inset-0 z-50 bg-neutral-950/40" @click.self="selectedTenant = null">
+                <aside class="ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
+                    <div class="flex items-start justify-between border-b border-neutral-200 px-6 py-5">
+                        <div class="flex min-w-0 items-center gap-3">
+                            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e8f3ef] text-sm font-bold text-[#24624f]">{{ initials(selectedTenant.name) }}</span>
+                            <div class="min-w-0">
+                                <h2 class="truncate text-lg font-semibold text-neutral-900">{{ selectedTenant.name }}</h2>
+                                <p class="truncate text-sm text-neutral-500">{{ selectedTenant.primary_domain || selectedTenant.slug }}</p>
+                            </div>
+                        </div>
+                        <button type="button" class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" aria-label="Mbyll" @click="selectedTenant = null"><X class="h-5 w-5" /></button>
+                    </div>
+
+                    <div class="flex-1 space-y-6 overflow-y-auto p-6">
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="rounded-xl bg-neutral-50 p-3">
+                                <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-400">MRR</p>
+                                <p class="mt-1 font-semibold text-neutral-900">{{ money(monthlyMrr(selectedTenant), selectedTenant.billing.currency) }}</p>
+                            </div>
+                            <div class="rounded-xl bg-neutral-50 p-3">
+                                <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Përdorues</p>
+                                <p class="mt-1 font-semibold text-neutral-900">{{ selectedTenant.users_count }}</p>
+                            </div>
+                            <div class="rounded-xl bg-neutral-50 p-3">
+                                <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Module</p>
+                                <p class="mt-1 font-semibold text-neutral-900">{{ enabledCount(selectedTenant) }}</p>
+                            </div>
+                        </div>
+
+                        <section>
+                            <h3 class="text-sm font-semibold text-neutral-900">Kontrolli i shëndetit</h3>
+                            <div class="mt-3 divide-y divide-neutral-100 rounded-xl border border-neutral-200">
+                                <div class="flex items-center justify-between gap-3 px-4 py-3">
+                                    <span class="text-sm text-neutral-600">Abonimi</span>
+                                    <span class="text-sm font-medium text-neutral-900">{{ statusLabel(selectedTenant.billing.status) }}</span>
+                                </div>
+                                <div class="flex items-center justify-between gap-3 px-4 py-3">
+                                    <span class="text-sm text-neutral-600">Domain primar</span>
+                                    <span class="max-w-[240px] truncate text-sm font-medium" :class="selectedTenant.primary_domain ? 'text-neutral-900' : 'text-amber-700'">{{ selectedTenant.primary_domain || 'Mungon' }}</span>
+                                </div>
+                                <div v-if="moduleEnabled(selectedTenant, 'channel_manager')" class="flex items-center justify-between gap-3 px-4 py-3">
+                                    <span class="text-sm text-neutral-600">Channex</span>
+                                    <span class="text-sm font-medium" :class="selectedTenant.integrations.channex.enabled && selectedTenant.integrations.channex.has_api_key ? 'text-emerald-700' : 'text-amber-700'">{{ selectedTenant.integrations.channex.enabled && selectedTenant.integrations.channex.has_api_key ? 'Konfiguruar' : 'Kërkon konfigurim' }}</span>
+                                </div>
+                                <div v-if="moduleEnabled(selectedTenant, 'booking_engine')" class="flex items-center justify-between gap-3 px-4 py-3">
+                                    <span class="text-sm text-neutral-600">POK</span>
+                                    <span class="text-sm font-medium" :class="selectedTenant.integrations.pok.enabled && selectedTenant.integrations.pok.has_key_id ? 'text-emerald-700' : 'text-amber-700'">{{ selectedTenant.integrations.pok.enabled && selectedTenant.integrations.pok.has_key_id ? 'Konfiguruar' : 'Kërkon konfigurim' }}</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section>
+                            <h3 class="text-sm font-semibold text-neutral-900">Modulet aktive</h3>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <span v-for="module in Object.values(selectedTenant.billing.modules).filter((item) => item.enabled)" :key="module.code" class="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">{{ module.name }}</span>
+                            </div>
+                        </section>
+                    </div>
+
+                    <div class="flex flex-wrap justify-end gap-2 border-t border-neutral-200 px-6 py-4">
+                        <Button variant="outline" @click="selectedTenant = null">Mbyll</Button>
+                        <Button variant="outline" @click="openConfig(selectedTenant); selectedTenant = null">Konfigurimi</Button>
+                        <Link :href="route('super-admin.tenants.show', selectedTenant.id)" class="inline-flex items-center gap-2 rounded-lg bg-[#123d32] px-4 py-2 text-sm font-medium text-white no-underline hover:bg-[#0d3027]">
+                            Shiko profilin <ExternalLink class="h-4 w-4" />
+                        </Link>
+                    </div>
+                </aside>
+            </div>
+        </Teleport>
 
         <Teleport to="body">
             <div v-if="showCreate" class="fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeCreate">
