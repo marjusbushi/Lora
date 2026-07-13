@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
+use App\Models\TenantIntegration;
+use App\Models\User;
 use App\Services\TenantBillingService;
 use App\Services\TenantRoleService;
 use App\Tenancy\TenantContext;
@@ -41,9 +43,14 @@ class TenantController extends Controller
                     'currency' => $tenant->currency,
                     'users_count' => $tenant->users_count,
                     'primary_domain' => $tenant->domains->firstWhere('is_primary', true)?->domain,
-                    'domains' => $tenant->domains->pluck('domain'),
+                    'domains' => $tenant->domains->map(fn (TenantDomain $domain) => [
+                        'id' => $domain->id,
+                        'domain' => $domain->domain,
+                        'is_primary' => (bool) $domain->is_primary,
+                    ])->values(),
                     'created_at' => $tenant->created_at?->toIso8601String(),
                     'billing' => $billing->summary($tenant),
+                    'integrations' => $this->integrationSummaries($tenant),
                 ]),
             'currentTenantId' => $request->user()->current_tenant_id,
         ]);
@@ -61,6 +68,8 @@ class TenantController extends Controller
             'primary_domain' => ['nullable', 'string', 'max:255'],
             'timezone' => ['required', 'timezone:all'],
             'currency' => ['required', 'string', 'size:3'],
+            'owner_name' => ['nullable', 'string', 'max:120', 'required_with:owner_email'],
+            'owner_email' => ['nullable', 'email', 'max:255', 'required_with:owner_name'],
         ]);
 
         $domain = $this->normalizeDomain($data['primary_domain'] ?? null);
@@ -123,6 +132,33 @@ class TenantController extends Controller
             $tenantRoles->provision($tenant, $request->user());
             $billing->provision($tenant);
 
+            // The hotel's first REAL owner: an existing account is linked
+            // (password untouched), a new one is created with a random
+            // password (they set their own via "forgot password").
+            if (! empty($data['owner_email'])) {
+                $owner = User::withoutGlobalScopes()->firstOrCreate(
+                    ['email' => Str::lower(trim($data['owner_email']))],
+                    [
+                        'name' => $data['owner_name'],
+                        'password' => Str::random(40),
+                        'current_tenant_id' => $tenant->id,
+                    ],
+                );
+
+                if (! $owner->current_tenant_id) {
+                    $owner->forceFill(['current_tenant_id' => $tenant->id])->save();
+                }
+
+                $tenant->users()->syncWithoutDetaching([
+                    $owner->id => ['is_owner' => true, 'is_active' => true],
+                ]);
+
+                app(TenantContext::class)->run(
+                    $tenant,
+                    fn () => $owner->unsetRelation('roles')->assignRole('admin'),
+                );
+            }
+
             return $tenant;
         });
 
@@ -182,6 +218,149 @@ class TenantController extends Controller
         ]));
 
         return redirect()->away($this->tenantDashboardUrl($tenant));
+    }
+
+    public function updateIntegration(
+        Request $request,
+        Tenant $tenant,
+        string $provider,
+        TenantContext $context,
+    ): RedirectResponse {
+        abort_unless(in_array($provider, ['channex', 'pok'], true), 404);
+
+        $data = $request->validate($provider === 'channex'
+            ? [
+                'enabled' => ['required', 'boolean'],
+                'api_key' => ['nullable', 'string', 'max:255'],
+                'webhook_secret' => ['nullable', 'string', 'max:255'],
+                'property_id' => ['nullable', 'string', 'max:255'],
+                'base_url' => ['nullable', 'url', 'max:255'],
+            ]
+            : [
+                'enabled' => ['required', 'boolean'],
+                'key_id' => ['nullable', 'string', 'max:255'],
+                'key_secret' => ['nullable', 'string', 'max:255'],
+                'merchant_id' => ['nullable', 'string', 'max:255'],
+                'production' => ['required', 'boolean'],
+            ]);
+
+        $integration = TenantIntegration::withoutGlobalScopes()
+            ->firstOrNew(['tenant_id' => $tenant->id, 'provider' => $provider]);
+
+        $credentials = $integration->credentials ?? [];
+        $configuration = $integration->configuration ?? [];
+
+        // A blank secret field means "keep the stored one" — stored values are
+        // never sent back to the browser, so blanks are the normal case.
+        foreach ($provider === 'channex' ? ['api_key', 'webhook_secret'] : ['key_id', 'key_secret'] as $key) {
+            if (filled($data[$key] ?? null)) {
+                $credentials[$key] = $data[$key];
+            }
+        }
+
+        foreach ($provider === 'channex' ? ['property_id', 'base_url'] : ['merchant_id'] as $key) {
+            if (filled($data[$key] ?? null)) {
+                $configuration[$key] = $data[$key];
+            }
+        }
+
+        if ($provider === 'pok') {
+            $configuration['production'] = (bool) $data['production'];
+        }
+
+        $integration->fill([
+            'enabled' => (bool) $data['enabled'],
+            'credentials' => $credentials,
+            'configuration' => $configuration,
+        ])->save();
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.integration.update', $tenant, [
+            'provider' => $provider,
+            'enabled' => (bool) $data['enabled'],
+            // Field NAMES only — never credential values.
+            'updated_fields' => array_keys(array_filter($data, fn ($value) => filled($value))),
+        ]));
+
+        return back()->with('success', "Integrimi ".ucfirst($provider)." u ruajt për {$tenant->name}.");
+    }
+
+    public function storeDomain(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
+    {
+        $data = $request->validate(['domain' => ['required', 'string', 'max:255']]);
+
+        $domain = $this->normalizeDomain($data['domain']);
+
+        if (! $domain) {
+            return back()->withErrors(['domain' => 'Domain i pavlefshëm.']);
+        }
+
+        if (TenantDomain::query()->where('domain', $domain)->exists()) {
+            return back()->withErrors(['domain' => 'Ky domain përdoret nga një hotel tjetër.']);
+        }
+
+        $tenant->domains()->create([
+            'domain' => $domain,
+            'is_primary' => ! $tenant->domains()->where('is_primary', true)->exists(),
+        ]);
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.domain.create', $tenant, ['domain' => $domain]));
+
+        return back()->with('success', "Domain {$domain} u shtua.");
+    }
+
+    public function destroyDomain(Tenant $tenant, TenantDomain $domain, TenantContext $context): RedirectResponse
+    {
+        if ($domain->is_primary) {
+            return back()->withErrors(['domain' => 'Cakto fillimisht një domain tjetër si primar.']);
+        }
+
+        $name = $domain->domain;
+        $domain->delete();
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.domain.delete', $tenant, ['domain' => $name]));
+
+        return back()->with('success', "Domain {$name} u hoq.");
+    }
+
+    public function makePrimaryDomain(Tenant $tenant, TenantDomain $domain, TenantContext $context): RedirectResponse
+    {
+        DB::transaction(function () use ($tenant, $domain) {
+            $tenant->domains()->update(['is_primary' => false]);
+            $domain->forceFill(['is_primary' => true])->save();
+        });
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.domain.primary', $tenant, ['domain' => $domain->domain]));
+
+        return back()->with('success', "{$domain->domain} u caktua si primar.");
+    }
+
+    /** Presence + non-secret config only — secret values never leave the server. */
+    private function integrationSummaries(Tenant $tenant): array
+    {
+        $rows = TenantIntegration::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->get()
+            ->keyBy('provider');
+
+        $channex = $rows->get('channex');
+        $pok = $rows->get('pok');
+
+        return [
+            'channex' => [
+                'enabled' => (bool) ($channex?->enabled),
+                'has_api_key' => filled($channex?->credentials['api_key'] ?? null),
+                'has_webhook_secret' => filled($channex?->credentials['webhook_secret'] ?? null),
+                'property_id' => $channex?->configuration['property_id'] ?? null,
+                'base_url' => $channex?->configuration['base_url'] ?? null,
+            ],
+            'pok' => [
+                'enabled' => (bool) ($pok?->enabled),
+                'has_key_id' => filled($pok?->credentials['key_id'] ?? null),
+                'has_key_secret' => filled($pok?->credentials['key_secret'] ?? null),
+                'merchant_id' => $pok?->configuration['merchant_id'] ?? null,
+                'production' => (bool) ($pok?->configuration['production'] ?? false),
+            ],
+        ];
     }
 
     private function normalizeDomain(?string $domain): ?string
