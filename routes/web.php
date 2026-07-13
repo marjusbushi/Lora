@@ -126,6 +126,7 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::get('/messages', [MessagesController::class, 'index'])->middleware('permission:view_reservations')->name('messages.index');
         Route::get('/messages/unread', [MessagesController::class, 'unread'])->middleware('permission:view_reservations')->name('messages.unread');
         Route::post('/messages/{thread}/reply', [MessagesController::class, 'reply'])->middleware('permission:view_reservations')->name('messages.reply');
+        Route::post('/messages/quick-replies', [MessagesController::class, 'saveQuickReplies'])->middleware('permission:view_reservations')->name('messages.quick-replies');
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         // Seasonal price quote for the create/edit form (server-computed; MUST stay before the {reservation} wildcard).
         Route::get('/reservations/quote', [ReservationController::class, 'quote'])->name('reservations.quote');

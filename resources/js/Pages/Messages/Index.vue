@@ -6,6 +6,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 const props = defineProps({
     threads: Array,
     selected: Object,
+    quickReplies: Array,
 });
 
 const replyForm = useForm({ body: '' });
@@ -50,12 +51,37 @@ function initials(name) {
     return (name || 'M').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
-const QUICK_REPLIES = [
-    { label: 'Orari i check-in', text: 'Check-in-i standard është ora 14:00 dhe check-out-i ora 11:00. Nëse ju nevojitet ndryshe, na thoni dhe do të mundohemi t\'ju akomodojmë.' },
-    { label: 'Parking & aksesi', text: 'Kemi parking privat falas brenda oborrit. Adresa e saktë dhe udhëzimet do t\'jua dërgojmë një ditë para mbërritjes.' },
-    { label: 'Orari i mëngjesit', text: 'Mëngjesi shërbehet çdo ditë nga ora 08:00 deri në 10:30 në restorantin tonë me pamje nga deti.' },
-    { label: 'Faleminderit!', text: 'Faleminderit shumë! Presim t\'ju mirëpresim. Mirë se vini në Villa Mucho.' },
-];
+// Quick-reply templates (WhatsApp-style): a ⚡ button beside the composer opens
+// the list; picking one drops the text into the input. Templates are the
+// hotel's own — managed in a modal and saved per-tenant on the server.
+const quickOpen = ref(false);
+const manageOpen = ref(false);
+const manageForm = useForm({ replies: [] });
+function openManage() {
+    manageForm.replies = (props.quickReplies || []).map((q) => ({ ...q }));
+    manageForm.clearErrors();
+    manageOpen.value = true;
+    quickOpen.value = false;
+}
+function addManageRow() {
+    manageForm.replies.push({ label: '', text: '' });
+}
+function removeManageRow(i) {
+    manageForm.replies.splice(i, 1);
+}
+function saveManage() {
+    manageForm.post(route('messages.quick-replies'), {
+        preserveScroll: true,
+        onSuccess: () => (manageOpen.value = false),
+    });
+}
+function pickQuick(text) {
+    replyForm.body = replyForm.body ? replyForm.body.trimEnd() + ' ' + text : text;
+    quickOpen.value = false;
+}
+
+// Mobile is master-detail like WhatsApp: the list OR the chat, never stacked.
+const mobileChatOpen = ref(false);
 
 const filteredThreads = computed(() => {
     if (filter.value === 'all') return props.threads;
@@ -101,10 +127,11 @@ const messageRows = computed(() => {
 });
 
 function openThread(id) {
+    mobileChatOpen.value = true;
     router.get(route('messages.index'), { thread: id }, { preserveState: true, preserveScroll: true });
 }
-function useQuick(text) {
-    replyForm.body = replyForm.body ? replyForm.body + ' ' + text : text;
+function backToList() {
+    mobileChatOpen.value = false;
 }
 function sendReply() {
     if (!props.selected || !replyForm.body.trim()) return;
@@ -130,11 +157,11 @@ function statusLabel(s) {
         <div v-else class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
             <div class="grid h-[calc(100vh-6.5rem)] grid-cols-1 sm:h-[calc(100vh-7.5rem)]"
                 :class="selected && panelOpen ? 'lg:grid-cols-[300px_1fr_300px]' : 'lg:grid-cols-[300px_1fr]'">
-                <!-- Thread list -->
-                <div class="flex min-h-0 flex-col border-r border-neutral-200">
+                <!-- Thread list (on mobile: hidden while a chat is open, like WhatsApp) -->
+                <div class="min-h-0 flex-col border-r border-neutral-200" :class="mobileChatOpen ? 'hidden lg:flex' : 'flex'">
                     <div class="px-4 pt-4">
                         <div class="flex items-center justify-between">
-                            <h2 class="text-lg font-bold tracking-tight text-neutral-900">Mesazhet</h2>
+                            <h2 class="text-[15px] font-bold tracking-tight text-neutral-900">Mesazhet</h2>
                             <button type="button" @click="toggleSound"
                                 :title="soundMuted ? 'Tingulli është i heshtur — kliko për ta ndezur' : 'Tingulli është ndezur — kliko për ta heshtur'"
                                 class="grid h-8 w-8 place-items-center rounded-lg border border-neutral-200 text-neutral-500 transition hover:bg-neutral-50"
@@ -145,44 +172,47 @@ function statusLabel(s) {
                         </div>
                         <div class="relative mt-3">
                             <svg class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" /></svg>
-                            <input placeholder="Kërko mysafir…" class="w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 pl-9 pr-3 text-sm" />
+                            <input placeholder="Kërko mysafir…" class="w-full rounded-lg border-neutral-200 bg-neutral-50 py-1.5 pl-9 pr-3 text-[12.5px]" />
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-1.5 px-4 py-3">
                         <button v-for="f in [['all','Të gjitha'],['unread','Të palexuara'],['booking.com','Booking'],['airbnb','Airbnb']]" :key="f[0]"
-                            class="rounded-full border px-2.5 py-1 text-xs font-semibold transition"
+                            class="rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition"
                             :class="filter === f[0] ? 'border-[#0f3b30] bg-[#0f3b30] text-white' : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'"
                             @click="filter = f[0]">{{ f[1] }}</button>
                     </div>
                     <div class="flex-1 overflow-y-auto px-2.5 pb-3">
                         <button v-for="t in filteredThreads" :key="t.id" type="button"
-                            class="relative mb-0.5 flex w-full gap-3 rounded-xl p-3 text-left transition"
+                            class="relative mb-0.5 flex w-full gap-2.5 rounded-xl p-2.5 text-left transition"
                             :class="selected && selected.id === t.id ? 'bg-[#eaf5ef]' : 'hover:bg-neutral-50'"
                             @click="openThread(t.id)">
-                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm font-bold text-white" :style="{ background: chan(t.channel).grad }">{{ initials(t.guest_name) }}</span>
+                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[12.5px] font-bold text-white" :style="{ background: chan(t.channel).grad }">{{ initials(t.guest_name) }}</span>
                             <span class="min-w-0 flex-1">
                                 <span class="flex items-center gap-2">
-                                    <span class="truncate text-sm font-semibold tracking-tight text-neutral-900">{{ t.guest_name }}</span>
-                                    <span class="ml-auto shrink-0 text-[11px] text-neutral-400">{{ time(t.last_message_at) }}</span>
+                                    <span class="truncate text-[13px] font-semibold tracking-tight text-neutral-900">{{ t.guest_name }}</span>
+                                    <span class="ml-auto shrink-0 text-[10.5px] text-neutral-400">{{ time(t.last_message_at) }}</span>
                                 </span>
                                 <span class="mt-0.5 flex items-center gap-2">
                                     <span class="shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold" :class="chan(t.channel).badge">{{ chan(t.channel).label }}</span>
-                                    <span class="truncate text-xs" :class="t.unread > 0 ? 'font-semibold text-neutral-800' : 'text-neutral-500'">{{ t.preview }}</span>
+                                    <span class="truncate text-[11.5px]" :class="t.unread > 0 ? 'font-semibold text-neutral-800' : 'text-neutral-500'">{{ t.preview }}</span>
                                 </span>
                             </span>
-                            <span v-if="t.unread > 0" class="absolute bottom-3 right-3 grid h-[19px] min-w-[19px] place-items-center rounded-full bg-[#15855c] px-1.5 text-[10.5px] font-bold text-white">{{ t.unread }}</span>
+                            <span v-if="t.unread > 0" class="absolute bottom-2.5 right-2.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-[#15855c] px-1.5 text-[10px] font-bold text-white">{{ t.unread }}</span>
                         </button>
                     </div>
                 </div>
 
-                <!-- Conversation -->
-                <div class="flex min-h-0 min-w-0 flex-col bg-[#f5f8f6]">
+                <!-- Conversation (on mobile: full screen only when a chat is open) -->
+                <div class="min-h-0 min-w-0 flex-col bg-[#f5f8f6]" :class="mobileChatOpen ? 'flex' : 'hidden lg:flex'">
                     <template v-if="selected">
-                        <div class="flex items-center gap-3 border-b border-neutral-200 bg-white px-5 py-3">
-                            <span class="grid h-9 w-9 place-items-center rounded-xl text-sm font-bold text-white" :style="{ background: chan(selected.channel).grad }">{{ initials(selected.guest_name) }}</span>
+                        <div class="flex items-center gap-2.5 border-b border-neutral-200 bg-white px-3.5 py-2.5 sm:px-5">
+                            <button type="button" @click="backToList" class="-ml-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-neutral-500 transition hover:bg-neutral-100 lg:hidden" title="Kthehu te lista">
+                                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clip-rule="evenodd" /></svg>
+                            </button>
+                            <span class="grid h-8 w-8 place-items-center rounded-lg text-[12.5px] font-bold text-white" :style="{ background: chan(selected.channel).grad }">{{ initials(selected.guest_name) }}</span>
                             <div class="min-w-0">
-                                <p class="truncate text-sm font-bold tracking-tight text-neutral-900">{{ selected.guest_name || 'Mysafir' }}</p>
-                                <p class="mt-0.5 flex items-center gap-2 text-xs text-neutral-400">
+                                <p class="truncate text-[13px] font-bold tracking-tight text-neutral-900">{{ selected.guest_name || 'Mysafir' }}</p>
+                                <p class="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-400">
                                     <span class="rounded px-1.5 py-0.5 text-[9.5px] font-bold" :class="chan(selected.channel).badge">{{ chan(selected.channel).label }}</span>
                                     <span v-if="selected.reservation">· {{ selected.reservation.ref }}</span>
                                 </p>
@@ -199,13 +229,13 @@ function statusLabel(s) {
                         <div ref="chatBox" class="flex-1 space-y-2 overflow-y-auto px-5 py-5">
                             <template v-for="row in messageRows" :key="row.key">
                                 <div v-if="row.sep" class="my-3 flex justify-center">
-                                    <span class="rounded-full border border-neutral-200 bg-white px-3.5 py-1 text-[10.5px] font-semibold text-neutral-400">{{ row.sep }}</span>
+                                    <span class="rounded-full border border-neutral-200 bg-white px-3 py-0.5 text-[10px] font-semibold text-neutral-400">{{ row.sep }}</span>
                                 </div>
                                 <div v-else class="flex" :class="row.sender === 'host' ? 'justify-end' : 'justify-start'">
-                                    <div class="max-w-[72%] rounded-2xl px-3.5 py-2.5 text-sm"
+                                    <div class="max-w-[78%] rounded-2xl px-3 py-2 text-[13px] leading-relaxed"
                                         :class="row.sender === 'host' ? 'rounded-br-md bg-[#15855c] text-white shadow-[0_4px_12px_-4px_rgba(21,133,92,0.5)]' : 'rounded-bl-md border border-neutral-200 bg-white text-neutral-800'">
                                         <p class="whitespace-pre-wrap break-words">{{ row.body }}</p>
-                                        <p class="mt-1.5 flex items-center gap-1 text-[10px]" :class="row.sender === 'host' ? 'justify-end text-emerald-100' : 'text-neutral-400'">
+                                        <p class="mt-1 flex items-center gap-1 text-[9.5px]" :class="row.sender === 'host' ? 'justify-end text-emerald-100' : 'text-neutral-400'">
                                             {{ clock(row.sent_at) }}
                                             <svg v-if="row.sender === 'host'" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.2a.75.75 0 01.1 1.05l-8 10.5a.75.75 0 01-1.13.07l-4.5-4.5a.75.75 0 011.06-1.06l3.9 3.9 7.48-9.82a.75.75 0 011.05-.14z" clip-rule="evenodd" /></svg>
                                         </p>
@@ -215,25 +245,45 @@ function statusLabel(s) {
                         </div>
 
                         <template v-if="selected.can_reply">
-                            <div class="flex flex-wrap gap-2 px-5 pb-2">
-                                <button v-for="q in QUICK_REPLIES" :key="q.label" type="button"
-                                    class="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-[11.5px] font-medium text-[#0c5a3e] transition hover:border-[#83dcb2] hover:bg-[#f2faf6]"
-                                    @click="useQuick(q.text)">{{ q.label }}</button>
-                            </div>
-                            <form class="flex items-end gap-2.5 border-t border-neutral-200 bg-white p-3" @submit.prevent="sendReply">
-                                <textarea v-model="replyForm.body" rows="1" placeholder="Shkruaj përgjigjen…  (Enter për të dërguar)"
-                                    class="min-h-[46px] flex-1 resize-none rounded-xl border-neutral-200 px-3.5 py-3 text-sm focus:border-[#83dcb2] focus:ring-[#83dcb2]"
+                            <form class="relative flex items-end gap-2 border-t border-neutral-200 bg-white p-2.5" @submit.prevent="sendReply">
+                                <!-- Quick-reply picker (WhatsApp-style, above the composer) -->
+                                <div v-if="quickOpen" class="fixed inset-0 z-10" @click="quickOpen = false" />
+                                <div v-if="quickOpen" class="absolute bottom-full left-2.5 z-20 mb-2 w-[calc(100%-1.25rem)] max-w-sm overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl">
+                                    <div class="max-h-64 overflow-y-auto py-1">
+                                        <button v-for="q in quickReplies" :key="q.label" type="button"
+                                            class="block w-full px-3.5 py-2 text-left transition hover:bg-[#f2faf6]"
+                                            @click="pickQuick(q.text)">
+                                            <span class="block text-[12px] font-semibold text-neutral-800">{{ q.label }}</span>
+                                            <span class="block truncate text-[11px] text-neutral-400">{{ q.text }}</span>
+                                        </button>
+                                        <p v-if="!quickReplies?.length" class="px-3.5 py-3 text-[11.5px] text-neutral-400">Ende asnjë përgjigje e shpejtë.</p>
+                                    </div>
+                                    <button type="button" @click="openManage"
+                                        class="flex w-full items-center gap-2 border-t border-neutral-100 px-3.5 py-2.5 text-[11.5px] font-semibold text-[#0c5a3e] transition hover:bg-[#f2faf6]">
+                                        <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" /></svg>
+                                        Menaxho përgjigjet e shpejta
+                                    </button>
+                                </div>
+
+                                <button type="button" @click="quickOpen = !quickOpen"
+                                    title="Përgjigjet e shpejta"
+                                    class="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-xl border transition"
+                                    :class="quickOpen ? 'border-[#83dcb2] bg-[#f2faf6] text-[#0c5a3e]' : 'border-neutral-200 text-neutral-500 hover:bg-neutral-50'">
+                                    <svg class="h-[18px] w-[18px]" viewBox="0 0 20 20" fill="currentColor"><path d="M11.983 1.907a.75.75 0 00-1.292-.657l-8.5 9.5A.75.75 0 002.75 12h4.716l-1.449 6.093a.75.75 0 001.292.657l8.5-9.5A.75.75 0 0015.25 8h-4.716l1.449-6.093z" /></svg>
+                                </button>
+                                <textarea v-model="replyForm.body" rows="1" placeholder="Shkruaj përgjigjen…"
+                                    class="min-h-[42px] flex-1 resize-none rounded-xl border-neutral-200 px-3 py-2.5 text-[13px] focus:border-[#83dcb2] focus:ring-[#83dcb2]"
                                     @keydown.enter.exact.prevent="sendReply" />
                                 <button type="submit" :disabled="replyForm.processing || !replyForm.body.trim()"
-                                    class="inline-flex h-[46px] items-center gap-2 rounded-xl bg-[#15855c] px-4 text-sm font-semibold text-white transition hover:bg-[#0c5a3e] disabled:opacity-50">
-                                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.926A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.085l-1.414 4.926a.75.75 0 00.826.95 28.897 28.897 0 0015.293-7.155.75.75 0 000-1.114A28.897 28.897 0 003.105 2.289z" /></svg>
-                                    Dërgo
+                                    class="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-xl bg-[#15855c] text-white transition hover:bg-[#0c5a3e] disabled:opacity-50"
+                                    title="Dërgo">
+                                    <svg class="h-[18px] w-[18px]" viewBox="0 0 20 20" fill="currentColor"><path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.926A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.085l-1.414 4.926a.75.75 0 00.826.95 28.897 28.897 0 0015.293-7.155.75.75 0 000-1.114A28.897 28.897 0 003.105 2.289z" /></svg>
                                 </button>
                             </form>
                         </template>
                         <p v-else class="border-t border-neutral-200 bg-white px-5 py-3 text-xs text-neutral-400">Kjo bisedë s'lejon përgjigje.</p>
                     </template>
-                    <div v-else class="flex flex-1 items-center justify-center text-sm text-neutral-400">Zgjidh një bisedë majtas.</div>
+                    <div v-else class="flex flex-1 items-center justify-center text-[12.5px] text-neutral-400">Zgjidh një bisedë majtas.</div>
                 </div>
 
                 <!-- Context panel -->
@@ -241,10 +291,10 @@ function statusLabel(s) {
                     <div>
                         <h3 class="text-[10.5px] font-bold uppercase tracking-widest text-neutral-400">Mysafiri</h3>
                         <div class="mt-2.5 flex items-center gap-3">
-                            <span class="grid h-12 w-12 place-items-center rounded-2xl text-base font-bold text-white" :style="{ background: chan(selected.channel).grad }">{{ initials(selected.guest_name) }}</span>
+                            <span class="grid h-10 w-10 place-items-center rounded-xl text-sm font-bold text-white" :style="{ background: chan(selected.channel).grad }">{{ initials(selected.guest_name) }}</span>
                             <div class="min-w-0">
-                                <p class="truncate text-[15px] font-bold tracking-tight text-neutral-900">{{ selected.guest_name || 'Mysafir' }}</p>
-                                <p v-if="selected.guest_email" class="truncate text-xs text-neutral-500">{{ selected.guest_email }}</p>
+                                <p class="truncate text-[13.5px] font-bold tracking-tight text-neutral-900">{{ selected.guest_name || 'Mysafir' }}</p>
+                                <p v-if="selected.guest_email" class="truncate text-[11.5px] text-neutral-500">{{ selected.guest_email }}</p>
                             </div>
                         </div>
                     </div>
@@ -252,15 +302,15 @@ function statusLabel(s) {
                     <div v-if="selected.reservation">
                         <h3 class="text-[10.5px] font-bold uppercase tracking-widest text-neutral-400">Rezervimi</h3>
                         <div class="mt-2.5 overflow-hidden rounded-2xl border border-neutral-200">
-                            <div class="flex items-center justify-between border-b border-neutral-200 bg-neutral-50/70 px-3.5 py-2.5 text-xs font-semibold">
+                            <div class="flex items-center justify-between border-b border-neutral-200 bg-neutral-50/70 px-3 py-2 text-[11.5px] font-semibold">
                                 <span>{{ selected.reservation.ref || ('#' + selected.reservation.id) }}</span>
                                 <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-medium text-emerald-700">{{ statusLabel(selected.reservation.status) }}</span>
                             </div>
-                            <div v-if="selected.reservation.room" class="flex justify-between gap-3 border-b border-neutral-100 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">Dhoma</span><span class="text-right font-semibold">{{ selected.reservation.room }}</span></div>
-                            <div class="flex justify-between gap-3 border-b border-neutral-100 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">Check-in</span><span class="font-semibold tabular-nums">{{ fdate(selected.reservation.check_in) }}</span></div>
-                            <div class="flex justify-between gap-3 border-b border-neutral-100 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">Check-out</span><span class="font-semibold tabular-nums">{{ fdate(selected.reservation.check_out) }}</span></div>
-                            <div class="flex justify-between gap-3 border-b border-neutral-100 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">Netë · persona</span><span class="font-semibold tabular-nums">{{ selected.reservation.nights }} · {{ selected.reservation.adults }}</span></div>
-                            <div class="flex justify-between gap-3 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">Total</span><span class="font-semibold tabular-nums">{{ money(selected.reservation.total) }}</span></div>
+                            <div v-if="selected.reservation.room" class="flex justify-between gap-3 border-b border-neutral-100 px-3 py-2 text-[11.5px]"><span class="text-neutral-400">Dhoma</span><span class="text-right font-semibold">{{ selected.reservation.room }}</span></div>
+                            <div class="flex justify-between gap-3 border-b border-neutral-100 px-3 py-2 text-[11.5px]"><span class="text-neutral-400">Check-in</span><span class="font-semibold tabular-nums">{{ fdate(selected.reservation.check_in) }}</span></div>
+                            <div class="flex justify-between gap-3 border-b border-neutral-100 px-3 py-2 text-[11.5px]"><span class="text-neutral-400">Check-out</span><span class="font-semibold tabular-nums">{{ fdate(selected.reservation.check_out) }}</span></div>
+                            <div class="flex justify-between gap-3 border-b border-neutral-100 px-3 py-2 text-[11.5px]"><span class="text-neutral-400">Netë · persona</span><span class="font-semibold tabular-nums">{{ selected.reservation.nights }} · {{ selected.reservation.adults }}</span></div>
+                            <div class="flex justify-between gap-3 px-3 py-2 text-[11.5px]"><span class="text-neutral-400">Total</span><span class="font-semibold tabular-nums">{{ money(selected.reservation.total) }}</span></div>
                         </div>
                         <Link :href="route('reservations.index')" class="mt-2.5 flex items-center justify-center gap-2 rounded-xl border border-neutral-200 py-2.5 text-xs font-semibold text-[#0c5a3e] no-underline transition hover:border-[#83dcb2] hover:bg-[#f2faf6]">
                             <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h4a.75.75 0 010 1.5h-4z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M6.194 12.753a.75.75 0 001.06.053L16.5 4.44v2.81a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.553l-9.056 8.194a.75.75 0 00-.053 1.06z" clip-rule="evenodd" /></svg>
@@ -274,6 +324,45 @@ function statusLabel(s) {
                         </p>
                     </div>
                 </aside>
+            </div>
+        </div>
+
+        <!-- Manage quick replies -->
+        <div v-if="manageOpen" class="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" @click.self="manageOpen = false">
+            <div class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <div class="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+                    <h3 class="text-[13.5px] font-bold tracking-tight text-neutral-900">Përgjigjet e shpejta</h3>
+                    <button type="button" @click="manageOpen = false" class="grid h-8 w-8 place-items-center rounded-lg text-neutral-400 transition hover:bg-neutral-100">
+                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" /></svg>
+                    </button>
+                </div>
+                <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+                    <div v-for="(row, i) in manageForm.replies" :key="i" class="rounded-xl border border-neutral-200 p-2.5">
+                        <div class="flex items-center gap-2">
+                            <input v-model="row.label" maxlength="40" placeholder="Titulli (p.sh. Wifi)"
+                                class="flex-1 rounded-lg border-neutral-200 px-2.5 py-1.5 text-[12.5px] font-semibold focus:border-[#83dcb2] focus:ring-[#83dcb2]" />
+                            <button type="button" @click="removeManageRow(i)" title="Fshi"
+                                class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-neutral-400 transition hover:bg-red-50 hover:text-red-600">
+                                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clip-rule="evenodd" /></svg>
+                            </button>
+                        </div>
+                        <textarea v-model="row.text" rows="2" maxlength="1000" placeholder="Teksti që i dërgohet mysafirit…"
+                            class="mt-2 w-full resize-none rounded-lg border-neutral-200 px-2.5 py-1.5 text-[12.5px] focus:border-[#83dcb2] focus:ring-[#83dcb2]" />
+                        <p v-if="manageForm.errors[`replies.${i}.label`] || manageForm.errors[`replies.${i}.text`]" class="mt-1 text-[11px] text-red-600">
+                            {{ manageForm.errors[`replies.${i}.label`] || manageForm.errors[`replies.${i}.text`] }}
+                        </p>
+                    </div>
+                    <button type="button" @click="addManageRow"
+                        class="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 py-2.5 text-[12px] font-semibold text-neutral-500 transition hover:border-[#83dcb2] hover:text-[#0c5a3e]">
+                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
+                        Shto përgjigje
+                    </button>
+                </div>
+                <div class="flex items-center justify-end gap-2 border-t border-neutral-200 px-4 py-3">
+                    <button type="button" @click="manageOpen = false" class="rounded-xl border border-neutral-200 px-3.5 py-2 text-[12.5px] font-semibold text-neutral-600 transition hover:bg-neutral-50">Anulo</button>
+                    <button type="button" @click="saveManage" :disabled="manageForm.processing"
+                        class="rounded-xl bg-[#15855c] px-4 py-2 text-[12.5px] font-semibold text-white transition hover:bg-[#0c5a3e] disabled:opacity-50">Ruaj</button>
+                </div>
             </div>
         </div>
     </AppLayout>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Message;
 use App\Models\MessageThread;
+use App\Models\Setting;
 use App\Services\ChannexClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -17,6 +18,14 @@ use Inertia\Response;
  */
 class MessagesController extends Controller
 {
+    /** Starter templates until the hotel writes its own. */
+    private const DEFAULT_QUICK_REPLIES = [
+        ['label' => 'Orari i check-in', 'text' => 'Check-in-i standard është ora 14:00 dhe check-out-i ora 11:00. Nëse ju nevojitet ndryshe, na thoni dhe do të mundohemi t\'ju akomodojmë.'],
+        ['label' => 'Parking & aksesi', 'text' => 'Kemi parking privat falas brenda oborrit. Adresa e saktë dhe udhëzimet do t\'jua dërgojmë një ditë para mbërritjes.'],
+        ['label' => 'Orari i mëngjesit', 'text' => 'Mëngjesi shërbehet çdo ditë nga ora 08:00 deri në 10:30 në restorantin tonë me pamje nga deti.'],
+        ['label' => 'Faleminderit!', 'text' => 'Faleminderit shumë! Presim t\'ju mirëpresim. Mirë se vini në Villa Mucho.'],
+    ];
+
     public function index(Request $request): Response
     {
         $threads = MessageThread::query()
@@ -74,7 +83,31 @@ class MessagesController extends Controller
                 'unread' => $t->unread_count,
             ]),
             'selected' => $selected,
+            'quickReplies' => $this->quickReplies(),
         ]);
+    }
+
+    /** Save the hotel's own quick-reply templates (per-tenant Setting). */
+    public function saveQuickReplies(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'replies' => ['present', 'array', 'max:20'],
+            'replies.*.label' => ['required', 'string', 'max:40'],
+            'replies.*.text' => ['required', 'string', 'max:1000'],
+        ]);
+
+        Setting::set('messages.quick_replies', array_values($data['replies']), 'json');
+
+        return back()->with('success', 'Përgjigjet e shpejta u ruajtën.');
+    }
+
+    private function quickReplies(): array
+    {
+        $stored = Setting::get('messages.quick_replies');
+
+        return is_array($stored) && $stored !== []
+            ? array_values($stored)
+            : self::DEFAULT_QUICK_REPLIES;
     }
 
     /** Lightweight unread total for the layout poll (sound + tab badge). */
