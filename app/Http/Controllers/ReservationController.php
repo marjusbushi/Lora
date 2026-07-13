@@ -159,10 +159,7 @@ class ReservationController extends Controller
     public function calendar(Request $request): Response
     {
         $startDate = $request->input('start', now()->startOfWeek()->toDateString());
-        $visibleDays = in_array($request->integer('days'), [7, 14, 30], true)
-            ? $request->integer('days')
-            : 14;
-        $endDate = now()->parse($startDate)->addDays($visibleDays - 1)->toDateString();
+        $endDate = now()->parse($startDate)->addDays(13)->toDateString();
 
         $rooms = Room::select('id', 'room_number', 'room_type_id', 'floor', 'status')
             ->with('roomType:id,name,base_price,max_occupancy')
@@ -216,28 +213,12 @@ class ReservationController extends Controller
             ->orderBy('last_name')
             ->get();
 
-        $today = now()->toDateString();
-        $activeToday = Reservation::query()
-            ->whereNotIn('status', ['cancelled', 'checked_out'])
-            ->whereDate('check_in_date', '<=', $today)
-            ->whereDate('check_out_date', '>', $today)
-            ->distinct('room_id')
-            ->count('room_id');
-
         return Inertia::render('Reservations/Calendar', [
             'rooms' => $rooms,
             'reservations' => $reservations,
             'guests' => $guests,
             'startDate' => $startDate,
             'endDate' => $endDate,
-            'visibleDays' => $visibleDays,
-            'stats' => [
-                'arrivals_today' => Reservation::whereDate('check_in_date', $today)
-                    ->whereNotIn('status', ['cancelled'])->count(),
-                'departures_today' => Reservation::whereDate('check_out_date', $today)
-                    ->whereNotIn('status', ['cancelled'])->count(),
-                'available_today' => max(0, $rooms->count() - $activeToday),
-            ],
             'channelFees' => Setting::get('financial.channel_fees', []),
         ]);
     }
