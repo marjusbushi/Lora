@@ -14,7 +14,6 @@ import {
     Search,
     SlidersHorizontal,
     WalletCards,
-    X,
 } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
@@ -308,10 +307,10 @@ function submit() {
             </section>
         </div>
 
-        <Modal :show="showNew" @close="closeNewPayment">
-            <form class="p-5" @submit.prevent="submit">
-                <div class="mb-4 flex items-start justify-between gap-4"><div><h3 class="text-h4 font-bold text-primary-900">{{ $t('admin.generated.k_b70188b5cb02') }}</h3><p class="mt-1 text-tiny text-neutral-500">{{ $t('admin.generated.k_aee4f4796a95') }}</p></div><button type="button" class="grid h-8 w-8 place-items-center rounded-md text-neutral-400 hover:bg-neutral-100" @click="closeNewPayment"><X class="h-4 w-4" /></button></div>
-                <div class="mb-4 grid grid-cols-2 gap-2">
+        <Modal :show="showNew" :title="$t('admin.generated.k_b70188b5cb02')" max-width="xl" @close="closeNewPayment">
+            <p class="mb-4 text-tiny text-neutral-500">{{ $t('admin.generated.k_aee4f4796a95') }}</p>
+            <form id="manual-payment-form" @submit.prevent="submit">
+                <div class="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <button type="button" class="rounded-lg border px-3 py-2.5 text-body-sm font-bold" :class="form.direction === 'in' ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-500'" @click="form.direction = 'in'"><ArrowDown class="mr-1 inline h-4 w-4" /> {{ $t('admin.generated.k_de6f08ba011b') }}</button>
                     <button v-if="can.payBills" type="button" class="rounded-lg border px-3 py-2.5 text-body-sm font-bold" :class="form.direction === 'out' ? 'border-error-500 bg-error-50 text-error-700' : 'border-neutral-200 text-neutral-500'" @click="form.direction = 'out'"><ArrowUp class="mr-1 inline h-4 w-4" /> {{ $t('admin.generated.k_fc6de4f415f6') }}</button>
                 </div>
@@ -326,8 +325,11 @@ function submit() {
                     <div class="sm:col-span-2"><label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_5ed8e9c8f4d2') }}</label><textarea v-model="form.description" maxlength="300" rows="3" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('admin.generated.k_859da1bc6b2d')" /><p v-if="form.errors.description" class="mt-1 text-tiny text-error-600">{{ form.errors.description }}</p></div>
                     <div class="sm:col-span-2"><label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_0238235638a7') }}</label><input v-model="form.paid_at" type="datetime-local" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" /><p v-if="form.errors.paid_at" class="mt-1 text-tiny text-error-600">{{ form.errors.paid_at }}</p></div>
                 </div>
-                <div class="mt-5 flex items-center justify-end gap-2 border-t border-neutral-100 pt-4"><Button variant="ghost" type="button" @click="closeNewPayment">{{ $t('admin.generated.k_cfdab4713700') }}</Button><Button type="submit" :loading="form.processing" :variant="form.direction === 'out' ? 'danger' : 'primary'" :disabled="!form.amount || !form.description">{{ $t('admin.generated.k_ceaf64f3479c') }}</Button></div>
             </form>
+            <template #footer>
+                <Button variant="ghost" type="button" @click="closeNewPayment">{{ $t('admin.generated.k_cfdab4713700') }}</Button>
+                <Button form="manual-payment-form" type="submit" :loading="form.processing" :variant="form.direction === 'out' ? 'danger' : 'primary'" :disabled="!form.amount || !form.description">{{ $t('admin.generated.k_ceaf64f3479c') }}</Button>
+            </template>
         </Modal>
 
         <TransactionDetailsDrawer :payment="selectedPayment" @close="selectedPayment = null" />

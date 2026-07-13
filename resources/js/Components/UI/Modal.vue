@@ -132,13 +132,13 @@ onUnmounted(() => {
                             :aria-labelledby="title ? titleId : undefined"
                             tabindex="-1"
                             :class="[
-                                'relative w-full rounded-lg bg-white shadow-modal',
+                                'relative flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-lg bg-white shadow-modal',
                                 maxWidthClasses[maxWidth],
                             ]"
                             @click.stop
                         >
                             <!-- Header -->
-                            <div v-if="title || closeable" class="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
+                            <div v-if="title || closeable" class="flex shrink-0 items-center justify-between border-b border-neutral-200 px-5 py-4">
                                 <h3 v-if="title" :id="titleId" class="text-h4 text-neutral-900">{{ title }}</h3>
                                 <button
                                     v-if="closeable"
@@ -154,12 +154,12 @@ onUnmounted(() => {
                             </div>
 
                             <!-- Body -->
-                            <div class="px-5 py-4">
+                            <div class="min-h-0 overflow-y-auto px-5 py-4">
                                 <slot />
                             </div>
 
                             <!-- Footer -->
-                            <div v-if="$slots.footer" class="flex items-center justify-end gap-3 border-t border-neutral-200 px-5 py-3 bg-neutral-50">
+                            <div v-if="$slots.footer" class="flex shrink-0 items-center justify-end gap-3 border-t border-neutral-200 bg-neutral-50 px-5 py-3">
                                 <slot name="footer" />
                             </div>
                         </div>
