@@ -29,6 +29,7 @@ const anchorDate = ref(startOfDay(new Date()));
 const query = ref('');
 const statusFilter = ref('all');
 const selectedReservation = ref(null);
+const dateHeaderTrack = ref(null);
 
 const rooms = [
     { id: 1, number: '101', type: 'Deluxe Sea View', floor: 1, housekeeping: 'clean' },
@@ -155,6 +156,12 @@ function selectReservation(reservation) {
     selectedReservation.value = reservation;
 }
 
+function syncDateHeader(event) {
+    if (dateHeaderTrack.value) {
+        dateHeaderTrack.value.style.transform = `translateX(-${event.currentTarget.scrollLeft}px)`;
+    }
+}
+
 function formatMoney(value) {
     return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: 'EUR' }).format(value);
 }
@@ -234,7 +241,7 @@ function formatMoney(value) {
                 </div>
             </div>
 
-            <section class="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card">
+            <section class="rounded-xl border border-neutral-200 bg-white shadow-card">
                 <div class="flex flex-col gap-3 border-b border-neutral-200 p-3 lg:flex-row lg:items-center lg:justify-between">
                     <div class="flex flex-wrap items-center gap-2">
                         <div class="flex items-center rounded-lg border border-neutral-200 bg-white p-0.5">
@@ -261,19 +268,21 @@ function formatMoney(value) {
                     </div>
                 </div>
 
-                <div class="overflow-x-auto overflow-y-visible overscroll-x-contain">
-                    <div class="min-w-[1050px]">
-                        <div class="sticky top-16 z-40 flex border-b border-neutral-300 bg-white shadow-[0_6px_14px_-10px_rgba(15,23,42,0.45)]">
-                            <div class="sticky left-0 z-50 flex w-48 shrink-0 items-center border-r border-neutral-200 bg-white px-4 py-3 text-tiny font-bold uppercase tracking-wider text-neutral-500">{{ $t('admin.calendarPreview.room') }}</div>
-                            <div class="grid min-w-0 flex-1" :style="{ gridTemplateColumns: `repeat(${visibleDays}, minmax(76px, 1fr))` }">
+                <div class="sticky top-16 z-40 flex border-b border-neutral-300 bg-white shadow-[0_6px_14px_-10px_rgba(15,23,42,0.45)]">
+                    <div class="z-50 flex w-48 shrink-0 items-center border-r border-neutral-200 bg-white px-4 py-3 text-tiny font-bold uppercase tracking-wider text-neutral-500">{{ $t('admin.calendarPreview.room') }}</div>
+                    <div class="min-w-0 flex-1 overflow-hidden">
+                        <div ref="dateHeaderTrack" class="grid w-full min-w-[858px] will-change-transform" :style="{ gridTemplateColumns: `repeat(${visibleDays}, minmax(76px, 1fr))` }">
                                 <div v-for="day in days" :key="day.iso" class="border-r border-neutral-200 px-2 py-2 text-center" :class="day.today ? 'bg-accent-50' : day.weekend ? 'bg-neutral-100/80' : ''">
                                     <p class="text-[10px] font-bold uppercase tracking-wide text-neutral-400">{{ day.weekday }}</p>
                                     <p class="mx-auto mt-1 grid h-7 w-7 place-items-center rounded-full text-body-sm font-bold" :class="day.today ? 'bg-accent-600 text-white' : 'text-neutral-700'">{{ day.day }}</p>
                                     <p class="mt-0.5 text-[10px] text-neutral-400">{{ day.month }}</p>
                                 </div>
-                            </div>
                         </div>
+                    </div>
+                </div>
 
+                <div class="overflow-x-auto overflow-y-visible overscroll-x-contain" @scroll.passive="syncDateHeader">
+                    <div class="min-w-[1050px]">
                         <template v-for="(floorRooms, floor) in groupedRooms" :key="floor">
                             <div class="sticky left-0 z-20 flex h-8 items-center border-b border-neutral-200 bg-primary-50 px-4 text-tiny font-bold uppercase tracking-wider text-primary-700">{{ $t('admin.calendarPreview.floor') }} {{ floor }} · {{ floorRooms.length }} {{ $t('admin.calendarPreview.rooms') }}</div>
                             <div v-for="room in floorRooms" :key="room.id" class="group flex border-b border-neutral-200 last:border-b-0">
