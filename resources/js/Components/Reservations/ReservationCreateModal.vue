@@ -56,6 +56,7 @@ const form = useForm({
     check_out_date: '',
     status: 'confirmed',
     channel: 'direct',
+    channel_ref: '',
     notes: '',
     rooms: [emptyRoom()],
 });
@@ -233,8 +234,14 @@ function submit() {
 </script>
 
 <template>
-    <Modal :show="show" :title="$t('admin.generated.k_cea379e779d3')" max-width="lg" @close="emit('close')">
-        <form class="space-y-4" @submit.prevent="submit">
+    <Modal :show="show" title="Rezervim i ri" max-width="2xl" @close="emit('close')">
+        <form @submit.prevent="submit">
+            <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+                <div class="space-y-4">
+                    <div>
+                        <p class="text-tiny font-semibold uppercase tracking-[0.14em] text-accent-700">Të dhënat e rezervimit</p>
+                        <p class="mt-1 text-body-sm text-neutral-500">Zgjidh mysafirin, burimin, datat dhe dhomën.</p>
+                    </div>
             <!-- Shared: guest + dates + channel -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormGroup :label="$t('admin.generated.k_fd3481133d25')" :error="form.errors.guest_id" required>
@@ -245,6 +252,12 @@ function submit() {
                 </FormGroup>
                 <FormGroup :label="$t('admin.generated.k_fdfb0b54ae04')" :error="form.errors.channel">
                     <Select v-model="form.channel" :options="channelOptions" :error="form.errors.channel" />
+                </FormGroup>
+                <FormGroup label="Referenca e kanalit" :error="form.errors.channel_ref">
+                    <TextInput v-model="form.channel_ref" placeholder="p.sh. Booking #45218" :error="form.errors.channel_ref" />
+                </FormGroup>
+                <FormGroup label="Statusi" :error="form.errors.status">
+                    <Select v-model="form.status" :options="[{ value: 'confirmed', label: 'Konfirmuar' }, { value: 'pending', label: 'Në pritje' }]" :error="form.errors.status" />
                 </FormGroup>
                 <FormGroup :label="$t('admin.generated.k_7eb4cdcb93e4')" :error="form.errors.check_in_date" required>
                     <DatePicker v-model="form.check_in_date" :error="form.errors.check_in_date" />
@@ -325,6 +338,22 @@ function submit() {
             <FormGroup :label="$t('admin.generated.k_2c38f71a5f9b')">
                 <Textarea v-model="form.notes" :placeholder="$t('admin.generated.k_ac6bf44f81ce')" :rows="2" />
             </FormGroup>
+                </div>
+
+                <aside class="h-fit rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:sticky lg:top-0">
+                    <p class="text-label font-semibold text-primary-900">Përmbledhja</p>
+                    <div class="mt-4 space-y-3 text-body-sm">
+                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Qëndrimi</span><span class="text-right font-medium text-primary-900">{{ nights() || 0 }} net</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Dhoma</span><span class="text-right font-medium text-primary-900">{{ form.rooms.length }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Totali</span><span class="text-right font-semibold text-primary-900">€{{ totalAmount.toFixed(2) }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Komisioni ({{ feePct(form.channel) }}%)</span><span class="text-right font-medium text-warning-700">− €{{ commission.toFixed(2) }}</span></div>
+                        <div class="flex justify-between gap-3 border-t border-neutral-200 pt-3"><span class="font-semibold text-primary-900">Neto</span><span class="text-h4 text-accent-700">€{{ net.toFixed(2) }}</span></div>
+                    </div>
+                    <div class="mt-4 rounded-lg border border-info-200 bg-info-50 px-3 py-2.5 text-small leading-relaxed text-info-800">
+                        Disponueshmëria dhe çmimi sezonal kontrollohen përsëri gjatë ruajtjes.
+                    </div>
+                </aside>
+            </div>
         </form>
         <template #footer>
             <Button variant="outline" @click="emit('close')">{{ $t('admin.generated.k_37bf3ada5d70') }}</Button>

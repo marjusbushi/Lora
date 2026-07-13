@@ -15,7 +15,7 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import AuditTimeline from '@/Components/AuditTimeline.vue';
 import { channelMeta } from '@/channels';
-import { ArrowLeft } from 'lucide-vue-next';
+import { ArrowLeft, ArrowRight, CalendarDays, CreditCard, DoorOpen, UserRound } from 'lucide-vue-next';
 
 const props = defineProps({
     reservation: Object,
@@ -205,6 +205,25 @@ function settleAndCheckout(method) {
             </template>
         </PageHeader>
 
+        <div class="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <p class="text-small text-neutral-500">Mysafiri</p>
+                <p class="mt-1 truncate font-semibold text-primary-900">{{ reservation.guest?.name }}</p>
+            </div>
+            <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <p class="text-small text-neutral-500">Qëndrimi</p>
+                <p class="mt-1 font-semibold text-primary-900">{{ reservation.nights }} net</p>
+            </div>
+            <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <p class="text-small text-neutral-500">Totali</p>
+                <p class="mt-1 font-semibold text-primary-900">{{ money(folio.gross) }}</p>
+            </div>
+            <div class="rounded-xl border p-4 shadow-sm" :class="unsettled ? 'border-warning-200 bg-warning-50' : 'border-success-200 bg-success-50'">
+                <p class="text-small" :class="unsettled ? 'text-warning-700' : 'text-success-700'">Për t’u arkëtuar</p>
+                <p class="mt-1 font-semibold" :class="unsettled ? 'text-warning-800' : 'text-success-800'">{{ money(folio.outstanding) }}</p>
+            </div>
+        </div>
+
         <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Reservation details -->
             <Card class="lg:col-span-1">
@@ -212,7 +231,10 @@ function settleAndCheckout(method) {
                 <dl class="space-y-3">
                     <div class="flex justify-between">
                         <dt class="text-body-sm text-neutral-500">{{ $t('admin.generated.k_93eeb8e2c428') }}</dt>
-                        <dd class="text-body-sm text-primary-900 font-medium text-right">{{ reservation.guest?.name }}</dd>
+                        <dd class="text-body-sm font-medium text-right">
+                            <Link v-if="reservation.links?.guest" :href="reservation.links.guest" class="text-primary-900 no-underline hover:text-accent-700">{{ reservation.guest?.name }}</Link>
+                            <span v-else class="text-primary-900">{{ reservation.guest?.name }}</span>
+                        </dd>
                     </div>
                     <div class="flex justify-between">
                         <dt class="text-body-sm text-neutral-500">{{ $t('admin.generated.k_7b00d0ffb62a') }}</dt>
@@ -224,7 +246,10 @@ function settleAndCheckout(method) {
                     </div>
                     <div class="flex justify-between border-t border-neutral-100 pt-3">
                         <dt class="text-body-sm text-neutral-500">{{ $t('admin.generated.k_7765353fdc9c') }}</dt>
-                        <dd class="text-body-sm text-primary-900 text-right">{{ reservation.room?.room_number }} — {{ reservation.room?.room_type }}</dd>
+                        <dd class="text-body-sm text-right">
+                            <Link v-if="reservation.links?.room" :href="reservation.links.room" class="text-primary-900 no-underline hover:text-accent-700">{{ reservation.room?.room_number }} — {{ reservation.room?.room_type }}</Link>
+                            <span v-else class="text-primary-900">{{ reservation.room?.room_number }} — {{ reservation.room?.room_type }}</span>
+                        </dd>
                     </div>
                     <div class="flex justify-between">
                         <dt class="text-body-sm text-neutral-500">{{ $t('admin.generated.k_a2d639c1c1c3') }}</dt>
@@ -313,7 +338,8 @@ function settleAndCheckout(method) {
                     <p class="px-5 pt-3 text-label text-neutral-500 uppercase tracking-wider">{{ $t('admin.generated.k_dfd9fd8d57a7') }}</p>
                     <ul class="px-5 py-2 space-y-1">
                         <li v-for="p in payments" :key="p.id" class="flex justify-between text-body-sm">
-                            <span class="text-neutral-600">{{ methodLabel[p.method] || p.method }} · {{ formatDate(p.date) }}</span>
+                            <Link v-if="reservation.links?.finance" :href="reservation.links.finance" class="text-neutral-600 no-underline hover:text-accent-700">{{ methodLabel[p.method] || p.method }} · {{ formatDate(p.date) }}</Link>
+                            <span v-else class="text-neutral-600">{{ methodLabel[p.method] || p.method }} · {{ formatDate(p.date) }}</span>
                             <span class="text-success-600">− {{ money(p.amount) }}</span>
                         </li>
                     </ul>
@@ -353,13 +379,24 @@ function settleAndCheckout(method) {
             </Card>
         </div>
 
-        <Card class="mt-6" :padding="false">
+        <div class="mt-6 grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+            <Card>
+                <h3 class="text-label uppercase tracking-wider text-neutral-600">Lidhjet e rezervimit</h3>
+                <div class="mt-4 space-y-2">
+                    <Link v-if="reservation.links?.guest" :href="reservation.links.guest" class="flex items-center gap-3 rounded-lg border border-neutral-200 p-3 text-body-sm font-medium text-primary-900 no-underline transition hover:border-accent-300 hover:bg-accent-50/40"><UserRound class="h-5 w-5 text-accent-700" />Profili i mysafirit<ArrowRight class="ml-auto h-4 w-4 text-neutral-400" /></Link>
+                    <Link v-if="reservation.links?.room" :href="reservation.links.room" class="flex items-center gap-3 rounded-lg border border-neutral-200 p-3 text-body-sm font-medium text-primary-900 no-underline transition hover:border-accent-300 hover:bg-accent-50/40"><DoorOpen class="h-5 w-5 text-accent-700" />Dhoma {{ reservation.room?.room_number }}<ArrowRight class="ml-auto h-4 w-4 text-neutral-400" /></Link>
+                    <Link v-if="reservation.links?.finance" :href="reservation.links.finance" class="flex items-center gap-3 rounded-lg border border-neutral-200 p-3 text-body-sm font-medium text-primary-900 no-underline transition hover:border-accent-300 hover:bg-accent-50/40"><CreditCard class="h-5 w-5 text-accent-700" />Pagesat në Financë<ArrowRight class="ml-auto h-4 w-4 text-neutral-400" /></Link>
+                    <Link :href="route('reservations.calendar')" class="flex items-center gap-3 rounded-lg border border-neutral-200 p-3 text-body-sm font-medium text-primary-900 no-underline transition hover:border-accent-300 hover:bg-accent-50/40"><CalendarDays class="h-5 w-5 text-accent-700" />Kalendari i rezervimeve<ArrowRight class="ml-auto h-4 w-4 text-neutral-400" /></Link>
+                </div>
+            </Card>
+        <Card :padding="false">
             <div class="border-b border-neutral-200 px-5 py-4">
                 <h3 class="text-label uppercase tracking-wider text-neutral-600">{{ $t('admin.generated.k_4b669a4a3082') }}</h3>
                 <p class="mt-0.5 text-tiny text-neutral-400">{{ $t('admin.generated.k_a5d6ddbd4f1e') }}</p>
             </div>
             <AuditTimeline :entries="history" />
         </Card>
+        </div>
 
         <!-- Add a hotel charge to the guest account. Food/drinks come from POS. -->
         <Modal

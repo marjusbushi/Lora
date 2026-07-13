@@ -46,6 +46,7 @@ const localFilters = reactive({
     account_id: props.filters.account_id ? String(props.filters.account_id) : '',
     method: props.filters.method || '',
     source: props.filters.source || '',
+    reservation_id: props.filters.reservation_id ? String(props.filters.reservation_id) : '',
     date_from: props.filters.date_from || '',
     date_to: props.filters.date_to || '',
     per_page: Number(props.filters.per_page || 20),
@@ -59,6 +60,7 @@ function cleanFilters(overrides = {}) {
         account_id: values.account_id || undefined,
         method: values.method || undefined,
         source: values.source || undefined,
+        reservation_id: values.reservation_id || undefined,
         date_from: values.date_from || undefined,
         date_to: values.date_to || undefined,
         per_page: Number(values.per_page) === 20 ? undefined : Number(values.per_page),
@@ -86,7 +88,7 @@ function scheduleSearch() {
 function clearFilters() {
     clearTimeout(searchTimer);
     applyFilters({
-        direction: '', query: '', account_id: '', method: '', source: '', date_from: '', date_to: '', per_page: 20,
+        direction: '', query: '', account_id: '', method: '', source: '', reservation_id: '', date_from: '', date_to: '', per_page: 20,
     });
 }
 
@@ -95,6 +97,7 @@ const activeFilterCount = computed(() => [
     localFilters.account_id,
     localFilters.method,
     localFilters.source,
+    localFilters.reservation_id,
     localFilters.date_from,
     localFilters.date_to,
 ].filter(Boolean).length);
@@ -207,6 +210,14 @@ function submit() {
         </PageHeader>
 
         <p class="mt-1 text-body-sm text-neutral-500">{{ $t('admin.generated.k_e4cb996b7e1a') }}</p>
+
+        <div v-if="localFilters.reservation_id" class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-info-200 bg-info-50 px-4 py-3">
+            <p class="text-body-sm text-info-800">Po shfaqen vetëm lëvizjet e lidhura me rezervimin <strong>#{{ localFilters.reservation_id }}</strong>.</p>
+            <div class="flex items-center gap-3">
+                <a :href="route('reservations.show', localFilters.reservation_id)" class="text-small font-semibold text-info-800 no-underline hover:text-info-900">Hap rezervimin</a>
+                <button type="button" class="text-small font-semibold text-accent-700 hover:text-accent-800" @click="applyFilters({ reservation_id: '' })">Hiq filtrin</button>
+            </div>
+        </div>
 
         <div class="mt-5 pb-10 space-y-5">
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

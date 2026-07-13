@@ -774,6 +774,7 @@ class FinanceController extends Controller
             ? $request->input('method')
             : null;
         $accountId = $request->integer('account_id') ?: null;
+        $reservationId = $request->integer('reservation_id') ?: null;
         if ($accountId && ! in_array($accountId, $visibleAccountIds, true)) {
             abort(403);
         }
@@ -803,6 +804,7 @@ class FinanceController extends Controller
             'source' => $source,
             'method' => $method,
             'account_id' => $accountId,
+            'reservation_id' => $reservationId,
             'query' => mb_substr(trim((string) $request->input('query', '')), 0, 100),
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
@@ -828,6 +830,16 @@ class FinanceController extends Controller
             $query->where(fn ($q) => $q
                 ->where('account_id', $filters['account_id'])
                 ->orWhere('counter_account_id', $filters['account_id']));
+        }
+        if ($filters['reservation_id']) {
+            $reservationId = $filters['reservation_id'];
+            $query->where(function ($linked) use ($reservationId) {
+                $linked
+                    ->whereHasMorph('sourceable', [Payment::class], fn ($payment) => $payment
+                        ->where('reservation_id', $reservationId))
+                    ->orWhereHas('invoice', fn ($invoice) => $invoice
+                        ->where('reservation_id', $reservationId));
+            });
         }
         if ($filters['date_from']) {
             $query->whereDate('paid_at', '>=', $filters['date_from']);
