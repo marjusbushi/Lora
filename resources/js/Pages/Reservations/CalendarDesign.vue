@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import {
     ArrowLeft,
+    ArrowLeftRight,
     BedDouble,
     CalendarDays,
     CheckCircle2,
@@ -11,9 +12,16 @@ import {
     ChevronRight,
     ChevronUp,
     CircleDollarSign,
+    Clock3,
+    CreditCard,
     Filter,
+    Hash,
     LogIn,
     LogOut,
+    Mail,
+    MessageSquare,
+    Pencil,
+    Phone,
     Plus,
     Search,
     Sparkles,
@@ -55,6 +63,20 @@ const reservations = [
     { id: 110, roomId: 7, guest: 'Familja Gashi', start: 0, nights: 7, status: 'checked_in', channel: 'Booking.com', paid: false, total: 1190, adults: 4 },
     { id: 111, roomId: 7, guest: 'Oliver Smith', start: 9, nights: 4, status: 'pending', channel: 'Expedia', paid: false, total: 680, adults: 3 },
 ];
+
+const reservationMeta = {
+    101: { reference: 'VM-240713-101', phone: '+39 347 555 0192', email: 'elena.rossi@example.com', country: 'Italy', paidAmount: 420, bookedAt: '02 Jul 2026', arrivalTime: '15:30', mealPlan: 'Breakfast included', note: 'Late breakfast requested. Airport transfer confirmed.' },
+    102: { reference: 'VM-240713-102', phone: '+49 151 234 8890', email: 'lukas.weber@example.com', country: 'Germany', paidAmount: 160, bookedAt: '08 Jul 2026', arrivalTime: '18:00', mealPlan: 'Breakfast included', note: 'Sea-view room preferred.' },
+    103: { reference: 'AIR-HM82Q', phone: '+33 6 44 12 88 03', email: 'sophie.martin@example.com', country: 'France', paidAmount: 725, bookedAt: '29 Jun 2026', arrivalTime: '16:00', mealPlan: 'Room only', note: 'Allergic to nuts.' },
+    104: { reference: 'VM-240713-104', phone: '+355 69 220 1144', email: 'arben.kola@example.com', country: 'Albania', paidAmount: 0, bookedAt: '12 Jul 2026', arrivalTime: '13:00', mealPlan: 'Breakfast included', note: 'Confirmation call required.' },
+    105: { reference: 'EXP-847291', phone: '+45 22 45 19 80', email: 'nora.jensen@example.com', country: 'Denmark', paidAmount: 330, bookedAt: '04 Jul 2026', arrivalTime: '17:30', mealPlan: 'Breakfast included' },
+    106: { reference: 'BKG-419735', phone: '+39 333 412 7801', email: 'marco.bianchi@example.com', country: 'Italy', paidAmount: 200, bookedAt: '01 Jul 2026', arrivalTime: '14:30', mealPlan: 'Breakfast included', note: 'Needs baby cot.' },
+    107: { reference: 'VM-240713-107', phone: '+44 7700 900218', email: 'amelia.brown@example.com', country: 'United Kingdom', paidAmount: 780, bookedAt: '20 Jun 2026', arrivalTime: '12:45', mealPlan: 'Breakfast included' },
+    108: { reference: 'VM-240713-108', phone: '+355 68 330 9081', email: 'dritan.hoxha@example.com', country: 'Albania', paidAmount: 200, bookedAt: '10 Jul 2026', arrivalTime: '15:00', mealPlan: 'Room only' },
+    109: { reference: 'AIR-LP19D', phone: '+44 7700 900477', email: 'emma.wilson@example.com', country: 'United Kingdom', paidAmount: 465, bookedAt: '06 Jul 2026', arrivalTime: '19:00', mealPlan: 'Breakfast included' },
+    110: { reference: 'BKG-920174', phone: '+383 44 221 760', email: 'gashi.family@example.com', country: 'Kosovo', paidAmount: 500, bookedAt: '18 Jun 2026', arrivalTime: '14:00', mealPlan: 'Breakfast included', note: 'Two extra pillows and a baby cot.' },
+    111: { reference: 'EXP-104857', phone: '+44 7700 900612', email: 'oliver.smith@example.com', country: 'United Kingdom', paidAmount: 0, bookedAt: '11 Jul 2026', arrivalTime: '16:30', mealPlan: 'Room only' },
+};
 
 const statusStyles = {
     checked_in: 'border-emerald-300 bg-emerald-100 text-emerald-950 hover:bg-emerald-200',
@@ -156,6 +178,14 @@ function selectReservation(reservation) {
     selectedReservation.value = reservation;
 }
 
+const selectedMeta = computed(() => selectedReservation.value ? reservationMeta[selectedReservation.value.id] || {} : {});
+const selectedRoom = computed(() => rooms.find((room) => room.id === selectedReservation.value?.roomId));
+const selectedCheckIn = computed(() => selectedReservation.value ? addDays(anchorDate.value, selectedReservation.value.start) : null);
+const selectedCheckOut = computed(() => selectedReservation.value ? addDays(anchorDate.value, selectedReservation.value.start + selectedReservation.value.nights) : null);
+const selectedPaidAmount = computed(() => Number(selectedMeta.value.paidAmount || 0));
+const selectedBalance = computed(() => Math.max(0, Number(selectedReservation.value?.total || 0) - selectedPaidAmount.value));
+const selectedPaymentProgress = computed(() => selectedReservation.value?.total ? Math.min(100, Math.round((selectedPaidAmount.value / selectedReservation.value.total) * 100)) : 0);
+
 function syncDateHeader(event) {
     if (dateHeaderTrack.value) {
         dateHeaderTrack.value.style.transform = `translateX(-${event.currentTarget.scrollLeft}px)`;
@@ -164,6 +194,10 @@ function syncDateHeader(event) {
 
 function formatMoney(value) {
     return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: 'EUR' }).format(value);
+}
+
+function formatDate(value) {
+    return value?.toLocaleDateString(getIntlLocale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) || '—';
 }
 </script>
 
@@ -322,20 +356,89 @@ function formatMoney(value) {
         </div>
 
         <Transition enter-active-class="duration-200 ease-out" enter-from-class="translate-x-full opacity-0" leave-active-class="duration-150 ease-in" leave-to-class="translate-x-full opacity-0">
-            <aside v-if="selectedReservation" class="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col border-l border-neutral-200 bg-white shadow-2xl">
-                <div class="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
-                    <div><p class="text-tiny font-bold uppercase tracking-wider text-accent-700">{{ $t('admin.calendarPreview.reservationDetails') }}</p><h2 class="mt-1 text-h3 text-primary-900">{{ selectedReservation.guest }}</h2></div>
-                    <button type="button" class="grid h-9 w-9 place-items-center rounded-lg text-neutral-400 hover:bg-neutral-100" @click="selectedReservation = null"><X class="h-5 w-5" /></button>
-                </div>
-                <div class="flex-1 space-y-5 overflow-y-auto p-5">
-                    <div class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                        <div class="flex items-center justify-between"><span class="text-body-sm font-bold text-primary-900">{{ selectedReservation.channel }}</span><span class="rounded-full px-2.5 py-1 text-tiny font-semibold" :class="statusStyles[selectedReservation.status]">{{ $t(`admin.calendarPreview.${selectedReservation.status === 'checked_in' ? 'inHouse' : selectedReservation.status}`) }}</span></div>
-                        <div class="mt-4 grid grid-cols-2 gap-4 text-body-sm"><div><p class="text-tiny text-neutral-400">{{ $t('admin.calendarPreview.room') }}</p><p class="mt-1 font-bold text-primary-900">{{ rooms.find((room) => room.id === selectedReservation.roomId)?.number }}</p></div><div><p class="text-tiny text-neutral-400">{{ $t('admin.calendarPreview.guests') }}</p><p class="mt-1 font-bold text-primary-900">{{ selectedReservation.adults }}</p></div><div><p class="text-tiny text-neutral-400">{{ $t('admin.calendarPreview.nights') }}</p><p class="mt-1 font-bold text-primary-900">{{ selectedReservation.nights }}</p></div><div><p class="text-tiny text-neutral-400">{{ $t('admin.calendarPreview.total') }}</p><p class="mt-1 font-bold text-accent-700">{{ formatMoney(selectedReservation.total) }}</p></div></div>
+            <aside v-if="selectedReservation" class="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-neutral-200 bg-white shadow-2xl">
+                <div class="shrink-0 border-b border-neutral-200 px-5 py-4">
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <p class="text-tiny font-bold uppercase tracking-wider text-accent-700">{{ $t('admin.calendarPreview.reservationDetails') }}</p>
+                                <span class="rounded-full border px-2 py-0.5 text-[10px] font-bold" :class="statusStyles[selectedReservation.status]">{{ $t(`admin.calendarPreview.${selectedReservation.status === 'checked_in' ? 'inHouse' : selectedReservation.status}`) }}</span>
+                            </div>
+                            <h2 class="mt-1 truncate text-h3 text-primary-900">{{ selectedReservation.guest }}</h2>
+                            <p class="mt-1 flex items-center gap-1.5 text-tiny text-neutral-400"><Hash class="h-3.5 w-3.5" /> {{ selectedMeta.reference }}</p>
+                        </div>
+                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-neutral-400 hover:bg-neutral-100" @click="selectedReservation = null"><X class="h-5 w-5" /></button>
                     </div>
-                    <div class="flex items-center justify-between rounded-xl border p-4" :class="selectedReservation.paid ? 'border-success-200 bg-success-50' : 'border-warning-200 bg-warning-50'"><div><p class="text-body-sm font-bold text-primary-900">{{ selectedReservation.paid ? $t('admin.calendarPreview.paid') : $t('admin.calendarPreview.paymentPending') }}</p><p class="mt-0.5 text-tiny text-neutral-500">{{ formatMoney(selectedReservation.total) }}</p></div><CircleDollarSign class="h-5 w-5" :class="selectedReservation.paid ? 'text-success-600' : 'text-warning-600'" /></div>
-                    <div v-if="selectedReservation.note"><p class="text-tiny font-bold uppercase tracking-wider text-neutral-400">{{ $t('admin.calendarPreview.notes') }}</p><p class="mt-2 rounded-lg bg-neutral-50 p-3 text-body-sm text-neutral-700">{{ selectedReservation.note }}</p></div>
                 </div>
-                <div class="flex gap-2 border-t border-neutral-200 bg-neutral-50 p-4"><Button variant="outline" class="flex-1">{{ $t('admin.calendarPreview.openProfile') }}</Button><Button class="flex-1">{{ $t('admin.calendarPreview.manage') }}</Button></div>
+
+                <div class="flex-1 space-y-5 overflow-y-auto p-5">
+                    <section>
+                        <div class="mb-2 flex items-center justify-between"><h3 class="text-body-sm font-bold text-primary-900">{{ $t('admin.calendarPreview.guestDetails') }}</h3><span class="text-tiny text-neutral-400">{{ selectedMeta.country }}</span></div>
+                        <div class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                            <div class="grid gap-2 text-body-sm">
+                                <a :href="`tel:${selectedMeta.phone}`" class="flex items-center gap-2.5 text-neutral-700 no-underline hover:text-accent-700"><Phone class="h-4 w-4 text-neutral-400" />{{ selectedMeta.phone }}</a>
+                                <a :href="`mailto:${selectedMeta.email}`" class="flex items-center gap-2.5 truncate text-neutral-700 no-underline hover:text-accent-700"><Mail class="h-4 w-4 shrink-0 text-neutral-400" /><span class="truncate">{{ selectedMeta.email }}</span></a>
+                            </div>
+                            <div class="mt-3 flex gap-2 border-t border-neutral-200 pt-3">
+                                <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-tiny font-semibold text-neutral-600 hover:bg-neutral-50"><Phone class="h-3.5 w-3.5" />{{ $t('admin.calendarPreview.call') }}</button>
+                                <button type="button" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-tiny font-semibold text-neutral-600 hover:bg-neutral-50"><MessageSquare class="h-3.5 w-3.5" />{{ $t('admin.calendarPreview.message') }}</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 class="mb-2 text-body-sm font-bold text-primary-900">{{ $t('admin.calendarPreview.stayDetails') }}</h3>
+                        <div class="overflow-hidden rounded-xl border border-neutral-200">
+                            <div class="grid grid-cols-2 divide-x divide-neutral-200 bg-neutral-50">
+                                <div class="p-3"><p class="text-[10px] font-bold uppercase tracking-wide text-neutral-400">{{ $t('admin.calendarPreview.checkIn') }}</p><p class="mt-1 text-body-sm font-bold text-primary-900">{{ formatDate(selectedCheckIn) }}</p><p class="mt-0.5 flex items-center gap-1 text-tiny text-neutral-500"><Clock3 class="h-3 w-3" />{{ selectedMeta.arrivalTime }}</p></div>
+                                <div class="p-3"><p class="text-[10px] font-bold uppercase tracking-wide text-neutral-400">{{ $t('admin.calendarPreview.checkOut') }}</p><p class="mt-1 text-body-sm font-bold text-primary-900">{{ formatDate(selectedCheckOut) }}</p><p class="mt-0.5 text-tiny text-neutral-500">{{ selectedReservation.nights }} {{ $t('admin.calendarPreview.nights').toLowerCase() }}</p></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 border-t border-neutral-200 p-3 text-body-sm">
+                                <div><p class="text-tiny text-neutral-400">{{ $t('admin.calendarPreview.room') }}</p><p class="mt-1 font-bold text-primary-900">{{ selectedRoom?.number }} · {{ selectedRoom?.type }}</p></div>
+                                <div><p class="text-tiny text-neutral-400">{{ $t('admin.calendarPreview.guests') }}</p><p class="mt-1 font-bold text-primary-900">{{ selectedReservation.adults }} {{ $t('admin.calendarPreview.adults') }}</p></div>
+                                <div class="col-span-2"><p class="text-tiny text-neutral-400">{{ $t('admin.calendarPreview.mealPlan') }}</p><p class="mt-1 font-medium text-neutral-700">{{ selectedMeta.mealPlan }}</p></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <div class="mb-2 flex items-center justify-between"><h3 class="text-body-sm font-bold text-primary-900">{{ $t('admin.calendarPreview.paymentSummary') }}</h3><CreditCard class="h-4 w-4 text-neutral-400" /></div>
+                        <div class="rounded-xl border border-neutral-200 p-4">
+                            <div class="grid grid-cols-3 gap-3 text-center">
+                                <div><p class="text-[10px] font-bold uppercase text-neutral-400">{{ $t('admin.calendarPreview.total') }}</p><p class="mt-1 text-body-sm font-bold text-primary-900">{{ formatMoney(selectedReservation.total) }}</p></div>
+                                <div><p class="text-[10px] font-bold uppercase text-neutral-400">{{ $t('admin.calendarPreview.paid') }}</p><p class="mt-1 text-body-sm font-bold text-success-700">{{ formatMoney(selectedPaidAmount) }}</p></div>
+                                <div><p class="text-[10px] font-bold uppercase text-neutral-400">{{ $t('admin.calendarPreview.balance') }}</p><p class="mt-1 text-body-sm font-bold" :class="selectedBalance ? 'text-warning-700' : 'text-success-700'">{{ formatMoney(selectedBalance) }}</p></div>
+                            </div>
+                            <div class="mt-3 h-2 overflow-hidden rounded-full bg-neutral-100"><div class="h-full rounded-full bg-success-500 transition-all" :style="{ width: `${selectedPaymentProgress}%` }" /></div>
+                            <p class="mt-2 text-right text-[10px] font-semibold text-neutral-400">{{ selectedPaymentProgress }}% {{ $t('admin.calendarPreview.paid').toLowerCase() }}</p>
+                        </div>
+                    </section>
+
+                    <section class="grid grid-cols-2 gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-body-sm">
+                        <div><p class="text-tiny text-neutral-400">{{ $t('admin.calendarPreview.channel') }}</p><p class="mt-1 flex items-center gap-1.5 font-bold text-primary-900"><span class="h-2 w-2 rounded-full" :style="{ backgroundColor: channelColors[selectedReservation.channel] }" />{{ selectedReservation.channel }}</p></div>
+                        <div><p class="text-tiny text-neutral-400">{{ $t('admin.calendarPreview.bookedOn') }}</p><p class="mt-1 font-bold text-primary-900">{{ selectedMeta.bookedAt }}</p></div>
+                    </section>
+
+                    <section v-if="selectedMeta.note">
+                        <h3 class="mb-2 text-body-sm font-bold text-primary-900">{{ $t('admin.calendarPreview.specialRequests') }}</h3>
+                        <p class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-body-sm leading-5 text-warning-900">{{ selectedMeta.note }}</p>
+                    </section>
+
+                    <section>
+                        <h3 class="mb-3 text-body-sm font-bold text-primary-900">{{ $t('admin.calendarPreview.activity') }}</h3>
+                        <div class="space-y-3 border-l-2 border-neutral-100 pl-4">
+                            <div class="relative"><span class="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-info-500 ring-4 ring-white" /><p class="text-body-sm font-medium text-neutral-700">{{ $t('admin.calendarPreview.reservationCreated') }}</p><p class="text-tiny text-neutral-400">{{ selectedMeta.bookedAt }} · {{ selectedReservation.channel }}</p></div>
+                            <div v-if="selectedPaidAmount" class="relative"><span class="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-success-500 ring-4 ring-white" /><p class="text-body-sm font-medium text-neutral-700">{{ $t('admin.calendarPreview.paymentRecorded') }}</p><p class="text-tiny text-neutral-400">{{ formatMoney(selectedPaidAmount) }}</p></div>
+                            <div v-if="selectedReservation.status === 'checked_in'" class="relative"><span class="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-accent-500 ring-4 ring-white" /><p class="text-body-sm font-medium text-neutral-700">{{ $t('admin.calendarPreview.checkedIn') }}</p><p class="text-tiny text-neutral-400">{{ formatDate(selectedCheckIn) }}</p></div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="grid shrink-0 grid-cols-3 gap-2 border-t border-neutral-200 bg-neutral-50 p-4">
+                    <Button variant="outline"><Pencil class="h-4 w-4" />{{ $t('admin.calendarPreview.edit') }}</Button>
+                    <Button variant="outline"><ArrowLeftRight class="h-4 w-4" />{{ $t('admin.calendarPreview.move') }}</Button>
+                    <Button>{{ $t('admin.calendarPreview.manage') }}</Button>
+                </div>
             </aside>
         </Transition>
     </AppLayout>
