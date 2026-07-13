@@ -1,40 +1,28 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
-import ReservationCreateModal from '@/Components/Reservations/ReservationCreateModal.vue';
-import MoveRoomModal from '@/Components/Reservations/MoveRoomModal.vue';
-import ReservationEditModal from '@/Components/Reservations/ReservationEditModal.vue';
 import { channelMeta } from '@/channels';
 import {
     ArrowLeftRight,
-    BedDouble,
     CalendarDays,
-    CheckCircle2,
-    ChevronDown,
-    ChevronLeft,
-    ChevronRight,
-    ChevronUp,
-    CircleDollarSign,
     Clock3,
     CreditCard,
     ExternalLink,
-    Filter,
-    List,
-    LogIn,
-    LogOut,
     Mail,
     MessageSquare,
     Pencil,
     Phone,
-    Plus,
-    Search,
     X,
 } from 'lucide-vue-next';
+
+const ReservationCreateModal = defineAsyncComponent(() => import('@/Components/Reservations/ReservationCreateModal.vue'));
+const MoveRoomModal = defineAsyncComponent(() => import('@/Components/Reservations/MoveRoomModal.vue'));
+const ReservationEditModal = defineAsyncComponent(() => import('@/Components/Reservations/ReservationEditModal.vue'));
 
 const props = defineProps({
     rooms: Array,
@@ -410,34 +398,34 @@ function doCheckOut(res) {
                     </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <Link :href="route('reservations.index')" class="no-underline"><Button variant="outline" size="sm"><List class="h-4 w-4" />{{ $t('admin.generated.k_8ad6f4281da4') }}</Button></Link>
-                    <Button variant="outline" size="sm" @click="showSummary = !showSummary"><ChevronUp v-if="showSummary" class="h-4 w-4" /><ChevronDown v-else class="h-4 w-4" />{{ showSummary ? $t('admin.calendarPreview.hideSummary') : $t('admin.calendarPreview.showSummary') }}</Button>
-                    <Button variant="outline" size="sm" @click="filterInput?.focus()"><Filter class="h-4 w-4" />{{ $t('admin.calendarPreview.filters') }}</Button>
-                    <Button v-if="canCreate" size="sm" @click="openCreate(null, new Date().toISOString().split('T')[0])"><Plus class="h-4 w-4" />{{ $t('admin.calendarPreview.newReservation') }}</Button>
+                    <Link :href="route('reservations.index')" class="no-underline"><Button variant="outline" size="sm">{{ $t('admin.generated.k_8ad6f4281da4') }}</Button></Link>
+                    <Button variant="outline" size="sm" @click="showSummary = !showSummary"><span aria-hidden="true">{{ showSummary ? '−' : '+' }}</span>{{ showSummary ? $t('admin.calendarPreview.hideSummary') : $t('admin.calendarPreview.showSummary') }}</Button>
+                    <Button variant="outline" size="sm" @click="filterInput?.focus()">{{ $t('admin.calendarPreview.filters') }}</Button>
+                    <Button v-if="canCreate" size="sm" @click="openCreate(null, new Date().toISOString().split('T')[0])"><span aria-hidden="true">+</span>{{ $t('admin.calendarPreview.newReservation') }}</Button>
                 </div>
             </div>
 
             <div v-if="!showSummary" class="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.occupancy') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ occupancy }}%</p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-accent-50 text-accent-700"><BedDouble class="h-4 w-4" /></span></div>
-                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.arrivalsToday') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ arrivals }}</p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-info-50 text-info-700"><LogIn class="h-4 w-4" /></span></div>
-                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.departuresToday') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ departures }}</p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-warning-50 text-warning-700"><LogOut class="h-4 w-4" /></span></div>
-                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.availableTonight') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ availableToday }} <span class="text-tiny font-medium text-neutral-400">/ {{ rooms.length }}</span></p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-success-50 text-success-700"><CheckCircle2 class="h-4 w-4" /></span></div>
+                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.occupancy') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ occupancy }}%</p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-accent-50 text-sm font-bold text-accent-700" aria-hidden="true">●</span></div>
+                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.arrivalsToday') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ arrivals }}</p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-info-50 text-sm font-bold text-info-700" aria-hidden="true">↘</span></div>
+                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.departuresToday') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ departures }}</p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-warning-50 text-sm font-bold text-warning-700" aria-hidden="true">↗</span></div>
+                <div class="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-card"><div><p class="text-tiny font-medium text-neutral-500">{{ $t('admin.calendarPreview.availableTonight') }}</p><p class="mt-0.5 text-h4 font-extrabold text-primary-900">{{ availableToday }} <span class="text-tiny font-medium text-neutral-400">/ {{ rooms.length }}</span></p></div><span class="grid h-8 w-8 place-items-center rounded-lg bg-success-50 text-sm font-bold text-success-700" aria-hidden="true">✓</span></div>
             </div>
 
             <div v-else class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.occupancy') }}</p><BedDouble class="h-4 w-4 text-accent-600" /></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ occupancy }}%</p><div class="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-100"><div class="h-full rounded-full bg-accent-500" :style="{ width: `${occupancy}%` }" /></div></div>
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.arrivalsToday') }}</p><LogIn class="h-4 w-4 text-info-600" /></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ arrivals }}</p></div>
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.departuresToday') }}</p><LogOut class="h-4 w-4 text-warning-600" /></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ departures }}</p></div>
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.availableTonight') }}</p><CheckCircle2 class="h-4 w-4 text-success-600" /></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ availableToday }} <span class="text-body-sm font-medium text-neutral-400">/ {{ rooms.length }}</span></p><p class="mt-1 text-tiny text-success-700">{{ $t('admin.calendarPreview.readyToSell') }}</p></div>
+                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.occupancy') }}</p><span class="font-bold text-accent-600" aria-hidden="true">●</span></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ occupancy }}%</p><div class="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-100"><div class="h-full rounded-full bg-accent-500" :style="{ width: `${occupancy}%` }" /></div></div>
+                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.arrivalsToday') }}</p><span class="font-bold text-info-600" aria-hidden="true">↘</span></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ arrivals }}</p></div>
+                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.departuresToday') }}</p><span class="font-bold text-warning-600" aria-hidden="true">↗</span></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ departures }}</p></div>
+                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-card"><div class="flex items-center justify-between"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.calendarPreview.availableTonight') }}</p><span class="font-bold text-success-600" aria-hidden="true">✓</span></div><p class="mt-2 text-h2 font-extrabold text-primary-900">{{ availableToday }} <span class="text-body-sm font-medium text-neutral-400">/ {{ rooms.length }}</span></p><p class="mt-1 text-tiny text-success-700">{{ $t('admin.calendarPreview.readyToSell') }}</p></div>
             </div>
 
             <section class="rounded-xl border border-neutral-200 bg-white shadow-card">
                 <div class="flex flex-col gap-3 border-b border-neutral-200 p-3 xl:flex-row xl:items-center xl:justify-between">
                     <div class="flex flex-wrap items-center gap-2">
                         <div class="flex items-center rounded-lg border border-neutral-200 bg-white p-0.5">
-                            <button type="button" class="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100" @click="navigate(-1)"><ChevronLeft class="h-4 w-4" /></button>
+                            <button type="button" class="grid h-8 w-8 place-items-center rounded-md text-lg text-neutral-500 hover:bg-neutral-100" @click="navigate(-1)" aria-label="Previous">‹</button>
                             <button type="button" class="min-w-44 px-3 text-body-sm font-bold text-primary-900" @click="goToToday">{{ dateRangeLabel }}</button>
-                            <button type="button" class="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100" @click="navigate(1)"><ChevronRight class="h-4 w-4" /></button>
+                            <button type="button" class="grid h-8 w-8 place-items-center rounded-md text-lg text-neutral-500 hover:bg-neutral-100" @click="navigate(1)" aria-label="Next">›</button>
                         </div>
                         <button type="button" class="h-9 rounded-lg border border-neutral-200 px-3 text-body-sm font-medium text-neutral-600 hover:bg-neutral-50" @click="goToToday">{{ $t('admin.calendarPreview.today') }}</button>
                         <div class="inline-flex rounded-lg bg-neutral-100 p-0.5">
@@ -450,7 +438,7 @@ function doCheckOut(res) {
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <label class="relative min-w-52 flex-1 xl:flex-none">
-                            <Search class="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
+                            <span class="pointer-events-none absolute left-3 top-2 text-base text-neutral-400" aria-hidden="true">⌕</span>
                             <input ref="filterInput" v-model="query" type="search" class="h-9 w-full rounded-lg border-neutral-200 pl-9 pr-3 text-body-sm focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('admin.calendarPreview.searchGuest')" />
                         </label>
                         <select v-model="statusFilter" class="h-9 rounded-lg border-neutral-200 py-1.5 pl-3 pr-8 text-body-sm text-neutral-600 focus:border-accent-500 focus:ring-accent-500">
@@ -511,7 +499,7 @@ function doCheckOut(res) {
                                         @click="openDetail(reservation)"
                                     >
                                         <span class="flex items-center gap-1.5 truncate text-[11px] font-extrabold"><span class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ backgroundColor: channelMeta(reservation.channel).color }" />{{ reservation.guest?.first_name }} {{ reservation.guest?.last_name }}</span>
-                                        <span class="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-75"><span class="truncate">{{ channelMeta(reservation.channel).label }}</span><CircleDollarSign class="h-3 w-3 shrink-0" :class="Number(reservation.paid_amount) >= Number(reservation.total_amount) ? 'text-success-700' : 'text-warning-700'" /></span>
+                                        <span class="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-75"><span class="truncate">{{ channelMeta(reservation.channel).label }}</span><span class="shrink-0 font-bold" :class="Number(reservation.paid_amount) >= Number(reservation.total_amount) ? 'text-success-700' : 'text-warning-700'" aria-hidden="true">€</span></span>
                                     </button>
                                 </div>
                             </div>
@@ -710,4 +698,3 @@ function doCheckOut(res) {
     }
 }
 </style>
-
