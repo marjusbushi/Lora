@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue';
 import Sidebar from '@/Components/UI/Sidebar.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
@@ -18,6 +18,15 @@ watch(sidebarCollapsed, (v) => {
     }
 });
 const mobileMenuOpen = ref(false);
+
+// Full-screen pages (the chat) hide the topbar and bring their own header.
+// They still need a way to open the mobile nav drawer, so expose the trigger.
+defineProps({
+    hideHeader: { type: Boolean, default: false },
+});
+provide('openMobileMenu', () => {
+    mobileMenuOpen.value = true;
+});
 
 const page = usePage();
 const userPermissions = computed(() => page.props.auth.user?.permissions || []);
@@ -191,7 +200,7 @@ const navItems = computed(() =>
         <!-- Main content -->
         <div class="flex-1 flex flex-col min-w-0">
             <!-- Top bar -->
-            <header class="flex items-center justify-between h-16 px-4 sm:px-6 bg-white border-b border-neutral-200 sticky top-0 z-30">
+            <header v-if="!hideHeader" class="flex items-center justify-between h-16 px-4 sm:px-6 bg-white border-b border-neutral-200 sticky top-0 z-30">
                 <!-- Mobile hamburger -->
                 <button
                     class="lg:hidden rounded-md p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100"

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, inject } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -83,6 +83,10 @@ function pickQuick(text) {
 // Mobile is master-detail like WhatsApp: the list OR the chat, never stacked.
 const mobileChatOpen = ref(false);
 
+// The app topbar is hidden on this page (hide-header) — this opens the nav
+// drawer from our own header on phones, where the hamburger used to live.
+const openMobileMenu = inject('openMobileMenu', () => {});
+
 const filteredThreads = computed(() => {
     if (filter.value === 'all') return props.threads;
     if (filter.value === 'unread') return props.threads.filter((t) => t.unread > 0);
@@ -148,7 +152,9 @@ function statusLabel(s) {
 <template>
     <Head title="Mesazhet" />
 
-    <AppLayout>
+    <!-- The chat brings its own header; the empty state keeps the normal chrome
+         (without it a phone with zero threads would have no navigation at all). -->
+    <AppLayout :hide-header="threads.length > 0">
         <div v-if="!threads.length" class="rounded-2xl border border-neutral-200 bg-white px-6 py-20 text-center">
             <p class="text-base font-semibold text-neutral-800">Ende asnjë bisedë</p>
             <p class="mt-1 text-sm text-neutral-500">Kur një mysafir të shkruajë nga Booking, Airbnb ose Expedia, biseda do të shfaqet këtu.</p>
@@ -157,13 +163,19 @@ function statusLabel(s) {
         <!-- Mobile is full-bleed edge-to-edge (WhatsApp): the -m cancels the main
              padding, and dvh (not vh) keeps the composer above the browser bar. -->
         <div v-else class="-m-4 overflow-hidden border-y border-neutral-200 bg-white sm:m-0 sm:rounded-2xl sm:border sm:shadow-sm">
-            <div class="grid h-[calc(100dvh-4.1rem)] grid-cols-1 sm:h-[calc(100dvh-7.5rem)]"
+            <div class="grid h-[calc(100dvh-2px)] grid-cols-1 sm:h-[calc(100dvh-3.1rem)]"
                 :class="selected && panelOpen ? 'lg:grid-cols-[300px_1fr_300px]' : 'lg:grid-cols-[300px_1fr]'">
                 <!-- Thread list (on mobile: hidden while a chat is open, like WhatsApp) -->
                 <div class="min-h-0 flex-col border-r border-neutral-200" :class="mobileChatOpen ? 'hidden lg:flex' : 'flex'">
                     <div class="px-4 pt-4">
                         <div class="flex items-center justify-between">
-                            <h2 class="text-[15px] font-bold tracking-tight text-neutral-900">Mesazhet</h2>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" @click="openMobileMenu" title="Menu"
+                                    class="-ml-1.5 grid h-8 w-8 place-items-center rounded-lg text-neutral-500 transition hover:bg-neutral-100 lg:hidden">
+                                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                                </button>
+                                <h2 class="text-[15px] font-bold tracking-tight text-neutral-900">Mesazhet</h2>
+                            </div>
                             <button type="button" @click="toggleSound"
                                 :title="soundMuted ? 'Tingulli është i heshtur — kliko për ta ndezur' : 'Tingulli është ndezur — kliko për ta heshtur'"
                                 class="grid h-8 w-8 place-items-center rounded-lg border border-neutral-200 text-neutral-500 transition hover:bg-neutral-50"
