@@ -11,6 +11,7 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -213,18 +214,36 @@ class FinanceTest extends TestCase
 
     public function test_dashboard_math_matches_the_rows(): void
     {
+        $this->travelTo(CarbonImmutable::parse('2026-07-13 12:00:00'));
         $this->withoutVite();
         $admin = $this->role('admin');
         $res = $this->reservation();
         Payment::create(['reservation_id' => $res->id, 'amount' => 300, 'method' => 'cash', 'type' => 'payment']);
         Payment::create(['reservation_id' => $res->id, 'amount' => 150, 'method' => 'card', 'type' => 'payment']);
 
-        $this->actingAs($admin)->get(route('finance.index'))
+        $arka = FinanceAccount::where('type', 'cash')->firstOrFail();
+        $bank = FinanceAccount::where('type', 'bank')->firstOrFail();
+        FinancePayment::create([
+            'direction' => 'out', 'account_id' => $arka->id, 'amount' => 50,
+            'currency' => 'EUR', 'method' => 'cash', 'source' => 'manual',
+            'description' => 'Shpenzim testi', 'paid_at' => now(),
+        ]);
+        FinancePayment::create([
+            'direction' => 'transfer', 'account_id' => $arka->id, 'counter_account_id' => $bank->id,
+            'amount' => 100, 'currency' => 'EUR', 'method' => 'bank', 'source' => 'manual',
+            'description' => 'Transfer test', 'paid_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->get(route('finance.index', ['period' => 'month']))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Finance/Index')
-                ->where('accounts.0.balance', 300)
-                ->where('accounts.1.balance', 150)
+                ->where('accounts.0.balance', 150)
+                ->where('accounts.1.balance', 250)
+                ->where('summary.period', 'month')
+                ->where('summary.income', 450)
+                ->where('summary.expenses', 50)
+                ->where('summary.net', 400)
                 ->has('cashflow', 14)
                 ->has('latest'));
     }

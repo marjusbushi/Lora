@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Bill;
-use App\Models\Supplier;
 use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
 use App\Models\Invoice;
+use App\Models\Reservation;
 use App\Models\Setting;
+use App\Models\Supplier;
+use App\Services\CurrencyRates;
+use App\Tenancy\TenantRule;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,7 +30,49 @@ class FinanceController extends Controller
     {
         FinanceAccount::ensureDefaults();
         $accounts = $this->visibleAccounts($request);
-        $today = CarbonImmutable::today();
+        $now = CarbonImmutable::now();
+        $today = $now->startOfDay();
+        $period = in_array($request->string('period')->toString(), ['today', 'month', 'year'], true)
+            ? $request->string('period')->toString()
+            : 'month';
+
+        [$periodStart, $periodEnd, $previousStart, $previousEnd, $periodLabel, $comparisonLabel] = match ($period) {
+            'today' => [
+                $today,
+                $now,
+                $today->subDay(),
+                $now->subDay(),
+                'Sot',
+                'krahasuar me dje',
+            ],
+            'year' => [
+                $now->startOfYear(),
+                $now,
+                $now->subYear()->startOfYear(),
+                $now->subYear(),
+                'Ky vit',
+                'krahasuar me të njëjtën periudhë vjet',
+            ],
+            default => [
+                $now->startOfMonth(),
+                $now,
+                $now->subMonthNoOverflow()->startOfMonth(),
+                $now->subMonthNoOverflow(),
+                'Ky muaj',
+                'krahasuar me të njëjtën periudhë muajin e kaluar',
+            ],
+        };
+
+        $currentSummary = $this->cashSummary($periodStart, $periodEnd);
+        $previousSummary = $this->cashSummary($previousStart, $previousEnd);
+        $summary = array_merge($currentSummary, [
+            'period' => $period,
+            'period_label' => $periodLabel,
+            'comparison_label' => $comparisonLabel,
+            'income_change' => $this->percentageChange($currentSummary['income'], $previousSummary['income']),
+            'expenses_change' => $this->percentageChange($currentSummary['expenses'], $previousSummary['expenses']),
+            'net_change' => $this->percentageChange($currentSummary['net'], $previousSummary['net']),
+        ]);
 
         // 14-day cash-flow in base EUR (transfers move money between our own
         // pockets — they are neither income nor spend, so they stay out).
@@ -48,6 +93,15 @@ class FinanceController extends Controller
 
         $openBills = Bill::with('supplier:id,name')->where('status', '!=', 'paid')->get();
         $openInvoices = Invoice::where('status', '!=', 'paid')->get();
+        $receivableTotal = round((float) $openInvoices->sum(fn ($i) => $i->remainingBase()), 2);
+        $payableTotal = round((float) $openBills->sum(fn ($b) => $b->remainingBase()), 2);
+        $overdueBills = $openBills->filter(fn ($b) => $b->due_date && $b->due_date->lt($today));
+        $dueSoonBills = $openBills->filter(fn ($b) => $b->due_date && $b->due_date->gte($today) && $b->due_date->lte($today->addDays(7)));
+        $overdueInvoices = $openInvoices->filter(fn ($i) => $i->due_date && $i->due_date->lt($today));
+        $invoiceTotal = round((float) Invoice::sum('total'), 2);
+        $collectionRate = $invoiceTotal > 0
+            ? round(max(0, min(100, (($invoiceTotal - $receivableTotal) / $invoiceTotal) * 100)), 1)
+            : 100.0;
 
         $alerts = $openBills
             ->filter(fn ($b) => $b->due_date && $b->due_date->lte($today))
@@ -55,7 +109,8 @@ class FinanceController extends Controller
                 'label' => 'Bill '.($b->number ?: '#'.$b->id).' — '.($b->supplier?->name ?? ''),
                 'amount' => (float) $b->remainingBase(),
                 'severity' => 'error',
-                'badge' => $b->due_date->isToday() ? 'Afati SOT' : 'Vonesë '.$b->due_date->diffInDays($today).' ditë',
+                'badge' => $b->due_date->isToday() ? 'Afati SOT' : 'Vonesë '.max(1, (int) ceil($b->due_date->diffInDays($today, true))).' ditë',
+                'href' => route('finance.bills'),
             ])->values();
 
         $arkaLimit = (float) Setting::get('financial.arka_limit', 1000);
@@ -66,13 +121,28 @@ class FinanceController extends Controller
                 'amount' => $cash['balance'],
                 'severity' => 'warning',
                 'badge' => 'Sugjerim',
+                'href' => route('finance.accounts', ['account_id' => $cash['id']]),
             ]);
         }
 
         return Inertia::render('Finance/Index', array_merge($this->shared($request), [
             'accounts' => $accounts,
-            'receivables' => ['total' => round((float) $openInvoices->sum(fn ($i) => $i->remainingBase()), 2), 'count' => $openInvoices->count()],
-            'payables' => ['total' => round((float) $openBills->sum(fn ($b) => $b->remainingBase()), 2), 'count' => $openBills->count()],
+            'summary' => $summary,
+            'receivables' => [
+                'total' => $receivableTotal,
+                'count' => $openInvoices->count(),
+                'overdue_total' => round((float) $overdueInvoices->sum(fn ($i) => $i->remainingBase()), 2),
+                'overdue_count' => $overdueInvoices->count(),
+                'collection_rate' => $collectionRate,
+            ],
+            'payables' => [
+                'total' => $payableTotal,
+                'count' => $openBills->count(),
+                'overdue_total' => round((float) $overdueBills->sum(fn ($b) => $b->remainingBase()), 2),
+                'overdue_count' => $overdueBills->count(),
+                'due_soon_total' => round((float) $dueSoonBills->sum(fn ($b) => $b->remainingBase()), 2),
+                'due_soon_count' => $dueSoonBills->count(),
+            ],
             'cashflow' => $cashflow,
             'alerts' => $alerts,
             'latest' => $this->paymentRows(FinancePayment::with(['account:id,name', 'counterAccount:id,name'])
@@ -293,7 +363,7 @@ class FinanceController extends Controller
             ->groupBy('category')
             ->map(fn ($g) => round((float) $g->sum('total_base'), 2))
             ->sortDesc();
-        $commissions = (float) \App\Models\Reservation::whereNotIn('status', ['cancelled'])
+        $commissions = (float) Reservation::whereNotIn('status', ['cancelled'])
             ->whereDate('check_in_date', '>=', $monthStart->toDateString())
             ->sum('commission_amount');
         if ($commissions > 0) {
@@ -436,7 +506,7 @@ class FinanceController extends Controller
     private function supplierData(Request $request, ?int $ignoreId = null): array
     {
         return $request->validate([
-            'name' => ['required', 'string', 'max:255', \App\Tenancy\TenantRule::unique('suppliers', 'name')->ignore($ignoreId)],
+            'name' => ['required', 'string', 'max:255', TenantRule::unique('suppliers', 'name')->ignore($ignoreId)],
             'nipt' => ['nullable', 'string', 'max:20'],
             'category' => ['nullable', 'string', 'max:60'],
             'phone' => ['nullable', 'string', 'max:40'],
@@ -495,15 +565,49 @@ class FinanceController extends Controller
             $q->where('type', 'cash');
         }
 
-        return $q->get()->map(fn (FinanceAccount $a) => [
-            'id' => $a->id,
-            'name' => $a->name,
-            'type' => $a->type,
-            'currency' => $a->currency,
-            'iban' => $a->iban,
-            'is_active' => $a->is_active,
-            'balance' => $a->balance(),
-        ])->values();
+        return $q->get()->map(function (FinanceAccount $a) {
+            $balance = $a->balance();
+            $rate = $a->currency === 'EUR' ? 1.0 : CurrencyRates::rate($a->currency);
+
+            return [
+                'id' => $a->id,
+                'name' => $a->name,
+                'type' => $a->type,
+                'currency' => $a->currency,
+                'iban' => $a->iban,
+                'is_active' => $a->is_active,
+                'balance' => $balance,
+                'balance_base' => $rate ? round($balance / $rate, 2) : null,
+            ];
+        })->values();
+    }
+
+    protected function cashSummary(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $row = FinancePayment::query()
+            ->whereBetween('paid_at', [$from, $to])
+            ->whereIn('direction', ['in', 'out'])
+            ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'in' THEN amount_base ELSE 0 END), 0) as income")
+            ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'out' THEN amount_base ELSE 0 END), 0) as expenses")
+            ->first();
+
+        $income = round((float) $row->income, 2);
+        $expenses = round((float) $row->expenses, 2);
+
+        return [
+            'income' => $income,
+            'expenses' => $expenses,
+            'net' => round($income - $expenses, 2),
+        ];
+    }
+
+    protected function percentageChange(float $current, float $previous): ?float
+    {
+        if (abs($previous) < 0.005) {
+            return abs($current) < 0.005 ? 0.0 : null;
+        }
+
+        return round((($current - $previous) / abs($previous)) * 100, 1);
     }
 
     protected function shared(Request $request): array
