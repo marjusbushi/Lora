@@ -16,6 +16,14 @@
         <link rel="alternate icon" href="/favicon.ico?v=3">
         <meta name="theme-color" content="#2d6a4f">
 
+        {{-- Installed-app (PWA) identity: Add to Home Screen opens standalone —
+             no browser URL bar — on Android (manifest) and iOS (apple-* metas). --}}
+        <link rel="manifest" href="/manifest.webmanifest">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="{{ $brand['hotel_name'] ?? 'Villa Mucho' }}">
+
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
