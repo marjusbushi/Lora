@@ -23,13 +23,13 @@ function closeMenu() {
 const page = usePage();
 const settings = computed(() => page.props.settings || {});
 const bookingEnabled = computed(() => page.props.modules?.booking_engine === true);
-const hotelName = settings.value.hotel_name || 'Villa Mucho';
+const hotelName = settings.value.hotel_name || 'Hotel';
 const logo = computed(() => settings.value.logo ? `/storage/${settings.value.logo}` : null);
 
 // Contact details → actionable links
-const addr = computed(() => settings.value.address || 'Ksamil, Sarande, Shqiperi');
-const phone = computed(() => settings.value.phone || '+355 69 000 0000');
-const email = computed(() => settings.value.email || 'info@villamucho.com');
+const addr = computed(() => settings.value.address || '');
+const phone = computed(() => settings.value.phone || '');
+const email = computed(() => settings.value.email || '');
 const telHref = computed(() => 'tel:' + phone.value.replace(/[^+\d]/g, ''));
 const mailHref = computed(() => 'mailto:' + email.value);
 const mapsDest = computed(() => {

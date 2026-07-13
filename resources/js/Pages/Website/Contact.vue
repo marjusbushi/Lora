@@ -5,6 +5,8 @@ import { useI18n } from 'vue-i18n';
 import { MapPin, Phone, Mail } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 
+const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
+
 const { t } = useI18n();
 
 const props = defineProps({ hotel: Object });
@@ -20,9 +22,9 @@ const mapSrc = computed(() => {
 });
 
 // Contact details → actionable links
-const addr = computed(() => props.hotel?.address || 'Ksamil, Sarande, Shqiperi');
-const phone = computed(() => props.hotel?.phone || '+355 69 000 0000');
-const email = computed(() => props.hotel?.email || 'info@villamucho.com');
+const addr = computed(() => props.hotel?.address || '');
+const phone = computed(() => props.hotel?.phone || '');
+const email = computed(() => props.hotel?.email || '');
 const telHref = computed(() => 'tel:' + phone.value.replace(/[^+\d]/g, ''));
 const mailHref = computed(() => 'mailto:' + email.value);
 const mapsDest = computed(() => {
@@ -48,7 +50,7 @@ function submit() {
 </script>
 
 <template>
-    <Head :title="$t('contact.meta.title')" />
+    <Head :title="$t('contact.meta.title', { hotel: brandName })" />
     <WebsiteLayout>
         <section class="py-16">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

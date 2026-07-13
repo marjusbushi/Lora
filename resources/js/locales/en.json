@@ -21,16 +21,16 @@
     },
     "home": {
         "meta": {
-            "title": "Home — Villa Mucho"
+            "title": "Home — {hotel}"
         },
         "hero": {
-            "imageAlt": "Villa Mucho — Ksamil, the Ionian shore",
+            "imageAlt": "{hotel}",
             "bookNow": "Book Now",
             "viewRooms": "View Rooms"
         },
         "features": {
             "eyebrow": "Experience",
-            "heading": "Why Villa Mucho?",
+            "heading": "Why choose us?",
             "subheading": "Every detail is designed for your comfort",
             "sea": {
                 "title": "By the Sea",
@@ -72,7 +72,7 @@
     },
     "rooms": {
         "meta": {
-            "title": "Rooms — Villa Mucho"
+            "title": "Rooms — {hotel}"
         },
         "hero": {
             "eyebrow": "Accommodation",
@@ -93,7 +93,7 @@
     },
     "book": {
         "head": {
-            "title": "Book — Villa Mucho"
+            "title": "Book — {hotel}"
         },
         "header": {
             "title": "Book a Room",
@@ -168,7 +168,7 @@
     },
     "contact": {
         "meta": {
-            "title": "Contact — Villa Mucho"
+            "title": "Contact — {hotel}"
         },
         "heading": {
             "title": "Get in Touch",
@@ -199,7 +199,7 @@
     },
     "about": {
         "meta": {
-            "title": "About Us — Villa Mucho"
+            "title": "About Us — {hotel}"
         },
         "hero": {
             "title": "About Us"
@@ -207,7 +207,7 @@
         "photoSoon": "Photo coming soon",
         "story": {
             "title": "Our Story",
-            "paragraph1": "Villa Mucho was born out of a love for hospitality and the beauty of southern Albania. Set on the shores of Ksamil, our villa offers a unique experience that blends modern luxury with Albanian tradition.",
+            "paragraph1": "Our hotel was born out of a love for hospitality. Every stay is designed as a unique experience that blends modern comfort with local tradition.",
             "paragraph2": "With comfortable rooms, a restaurant serving Mediterranean cuisine, and a dedicated staff, we make sure every guest feels at home — only better."
         },
         "stats": {
@@ -222,7 +222,7 @@
         }
     },
     "confirmation": {
-        "pageTitle": "Booking confirmed — Villa Mucho",
+        "pageTitle": "Booking confirmed — {hotel}",
         "heading": "Thank you!",
         "intro": "Your booking has been submitted successfully. It will be confirmed by our team within 24 hours.",
         "labels": {

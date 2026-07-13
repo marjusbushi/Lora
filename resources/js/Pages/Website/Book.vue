@@ -7,6 +7,8 @@ import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import AvailabilityCalendar from '@/Components/Website/AvailabilityCalendar.vue';
 import { countryOptions, PRIORITY_COUNTRIES } from '@/countries';
 
+const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
+
 const { t } = useI18n();
 
 const props = defineProps({
@@ -191,7 +193,7 @@ watch(step, (s) => {
 </script>
 
 <template>
-    <Head :title="$t('book.head.title')" />
+    <Head :title="$t('book.head.title', { hotel: brandName })" />
     <WebsiteLayout>
         <section class="py-16">
             <div class="max-w-3xl mx-auto px-4 sm:px-6">

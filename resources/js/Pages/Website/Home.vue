@@ -7,6 +7,8 @@ import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { amenityIcon } from '@/Components/Website/amenities';
 
+const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
+
 const props = defineProps({
     roomTypes: Array,
     hotel: Object,
@@ -69,7 +71,7 @@ const features = computed(() => [
 </script>
 
 <template>
-    <Head :title="$t('home.meta.title')" />
+    <Head :title="$t('home.meta.title', { hotel: brandName })" />
     <WebsiteLayout :transparent-header="true">
         <!-- Hero -->
         <section class="relative h-[90vh] min-h-[560px] w-full overflow-hidden">
@@ -77,7 +79,7 @@ const features = computed(() => [
                 :src="heroSrc"
                 :srcset="heroSrcset"
                 sizes="100vw"
-                :alt="$t('home.hero.imageAlt')"
+                :alt="$t('home.hero.imageAlt', { hotel: brandName })"
                 fetchpriority="high"
                 class="absolute inset-0 h-full w-full object-cover hero-kenburns"
             />

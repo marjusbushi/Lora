@@ -21,16 +21,16 @@
     },
     "home": {
         "meta": {
-            "title": "Kreu — Villa Mucho"
+            "title": "Kreu — {hotel}"
         },
         "hero": {
-            "imageAlt": "Villa Mucho — Ksamil, bregu i Jonit",
+            "imageAlt": "{hotel}",
             "bookNow": "Rezervo Tani",
             "viewRooms": "Shiko Dhomat"
         },
         "features": {
             "eyebrow": "Pervoja",
-            "heading": "Pse Villa Mucho?",
+            "heading": "Pse ne?",
             "subheading": "Cdo detaj eshte menduar per komoditetin tuaj",
             "sea": {
                 "title": "Afer Detit",
@@ -72,7 +72,7 @@
     },
     "rooms": {
         "meta": {
-            "title": "Dhomat — Villa Mucho"
+            "title": "Dhomat — {hotel}"
         },
         "hero": {
             "eyebrow": "Akomodimi",
@@ -93,7 +93,7 @@
     },
     "book": {
         "head": {
-            "title": "Rezervo — Villa Mucho"
+            "title": "Rezervo — {hotel}"
         },
         "header": {
             "title": "Rezervo Dhomen",
@@ -168,7 +168,7 @@
     },
     "contact": {
         "meta": {
-            "title": "Kontakt — Villa Mucho"
+            "title": "Kontakt — {hotel}"
         },
         "heading": {
             "title": "Na Kontaktoni",
@@ -199,7 +199,7 @@
     },
     "about": {
         "meta": {
-            "title": "Rreth Nesh — Villa Mucho"
+            "title": "Rreth Nesh — {hotel}"
         },
         "hero": {
             "title": "Rreth Nesh"
@@ -207,7 +207,7 @@
         "photoSoon": "Foto se shpejti",
         "story": {
             "title": "Historia Jone",
-            "paragraph1": "Villa Mucho lindi nga dashuria per mikpritjen dhe bukurine e Jugut te Shqiperise. E vendosur ne brigjet e Ksamilit, villa jone ofron nje pervojë unike qe kombinon luksin modern me traditen shqiptare.",
+            "paragraph1": "Hoteli yne lindi nga dashuria per mikpritjen. Cdo qendrim eshte menduar si nje pervoje unike qe kombinon komoditetin modern me traditen vendase.",
             "paragraph2": "Me dhoma te rehatshme, restorant me kuzhine mesdhetare, dhe staf te perkushtuar, ne sigurojme qe cdo mysafir te ndihet si ne shtepi — por me mire."
         },
         "stats": {
@@ -222,7 +222,7 @@
         }
     },
     "confirmation": {
-        "pageTitle": "Rezervimi u konfirmua — Villa Mucho",
+        "pageTitle": "Rezervimi u konfirmua — {hotel}",
         "heading": "Faleminderit!",
         "intro": "Rezervimi juaj u regjistrua me sukses. Do te konfirmohet nga stafi yne brenda 24 oreve.",
         "labels": {

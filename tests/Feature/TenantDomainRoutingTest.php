@@ -126,6 +126,10 @@ class TenantDomainRoutingTest extends TestCase
 
         $reservation = Reservation::withoutGlobalScopes()->latest('id')->firstOrFail();
         $this->assertSame($other->id, $reservation->tenant_id);
+
+        // Each hotel gets its OWN technical booking identity — never a shared one.
+        $creator = User::withoutGlobalScopes()->withTrashed()->findOrFail($reservation->created_by);
+        $this->assertSame("system+t{$other->id}@lora.local", $creator->email);
     }
 
     public function test_unknown_host_on_public_routes_is_404_even_for_logged_in_users(): void
