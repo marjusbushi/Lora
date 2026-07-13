@@ -339,6 +339,14 @@ class ChannexClient
         return $resp->successful();
     }
 
+    /** Fetch one booking (attributes carry ota_reservation_code = the OTA's own ref). */
+    public function getBooking(string $id): ?array
+    {
+        $resp = $this->http(idempotent: true)->get("{$this->baseUrl}/bookings/{$id}");
+
+        return $resp->successful() ? $resp->json('data') : null;
+    }
+
     /** Fetch one guest-message thread (title = guest name, channel, status). */
     public function getMessageThread(string $id): ?array
     {

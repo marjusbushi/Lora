@@ -57,9 +57,7 @@ class ChannexMessageImporter
                 // Best-effort link to the stay: OTA reservations imported from
                 // Channex carry the same booking id, so the inbox can show the
                 // room, dates and folio next to the conversation.
-                $reservationId = $bookingId
-                    ? \App\Models\Reservation::where('channex_booking_id', $bookingId)->value('id')
-                    : null;
+                $reservationId = $this->resolveReservationId($bookingId ? (string) $bookingId : null);
 
                 $thread = MessageThread::create([
                     'channex_thread_id' => $threadId,
@@ -134,7 +132,7 @@ class ChannexMessageImporter
             $thread->status = $thread->status ?: ($attr['status'] ?? 'open');
             $thread->channex_booking_id = $thread->channex_booking_id ?: $bookingId;
             if (! $thread->reservation_id && $thread->channex_booking_id) {
-                $thread->reservation_id = \App\Models\Reservation::where('channex_booking_id', $thread->channex_booking_id)->value('id');
+                $thread->reservation_id = $this->resolveReservationId((string) $thread->channex_booking_id);
             }
             $thread->save();
 
@@ -180,6 +178,46 @@ class ChannexMessageImporter
 
             return ['status' => 'ok', 'thread_id' => $thread->id, 'imported' => $imported];
         });
+    }
+
+    /**
+     * Find the PMS reservation for a Channex booking id. Reservations imported
+     * after the messaging release carry channex_booking_id; OLDER ones do not —
+     * for those, resolve via the booking's ota_reservation_code (the OTA's own
+     * ref, stored on our side as channel_ref) and stamp the id for next time.
+     */
+    private function resolveReservationId(?string $bookingId): ?int
+    {
+        if (! $bookingId) {
+            return null;
+        }
+
+        $id = \App\Models\Reservation::where('channex_booking_id', $bookingId)->value('id');
+        if ($id) {
+            return $id;
+        }
+
+        try {
+            $booking = $this->channex->getBooking($bookingId);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+
+        $ref = (string) data_get($booking, 'attributes.ota_reservation_code', '');
+        if ($ref === '') {
+            return null;
+        }
+
+        $reservation = \App\Models\Reservation::where('channel_ref', $ref)->first();
+        if (! $reservation) {
+            return null;
+        }
+
+        $reservation->forceFill(['channex_booking_id' => $bookingId])->save();
+
+        return $reservation->id;
     }
 
     /**

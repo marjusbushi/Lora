@@ -39,6 +39,9 @@ class GuestMessagingTest extends TestCase
             'https://staging.channex.io/api/v1/message_threads/*' => Http::response(['data' => ['attributes' => [
                 'title' => 'John Guest', 'channel' => 'booking.com', 'status' => 'open',
             ]]], 200),
+            'https://staging.channex.io/api/v1/bookings/*' => Http::response(['data' => [
+                'id' => 'BK-1', 'attributes' => ['ota_reservation_code' => 'BK-REF'],
+            ]], 200),
         ]);
     }
 
@@ -199,6 +202,9 @@ class GuestMessagingTest extends TestCase
                 ['id' => 'M-OLD-1', 'attributes' => ['message' => 'Përshëndetje, a keni parking?', 'sender' => 'guest', 'have_attachment' => false, 'inserted_at' => '2026-07-01T10:00:00Z']],
                 ['id' => 'M-OLD-2', 'attributes' => ['message' => 'Po, falas për mysafirët.', 'sender' => 'host', 'inserted_at' => '2026-07-01T11:00:00Z']],
             ]], 200),
+            'https://staging.channex.io/api/v1/bookings/*' => Http::response(['data' => [
+                'id' => 'BK-9', 'attributes' => ['ota_reservation_code' => '6987427272'],
+            ]], 200),
             // …then the thread list (one of ours + one of another property).
             // The real thread API carries the platform as 'provider', not 'channel'.
             'https://staging.channex.io/api/v1/message_threads*' => Http::response(['data' => [
@@ -289,6 +295,37 @@ class GuestMessagingTest extends TestCase
                 ['label' => str_repeat('x', 41), 'text' => 'ok'],
             ]])
             ->assertSessionHasErrors('replies.0.label');
+    }
+
+    public function test_thread_links_to_a_legacy_reservation_via_ota_code(): void
+    {
+        $this->fakeChannexBackfill();
+
+        // A reservation imported BEFORE the messaging release: it has the OTA's
+        // own ref (channel_ref) but no channex_booking_id — like all of prod.
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        $context->set($home);
+        $type = RoomType::create(['name' => 'Standard', 'base_price' => 90, 'max_occupancy' => 2, 'amenities' => []]);
+        $room = Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
+        $guest = Guest::create(['first_name' => 'Lidia', 'last_name' => 'Saucedo', 'email' => 'lidia@example.test']);
+        $staff = User::factory()->create(['current_tenant_id' => $home->id]);
+        $reservation = Reservation::create([
+            'room_id' => $room->id, 'guest_id' => $guest->id, 'created_by' => $staff->id,
+            'check_in_date' => '2026-07-12', 'check_out_date' => '2026-07-13',
+            'status' => 'confirmed', 'total_amount' => 90, 'adults' => 2,
+            'channel' => 'booking.com', 'channel_ref' => '6987427272',
+        ]);
+        // The thread already exists too (earlier backfill), unlinked.
+        MessageThread::create(['channex_thread_id' => 'TH-OLD', 'channex_booking_id' => 'BK-9']);
+        $context->clear();
+
+        $this->artisan('channex:pull-messages')->assertExitCode(0);
+
+        $thread = MessageThread::query()->sole();
+        $this->assertSame($reservation->id, $thread->reservation_id);
+        // …and the reservation is stamped so the next lookup skips the API.
+        $this->assertSame('BK-9', $reservation->fresh()->channex_booking_id);
     }
 
     public function test_pull_messages_heals_an_existing_thread_missing_its_channel(): void
