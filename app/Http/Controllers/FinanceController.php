@@ -12,11 +12,13 @@ use App\Models\Supplier;
 use App\Services\CurrencyRates;
 use App\Tenancy\TenantRule;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Finance module (Phase 1): Paneli + Arka & Banka + Pagesat.
@@ -245,26 +247,71 @@ class FinanceController extends Controller
     public function payments(Request $request): Response
     {
         FinanceAccount::ensureDefaults();
-        $direction = $request->input('direction');
-        $q = FinancePayment::with(['account:id,name', 'counterAccount:id,name'])
-            ->latest('paid_at')->latest('id');
-        if (in_array($direction, ['in', 'out', 'transfer'], true)) {
-            $q->where('direction', $direction);
-        }
-        if ($request->input('source') === 'manual') {
-            $q->where('source', 'manual');
-        }
-        if (! $request->user()->can('view_bank_accounts')) {
-            $bankIds = FinanceAccount::where('type', 'bank')->pluck('id');
-            $q->whereNotIn('account_id', $bankIds)
-                ->where(fn ($w) => $w->whereNull('counter_account_id')->orWhereNotIn('counter_account_id', $bankIds));
-        }
+        $accounts = $this->visibleAccounts($request);
+        $filters = $this->paymentFilters($request, $accounts->pluck('id')->all());
+        $baseQuery = $this->filteredPaymentsQuery($request, $filters, false);
+        $totals = (clone $baseQuery)
+            ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'in' THEN amount_base ELSE 0 END), 0) as income")
+            ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'out' THEN amount_base ELSE 0 END), 0) as expenses")
+            ->first();
+        $income = round((float) $totals->income, 2);
+        $expenses = round((float) $totals->expenses, 2);
+        $summary = [
+            'income' => $income,
+            'expenses' => $expenses,
+            'net' => round($income - $expenses, 2),
+            'transfers' => (clone $baseQuery)->where('direction', 'transfer')->count(),
+        ];
+
+        $payments = $this->filteredPaymentsQuery($request, $filters)
+            ->with(['account:id,name', 'counterAccount:id,name'])
+            ->latest('paid_at')->latest('id')
+            ->paginate($filters['per_page'])->withQueryString()
+            ->through(fn ($p) => $this->paymentRow($p));
 
         return Inertia::render('Finance/Payments', array_merge($this->shared($request), [
-            'accounts' => $this->visibleAccounts($request),
-            'filters' => ['direction' => $direction, 'source' => $request->input('source')],
-            'payments' => $q->paginate(30)->withQueryString()->through(fn ($p) => $this->paymentRow($p)),
+            'accounts' => $accounts,
+            'filters' => $filters,
+            'summary' => $summary,
+            'payments' => $payments,
         ]));
+    }
+
+    public function exportPayments(Request $request): StreamedResponse
+    {
+        FinanceAccount::ensureDefaults();
+        $accounts = $this->visibleAccounts($request);
+        $filters = $this->paymentFilters($request, $accounts->pluck('id')->all());
+        $query = $this->filteredPaymentsQuery($request, $filters)
+            ->with(['account:id,name', 'counterAccount:id,name'])
+            ->latest('paid_at')->latest('id');
+
+        return response()->streamDownload(function () use ($query) {
+            $output = fopen('php://output', 'w');
+            fwrite($output, "\xEF\xBB\xBF");
+            fputcsv($output, ['Data', 'Lloji', 'Përshkrimi', 'Metoda', 'Llogaria', 'Burimi', 'Shuma', 'Monedha'], ';', '"', '');
+
+            $safe = static fn ($value) => is_string($value) && preg_match('/^[=+\-@]/u', $value) ? "'{$value}" : $value;
+            foreach ($query->lazy(500) as $payment) {
+                $row = $this->paymentRow($payment);
+                $account = $row['direction'] === 'transfer'
+                    ? $row['account'].' → '.$row['counter_account']
+                    : $row['account'];
+                fputcsv($output, [
+                    $row['paid_at'],
+                    match ($row['direction']) {
+                        'in' => 'Hyrje', 'out' => 'Dalje', default => 'Transfertë'
+                    },
+                    $safe($row['description']),
+                    $row['method'],
+                    $safe($account),
+                    $row['source'],
+                    number_format($row['amount'], 2, '.', ''),
+                    $row['currency'],
+                ], ';', '"', '');
+            }
+            fclose($output);
+        }, 'pagesat-'.now()->format('Y-m-d').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     /** Manual movement: an ad-hoc arkëtim (in) or expense (out). */
@@ -631,6 +678,95 @@ class FinanceController extends Controller
                 'balance_base' => $rate ? round($balance / $rate, 2) : null,
             ];
         })->values();
+    }
+
+    protected function paymentFilters(Request $request, array $visibleAccountIds): array
+    {
+        $direction = in_array($request->input('direction'), ['in', 'out', 'transfer'], true)
+            ? $request->input('direction')
+            : null;
+        $source = in_array($request->input('source'), ['auto', 'manual'], true)
+            ? $request->input('source')
+            : null;
+        $method = in_array($request->input('method'), ['cash', 'card', 'bank', 'ota'], true)
+            ? $request->input('method')
+            : null;
+        $accountId = $request->integer('account_id') ?: null;
+        if ($accountId && ! in_array($accountId, $visibleAccountIds, true)) {
+            abort(403);
+        }
+
+        $parseDate = static function ($value): ?string {
+            if (! is_string($value) || ! $value) {
+                return null;
+            }
+            try {
+                $date = CarbonImmutable::createFromFormat('!Y-m-d', $value);
+
+                return $date && $date->format('Y-m-d') === $value ? $value : null;
+            } catch (\Throwable) {
+                return null;
+            }
+        };
+
+        $hasExplicitDates = $request->hasAny(['date_from', 'date_to', 'all_dates']);
+        $dateFrom = $hasExplicitDates ? $parseDate($request->input('date_from')) : now()->subDays(29)->toDateString();
+        $dateTo = $hasExplicitDates ? $parseDate($request->input('date_to')) : now()->toDateString();
+        $perPage = in_array($request->integer('per_page'), [10, 20, 30, 50], true)
+            ? $request->integer('per_page')
+            : 20;
+
+        return [
+            'direction' => $direction,
+            'source' => $source,
+            'method' => $method,
+            'account_id' => $accountId,
+            'query' => mb_substr(trim((string) $request->input('query', '')), 0, 100),
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'all_dates' => $hasExplicitDates && ! $dateFrom && ! $dateTo,
+            'per_page' => $perPage,
+        ];
+    }
+
+    protected function filteredPaymentsQuery(Request $request, array $filters, bool $withDirection = true): Builder
+    {
+        $query = FinancePayment::query();
+
+        if ($withDirection && $filters['direction']) {
+            $query->where('direction', $filters['direction']);
+        }
+        if ($filters['source']) {
+            $query->where('source', $filters['source']);
+        }
+        if ($filters['method']) {
+            $query->where('method', $filters['method']);
+        }
+        if ($filters['account_id']) {
+            $query->where(fn ($q) => $q
+                ->where('account_id', $filters['account_id'])
+                ->orWhere('counter_account_id', $filters['account_id']));
+        }
+        if ($filters['date_from']) {
+            $query->whereDate('paid_at', '>=', $filters['date_from']);
+        }
+        if ($filters['date_to']) {
+            $query->whereDate('paid_at', '<=', $filters['date_to']);
+        }
+        if ($filters['query']) {
+            $like = '%'.$filters['query'].'%';
+            $query->where(fn ($q) => $q
+                ->where('description', 'like', $like)
+                ->orWhereHas('account', fn ($account) => $account->where('name', 'like', $like))
+                ->orWhereHas('counterAccount', fn ($account) => $account->where('name', 'like', $like)));
+        }
+        if (! $request->user()->can('view_bank_accounts')) {
+            $bankIds = FinanceAccount::where('type', 'bank')->pluck('id');
+            $query->whereNotIn('account_id', $bankIds)
+                ->where(fn ($q) => $q->whereNull('counter_account_id')->orWhereNotIn('counter_account_id', $bankIds));
+        }
+
+        return $query;
     }
 
     protected function cashSummary(CarbonImmutable $from, CarbonImmutable $to): array
