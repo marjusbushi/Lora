@@ -41,13 +41,10 @@ jobs:
             if [ -n "$php_fpm_service" ]; then
               systemctl reload "$php_fpm_service"
             fi
-            # Temporary redacted diagnostics for the guest-directory 502.
-            if [ -f storage/logs/laravel.log ]; then
-              grep 'production.ERROR' storage/logs/laravel.log | tail -n 5 | sed -E 's/[[:alnum:]._%+-]+@[[:alnum:].-]+/[email]/g; s/[0-9]{7,}/[number]/g' | cut -c1-600 || true
-            fi
-            if [ -f /var/log/nginx/error.log ]; then
-              tail -n 20 /var/log/nginx/error.log | sed -E 's/[[:alnum:]._%+-]+@[[:alnum:].-]+/[email]/g; s/[0-9]{7,}/[number]/g' | cut -c1-600 || true
-            fi
+            # Inertia/Vite preload headers can exceed Nginx's small defaults.
+            install -m 0644 deploy/nginx/fastcgi-buffers.conf /etc/nginx/conf.d/villamucho-fastcgi-buffers.conf
+            nginx -t
+            systemctl reload nginx
             php artisan up
             trap - EXIT
             echo "Deployed at $(date)"
