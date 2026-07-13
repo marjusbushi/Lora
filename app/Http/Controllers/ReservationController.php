@@ -159,10 +159,7 @@ class ReservationController extends Controller
     public function calendar(Request $request): Response
     {
         $startDate = $request->input('start', now()->startOfWeek()->toDateString());
-        $visibleDays = in_array($request->integer('days'), [7, 14, 30], true)
-            ? $request->integer('days')
-            : 14;
-        $endDate = now()->parse($startDate)->addDays($visibleDays - 1)->toDateString();
+        $endDate = now()->parse($startDate)->addDays(13)->toDateString();
 
         $rooms = Room::select('id', 'room_number', 'room_type_id', 'floor', 'status')
             ->with('roomType:id,name,base_price,max_occupancy')
@@ -222,7 +219,6 @@ class ReservationController extends Controller
             'guests' => $guests,
             'startDate' => $startDate,
             'endDate' => $endDate,
-            'visibleDays' => $visibleDays,
             'channelFees' => Setting::get('financial.channel_fees', []),
         ]);
     }

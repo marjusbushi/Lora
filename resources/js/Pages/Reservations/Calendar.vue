@@ -186,7 +186,8 @@ function goToWeek(startStr, direction, daysCount = props.visibleDays) {
 }
 
 function setVisibleDays(daysCount) {
-    goToWeek(props.startDate, 1, daysCount);
+    if (daysCount !== 14) return;
+    goToWeek(props.startDate, 1, 14);
 }
 
 function navigate(direction) {
@@ -440,7 +441,7 @@ function doCheckOut(res) {
                         </div>
                         <button type="button" class="h-9 rounded-lg border border-neutral-200 px-3 text-body-sm font-medium text-neutral-600 hover:bg-neutral-50" @click="goToToday">{{ $t('admin.calendarPreview.today') }}</button>
                         <div class="inline-flex rounded-lg bg-neutral-100 p-0.5">
-                            <button v-for="count in [7, 14, 30]" :key="count" type="button" class="rounded-md px-3 py-1.5 text-tiny font-semibold transition" :class="visibleDays === count ? 'bg-white text-primary-900 shadow-sm' : 'text-neutral-500'" @click="setVisibleDays(count)">{{ count }}d</button>
+                            <button v-for="count in [7, 14, 30]" :key="count" type="button" :disabled="count !== 14" class="rounded-md px-3 py-1.5 text-tiny font-semibold transition disabled:cursor-not-allowed disabled:opacity-40" :class="visibleDays === count ? 'bg-white text-primary-900 shadow-sm' : 'text-neutral-500'" @click="setVisibleDays(count)">{{ count }}d</button>
                         </div>
                         <div class="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5" role="group" :aria-label="$t('admin.generated.k_96f31a0be77c')">
                             <button type="button" :aria-pressed="roomSort === 'number'" class="rounded-md px-2.5 py-1.5 text-tiny font-semibold transition" :class="roomSort === 'number' ? 'bg-primary-900 text-white' : 'text-neutral-500'" @click="roomSort = 'number'">{{ $t('admin.generated.k_fa144b375912') }}</button>

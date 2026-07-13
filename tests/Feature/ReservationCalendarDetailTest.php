@@ -46,7 +46,6 @@ class ReservationCalendarDetailTest extends TestCase
         $this->actingAs($admin)->get(route('reservations.calendar'))
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('Reservations/Calendar')
-                ->where('visibleDays', 14)
                 ->has('reservations.0', fn (AssertableInertia $r) => $r
                     ->where('adults', 2)
                     ->where('children', 1)
@@ -65,14 +64,5 @@ class ReservationCalendarDetailTest extends TestCase
                 )
             );
 
-        $start = now()->startOfWeek()->toDateString();
-        $expectedEnd = now()->parse($start)->addDays(29)->toDateString();
-
-        $this->actingAs($admin)->get(route('reservations.calendar', ['start' => $start, 'days' => 30]))
-            ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('visibleDays', 30)
-                ->where('startDate', $start)
-                ->where('endDate', $expectedEnd)
-            );
     }
 }
