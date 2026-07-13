@@ -248,6 +248,49 @@ class GuestMessagingTest extends TestCase
         $this->assertSame(1, MessageThread::query()->sole()->unread_count);
     }
 
+    public function test_quick_replies_can_be_saved_and_are_returned_on_index(): void
+    {
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($home);
+        $context->set($home);
+        $admin = User::factory()->create(['current_tenant_id' => $home->id]);
+        $admin->assignRole('admin');
+        $context->clear();
+
+        $this->actingAs($admin)->withSession(['tenant_id' => $home->id])
+            ->post(route('messages.quick-replies'), ['replies' => [
+                ['label' => 'Wifi', 'text' => 'Fjalëkalimi i wifi-t ju pret në recepsion.'],
+            ]])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($admin)->withSession(['tenant_id' => $home->id])
+            ->get(route('messages.index'))
+            ->assertInertia(fn ($page) => $page
+                ->component('Messages/Index')
+                ->has('quickReplies', 1)
+                ->where('quickReplies.0.label', 'Wifi'));
+    }
+
+    public function test_quick_replies_validation_blocks_bad_rows(): void
+    {
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($home);
+        $context->set($home);
+        $admin = User::factory()->create(['current_tenant_id' => $home->id]);
+        $admin->assignRole('admin');
+        $context->clear();
+
+        $this->actingAs($admin)->withSession(['tenant_id' => $home->id])
+            ->from(route('messages.index'))
+            ->post(route('messages.quick-replies'), ['replies' => [
+                ['label' => str_repeat('x', 41), 'text' => 'ok'],
+            ]])
+            ->assertSessionHasErrors('replies.0.label');
+    }
+
     public function test_pull_messages_heals_an_existing_thread_missing_its_channel(): void
     {
         $this->fakeChannexBackfill();
