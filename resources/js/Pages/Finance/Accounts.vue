@@ -324,10 +324,9 @@ function toggleAccount(a) {
         <TransactionDetailsDrawer :payment="selectedPayment" @close="selectedPayment = null" />
 
         <!-- transfer modal -->
-        <Modal :show="showTransfer" @close="showTransfer = false">
-            <div class="p-5 space-y-4">
-                <h3 class="text-h4 font-bold text-primary-900">{{ $t('admin.generated.k_f11c14ed633a') }}</h3>
-                <div class="grid grid-cols-2 gap-3">
+        <Modal :show="showTransfer" :title="$t('admin.generated.k_f11c14ed633a')" max-width="lg" @close="showTransfer = false">
+            <form id="account-transfer-form" class="space-y-4" @submit.prevent="submitTransfer">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                         <label class="block text-body-sm font-semibold text-primary-900 mb-1">{{ $t('admin.generated.k_20aee3e2f357') }}</label>
                         <select v-model="transfer.from_account_id" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm">
@@ -350,11 +349,11 @@ function toggleAccount(a) {
                     <label class="block text-body-sm font-semibold text-primary-900 mb-1">{{ $t('admin.generated.k_8a16159d3a40') }}</label>
                     <TextInput v-model="transfer.description" class="w-full" :placeholder="$t('admin.generated.k_401b48950431')" />
                 </div>
-                <div class="flex justify-end gap-2">
-                    <Button variant="ghost" @click="showTransfer = false">{{ $t('admin.generated.k_83fe7c41f4fc') }}</Button>
-                    <Button :disabled="transfer.processing || !transfer.to_account_id || !transfer.amount" @click="submitTransfer">{{ $t('admin.generated.k_baaf04345068') }}</Button>
-                </div>
-            </div>
+            </form>
+            <template #footer>
+                <Button variant="ghost" type="button" @click="showTransfer = false">{{ $t('admin.generated.k_83fe7c41f4fc') }}</Button>
+                <Button form="account-transfer-form" type="submit" :loading="transfer.processing" :disabled="!transfer.to_account_id || !transfer.amount">{{ $t('admin.generated.k_baaf04345068') }}</Button>
+            </template>
         </Modal>
 
         <!-- new account modal -->
