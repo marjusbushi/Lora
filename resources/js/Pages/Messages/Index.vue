@@ -11,6 +11,13 @@ const props = defineProps({
 const replyForm = useForm({ body: '' });
 const filter = ref('all'); // all | unread | booking.com | airbnb
 
+// Sound alert on/off (read by AppLayout's poll via localStorage).
+const soundMuted = ref(typeof window !== 'undefined' && localStorage.getItem('msgSoundMuted') === '1');
+function toggleSound() {
+    soundMuted.value = !soundMuted.value;
+    localStorage.setItem('msgSoundMuted', soundMuted.value ? '1' : '0');
+}
+
 const CHANNELS = {
     'booking.com': { label: 'Booking', badge: 'bg-[#eaf0fb] text-[#1a4fa0]', grad: 'linear-gradient(145deg,#2f6fd0,#1a4fa0)' },
     booking: { label: 'Booking', badge: 'bg-[#eaf0fb] text-[#1a4fa0]', grad: 'linear-gradient(145deg,#2f6fd0,#1a4fa0)' },
@@ -107,7 +114,16 @@ function statusLabel(s) {
                 <!-- Thread list -->
                 <div class="flex min-h-0 flex-col border-r border-neutral-200">
                     <div class="px-4 pt-4">
-                        <h2 class="text-lg font-bold tracking-tight text-neutral-900">Mesazhet</h2>
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-lg font-bold tracking-tight text-neutral-900">Mesazhet</h2>
+                            <button type="button" @click="toggleSound"
+                                :title="soundMuted ? 'Tingulli është i heshtur — kliko për ta ndezur' : 'Tingulli është ndezur — kliko për ta heshtur'"
+                                class="grid h-8 w-8 place-items-center rounded-lg border border-neutral-200 text-neutral-500 transition hover:bg-neutral-50"
+                                :class="soundMuted ? 'text-neutral-400' : 'text-[#15855c]'">
+                                <svg v-if="!soundMuted" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10 3.75a.75.75 0 00-1.264-.546L5.203 6.5H3.167a.75.75 0 00-.7.48A6.985 6.985 0 002 9.5c0 .887.165 1.737.468 2.52.111.29.39.48.7.48h2.035l3.533 3.296A.75.75 0 0010 15.25V3.75zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"/></svg>
+                                <svg v-else class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3.75a.75.75 0 00-1.264-.546L5.203 6.5H3.167a.75.75 0 00-.7.48A6.985 6.985 0 002 9.5c0 .887.165 1.737.468 2.52.111.29.39.48.7.48h2.035l3.533 3.296A.75.75 0 0010 15.25V3.75zM13.28 7.22a.75.75 0 10-1.06 1.06L13.94 10l-1.72 1.72a.75.75 0 101.06 1.06L15 11.06l1.72 1.72a.75.75 0 101.06-1.06L16.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L15 8.94l-1.72-1.72z" clip-rule="evenodd" opacity=".4"/></svg>
+                            </button>
+                        </div>
                         <div class="relative mt-3">
                             <svg class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" /></svg>
                             <input placeholder="Kërko mysafir…" class="w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 pl-9 pr-3 text-sm" />

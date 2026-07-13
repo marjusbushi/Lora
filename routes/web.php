@@ -132,6 +132,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
 
         // Guest messaging (Channex Messages) — front desk replies to OTA guests.
         Route::get('/messages', [MessagesController::class, 'index'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.index');
+        Route::get('/messages/unread', [MessagesController::class, 'unread'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.unread');
         Route::post('/messages/{thread}/reply', [MessagesController::class, 'reply'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.reply');
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         // Seasonal price quote for the create/edit form (server-computed; MUST stay before the {reservation} wildcard).

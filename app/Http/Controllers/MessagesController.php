@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Message;
 use App\Models\MessageThread;
 use App\Services\ChannexClient;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -74,6 +75,12 @@ class MessagesController extends Controller
             ]),
             'selected' => $selected,
         ]);
+    }
+
+    /** Lightweight unread total for the layout poll (sound + tab badge). */
+    public function unread(): JsonResponse
+    {
+        return response()->json(['count' => (int) MessageThread::sum('unread_count')]);
     }
 
     public function reply(Request $request, MessageThread $thread, ChannexClient $channex): RedirectResponse

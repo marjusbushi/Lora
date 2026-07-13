@@ -172,4 +172,22 @@ class GuestMessagingTest extends TestCase
 
         $this->assertSame($reservation->id, MessageThread::query()->sole()->reservation_id);
     }
+    public function test_unread_endpoint_returns_the_hotels_total(): void
+    {
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($home);
+        $context->set($home);
+        MessageThread::create(['channex_thread_id' => 'T1', 'unread_count' => 2]);
+        MessageThread::create(['channex_thread_id' => 'T2', 'unread_count' => 3]);
+        $admin = User::factory()->create(['current_tenant_id' => $home->id]);
+        $admin->assignRole('admin');
+        $context->clear();
+
+        $this->actingAs($admin)
+            ->withSession(['tenant_id' => $home->id])
+            ->getJson(route('messages.unread'))
+            ->assertOk()
+            ->assertJson(['count' => 5]);
+    }
 }
