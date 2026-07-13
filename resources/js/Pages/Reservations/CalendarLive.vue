@@ -29,7 +29,7 @@ function navigate({ start, days }) {
             :end-date="endDate"
             :visible-days="visibleDays"
             :channel-fees="channelFees"
-            :available-day-ranges="[14]"
+            :available-day-ranges="[7, 14, 30]"
             @navigate="navigate"
         />
     </AppLayout>

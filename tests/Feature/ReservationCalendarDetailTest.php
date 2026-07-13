@@ -16,6 +16,31 @@ class ReservationCalendarDetailTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_calendar_supports_only_the_operational_day_ranges(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        foreach ([7, 14, 30] as $days) {
+            $this->actingAs($admin)->get(route('reservations.calendar', [
+                'start' => '2026-07-13',
+                'days' => $days,
+            ]))->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Reservations/CalendarLive')
+                ->where('startDate', '2026-07-13')
+                ->where('endDate', now()->parse('2026-07-13')->addDays($days - 1)->toDateString())
+                ->where('visibleDays', $days));
+        }
+
+        $this->actingAs($admin)->get(route('reservations.calendar', [
+            'start' => '2026-07-13',
+            'days' => 365,
+        ]))->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('endDate', '2026-07-26')
+            ->where('visibleDays', 14));
+    }
+
     public function test_calendar_exposes_enriched_reservation_fields(): void
     {
         $this->seed(RolePermissionSeeder::class);
