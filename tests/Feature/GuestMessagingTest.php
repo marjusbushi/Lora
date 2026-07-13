@@ -200,8 +200,9 @@ class GuestMessagingTest extends TestCase
                 ['id' => 'M-OLD-2', 'attributes' => ['message' => 'Po, falas për mysafirët.', 'sender' => 'host', 'inserted_at' => '2026-07-01T11:00:00Z']],
             ]], 200),
             // …then the thread list (one of ours + one of another property).
+            // The real thread API carries the platform as 'provider', not 'channel'.
             'https://staging.channex.io/api/v1/message_threads*' => Http::response(['data' => [
-                ['id' => 'TH-OLD', 'attributes' => ['title' => 'Maria Guest', 'channel' => 'booking.com', 'status' => 'open', 'property_id' => 'PROP-1', 'booking_id' => 'BK-9']],
+                ['id' => 'TH-OLD', 'attributes' => ['title' => 'Maria Guest', 'provider' => 'BookingCom', 'status' => 'open', 'property_id' => 'PROP-1', 'booking_id' => 'BK-9']],
                 ['id' => 'TH-FOREIGN', 'attributes' => ['title' => 'Tjetërkush', 'property_id' => 'PROP-OTHER']],
             ]], 200),
         ]);
@@ -245,5 +246,23 @@ class GuestMessagingTest extends TestCase
 
         // Only the guest message counts as unread, not the host's own reply.
         $this->assertSame(1, MessageThread::query()->sole()->unread_count);
+    }
+
+    public function test_pull_messages_heals_an_existing_thread_missing_its_channel(): void
+    {
+        $this->fakeChannexBackfill();
+
+        // A thread imported before the provider mapping existed: no channel, no name.
+        $context = app(TenantContext::class);
+        $context->set(Tenant::query()->sole());
+        MessageThread::create(['channex_thread_id' => 'TH-OLD', 'channel' => null, 'guest_name' => null]);
+        $context->clear();
+
+        $this->artisan('channex:pull-messages')->assertExitCode(0);
+
+        $thread = MessageThread::query()->sole(); // healed in place — no duplicate
+        $this->assertSame('booking.com', $thread->channel);
+        $this->assertSame('Maria Guest', $thread->guest_name);
+        $this->assertSame(2, $thread->messages()->count());
     }
 }
