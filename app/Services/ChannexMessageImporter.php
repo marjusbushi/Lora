@@ -63,7 +63,7 @@ class ChannexMessageImporter
 
                 $thread = MessageThread::create([
                     'channex_thread_id' => $threadId,
-                    'channel' => $attr['channel'] ?? null,
+                    'channel' => $this->channelFrom($attr),
                     'channex_booking_id' => $bookingId,
                     'reservation_id' => $reservationId,
                     'guest_name' => $attr['title'] ?? ($attr['guest_name'] ?? null),
@@ -125,18 +125,18 @@ class ChannexMessageImporter
         $apiMessages = $this->channex->getThreadMessages($threadId);
 
         return DB::transaction(function () use ($threadId, $attr, $bookingId, $apiMessages, $markUnread) {
-            $thread = MessageThread::firstOrCreate(
-                ['channex_thread_id' => $threadId],
-                [
-                    'channel' => $attr['channel'] ?? null,
-                    'channex_booking_id' => $bookingId,
-                    'reservation_id' => $bookingId
-                        ? \App\Models\Reservation::where('channex_booking_id', $bookingId)->value('id')
-                        : null,
-                    'guest_name' => $attr['title'] ?? ($attr['guest_name'] ?? null),
-                    'status' => $attr['status'] ?? 'open',
-                ],
-            );
+            // firstOrNew (not firstOrCreate) so a re-run also HEALS an existing
+            // thread that was imported before this data existed — a missing
+            // channel, guest name, or reservation link fills in without dupes.
+            $thread = MessageThread::firstOrNew(['channex_thread_id' => $threadId]);
+            $thread->channel = $thread->channel ?: $this->channelFrom($attr);
+            $thread->guest_name = $thread->guest_name ?: ($attr['title'] ?? ($attr['guest_name'] ?? null));
+            $thread->status = $thread->status ?: ($attr['status'] ?? 'open');
+            $thread->channex_booking_id = $thread->channex_booking_id ?: $bookingId;
+            if (! $thread->reservation_id && $thread->channex_booking_id) {
+                $thread->reservation_id = \App\Models\Reservation::where('channex_booking_id', $thread->channex_booking_id)->value('id');
+            }
+            $thread->save();
 
             $imported = 0;
             $latest = null;
@@ -180,5 +180,26 @@ class ChannexMessageImporter
 
             return ['status' => 'ok', 'thread_id' => $thread->id, 'imported' => $imported];
         });
+    }
+
+    /**
+     * The platform a thread belongs to. Channex sends it as 'channel' on some
+     * payloads but as 'provider' (e.g. "BookingCom") on the thread API —
+     * normalize to the channel slugs the inbox badges understand.
+     */
+    private function channelFrom(array $attr): ?string
+    {
+        if (! empty($attr['channel'])) {
+            return $attr['channel'];
+        }
+
+        return match ((string) ($attr['provider'] ?? '')) {
+            '' => null,
+            'BookingCom' => 'booking.com',
+            'AirBNB', 'Airbnb' => 'airbnb',
+            'Expedia', 'ExpediaGroup' => 'expedia',
+            'Agoda' => 'agoda',
+            default => strtolower((string) $attr['provider']),
+        };
     }
 }
