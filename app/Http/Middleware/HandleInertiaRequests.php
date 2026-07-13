@@ -35,6 +35,12 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $tenant = app(TenantContext::class)->tenant();
+
+        // Spatie caches the roles/permissions relations on the model instance.
+        // If the same instance survives a tenant (team) switch — long-running
+        // runtimes, queued context, tests — the payload would leak the OLD
+        // hotel's role. Always read them fresh for the CURRENT tenant.
+        $user?->unsetRelation('roles')->unsetRelation('permissions');
         $billingAccess = $tenant ? app(TenantBillingService::class)->accessSnapshot($tenant) : null;
         $settings = $tenant
             ? Cache::rememberForever(Setting::cacheKey(), fn () => [

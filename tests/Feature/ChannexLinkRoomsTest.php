@@ -139,4 +139,30 @@ class ChannexLinkRoomsTest extends TestCase
         $this->artisan('channex:link-rooms')->assertFailed();
         $this->assertDatabaseCount('channel_mappings', 0);
     }
+
+    public function test_classifies_channel_rate_plans_by_title_into_their_columns(): void
+    {
+        $studio = RoomType::create(['name' => 'Studio', 'base_price' => 120, 'max_occupancy' => 3]);
+        $rel = ['room_type' => ['data' => ['id' => 'RT-S']]];
+        Http::fake([
+            '*room_types*' => Http::response(['data' => [['id' => 'RT-S', 'attributes' => ['title' => 'Studio']]]]),
+            '*rate_plans*' => Http::response(['data' => [
+                // Channel plans deliberately listed FIRST: the base column must
+                // still get the non-channel plan, not simply the first one.
+                ['id' => 'RP-B', 'attributes' => ['title' => 'Standard Rate - Booking.com'], 'relationships' => $rel],
+                ['id' => 'RP-E', 'attributes' => ['title' => 'Standard Rate - Expedia'], 'relationships' => $rel],
+                ['id' => 'RP-S', 'attributes' => ['title' => 'Standard Rate'], 'relationships' => $rel],
+            ]]),
+        ]);
+
+        $this->artisan('channex:link-rooms')->assertSuccessful();
+
+        $this->assertDatabaseHas('channel_mappings', [
+            'room_type_id' => $studio->id,
+            'channex_room_type_id' => 'RT-S',
+            'channex_rate_plan_id' => 'RP-S',
+            'channex_booking_rate_plan_id' => 'RP-B',
+            'channex_expedia_rate_plan_id' => 'RP-E',
+        ]);
+    }
 }

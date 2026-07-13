@@ -62,10 +62,10 @@ Route::post('/contact', [WebsiteController::class, 'submitContact'])->middleware
 
 // Inbound Channex booking webhook (server-to-server; CSRF-excluded in bootstrap/app.php).
 // Auth is a shared secret header validated in the controller — Channex has no HMAC.
-Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->middleware(['module:channel_manager', 'throttle:120,1'])->name('channex.webhook');
+Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->middleware(['module:channel_manager', 'throttle:channex-webhook'])->name('channex.webhook');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified', 'dedicated_control_redirect'])->name('dashboard');
+    ->middleware(['auth', 'verified', 'hotel_host', 'dedicated_control_redirect'])->name('dashboard');
 
 Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
     ->prefix('super-admin')
@@ -76,15 +76,22 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
         Route::post('/tenants', [SuperAdminTenantController::class, 'store'])->name('tenants.store');
         Route::put('/tenants/{tenant}/subscription', [SuperAdminTenantController::class, 'updateSubscription'])->name('tenants.subscription.update');
         Route::post('/tenants/{tenant}/switch', [SuperAdminTenantController::class, 'switch'])->name('tenants.switch');
+        Route::put('/tenants/{tenant}/integrations/{provider}', [SuperAdminTenantController::class, 'updateIntegration'])
+            ->whereIn('provider', ['channex', 'pok'])->name('tenants.integrations.update');
+        Route::post('/tenants/{tenant}/domains', [SuperAdminTenantController::class, 'storeDomain'])->name('tenants.domains.store');
+        Route::delete('/tenants/{tenant}/domains/{domain}', [SuperAdminTenantController::class, 'destroyDomain'])
+            ->scopeBindings()->name('tenants.domains.destroy');
+        Route::patch('/tenants/{tenant}/domains/{domain}/primary', [SuperAdminTenantController::class, 'makePrimaryDomain'])
+            ->scopeBindings()->name('tenants.domains.primary');
     });
 
 // Internal component gallery (dev reference) — no data, but staff-only (not public).
 Route::get('/design-system', function () {
     return Inertia::render('DesignSystem');
-})->middleware(['auth'])->name('design-system');
+})->middleware(['auth', 'hotel_host'])->name('design-system');
 
 // ===== PMS (authenticated) =====
-Route::middleware('auth')->prefix('pms')->group(function () {
+Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -243,6 +250,8 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::post('/settings/website', [SettingsController::class, 'updateWebsite'])->name('settings.website');
         Route::post('/settings/about', [SettingsController::class, 'updateAbout'])->name('settings.about');
         Route::put('/settings/financial', [SettingsController::class, 'updateFinancial'])->name('settings.financial');
+        Route::put('/settings/market-rates', [SettingsController::class, 'updateMarketRates'])->name('settings.market-rates');
+        Route::put('/settings/pricing-programs', [SettingsController::class, 'updatePricingPrograms'])->name('settings.pricing-programs');
         Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->middleware('module:housekeeping')->name('settings.housekeeping');
         Route::put('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai');
 

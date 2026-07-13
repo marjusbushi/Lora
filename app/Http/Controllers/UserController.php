@@ -251,7 +251,7 @@ class UserController extends Controller
         // The self-seeded system user that every public/website booking is attributed to.
         // Deleting it (it was soft-deleted once, causing an 11-day booking outage) must be
         // impossible from the UI — the booking funnel depends on it existing.
-        if ($user->email === 'system@villamucho.local') {
+        if (User::isSystemEmail($user->email)) {
             return back()->with('error', 'Ky eshte perdoruesi i sistemit per rezervimet online — nuk mund te fshihet.');
         }
 

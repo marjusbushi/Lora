@@ -59,6 +59,8 @@ class TenantBillingTest extends TestCase
 
     public function test_super_admin_can_configure_modules_quantities_and_annual_discount(): void
     {
+        config(['lora.control_panel_hosts' => ['localhost']]);
+
         $tenant = Tenant::query()->sole();
         app(TenantContext::class)->set($tenant);
         $superAdmin = User::factory()->create([

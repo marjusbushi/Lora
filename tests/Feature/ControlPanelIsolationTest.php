@@ -113,4 +113,45 @@ class ControlPanelIsolationTest extends TestCase
             'password' => 'password',
         ])->assertRedirect('https://admin.lorapms.test/super-admin');
     }
+    public function test_hotel_pms_is_unreachable_on_product_hosts(): void
+    {
+        $staff = User::factory()->create(['is_super_admin' => false]);
+
+        // Dedicated control panel host — never a hotel back-office.
+        $this->actingAs($staff)
+            ->get('https://admin.lorapms.test/pms/rooms')
+            ->assertNotFound();
+
+        // Marketing host (default config) — never a hotel back-office either.
+        $this->actingAs($staff)
+            ->get('https://lorapms.com/pms/rooms')
+            ->assertNotFound();
+    }
+
+    public function test_super_admin_on_a_product_host_is_sent_to_the_control_panel(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $superAdmin = User::factory()->create([
+            'is_super_admin' => true,
+            'current_tenant_id' => $tenant->id,
+        ]);
+
+        $this->actingAs($superAdmin)
+            ->get('https://lorapms.com/pms/rooms')
+            ->assertRedirect('https://admin.lorapms.test/super-admin');
+    }
+
+    public function test_hotel_pages_do_not_expose_control_panel_route_names(): void
+    {
+        // localhost is the migrated hotel's own domain (not a control panel host
+        // under this test's config) — its HTML must carry the FILTERED route map.
+        $this->get('http://localhost/login')
+            ->assertOk()
+            ->assertDontSee('super-admin.tenants', false);
+
+        // The control panel host keeps the full map (its pages need those routes).
+        $this->get('https://admin.lorapms.test/login')
+            ->assertOk()
+            ->assertSee('super-admin.tenants', false);
+    }
 }

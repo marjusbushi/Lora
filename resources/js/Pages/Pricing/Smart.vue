@@ -12,6 +12,8 @@ const props = defineProps({
     roomTypes: { type: Array, default: () => [] },       // {id, name, min_price, max_price}
     selectedTypeId: { type: [Number, String], default: null },
     days: { type: Array, default: () => [] },            // engine rows + dow/is_weekend/holiday
+    market: { type: Object, default: () => ({}) },       // rate shopping: date => {median,min,max,count}
+    marketEnabled: { type: Boolean, default: false },
     month: { type: String, default: '' },
     prevMonth: { type: String, default: '' },
     nextMonth: { type: String, default: '' },
@@ -22,6 +24,7 @@ const props = defineProps({
     upcomingEvents: { type: Array, default: () => [] },
     latestReport: { type: Object, default: null },
     autopilot: { type: Object, default: () => ({ enabled: false, logs: [] }) },
+    otaPrograms: { type: Object, default: () => ({}) },
 });
 
 const toasts = ref(null);
@@ -355,6 +358,27 @@ const dows = ['Hë', 'Ma', 'Më', 'En', 'Pr', 'Sh', 'Di'];
 const monthLabel = computed(() =>
     props.month ? new Date(props.month + 'T00:00:00').toLocaleDateString('sq-AL', { month: 'long', year: 'numeric' }) : '',
 );
+// Rate shopping: our price vs the market median (competitors' CHEAPEST room).
+function marketDelta(d) {
+    const m = props.market[d.date];
+    if (!m || !d.current_price) return null;
+    return Math.round(((d.current_price - m.median) / m.median) * 100);
+}
+function marketTone(d) {
+    const delta = marketDelta(d);
+    if (delta === null) return '';
+    if (delta > 8) return 'bg-warning-50 text-warning-700 border border-warning-200';
+    if (delta < -8) return 'bg-info-50 text-info-700 border border-info-200';
+    return 'bg-success-50 text-success-700 border border-success-200';
+}
+function marketBadge(d) {
+    const delta = marketDelta(d);
+    if (delta === null) return null;
+    if (delta > 8) return { cls: 'bg-warning-100 text-warning-700', text: '▲ ' + delta + '% mbi tregun' };
+    if (delta < -8) return { cls: 'bg-info-100 text-info-700', text: '▼ ' + Math.abs(delta) + '% nën tregun' };
+    return { cls: 'bg-success-100 text-success-700', text: '≈ Në linjë me tregun' };
+}
+
 const leadingBlanks = computed(() => (props.days.length ? props.days[0].dow - 1 : 0));
 const actionableCount = computed(() => props.days.filter((d) => d.actionable && !d.is_past).length);
 
@@ -504,6 +528,20 @@ function syncLabel(ts) {
                     </span>
                 </div>
 
+                <div v-if="otaPrograms.booking || otaPrograms.expedia" class="grid sm:grid-cols-2 gap-3 mb-5">
+                    <div v-for="(program, key) in otaPrograms" :key="key" class="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-body-sm font-bold text-primary-900">{{ key === 'booking' ? 'Booking.com' : 'Expedia' }}</span>
+                            <span class="text-tiny font-bold text-info-700">Modifier +{{ program.required_modifier_pct }}%</span>
+                        </div>
+                        <p class="text-tiny text-neutral-500 mt-1">
+                            <template v-if="program.discounts.length">{{ program.discounts.map((d) => d.label + ' ' + d.pct + '%').join(' · ') }}</template>
+                            <template v-else>Pa promocione aktive</template>
+                            <template v-if="program.preferred_partner"> · Preferred Partner</template>
+                        </p>
+                    </div>
+                </div>
+
                 <div v-if="!roomTypes.length" class="py-16 text-center text-body-sm text-neutral-500">
                     Shto fillimisht tipet e dhomave te "Dhomat".
                 </div>
@@ -542,6 +580,16 @@ function syncLabel(ts) {
                                 {{ d.adjustment_pct > 0 ? '▲' : '▼' }} {{ currency }}{{ fmtPrice(d.suggested_price) }}<span v-if="d.clamped" :title="'I ndalur te kufiri ' + (d.clamped === 'max' ? 'maksimal' : 'minimal')"> 🔒</span>
                             </div>
 
+                            <!-- rate shopping: market median pill, coloured by our position -->
+                            <div
+                                v-if="market[d.date]"
+                                class="mt-1 inline-flex items-center gap-0.5 rounded-md px-1 py-0.5 text-[10px] font-semibold tabular-nums leading-none"
+                                :class="marketTone(d)"
+                                :title="'Tregu (çmimi më i lirë i ' + market[d.date].count + ' konkurrentëve): ' + currency + market[d.date].min + '–' + currency + market[d.date].max"
+                            >
+                                ⌂ {{ currency }}{{ fmtPrice(market[d.date].median) }}
+                            </div>
+
                             <span v-if="d.total > 0 && d.booked >= d.total" class="absolute bottom-1.5 left-2 text-[10px] font-bold text-white bg-primary-900 rounded px-1.5 py-0.5 leading-none">plot</span>
                             <span v-if="d.has_override" class="absolute bottom-2 right-2 w-2 h-2 rounded-full bg-info-500" title="Çmim i vendosur nga ti" />
                         </div>
@@ -555,6 +603,7 @@ function syncLabel(ts) {
                         <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-warning-100 border border-warning-200 mr-1.5 align-[-1px]" />Po mbushet</span>
                         <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-error-100 border border-error-200 mr-1.5 align-[-1px]" />Plot</span>
                         <span><span class="text-error-600 font-bold mr-1">⚑</span>Festë</span>
+                        <span v-if="marketEnabled"><span class="font-bold mr-1">⌂</span>Tregu — mediana e çmimeve më të lira të konkurrentëve</span>
                         <span><i class="inline-block w-2 h-2 rounded-full bg-info-500 mr-1.5 align-[0px]" />Çmim i vendosur nga ti</span>
                     </div>
 
@@ -597,6 +646,39 @@ function syncLabel(ts) {
                                     <Button variant="outline" size="sm" :disabled="applySaving || removeSaving" @click="askBulkWeek">Apliko javën</Button>
                                     <Button v-if="selected.has_override" variant="ghost" :loading="removeSaving" :disabled="applySaving" @click="remove(selected)">Hiq</Button>
                                 </div>
+                            </div>
+
+                            <div v-if="selected.ota_prices" class="grid sm:grid-cols-2 gap-3">
+                                <div v-for="(ota, key) in selected.ota_prices" :key="key" class="rounded-xl border border-info-100 bg-info-50/50 p-3">
+                                    <p class="text-tiny font-bold uppercase tracking-wide text-info-700">{{ key === 'booking' ? 'Booking.com' : 'Expedia' }}</p>
+                                    <div class="mt-2 space-y-1 text-body-sm">
+                                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Çmimi final i synuar</span><b class="tabular-nums">{{ currency }}{{ fmtPrice(ota.target_price) }}</b></div>
+                                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Dërgo te kanali</span><b class="tabular-nums text-info-700">{{ currency }}{{ fmtPrice(ota.published_price) }}</b></div>
+                                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Neto pas komisionit</span><b class="tabular-nums">{{ currency }}{{ fmtPrice(ota.estimated_net) }}</b></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- TREGU — competitor entry prices for this date (display only) -->
+                            <div v-if="market[selected.date]" class="rounded-xl border border-neutral-200 bg-white p-3">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <p class="text-tiny font-bold uppercase tracking-wide text-neutral-400">⌂ Tregu i zonës · {{ market[selected.date].count }} konkurrentë</p>
+                                    <span class="text-tiny text-neutral-400">çmimi më i lirë i secilit hotel</span>
+                                </div>
+                                <div class="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2">
+                                    <div>
+                                        <span class="text-tiny text-neutral-500">Mediana</span>
+                                        <div class="text-h4 font-extrabold text-primary-900 tabular-nums leading-tight">{{ currency }}{{ fmtPrice(market[selected.date].median) }}</div>
+                                    </div>
+                                    <div>
+                                        <span class="text-tiny text-neutral-500">Nga – deri</span>
+                                        <div class="text-body-sm font-semibold text-neutral-600 tabular-nums leading-tight mt-1">{{ currency }}{{ fmtPrice(market[selected.date].min) }} – {{ currency }}{{ fmtPrice(market[selected.date].max) }}</div>
+                                    </div>
+                                    <span v-if="marketBadge(selected)" class="text-small font-bold px-2.5 py-1 rounded-lg" :class="marketBadge(selected).cls">
+                                        {{ marketBadge(selected).text }}
+                                    </span>
+                                </div>
+                                <p class="text-tiny text-neutral-400 mt-2">Krahasim informues me dhomat standarde — nuk ndikon sugjerimet. Për tipet e mëdha (p.sh. Apartment) tregu i dhomave hyrëse s'është i krahasueshëm.</p>
                             </div>
 
                             <!-- PSE KY ÇMIM? — the factor breakdown, plain Albanian -->

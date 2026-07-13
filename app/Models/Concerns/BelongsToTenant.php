@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Tenancy\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use RuntimeException;
 
 trait BelongsToTenant
 {
@@ -26,15 +27,21 @@ trait BelongsToTenant
 
             $tenantId = app(TenantContext::class)->id();
 
-            // Seeders and legacy console commands run outside HTTP middleware.
-            // During the transition they stay pinned to the single/default tenant.
-            if ($tenantId === null && app()->runningInConsole()) {
+            // Tests build models without an explicit context and pin to the
+            // single migrated tenant. Everywhere else a missing context must
+            // FAIL, never silently write into the first hotel's data.
+            if ($tenantId === null && app()->environment('testing')) {
                 $tenantId = Tenant::query()->active()->orderBy('id')->value('id');
             }
 
-            if ($tenantId !== null) {
-                $model->tenant_id = $tenantId;
+            if ($tenantId === null) {
+                throw new RuntimeException(sprintf(
+                    'Cannot create %s without a tenant context — run inside TenantContext::run() or pass --tenant=<ID> to the command.',
+                    $model::class,
+                ));
             }
+
+            $model->tenant_id = $tenantId;
         });
     }
 

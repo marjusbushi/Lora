@@ -25,7 +25,7 @@
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
         <!-- Scripts -->
-        @routes
+        @routes(in_array(strtolower(request()->getHost()), config('lora.control_panel_hosts', []), true) ? null : 'hotel')
         @vite(['resources/js/app.js', "resources/js/Pages/{$page['component']}.vue"])
         @inertiaHead
     </head>

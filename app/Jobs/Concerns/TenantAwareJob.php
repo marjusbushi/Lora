@@ -14,9 +14,10 @@ trait TenantAwareJob
     {
         $this->tenantId = app(TenantContext::class)->id();
 
-        // Keeps explicit/manual Artisan dispatches compatible while there is
-        // only the migrated default hotel. Scheduled work sets context itself.
-        if ($this->tenantId === null && app()->runningInConsole()) {
+        // Tests dispatch without a context and pin to the migrated tenant.
+        // Anywhere else a null stays null — UseTenantContext then refuses to
+        // run the job instead of executing it against the wrong hotel.
+        if ($this->tenantId === null && app()->environment('testing')) {
             $this->tenantId = Tenant::query()->active()->orderBy('id')->value('id');
         }
     }

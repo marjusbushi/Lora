@@ -42,6 +42,7 @@ class GuestDocumentTest extends TestCase
         $this->assertSame('passport.pdf', $doc->original_name);
         $this->assertSame($admin->id, $doc->uploaded_by);
         Storage::disk('local')->assertExists($doc->path);          // PRIVATE disk
+        $this->assertStringStartsWith('tenants/', $doc->path);      // per-tenant folder
         $this->assertSame(0, count(Storage::disk('public')->allFiles())); // never public
     }
 

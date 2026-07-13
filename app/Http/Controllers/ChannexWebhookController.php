@@ -40,7 +40,14 @@ class ChannexWebhookController extends Controller
         try {
             $revision = $channex->getBookingRevision($revisionId);
             if ($revision) {
-                $importer->importRevision($revision);
+                $summary = $importer->importRevision($revision, $channex->propertyId());
+
+                // A revision of another property (= another hotel/tenant) delivered
+                // to this domain is a Channex misconfiguration: never import it and
+                // never ack it — the owning hotel's own endpoint/feed must get it.
+                if (($summary['status'] ?? null) === 'foreign_property') {
+                    return response('ignored — foreign property', 200);
+                }
             }
         } catch (\Throwable $e) {
             report($e);

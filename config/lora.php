@@ -16,7 +16,7 @@ return [
         static fn (string $host): string => strtolower(trim($host)),
         explode(',', (string) env(
             'LORA_CONTROL_PANEL_HOSTS',
-            'admin.lorapms.com,admin.staging.lorapms.com,staging.lorapms.com,localhost',
+            'admin.lorapms.com,admin.staging.lorapms.com,staging.lorapms.com',
         )),
     ))),
 

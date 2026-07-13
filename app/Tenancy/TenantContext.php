@@ -28,7 +28,10 @@ class TenantContext
 
     public function idOrDefault(): ?int
     {
-        return $this->id() ?? (app()->runningInConsole()
+        // Only tests fall back to the single migrated tenant; in production a
+        // missing context must stay null (fail-closed) instead of silently
+        // resolving to the first hotel.
+        return $this->id() ?? (app()->environment('testing')
             ? Tenant::query()->active()->orderBy('id')->value('id')
             : null);
     }

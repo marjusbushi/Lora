@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\Support\TenantStorage;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -435,7 +436,7 @@ class GuestController extends Controller
 
         $file = $request->file('file');
         // 'local' disk root = storage/app/private → NOT web-accessible (sensitive ID docs).
-        $path = $file->store("guest-documents/{$guest->id}", 'local');
+        $path = $file->store(TenantStorage::path("guest-documents/{$guest->id}"), 'local');
 
         $guest->documents()->create([
             'type' => $data['type'],

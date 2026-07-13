@@ -10,6 +10,7 @@ use App\Services\ChannelSync;
 use App\Services\ChannexClient;
 use App\Services\OtaSellWindow;
 use Carbon\CarbonImmutable;
+use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 
 /**
@@ -22,12 +23,18 @@ use Illuminate\Console\Command;
  */
 class ChannexPushAri extends Command
 {
-    protected $signature = 'channex:push-ari {--days=365 : Days ahead to sync} {--queue : Dispatch jobs instead of pushing inline} {--reconcile-fixed : Re-apply and verify a configured fixed OTA cutoff}';
+    use ResolvesTenantContext;
+
+    protected $signature = 'channex:push-ari {--days=365 : Days ahead to sync} {--queue : Dispatch jobs instead of pushing inline} {--reconcile-fixed : Re-apply and verify a configured fixed OTA cutoff} {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Push availability + rates for all Channex-mapped room types';
 
     public function handle(ChannelSync $sync, OtaSellWindow $sellWindow, ChannexClient $channex): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         if (! $channex->configured()) {
             $this->error('Channex is not configured for this hotel.');
 

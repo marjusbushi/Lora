@@ -138,7 +138,7 @@ class PricingAutopilotTest extends TestCase
     {
         $this->fullNight();
         $this->enable();
-        $lock = Cache::lock('pricing:autopilot:run', 60);
+        $lock = Cache::lock('pricing:autopilot:run:'.app(\App\Tenancy\TenantContext::class)->id(), 60);
         $this->assertTrue($lock->get());
 
         try {

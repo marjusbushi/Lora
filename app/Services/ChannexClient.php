@@ -321,10 +321,15 @@ class ChannexClient
         return $resp->json('data');
     }
 
-    /** Unacknowledged booking revisions (the canonical catch-up feed). */
+    /** Unacknowledged booking revisions for THIS property (the canonical catch-up feed). */
     public function getBookingFeed(): array
     {
-        return $this->getList('/booking_revisions/feed');
+        // Scoped to the tenant's own property: one Channex account can hold many
+        // hotels' properties, and an unfiltered feed would drain (and later ack)
+        // other tenants' revisions — permanently losing their OTA bookings.
+        return $this->getList('/booking_revisions/feed', [
+            'filter' => ['property_id' => $this->propertyId],
+        ]);
     }
 
     /**

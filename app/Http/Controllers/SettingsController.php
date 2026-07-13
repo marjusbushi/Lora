@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\PushRoomTypeAri;
 use App\Models\Amenity;
 use App\Models\CleaningTask;
 use App\Models\Floor;
@@ -17,6 +18,7 @@ use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Support\TenantStorage;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -32,7 +34,19 @@ class SettingsController extends Controller
         $settings['ai'] = [
             'gemini_configured' => ! empty($aiKey) || ! empty(config('services.gemini.key')),
             'gemini_key_hint' => $aiKey ? str_repeat('•', 6).substr((string) $aiKey, -4) : null,
+            'ai_hotel_context' => Setting::get('ai.hotel_context', ''),
             'gemini_from_env' => empty($aiKey) && ! empty(config('services.gemini.key')),
+        ];
+
+        // Rate shopping (market_rates): same rule — never ship the raw key.
+        $marketKey = trim((string) ($settings['market_rates']['api_key'] ?? ''));
+        $settings['market_rates'] = [
+            'enabled' => (bool) ($settings['market_rates']['enabled'] ?? false),
+            'configured' => $marketKey !== '',
+            'api_key_hint' => $marketKey !== '' ? str_repeat('•', 6).substr($marketKey, -4) : null,
+            'competitors' => \App\Services\MarketRates::competitors(),
+            'frequency' => \App\Services\MarketRates::frequency(),
+            'search_query' => \App\Services\MarketRates::searchQuery(),
         ];
 
         return Inertia::render('Settings/Index', [
@@ -116,7 +130,7 @@ class SettingsController extends Controller
         }
 
         if ($request->hasFile('logo')) {
-            $path = $request->file('logo')->store('logos', 'public');
+            $path = $request->file('logo')->store(TenantStorage::path('logos'), 'public');
             Setting::set('hotel.logo', $path, 'image');
         }
 
@@ -140,7 +154,7 @@ class SettingsController extends Controller
 
         if ($request->hasFile('logo')) {
             $oldLogo = Setting::get('hotel.logo');
-            $path = $request->file('logo')->store('branding', 'public');
+            $path = $request->file('logo')->store(TenantStorage::path('branding'), 'public');
             Setting::set('hotel.logo', $path, 'image');
             if ($oldLogo) {
                 Storage::disk('public')->delete($oldLogo);
@@ -149,7 +163,7 @@ class SettingsController extends Controller
 
         if ($request->hasFile('hero_image')) {
             $oldHero = Setting::get('hotel.hero_image');
-            $path = $request->file('hero_image')->store('branding', 'public');
+            $path = $request->file('hero_image')->store(TenantStorage::path('branding'), 'public');
             Setting::set('hotel.hero_image', $path, 'image');
             if ($oldHero) {
                 Storage::disk('public')->delete($oldHero);
@@ -205,7 +219,7 @@ class SettingsController extends Controller
         foreach (['hero_image', 'story_image', 'staff_image'] as $imgKey) {
             if ($request->hasFile($imgKey)) {
                 $old = Setting::get("about.{$imgKey}");
-                $path = $request->file($imgKey)->store('about', 'public');
+                $path = $request->file($imgKey)->store(TenantStorage::path('about'), 'public');
                 Setting::set("about.{$imgKey}", $path, 'image');
                 if ($old) {
                     Storage::disk('public')->delete($old);
@@ -242,6 +256,42 @@ class SettingsController extends Controller
         Setting::set('financial.channel_fees', $fees, 'json');
 
         return back()->with('success', 'Konfigurimet financiare u ruajten.');
+    }
+
+    // --- OTA pricing programs (Booking.com / Expedia) ---
+    public function updatePricingPrograms(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'booking_genius_enabled' => ['required', 'boolean'],
+            'booking_genius_pct' => ['required', 'numeric', 'min:0', 'max:50'],
+            'booking_mobile_enabled' => ['required', 'boolean'],
+            'booking_mobile_pct' => ['required', 'numeric', 'min:0', 'max:50'],
+            'booking_preferred_enabled' => ['required', 'boolean'],
+            'expedia_member_enabled' => ['required', 'boolean'],
+            'expedia_member_pct' => ['required', 'numeric', 'min:0', 'max:50'],
+            'expedia_mobile_enabled' => ['required', 'boolean'],
+            'expedia_mobile_pct' => ['required', 'numeric', 'min:0', 'max:50'],
+        ]);
+
+        DB::transaction(function () use ($data) {
+            $version = PricingRulesVersion::lock();
+            foreach ($data as $key => $value) {
+                Setting::set(
+                    "pricing_programs.{$key}",
+                    is_bool($value) ? ($value ? '1' : '0') : round((float) $value, 2),
+                    is_bool($value) ? 'boolean' : 'number',
+                );
+            }
+            PricingRulesVersion::increment($version);
+        });
+
+        // The programs feed ChannelSync's per-channel rate compensation, so a
+        // changed percentage must re-push every mapped room type's rates —
+        // otherwise the OTAs keep selling on the OLD factor until the nightly
+        // full sync. No-op when Channex is not configured.
+        PushRoomTypeAri::dispatchAllMapped();
+
+        return back()->with('success', 'Programet OTA u ruajtën — çmimet e kanaleve po ridërgohen në Channex.');
     }
 
     // --- Housekeeping ---
@@ -281,8 +331,13 @@ class SettingsController extends Controller
     {
         $data = $request->validate([
             'gemini_key' => ['nullable', 'string', 'max:200'],
+            'hotel_context' => ['nullable', 'string', 'max:1000'],
             'clear' => ['nullable', 'boolean'],
         ]);
+
+        if ($request->has('hotel_context')) {
+            Setting::set('ai.hotel_context', trim((string) ($data['hotel_context'] ?? '')), 'text');
+        }
 
         if ($request->boolean('clear')) {
             Setting::set('ai.gemini_key', '', 'text');
@@ -298,6 +353,45 @@ class SettingsController extends Controller
         Setting::set('ai.gemini_key', $key, 'text');
 
         return back()->with('success', 'Çelësi AI u ruajt. Asistenti i çmimeve tani është aktiv.');
+    }
+
+    // --- Market rates (rate shopping — competitor prices, Phase 1) ---
+    public function updateMarketRates(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'api_key' => ['nullable', 'string', 'max:200'],
+            'clear_key' => ['nullable', 'boolean'],
+            'competitors' => ['required', 'array', 'min:1', 'max:30'],
+            // nullable: blank rows become null via ConvertEmptyStringsToNull —
+            // the sanitize step below drops them rather than failing the save.
+            'competitors.*' => ['nullable', 'string', 'max:120'],
+            'frequency' => ['required', 'in:daily,3x_week'],
+            'search_query' => ['required', 'string', 'max:120'],
+        ]);
+
+        // Trim + drop blank rows server-side (don't trust the client list).
+        $competitors = collect($data['competitors'])
+            ->map(fn ($c) => trim((string) $c))
+            ->filter(fn ($c) => $c !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        Setting::set('market_rates.enabled', $data['enabled'] ? '1' : '0', 'boolean');
+        Setting::set('market_rates.competitors', $competitors, 'json');
+        Setting::set('market_rates.frequency', $data['frequency'], 'text');
+        Setting::set('market_rates.search_query', trim($data['search_query']), 'text');
+
+        if ($request->boolean('clear_key')) {
+            Setting::set('market_rates.api_key', '', 'text');
+        } elseif (trim((string) ($data['api_key'] ?? '')) !== '') {
+            // An empty field means "keep the stored key" — the form never
+            // receives the real key back, only a masked hint.
+            Setting::set('market_rates.api_key', trim($data['api_key']), 'text');
+        }
+
+        return back()->with('success', 'Çmimet e tregut u ruajtën.');
     }
 
     // --- Room Types CRUD ---
@@ -463,7 +557,7 @@ class SettingsController extends Controller
         ];
 
         if ($request->hasFile('image')) {
-            $data['image_path'] = $request->file('image')->store('menu', 'public');
+            $data['image_path'] = $request->file('image')->store(TenantStorage::path('menu'), 'public');
         }
 
         MenuItem::create($data);
@@ -486,7 +580,7 @@ class SettingsController extends Controller
             if ($menuItem->image_path) {
                 Storage::disk('public')->delete($menuItem->image_path);
             }
-            $data['image_path'] = $request->file('image')->store('menu', 'public');
+            $data['image_path'] = $request->file('image')->store(TenantStorage::path('menu'), 'public');
         }
 
         $menuItem->update($data);
@@ -528,7 +622,7 @@ class SettingsController extends Controller
         $maxOrder = $roomType->images()->max('sort_order') ?? -1;
 
         foreach ($request->file('images') as $image) {
-            $path = $image->store('room-types', 'public');
+            $path = $image->store(TenantStorage::path('room-types'), 'public');
             $roomType->images()->create([
                 'path' => $path,
                 'sort_order' => ++$maxOrder,

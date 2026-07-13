@@ -21,9 +21,15 @@ class PokConfiguration
             return $this->resolved;
         }
 
-        if ($this->context->id() === null
-            || (app()->environment('testing') && config('services.pok.testing_legacy_fallback', true))) {
+        // Legacy env credentials exist ONLY for the test suite. In production a
+        // missing tenant context must resolve to NO credentials — never to the
+        // first hotel's (Villa Mucho's) live account.
+        if (app()->environment('testing') && config('services.pok.testing_legacy_fallback', true)) {
             return $this->resolved = $this->legacyConfig();
+        }
+
+        if ($this->context->id() === null) {
+            return $this->resolved = $this->emptyConfig();
         }
 
         if (! $this->billing->enabled(TenantBillingService::BOOKING_ENGINE, $this->context->tenant())) {

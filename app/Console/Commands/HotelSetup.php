@@ -3,16 +3,23 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 
 class HotelSetup extends Command
 {
-    protected $signature = 'hotel:setup';
+    use ResolvesTenantContext;
+
+    protected $signature = 'hotel:setup {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'First-time hotel setup: run migrations, seed admin user';
 
     public function handle(): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         $this->info('Setting up Chanel Manager...');
 
         // Run migrations

@@ -9,6 +9,14 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 const props = defineProps({ settings: Object, toasts: Object });
 
 const form = useForm({ gemini_key: '' });
+const contextForm = useForm({ hotel_context: props.settings.ai_hotel_context || '' });
+
+function saveContext() {
+    contextForm.put(route('settings.ai'), {
+        preserveScroll: true,
+        onSuccess: () => props.toasts?.success('Konteksti i hotelit u ruajt.'),
+    });
+}
 
 function submit() {
     if (!form.gemini_key.trim()) {
@@ -89,6 +97,27 @@ function removeKey() {
                        class="text-accent-600 underline hover:text-accent-700">aistudio.google.com/apikey</a>
                     → “Create API key”. Çelësi ruhet vetëm te ky server dhe nuk shfaqet më i plotë për arsye sigurie.
                 </p>
+            </form>
+
+            <!-- Hotel context for richer AI reasoning -->
+            <form @submit.prevent="saveContext" class="space-y-3 border-t border-neutral-200 pt-5">
+                <FormGroup
+                    label="Konteksti i hotelit (opsional)"
+                    :error="contextForm.errors.hotel_context"
+                >
+                    <textarea
+                        v-model="contextForm.hotel_context"
+                        rows="3"
+                        maxlength="1000"
+                        class="w-full rounded-lg border-neutral-300 text-sm"
+                        placeholder="P.sh.: Hotel plazhi në Ksamil; mysafirët kryesisht shqiptarë, italianë, grekë e kosovarë; piku korrik–gusht, Ferragosto e mbush qytetin…"
+                    />
+                </FormGroup>
+                <p class="text-body-xs text-neutral-500">
+                    Ky përshkrim i jepet AI-së bashkë me të dhënat — sa më konkret (tregu i mysafirëve,
+                    sezonaliteti, çfarë e mbush zonën), aq më të sakta arsyetimet e çmimeve.
+                </p>
+                <Button type="submit" variant="outline" size="sm" :loading="contextForm.processing">Ruaj kontekstin</Button>
             </form>
         </div>
     </Card>

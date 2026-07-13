@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Payment;
 use App\Models\Reservation;
 use App\Services\PokPayments;
+use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 
 /**
@@ -15,12 +16,18 @@ use Illuminate\Console\Command;
  */
 class ReleaseUnpaidHolds extends Command
 {
-    protected $signature = 'pok:release-unpaid {--minutes=35 : Age (minutes) after which an unpaid hold is released}';
+    use ResolvesTenantContext;
+
+    protected $signature = 'pok:release-unpaid {--minutes=35 : Age (minutes) after which an unpaid hold is released} {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Cancel pending direct reservations whose POK payment never completed (frees abandoned holds).';
 
     public function handle(): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         $cutoff = now()->subMinutes((int) $this->option('minutes'));
 
         $stale = Reservation::query()
