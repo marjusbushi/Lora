@@ -59,7 +59,9 @@ class User extends Authenticatable
     {
         $tenantId = app(TenantContext::class)->id();
 
-        if ($tenantId === null && app()->runningInConsole()) {
+        // Only tests fall back to the single migrated tenant — a console run
+        // without context must NOT silently attach users to the first hotel.
+        if ($tenantId === null && app()->environment('testing')) {
             $tenantId = Tenant::query()->active()->orderBy('id')->value('id');
         }
 
