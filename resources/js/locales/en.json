@@ -492,6 +492,55 @@
                 "payment": "Payment recorded"
             }
         },
+        "guestMerge": {
+            "title": "Merge duplicate guest profiles",
+            "subtitle": "Choose the primary profile and the data to keep",
+            "start": "Review and merge",
+            "cancel": "Back to profile",
+            "safeTitle": "Controlled and auditable merge",
+            "safeText": "Nothing disappears without a trace. Reservations, documents, invoices and reviews are transferred; the other profile is archived and the action is recorded.",
+            "suggestion": "Primary profile suggestion",
+            "analyzing": "AI is analyzing",
+            "privateSuggestion": "AI receives anonymized statistics only—not email, phone or document numbers.",
+            "recommendedPrimary": "Recommended profile",
+            "primary": "Primary",
+            "archive": "Will be archived",
+            "created": "Created",
+            "reservations": "Reservations",
+            "documents": "Documents",
+            "invoices": "Invoices",
+            "reviews": "Reviews",
+            "chooseData": "Choose the final data",
+            "chooseDataHelp": "For each field, choose the value that should remain on the primary profile.",
+            "empty": "Empty",
+            "finalTitle": "Final confirmation",
+            "finalText": "“{secondary}” will be archived and everything will be transferred to “{primary}”.",
+            "confirm": "I have reviewed the primary profile and every field that will be kept.",
+            "mergeNow": "Merge profiles",
+            "failed": "The profiles could not be merged. Refresh the page and try again.",
+            "sources": {
+                "ai": "AI suggestion",
+                "fallback": "Safe suggestion",
+                "manual": "Manual choice"
+            },
+            "reasons": {
+                "more_history": "This profile has more operational history and should remain primary.",
+                "more_complete": "This profile has more complete identity information.",
+                "older_profile": "The profiles are similar; the older profile is recommended.",
+                "balanced": "Both profiles are similar; review the selection before merging."
+            },
+            "fields": {
+                "first_name": "First name",
+                "last_name": "Last name",
+                "email": "Email",
+                "phone": "Phone",
+                "nationality": "Nationality",
+                "date_of_birth": "Birth date",
+                "document_type": "Document type",
+                "document_number": "Document number",
+                "notes": "Notes"
+            }
+        },
         "generated": {
             "k_00001da4b7fd": "Dashboard",
             "k_00114f238556": "Today",

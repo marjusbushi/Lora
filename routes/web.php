@@ -7,6 +7,7 @@ use App\Http\Controllers\CleaningTaskController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\GuestController;
+use App\Http\Controllers\GuestMergeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosShiftController;
@@ -108,6 +109,11 @@ Route::middleware('auth')->prefix('pms')->group(function () {
     Route::middleware('permission:view_guests')->group(function () {
         Route::get('/guests', [GuestController::class, 'index'])->name('guests.index');
         Route::get('/guests/profile-design', fn () => Inertia::render('Guests/ProfileDesign'))->name('guests.profile-design');
+        Route::middleware(['permission:update_guests', 'permission:delete_guests'])->group(function () {
+            Route::get('/guests/{guest}/merge/{duplicate}', [GuestMergeController::class, 'show'])->name('guests.merge.show');
+            Route::post('/guests/{guest}/merge/{duplicate}/suggest', [GuestMergeController::class, 'suggest'])->name('guests.merge.suggest');
+            Route::post('/guests/{guest}/merge/{duplicate}', [GuestMergeController::class, 'store'])->name('guests.merge.store');
+        });
         Route::get('/guests/{guest}', [GuestController::class, 'show'])->name('guests.show');
         Route::post('/guests', [GuestController::class, 'store'])->middleware('permission:create_guests')->name('guests.store');
         Route::put('/guests/{guest}', [GuestController::class, 'update'])->middleware('permission:update_guests')->name('guests.update');

@@ -15,6 +15,7 @@ defineProps({
 
 const permissions = usePage().props.auth.user?.permissions || [];
 const canUpdate = permissions.includes('update_guests');
+const canMerge = canUpdate && permissions.includes('delete_guests');
 </script>
 
 <template>
@@ -28,6 +29,7 @@ const canUpdate = permissions.includes('update_guests');
             :history="history"
             :duplicates="duplicates"
             :can-update="canUpdate"
+            :can-merge="canMerge"
             :ai-configured="aiConfigured"
         />
     </AppLayout>

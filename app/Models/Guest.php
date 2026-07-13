@@ -34,6 +34,7 @@ class Guest extends TenantModel
             'preferences' => 'array',
             'tags' => 'array',
             'marketing_consent' => 'boolean',
+            'merged_at' => 'datetime',
         ];
     }
 
@@ -64,5 +65,20 @@ class Guest extends TenantModel
     public function documents()
     {
         return $this->hasMany(GuestDocument::class)->latest();
+    }
+
+    public function invoices()
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    public function mergedInto()
+    {
+        return $this->belongsTo(self::class, 'merged_into_guest_id')->withTrashed();
     }
 }

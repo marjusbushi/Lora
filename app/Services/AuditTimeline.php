@@ -19,6 +19,7 @@ class AuditTimeline
         'guest.created' => 'Profili i mysafirit u krijua',
         'guest.updated' => 'Profili i mysafirit u ndryshua',
         'guest.deleted' => 'Profili i mysafirit u fshi',
+        'guest.merged' => 'Profilet e dubluara u bashkuan',
         'payment.record' => 'U regjistrua pagesë',
         'payment.pok_capture' => 'U regjistrua pagesë online',
         'folio.add_line' => 'U shtua një zë në folio',
@@ -67,6 +68,11 @@ class AuditTimeline
         'from' => 'Nga',
         'to' => 'Në',
         'context' => 'Konteksti',
+        'merged_guest' => 'Profili i arkivuar',
+        'reservations_moved' => 'Rezervime të transferuara',
+        'documents_moved' => 'Dokumente të transferuara',
+        'invoices_moved' => 'Fatura të transferuara',
+        'reviews_moved' => 'Vlerësime të transferuara',
     ];
 
     /**

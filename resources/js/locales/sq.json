@@ -492,6 +492,55 @@
                 "payment": "U regjistrua pagesë"
             }
         },
+        "guestMerge": {
+            "title": "Bashko profilet e dubluara",
+            "subtitle": "Zgjidh profilin kryesor dhe të dhënat që do të ruhen",
+            "start": "Kontrollo dhe bashko",
+            "cancel": "Kthehu te profili",
+            "safeTitle": "Bashkim i kontrolluar dhe i auditueshëm",
+            "safeText": "Asgjë nuk humbet pa gjurmë. Rezervimet, dokumentet, faturat dhe vlerësimet transferohen; profili tjetër arkivohet dhe veprimi ruhet në histori.",
+            "suggestion": "Sugjerimi për profilin kryesor",
+            "analyzing": "AI po analizon",
+            "privateSuggestion": "AI merr vetëm statistika anonime, jo email, telefon apo numër dokumenti.",
+            "recommendedPrimary": "Profili i rekomanduar",
+            "primary": "Kryesor",
+            "archive": "Do të arkivohet",
+            "created": "Krijuar",
+            "reservations": "Rezervime",
+            "documents": "Dokumente",
+            "invoices": "Fatura",
+            "reviews": "Vlerësime",
+            "chooseData": "Zgjidh të dhënat përfundimtare",
+            "chooseDataHelp": "Për çdo fushë zgjidh vlerën që duhet të mbetet në profilin kryesor.",
+            "empty": "Bosh",
+            "finalTitle": "Konfirmimi përfundimtar",
+            "finalText": "Profili “{secondary}” do të arkivohet dhe gjithçka do të transferohet te “{primary}”.",
+            "confirm": "E kam kontrolluar profilin kryesor dhe të gjitha fushat që do të ruhen.",
+            "mergeNow": "Bashko profilet",
+            "failed": "Profilet nuk u bashkuan. Rifresko faqen dhe provo përsëri.",
+            "sources": {
+                "ai": "Sugjerim AI",
+                "fallback": "Sugjerim i sigurt",
+                "manual": "Zgjedhje manuale"
+            },
+            "reasons": {
+                "more_history": "Ky profil ka më shumë historik operativ dhe duhet të mbetet kryesor.",
+                "more_complete": "Ky profil ka të dhëna identiteti më të plota.",
+                "older_profile": "Profilet janë të ngjashme; sugjerohet profili më i vjetër.",
+                "balanced": "Të dy profilet janë të ngjashme; kontrollo zgjedhjen para bashkimit."
+            },
+            "fields": {
+                "first_name": "Emri",
+                "last_name": "Mbiemri",
+                "email": "Email",
+                "phone": "Telefoni",
+                "nationality": "Kombësia",
+                "date_of_birth": "Datëlindja",
+                "document_type": "Lloji i dokumentit",
+                "document_number": "Numri i dokumentit",
+                "notes": "Shënime"
+            }
+        },
         "generated": {
             "k_00001da4b7fd": "Paneli",
             "k_00114f238556": "Sot",

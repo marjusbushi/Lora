@@ -40,6 +40,7 @@ const props = defineProps({
     history: { type: Array, default: () => [] },
     duplicates: { type: Array, default: () => [] },
     canUpdate: { type: Boolean, default: false },
+    canMerge: { type: Boolean, default: false },
     aiConfigured: { type: Boolean, default: false },
     demo: { type: Boolean, default: false },
 });
@@ -344,7 +345,12 @@ onBeforeUnmount(() => clearTimeout(analysisTimer));
 
                 <Card v-if="duplicates.length" :padding="false">
                     <template #header><h2 class="text-body font-bold text-warning-800">{{ $t('admin.guestProfileDesign.possibleDuplicates') }}</h2></template>
-                    <div class="space-y-2 p-4"><Link v-for="duplicate in duplicates" :key="duplicate.id" :href="route('guests.show', duplicate.id)" class="block rounded-lg bg-warning-50 px-3 py-2 text-body-sm font-semibold text-warning-800 no-underline hover:bg-warning-100">{{ duplicate.first_name }} {{ duplicate.last_name }}<span v-if="duplicate.email" class="block text-tiny font-normal">{{ duplicate.email }}</span></Link></div>
+                    <div class="space-y-2 p-4">
+                        <div v-for="duplicate in duplicates" :key="duplicate.id" class="rounded-lg bg-warning-50 px-3 py-2">
+                            <Link :href="route('guests.show', duplicate.id)" class="block text-body-sm font-semibold text-warning-800 no-underline hover:underline">{{ duplicate.first_name }} {{ duplicate.last_name }}<span v-if="duplicate.email" class="block text-tiny font-normal">{{ duplicate.email }}</span></Link>
+                            <Link v-if="canMerge" :href="route('guests.merge.show', [guest.id, duplicate.id])" class="mt-2 inline-flex no-underline"><Button size="sm" variant="outline"><Sparkles class="h-4 w-4" />{{ $t('admin.guestMerge.start') }}</Button></Link>
+                        </div>
+                    </div>
                 </Card>
 
                 <Card :padding="false">
