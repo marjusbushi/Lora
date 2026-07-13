@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import Sidebar from '@/Components/UI/Sidebar.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
@@ -20,13 +20,17 @@ watch(sidebarCollapsed, (v) => {
 const mobileMenuOpen = ref(false);
 
 // Full-screen pages (the chat) hide the topbar and bring their own header.
-// They still need a way to open the mobile nav drawer, so expose the trigger.
+// They still need a way to open the mobile nav drawer. NOTE: provide/inject
+// does NOT work here — the page RENDERS this layout, so the page is the
+// PARENT and inject() never sees a child's provide. Expose a method instead;
+// pages call it through a template ref.
 defineProps({
     hideHeader: { type: Boolean, default: false },
 });
-provide('openMobileMenu', () => {
+function openMobileMenu() {
     mobileMenuOpen.value = true;
-});
+}
+defineExpose({ openMobileMenu });
 
 const page = usePage();
 const userPermissions = computed(() => page.props.auth.user?.permissions || []);

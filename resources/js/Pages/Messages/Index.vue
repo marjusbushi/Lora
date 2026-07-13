@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, inject } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -83,9 +83,14 @@ function pickQuick(text) {
 // Mobile is master-detail like WhatsApp: the list OR the chat, never stacked.
 const mobileChatOpen = ref(false);
 
-// The app topbar is hidden on this page (hide-header) — this opens the nav
-// drawer from our own header on phones, where the hamburger used to live.
-const openMobileMenu = inject('openMobileMenu', () => {});
+// The app topbar is hidden on this page (hide-header) — the hamburger in our
+// own header opens the nav drawer through the layout's exposed method (a
+// template ref, NOT inject: this page is the layout's parent, so inject
+// would never resolve the layout's provide).
+const layoutRef = ref(null);
+function openMobileMenu() {
+    layoutRef.value?.openMobileMenu?.();
+}
 
 const filteredThreads = computed(() => {
     if (filter.value === 'all') return props.threads;
@@ -154,7 +159,7 @@ function statusLabel(s) {
 
     <!-- The chat brings its own header; the empty state keeps the normal chrome
          (without it a phone with zero threads would have no navigation at all). -->
-    <AppLayout :hide-header="threads.length > 0">
+    <AppLayout ref="layoutRef" :hide-header="threads.length > 0">
         <div v-if="!threads.length" class="rounded-2xl border border-neutral-200 bg-white px-6 py-20 text-center">
             <p class="text-base font-semibold text-neutral-800">Ende asnjë bisedë</p>
             <p class="mt-1 text-sm text-neutral-500">Kur një mysafir të shkruajë nga Booking, Airbnb ose Expedia, biseda do të shfaqet këtu.</p>
