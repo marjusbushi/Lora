@@ -58,6 +58,8 @@ const allNavItems = [
             { label: 'Paneli', href: '/pms/finance' },
             { label: 'Arka & Banka', href: '/pms/finance/accounts' },
             { label: 'Pagesat', href: '/pms/finance/payments' },
+            { label: 'Blerjet (Bills)', href: '/pms/finance/bills' },
+            { label: 'Furnitorët', href: '/pms/finance/suppliers' },
         ],
     },
     { label: 'Raporte', href: '/pms/reports', icon: icons.reports, permission: 'view_reports' },

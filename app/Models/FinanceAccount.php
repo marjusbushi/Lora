@@ -20,13 +20,20 @@ class FinanceAccount extends TenantModel
         return $this->hasMany(FinancePayment::class, 'account_id');
     }
 
-    /** Ledger balance in the ACCOUNT's own currency. */
+    /**
+     * Ledger balance in the ACCOUNT's own currency. A EUR account sums the
+     * frozen base value of every row (so paying a LEK bill from the EUR arka
+     * deducts its exact EUR equivalent); a non-EUR account only ever holds
+     * rows in its own currency (enforced at write time), so it sums amounts.
+     */
     public function balance(): float
     {
-        $in = (float) FinancePayment::where('account_id', $this->id)->where('direction', 'in')->sum('amount');
-        $out = (float) FinancePayment::where('account_id', $this->id)->where('direction', 'out')->sum('amount');
-        $transferOut = (float) FinancePayment::where('account_id', $this->id)->where('direction', 'transfer')->sum('amount');
-        $transferIn = (float) FinancePayment::where('counter_account_id', $this->id)->where('direction', 'transfer')->sum('amount');
+        $col = strtoupper((string) $this->currency) === 'EUR' ? 'amount_base' : 'amount';
+
+        $in = (float) FinancePayment::where('account_id', $this->id)->where('direction', 'in')->sum($col);
+        $out = (float) FinancePayment::where('account_id', $this->id)->where('direction', 'out')->sum($col);
+        $transferOut = (float) FinancePayment::where('account_id', $this->id)->where('direction', 'transfer')->sum($col);
+        $transferIn = (float) FinancePayment::where('counter_account_id', $this->id)->where('direction', 'transfer')->sum($col);
 
         return round($in - $out - $transferOut + $transferIn, 2);
     }

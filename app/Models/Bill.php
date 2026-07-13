@@ -10,6 +10,19 @@ namespace App\Models;
  */
 class Bill extends TenantModel
 {
+    /** Default expense categories; the owner can override the list in Settings. */
+    public const DEFAULT_CATEGORIES = [
+        'Ushqim & Pije', 'Utilitete', 'Lavanderi', 'Mirëmbajtje', 'Marketing', 'Të tjera',
+    ];
+
+    /** @return list<string> */
+    public static function categories(): array
+    {
+        $custom = Setting::get('financial.expense_categories', null);
+
+        return is_array($custom) && $custom !== [] ? array_values($custom) : self::DEFAULT_CATEGORIES;
+    }
+
     protected $fillable = [
         'supplier_id', 'number', 'category', 'issue_date', 'due_date',
         'currency', 'fx_rate', 'total', 'total_base', 'status', 'notes',
