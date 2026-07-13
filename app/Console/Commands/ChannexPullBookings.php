@@ -32,6 +32,15 @@ class ChannexPullBookings extends Command
             return self::FAILURE;
         }
 
+        // Without a property id the feed is account-wide and ownership of a
+        // revision cannot be verified — running would risk draining OTHER
+        // hotels' bookings. Refuse loudly instead.
+        if ($channex->propertyId() === '') {
+            $this->error('Channex property_id mungon për këtë hotel — plotësoje te integrimi para se të tërheqësh rezervime.');
+
+            return self::FAILURE;
+        }
+
         $feed = $channex->getBookingFeed();
         if ($feed === []) {
             $this->info('No unacknowledged bookings.');

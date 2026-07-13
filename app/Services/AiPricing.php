@@ -32,11 +32,16 @@ class AiPricing
         $address = trim((string) (Setting::get('hotel.address') ?: ''));
         $rooms = Room::query()->count();
 
+        // Owner-written flavor (guest mix, seasonality, local anchors) makes the
+        // model's explanations far richer — Settings → Asistenti AI.
+        $custom = trim((string) (Setting::get('ai.hotel_context') ?: ''));
+
         return sprintf(
-            'Hotel "%s"%s (%d rooms).',
+            'Hotel "%s"%s (%d rooms).%s',
             $name,
             $address !== '' ? ', '.$address : '',
             $rooms,
+            $custom !== '' ? ' '.$custom : '',
         );
     }
 
@@ -114,9 +119,10 @@ class AiPricing
         $out = app(GeminiClient::class)->structured(
             'You maintain the demand-events calendar for pricing. '.self::hotelContext().' '
             .'Suggest REAL demand-relevant events in the given window that are MISSING from the '
-            .'existing list: Albanian & Kosovar public/religious holidays (incl. Bajram dates for '
-            .'the actual year), Italian holidays that push Ksamil demand, Saranda/Ksamil festivals, '
-            .'diaspora waves. For each: exact dates, a conservative uplift_pct suggestion (5-20, or '
+            .'existing list: national public/religious holidays of the hotel\'s country and its '
+            .'main guest markets (incl. movable dates for the actual year), local festivals and '
+            .'events around the hotel\'s own location, diaspora/holiday travel waves. For each: '
+            .'exact dates, a conservative uplift_pct suggestion (5-20, or '
             .'null if purely informational), and a one-line Albanian reason. Skip anything already '
             .'covered. Always call submit_event_suggestions.',
             json_encode([

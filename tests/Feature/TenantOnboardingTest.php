@@ -172,4 +172,16 @@ class TenantOnboardingTest extends TestCase
                 ->count(),
         );
     }
+    public function test_enabling_channex_without_a_property_id_is_rejected(): void
+    {
+        $tenant = Tenant::factory()->create();
+
+        $this->actingAs($this->superAdmin)
+            ->put(route('super-admin.tenants.integrations.update', [$tenant->id, 'channex']), [
+                'enabled' => true,
+                'api_key' => 'some-key',
+                'property_id' => '',
+            ])
+            ->assertSessionHasErrors('property_id');
+    }
 }

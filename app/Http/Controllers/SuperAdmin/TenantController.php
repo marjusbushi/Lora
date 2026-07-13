@@ -136,7 +136,7 @@ class TenantController extends Controller
             // (password untouched), a new one is created with a random
             // password (they set their own via "forgot password").
             if (! empty($data['owner_email'])) {
-                $owner = User::withoutGlobalScopes()->firstOrCreate(
+                $owner = User::withoutGlobalScopes()->withTrashed()->firstOrCreate(
                     ['email' => Str::lower(trim($data['owner_email']))],
                     [
                         'name' => $data['owner_name'],
@@ -144,6 +144,10 @@ class TenantController extends Controller
                         'current_tenant_id' => $tenant->id,
                     ],
                 );
+
+                if ($owner->trashed()) {
+                    $owner->restore();
+                }
 
                 if (! $owner->current_tenant_id) {
                     $owner->forceFill(['current_tenant_id' => $tenant->id])->save();
@@ -167,7 +171,11 @@ class TenantController extends Controller
             'tenant_name' => $tenant->name,
         ]));
 
-        return back()->with('success', 'Hoteli u krijua. Tani mund te kalosh ne tenantin e ri.');
+        $ownerNote = isset($owner) && ! $owner->wasRecentlyCreated
+            ? ' U lidh llogaria EKZISTUESE '.$owner->email.' si pronar — verifiko që është personi i duhur.'
+            : '';
+
+        return back()->with('success', 'Hoteli u krijua.'.$ownerNote.' Tani mund te kalosh ne tenantin e ri.');
     }
 
     public function updateSubscription(
@@ -233,7 +241,8 @@ class TenantController extends Controller
                 'enabled' => ['required', 'boolean'],
                 'api_key' => ['nullable', 'string', 'max:255'],
                 'webhook_secret' => ['nullable', 'string', 'max:255'],
-                'property_id' => ['nullable', 'string', 'max:255'],
+                // Pa property id feed-i bëhet account-wide (rrezik cross-tenant).
+                'property_id' => ['required_if:enabled,true', 'nullable', 'string', 'max:255'],
                 'base_url' => ['nullable', 'url', 'max:255'],
             ]
             : [
@@ -258,9 +267,15 @@ class TenantController extends Controller
             }
         }
 
+        // Non-secret config is pre-filled in the form, so a blank submit is a
+        // deliberate CLEAR (secrets stay blank-keeps — they are never pre-filled).
         foreach ($provider === 'channex' ? ['property_id', 'base_url'] : ['merchant_id'] as $key) {
-            if (filled($data[$key] ?? null)) {
-                $configuration[$key] = $data[$key];
+            if (array_key_exists($key, $data)) {
+                if (filled($data[$key])) {
+                    $configuration[$key] = $data[$key];
+                } else {
+                    unset($configuration[$key]);
+                }
             }
         }
 

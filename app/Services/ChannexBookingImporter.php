@@ -56,9 +56,12 @@ class ChannexBookingImporter
         // One Channex account serves many hotels: a revision belonging to another
         // property (= another tenant) must never be imported here — and the caller
         // must not ack it, or the owning hotel loses the booking permanently.
+        // An EMPTY expected property means ownership cannot be verified at all
+        // (misconfigured tenant) — refuse everything rather than import blind.
         $revisionProperty = (string) ($rev['property_id'] ?? '');
-        if ($expectedPropertyId !== null && $expectedPropertyId !== ''
-            && $revisionProperty !== '' && $revisionProperty !== $expectedPropertyId) {
+        if ($expectedPropertyId !== null
+            && ($expectedPropertyId === ''
+                || ($revisionProperty !== '' && $revisionProperty !== $expectedPropertyId))) {
             $summary['status'] = 'foreign_property';
             $summary['flagged'][] = "revision belongs to property {$revisionProperty} — not ours, skipped";
             $this->log($channel, $ref !== '' ? $ref : (string) $revisionId, $revisionId, 'booking.foreign_property', null, null, 'skipped');

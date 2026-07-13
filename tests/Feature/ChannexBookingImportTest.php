@@ -397,4 +397,15 @@ class ChannexBookingImportTest extends TestCase
             ChannelSyncLog::where('action', 'booking.room_type_unmapped')->where('status', 'skipped')->exists(),
         );
     }
+    public function test_unverifiable_property_refuses_import_entirely(): void
+    {
+        $this->studio();
+
+        // Expected property UNKNOWN ('' = misconfigured tenant): nothing may be
+        // imported or acked — ownership cannot be verified.
+        $summary = app(ChannexBookingImporter::class)->importRevision($this->revision(), '');
+
+        $this->assertSame('foreign_property', $summary['status']);
+        $this->assertSame(0, Reservation::count());
+    }
 }

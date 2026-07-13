@@ -34,6 +34,7 @@ class SettingsController extends Controller
         $settings['ai'] = [
             'gemini_configured' => ! empty($aiKey) || ! empty(config('services.gemini.key')),
             'gemini_key_hint' => $aiKey ? str_repeat('•', 6).substr((string) $aiKey, -4) : null,
+            'ai_hotel_context' => Setting::get('ai.hotel_context', ''),
             'gemini_from_env' => empty($aiKey) && ! empty(config('services.gemini.key')),
         ];
 
@@ -330,8 +331,13 @@ class SettingsController extends Controller
     {
         $data = $request->validate([
             'gemini_key' => ['nullable', 'string', 'max:200'],
+            'hotel_context' => ['nullable', 'string', 'max:1000'],
             'clear' => ['nullable', 'boolean'],
         ]);
+
+        if ($request->has('hotel_context')) {
+            Setting::set('ai.hotel_context', trim((string) ($data['hotel_context'] ?? '')), 'text');
+        }
 
         if ($request->boolean('clear')) {
             Setting::set('ai.gemini_key', '', 'text');

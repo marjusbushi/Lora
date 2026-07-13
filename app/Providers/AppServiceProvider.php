@@ -27,7 +27,7 @@ class AppServiceProvider extends ServiceProvider
         // Channex calls every hotel's webhook from the same IPs — key the
         // budget on the tenant's host so hotels never starve each other.
         RateLimiter::for('channex-webhook', function ($request) {
-            return Limit::perMinute(120)->by(strtolower($request->getHost()));
+            return Limit::perMinute(120)->by(strtolower($request->getHost()).'|'.$request->ip());
         });
 
         if (app()->environment('production')) {
