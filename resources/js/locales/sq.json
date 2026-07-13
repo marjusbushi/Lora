@@ -390,6 +390,7 @@
             "alternativeType": "Tip alternativ",
             "choose": "Zgjidh",
             "keepReservation": "Ky rezervim mund të qëndrojë në dhomën aktuale.",
+            "noSuggestion": "Nuk u gjet dhomë alternative e lirë. Ky rezervim kërkon zgjidhje manuale.",
             "demoApplied": "Demo: konflikti u zgjidh duke zgjedhur dhomën {room}. Rifresko faqen për ta rikthyer.",
             "confirmApply": "Ta zhvendos rezervimin në dhomën {room}? Sistemi do ta kontrollojë përsëri disponueshmërinë.",
             "realApplied": "Konflikti u zgjidh. Rezervimi u zhvendos në dhomën {room}.",

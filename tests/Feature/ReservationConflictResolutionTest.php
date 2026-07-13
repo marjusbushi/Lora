@@ -98,6 +98,8 @@ class ReservationConflictResolutionTest extends TestCase
             'days' => 14,
         ]))->assertInertia(fn (AssertableInertia $page) => $page
             ->has('conflicts', 1)
+            ->where('conflicts.0.start_date', '2026-07-22')
+            ->where('conflicts.0.end_date', '2026-07-27')
             ->has('conflicts.0.reservations', 3));
     }
 

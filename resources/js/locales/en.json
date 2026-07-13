@@ -390,6 +390,7 @@
             "alternativeType": "Alternative type",
             "choose": "Choose",
             "keepReservation": "This reservation can remain in its current room.",
+            "noSuggestion": "No available alternative room was found. This reservation requires a manual solution.",
             "demoApplied": "Demo: the conflict was resolved by choosing room {room}. Refresh the page to restore it.",
             "confirmApply": "Move the reservation to room {room}? The system will check availability again.",
             "realApplied": "Conflict resolved. The reservation was moved to room {room}.",

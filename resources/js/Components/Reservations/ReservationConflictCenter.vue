@@ -103,7 +103,9 @@ function guestName(reservation) {
                                         </div>
                                     </div>
                                 </div>
-                                <p v-else class="mt-3 rounded-lg bg-neutral-50 px-3 py-2 text-tiny text-neutral-500">{{ $t('admin.calendarConflicts.keepReservation') }}</p>
+                                <p v-else class="mt-3 rounded-lg px-3 py-2 text-tiny" :class="reservation.keep_in_room ? 'bg-neutral-50 text-neutral-500' : 'bg-warning-50 text-warning-800'">
+                                    {{ reservation.keep_in_room ? $t('admin.calendarConflicts.keepReservation') : $t('admin.calendarConflicts.noSuggestion') }}
+                                </p>
                             </section>
                         </div>
                     </article>

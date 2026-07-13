@@ -102,6 +102,7 @@ export function useReservationCalendarDemo() {
                 .filter((reservation) => reservationIds.includes(reservation.id))
                 .map((reservation) => ({
                     ...reservation,
+                    keep_in_room: reservation.id === 108,
                     suggested_rooms: reservation.id === 112 ? [
                         { id: 6, room_number: '202', room_type: 'Junior Suite', same_type: true },
                         { id: 7, room_number: '203', room_type: 'Family Suite', same_type: false },

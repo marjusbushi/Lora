@@ -61,6 +61,7 @@ class ReservationConflictService
                             'first_name' => $reservation->guest->first_name,
                             'last_name' => $reservation->guest->last_name,
                         ] : null,
+                        'keep_in_room' => $reservation->id === $keeper?->id || $reservation->status === 'checked_in',
                         'suggested_rooms' => $reservation->id !== $keeper?->id
                             && in_array($reservation->status, ['pending', 'confirmed'], true)
                                 ? $this->suggestRooms($reservation, $rooms)
@@ -82,7 +83,9 @@ class ReservationConflictService
         foreach ($reservations as $reservation) {
             if ($current->isEmpty() || $reservation->check_in_date->lessThan($currentEnd)) {
                 $current->push($reservation);
-                $currentEnd = $currentEnd?->max($reservation->check_out_date) ?? $reservation->check_out_date;
+                if ($currentEnd === null || $reservation->check_out_date->greaterThan($currentEnd)) {
+                    $currentEnd = $reservation->check_out_date;
+                }
 
                 continue;
             }
@@ -115,12 +118,16 @@ class ReservationConflictService
                     continue;
                 }
 
-                $starts->push($first->check_in_date->max($second->check_in_date));
-                $ends->push($first->check_out_date->min($second->check_out_date));
+                $starts->push(($first->check_in_date->greaterThan($second->check_in_date)
+                    ? $first->check_in_date
+                    : $second->check_in_date)->toDateString());
+                $ends->push(($first->check_out_date->lessThan($second->check_out_date)
+                    ? $first->check_out_date
+                    : $second->check_out_date)->toDateString());
             }
         }
 
-        return [$starts->min()->toDateString(), $ends->max()->toDateString()];
+        return [$starts->min(), $ends->max()];
     }
 
     public function hasConflict(Reservation $reservation): bool
