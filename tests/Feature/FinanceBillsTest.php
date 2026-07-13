@@ -191,4 +191,31 @@ class FinanceBillsTest extends TestCase
                 ->where('summary.due_soon_count', 1)
                 ->has('priorities', 2));
     }
+
+    public function test_suppliers_page_ships_operational_summary_and_open_bills(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-07-13 12:00:00'));
+        $this->withoutVite();
+        $manager = $this->role('manager');
+        $supplier = $this->supplier('Eco Market');
+        $bill = $this->lekBill($supplier);
+        $bill->update(['number' => 'EM-184', 'issue_date' => '2026-07-01', 'due_date' => '2026-07-12']);
+
+        $this->actingAs($manager)->get(route('finance.suppliers'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Finance/Suppliers')
+                ->where('suppliers.0.name', 'Eco Market')
+                ->where('suppliers.0.open_balance', 100)
+                ->where('suppliers.0.overdue_balance', 100)
+                ->where('suppliers.0.open_bills_count', 1)
+                ->where('suppliers.0.open_bills.0.number', 'EM-184')
+                ->where('suppliers.0.open_bills.0.is_overdue', true)
+                ->where('summary.active_count', 1)
+                ->where('summary.open_total', 100)
+                ->where('summary.open_bill_count', 1)
+                ->where('summary.overdue_total', 100)
+                ->where('summary.overdue_supplier_count', 1)
+                ->where('summary.ytd_total', 100));
+    }
 }

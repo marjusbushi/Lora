@@ -546,23 +546,79 @@ class FinanceController extends Controller
 
     public function suppliers(Request $request): Response
     {
-        $suppliers = Supplier::withCount('bills')->orderBy('name')->get()->map(fn (Supplier $s) => [
-            'id' => $s->id,
-            'name' => $s->name,
-            'nipt' => $s->nipt,
-            'category' => $s->category,
-            'phone' => $s->phone,
-            'email' => $s->email,
-            'address' => $s->address,
-            'payment_terms_days' => $s->payment_terms_days,
-            'is_active' => $s->is_active,
-            'bills_count' => $s->bills_count,
-            'open_balance' => $s->openBalanceBase(),
-            'ytd' => round((float) $s->bills()->whereYear('issue_date', now()->year)->sum('total_base'), 2),
-        ]);
+        $today = CarbonImmutable::today();
+        $remainingBase = static fn (Bill $bill): float => max(
+            0,
+            round((float) $bill->total_base - (float) ($bill->paid_base ?? 0), 2),
+        );
+
+        $suppliers = Supplier::query()
+            ->withCount('bills')
+            ->withSum([
+                'bills as ytd' => fn (Builder $query) => $query->whereYear('issue_date', $today->year),
+            ], 'total_base')
+            ->with([
+                'bills' => fn ($query) => $query
+                    ->where('status', '!=', 'paid')
+                    ->withSum('payments as paid_base', 'amount_base')
+                    ->orderBy('due_date')
+                    ->orderBy('id'),
+            ])
+            ->orderBy('name')
+            ->get()
+            ->map(function (Supplier $supplier) use ($remainingBase, $today) {
+                $openBills = $supplier->bills
+                    ->map(function (Bill $bill) use ($remainingBase, $today) {
+                        $remaining = $remainingBase($bill);
+                        $isOverdue = $bill->due_date?->isBefore($today) && $remaining > 0;
+
+                        return [
+                            'id' => $bill->id,
+                            'number' => $bill->number,
+                            'issue_date' => $bill->issue_date?->toDateString(),
+                            'due_date' => $bill->due_date?->toDateString(),
+                            'status' => $bill->status,
+                            'remaining_base' => $remaining,
+                            'is_overdue' => $isOverdue,
+                            'overdue_days' => $isOverdue ? $bill->due_date->diffInDays($today) : 0,
+                        ];
+                    })
+                    ->filter(fn (array $bill) => $bill['remaining_base'] > 0)
+                    ->values();
+
+                return [
+                    'id' => $supplier->id,
+                    'name' => $supplier->name,
+                    'nipt' => $supplier->nipt,
+                    'category' => $supplier->category,
+                    'phone' => $supplier->phone,
+                    'email' => $supplier->email,
+                    'address' => $supplier->address,
+                    'payment_terms_days' => $supplier->payment_terms_days,
+                    'is_active' => $supplier->is_active,
+                    'bills_count' => $supplier->bills_count,
+                    'open_balance' => round((float) $openBills->sum('remaining_base'), 2),
+                    'overdue_balance' => round((float) $openBills->where('is_overdue', true)->sum('remaining_base'), 2),
+                    'ytd' => round((float) ($supplier->ytd ?? 0), 2),
+                    'open_bills_count' => $openBills->count(),
+                    'open_bills' => $openBills->take(5),
+                ];
+            })
+            ->values();
+
+        $summary = [
+            'active_count' => $suppliers->where('is_active', true)->count(),
+            'category_count' => $suppliers->where('is_active', true)->pluck('category')->filter()->unique()->count(),
+            'open_total' => round((float) $suppliers->sum('open_balance'), 2),
+            'open_bill_count' => $suppliers->sum('open_bills_count'),
+            'overdue_total' => round((float) $suppliers->sum('overdue_balance'), 2),
+            'overdue_supplier_count' => $suppliers->where('overdue_balance', '>', 0)->count(),
+            'ytd_total' => round((float) $suppliers->sum('ytd'), 2),
+        ];
 
         return Inertia::render('Finance/Suppliers', array_merge($this->shared($request), [
             'suppliers' => $suppliers,
+            'summary' => $summary,
             'categories' => Bill::categories(),
         ]));
     }
