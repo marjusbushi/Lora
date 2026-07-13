@@ -5,6 +5,7 @@ import {
     Building2,
     ExternalLink,
     LayoutDashboard,
+    ListChecks,
     LogOut,
     Menu,
     ShieldCheck,
@@ -20,6 +21,7 @@ const user = computed(() => page.props.auth?.user || {});
 const navigation = [
     { label: 'Përmbledhje', href: '/super-admin', match: '/super-admin', exact: true, icon: LayoutDashboard },
     { label: 'Hotelet & abonimet', href: '/super-admin/tenants', match: '/super-admin/tenants', icon: Building2 },
+    { label: 'Aktiviteti', href: '/super-admin/activity', match: '/super-admin/activity', icon: ListChecks },
 ];
 
 function isActive(item) {

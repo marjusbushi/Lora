@@ -228,6 +228,26 @@ class TenantController extends Controller
         return redirect()->away($this->tenantDashboardUrl($tenant));
     }
 
+    public function updateStatus(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
+    {
+        $data = $request->validate([
+            'status' => ['required', Rule::in(['active', 'suspended'])],
+        ]);
+
+        // A suspended hotel is locked out everywhere: ResolveTenant only ever
+        // resolves an ACTIVE tenant, so its domains 404 and it cannot be
+        // switched into — no session/data is exposed while suspended.
+        $tenant->forceFill(['status' => $data['status']])->save();
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.status', $tenant, [
+            'status' => $data['status'],
+        ]));
+
+        $verb = $data['status'] === 'suspended' ? 'u pezullua' : 'u aktivizua';
+
+        return back()->with('success', "{$tenant->name} {$verb}.");
+    }
+
     public function updateIntegration(
         Request $request,
         Tenant $tenant,

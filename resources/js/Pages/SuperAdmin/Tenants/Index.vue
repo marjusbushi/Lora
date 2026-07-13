@@ -3,7 +3,7 @@ import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Button from '@/Components/UI/Button.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
 const props = defineProps({
     tenants: Array,
@@ -118,6 +118,38 @@ function switchTenant(tenant) {
     router.post(route('super-admin.tenants.switch', tenant.id));
 }
 
+const search = ref('');
+const filteredTenants = computed(() => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) return props.tenants;
+    return props.tenants.filter((t) =>
+        [t.name, t.slug, t.primary_domain, ...(t.domains || []).map((d) => d.domain)]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q)),
+    );
+});
+
+function toggleStatus(tenant) {
+    const suspend = tenant.status === 'active';
+    const msg = suspend
+        ? `Të pezulloj ${tenant.name}? Hoteli s'do të hapet dot (faqja, paneli, rezervimet) derisa ta riaktivizosh.`
+        : `Të riaktivizoj ${tenant.name}?`;
+    if (!confirm(msg)) return;
+    router.patch(route('super-admin.tenants.status', tenant.id), {
+        status: suspend ? 'suspended' : 'active',
+    }, { preserveScroll: true });
+}
+
+function tenantStatusClass(status) {
+    return status === 'active'
+        ? 'bg-success-50 text-success-700'
+        : 'bg-red-50 text-red-700';
+}
+
+function tenantStatusLabel(status) {
+    return status === 'active' ? 'Aktiv' : (status === 'suspended' ? 'Pezulluar' : status);
+}
+
 function openBilling(tenant) {
     editingTenant.value = tenant;
     billingForm.status = tenant.billing.status;
@@ -176,19 +208,28 @@ function statusLabel(status) {
 
             <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
                 <section class="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-                    <div class="border-b border-neutral-200 px-5 py-4">
-                        <h2 class="text-lg font-semibold text-neutral-900">Tenantët aktivë</h2>
-                        <p class="mt-1 text-sm text-neutral-500">Çdo hotel ka të dhënat, settings dhe domain-et e veta.</p>
+                    <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h2 class="text-lg font-semibold text-neutral-900">Hotelet</h2>
+                            <p class="mt-1 text-sm text-neutral-500">Çdo hotel ka të dhënat, settings dhe domain-et e veta.</p>
+                        </div>
+                        <input
+                            v-if="tenants.length"
+                            v-model="search"
+                            type="search"
+                            placeholder="Kërko emër / domain…"
+                            class="w-full rounded-lg border-neutral-300 text-sm sm:w-56"
+                        />
                     </div>
 
-                    <div v-if="tenants.length" class="divide-y divide-neutral-100">
-                        <article v-for="tenant in tenants" :key="tenant.id" class="p-5">
+                    <div v-if="filteredTenants.length" class="divide-y divide-neutral-100">
+                        <article v-for="tenant in filteredTenants" :key="tenant.id" class="p-5">
                             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div class="min-w-0 flex-1">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <h3 class="font-semibold text-neutral-900">{{ tenant.name }}</h3>
                                     <span v-if="tenant.id === currentTenantId" class="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">Aktual</span>
-                                    <span class="rounded-full bg-success-50 px-2 py-0.5 text-xs font-medium text-success-700">{{ tenant.status }}</span>
+                                    <span class="rounded-full px-2 py-0.5 text-xs font-medium" :class="tenantStatusClass(tenant.status)">{{ tenantStatusLabel(tenant.status) }}</span>
                                     <span
                                         class="rounded-full px-2 py-0.5 text-xs font-medium"
                                         :class="tenant.billing.status === 'active' || tenant.billing.status === 'trialing'
@@ -226,15 +267,31 @@ function statusLabel(status) {
                                     <Button
                                         size="sm"
                                         :variant="tenant.id === currentTenantId ? 'outline' : 'primary'"
-                                        :disabled="tenant.id === currentTenantId"
+                                        :disabled="tenant.id === currentTenantId || tenant.status !== 'active'"
                                         @click="switchTenant(tenant)"
                                     >
                                         {{ tenant.id === currentTenantId ? 'Në përdorim' : 'Hap hotelin' }}
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        :class="tenant.status === 'active' ? 'text-red-600' : 'text-success-700'"
+                                        @click="toggleStatus(tenant)"
+                                    >
+                                        {{ tenant.status === 'active' ? 'Pezullo' : 'Aktivizo' }}
                                     </Button>
                                 </div>
                             </div>
                             </div>
                         </article>
+                    </div>
+
+                    <div v-else-if="tenants.length" class="px-5 py-12 text-center text-sm text-neutral-500">
+                        Asnjë hotel nuk përputhet me “{{ search }}”.
+                    </div>
+                    <div v-else class="px-5 py-16 text-center">
+                        <p class="text-sm font-medium text-neutral-700">Ende asnjë hotel</p>
+                        <p class="mt-1 text-xs text-neutral-500">Krijo hotelin e parë nga forma anash.</p>
                     </div>
                 </section>
 

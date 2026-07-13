@@ -184,4 +184,54 @@ class TenantOnboardingTest extends TestCase
             ])
             ->assertSessionHasErrors('property_id');
     }
+    public function test_suspending_a_hotel_locks_it_out_and_activating_restores_it(): void
+    {
+        $tenant = Tenant::factory()->create(['name' => 'Hotel D', 'status' => 'active']);
+        app(\App\Services\TenantBillingService::class)->provision($tenant, enableAll: true);
+        TenantDomain::query()->create([
+            'tenant_id' => $tenant->id, 'domain' => 'hoteld.test', 'is_primary' => true,
+        ]);
+
+        // Super-admin actions live on the control-panel host (localhost here) —
+        // use explicit URLs so a preceding request to the HOTEL domain can't
+        // repoint route() at the wrong host.
+        $cp = fn (string $path) => 'http://localhost'.$path;
+
+        // Active hotel resolves on its own domain.
+        $this->get('https://hoteld.test/rooms')->assertOk();
+
+        // Suspend it.
+        $this->actingAs($this->superAdmin)
+            ->patch($cp("/super-admin/tenants/{$tenant->id}/status"), ['status' => 'suspended'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+        $this->assertSame('suspended', $tenant->fresh()->status);
+
+        // Now its domain 404s and it cannot be switched into.
+        $this->get('https://hoteld.test/rooms')->assertNotFound();
+        $this->actingAs($this->superAdmin)
+            ->post($cp("/super-admin/tenants/{$tenant->id}/switch"))
+            ->assertStatus(422);
+
+        // Reactivate → live again.
+        $this->actingAs($this->superAdmin)
+            ->patch($cp("/super-admin/tenants/{$tenant->id}/status"), ['status' => 'active'])
+            ->assertRedirect();
+        $this->assertSame('active', $tenant->fresh()->status);
+        $this->get('https://hoteld.test/rooms')->assertOk();
+
+        $this->assertSame(
+            2,
+            AuditLog::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('action', 'tenant.status')->count(),
+        );
+    }
+
+    public function test_status_only_accepts_active_or_suspended(): void
+    {
+        $tenant = Tenant::factory()->create();
+
+        $this->actingAs($this->superAdmin)
+            ->patch(route('super-admin.tenants.status', $tenant->id), ['status' => 'deleted'])
+            ->assertSessionHasErrors('status');
+    }
 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
 use App\Models\User;
@@ -153,5 +154,38 @@ class ControlPanelIsolationTest extends TestCase
         $this->get('https://admin.lorapms.test/login')
             ->assertOk()
             ->assertSee('super-admin.tenants', false);
+    }
+    public function test_activity_feed_shows_platform_actions_to_super_admin_only(): void
+    {
+        $tenant = Tenant::query()->sole();
+        app(\App\Tenancy\TenantContext::class)->run($tenant, function () use ($tenant) {
+            AuditLog::record('tenant.integration.update', $tenant, [
+                'provider' => 'channex',
+                'enabled' => true,
+                'updated_fields' => ['api_key', 'property_id'],
+            ]);
+        });
+
+        $superAdmin = User::factory()->create(['is_super_admin' => true, 'current_tenant_id' => $tenant->id]);
+
+        $response = $this->actingAs($superAdmin)
+            ->get('https://admin.lorapms.test/super-admin/activity')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SuperAdmin/Activity')
+                ->has('logs.data', 1)
+                ->where('logs.data.0.action', 'tenant.integration.update'));
+
+        // Field NAMES may show; secret VALUES must never reach the page.
+        $this->assertStringNotContainsString('api_key_value', $response->getContent());
+    }
+
+    public function test_activity_feed_is_forbidden_for_a_hotel_admin(): void
+    {
+        $user = User::factory()->create(['is_super_admin' => false]);
+
+        $this->actingAs($user)
+            ->get('https://admin.lorapms.test/super-admin/activity')
+            ->assertForbidden();
     }
 }

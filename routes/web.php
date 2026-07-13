@@ -72,10 +72,12 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
     ->name('super-admin.')
     ->group(function () {
         Route::get('/', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/activity', [SuperAdminDashboardController::class, 'activity'])->name('activity');
         Route::get('/tenants', [SuperAdminTenantController::class, 'index'])->name('tenants.index');
         Route::post('/tenants', [SuperAdminTenantController::class, 'store'])->name('tenants.store');
         Route::put('/tenants/{tenant}/subscription', [SuperAdminTenantController::class, 'updateSubscription'])->name('tenants.subscription.update');
         Route::post('/tenants/{tenant}/switch', [SuperAdminTenantController::class, 'switch'])->name('tenants.switch');
+        Route::patch('/tenants/{tenant}/status', [SuperAdminTenantController::class, 'updateStatus'])->name('tenants.status');
         Route::put('/tenants/{tenant}/integrations/{provider}', [SuperAdminTenantController::class, 'updateIntegration'])
             ->whereIn('provider', ['channex', 'pok'])->name('tenants.integrations.update');
         Route::post('/tenants/{tenant}/domains', [SuperAdminTenantController::class, 'storeDomain'])->name('tenants.domains.store');
