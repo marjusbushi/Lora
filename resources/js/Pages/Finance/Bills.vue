@@ -1,6 +1,19 @@
 <script setup>
-import { ref } from 'vue';
-import { router, useForm } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
+import { Link, router, useForm } from '@inertiajs/vue3';
+import {
+    AlertTriangle,
+    CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
+    CircleDollarSign,
+    Clock3,
+    Download,
+    Plus,
+    ReceiptText,
+    Search,
+    Users,
+} from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -16,6 +29,8 @@ const props = defineProps({
     accounts: Array,
     byCategory: Object,
     filters: Object,
+    summary: Object,
+    priorities: Array,
     fxRate: Number,
     can: Object,
 });
@@ -23,216 +38,536 @@ const props = defineProps({
 const chips = [
     { key: null, label: 'Të gjitha' },
     { key: 'unpaid', label: 'Të papaguara' },
-    { key: 'due', label: 'Me afat sot / vonesë' },
+    { key: 'overdue', label: 'Me vonesë' },
+    { key: 'paid', label: 'Të paguara' },
 ];
-function filter(f) {
-    router.get(route('finance.bills'), f ? { filter: f } : {}, { preserveState: true, preserveScroll: true });
-}
 
-const statusPill = {
-    open: { text: 'E papaguar', cls: 'bg-error-50 text-error-600' },
-    partial: { text: 'Pjesërisht', cls: 'bg-warning-50 text-warning-700' },
-    paid: { text: 'Paguar', cls: 'bg-accent-50 text-accent-700' },
-};
+const search = ref(props.filters.search || '');
+const categoryFilter = ref(props.filters.category || '');
 
-// -- new bill --
-const showNew = ref(false);
-const form = useForm({
-    supplier_id: null, number: '', category: props.categories[0],
-    issue_date: new Date().toISOString().slice(0, 10), due_date: null,
-    currency: 'ALL', fx_rate: props.fxRate, total: null, notes: '',
-});
-function submit() {
-    form.post(route('finance.bills.store'), {
+watch(() => props.filters, (filters) => {
+    search.value = filters.search || '';
+    categoryFilter.value = filters.category || '';
+}, { deep: true });
+
+function visitFilters(overrides = {}) {
+    const params = {
+        filter: overrides.filter !== undefined ? overrides.filter : (props.filters.filter || null),
+        category: overrides.category !== undefined ? overrides.category : categoryFilter.value,
+        search: overrides.search !== undefined ? overrides.search : search.value.trim(),
+    };
+
+    Object.keys(params).forEach((key) => {
+        if (params[key] === null || params[key] === '') delete params[key];
+    });
+
+    router.get(route('finance.bills'), params, {
+        preserveState: true,
         preserveScroll: true,
-        onSuccess: () => { showNew.value = false; form.reset('number', 'total', 'notes'); },
+        replace: true,
     });
 }
 
-// -- pay bill --
+function selectFilter(filter) {
+    visitFilters({ filter });
+}
+
+function applySearch() {
+    visitFilters({ search: search.value.trim(), category: categoryFilter.value });
+}
+
+function clearFilters() {
+    search.value = '';
+    categoryFilter.value = '';
+    visitFilters({ filter: null, category: '', search: '' });
+}
+
+const hasFilters = computed(() => Boolean(props.filters.filter || props.filters.category || props.filters.search));
+
+const statusPill = {
+    open: { text: 'E papaguar', cls: 'bg-warning-50 text-warning-700' },
+    partial: { text: 'Pjesërisht', cls: 'bg-info-50 text-info-700' },
+    paid: { text: 'E paguar', cls: 'bg-accent-50 text-accent-700' },
+};
+
+const categoryEntries = computed(() => Object.entries(props.byCategory || {}));
+const maxCategory = computed(() => Math.max(1, ...categoryEntries.value.map(([, total]) => Number(total))));
+
+function categoryWidth(total) {
+    return `${Math.max(4, Math.round((Number(total) / maxCategory.value) * 100))}%`;
+}
+
+function parseLocalDate(value) {
+    return value ? new Date(`${value}T00:00:00`) : null;
+}
+
+function formatDate(value) {
+    const date = parseLocalDate(value);
+    if (!date) return '—';
+    return new Intl.DateTimeFormat('sq-AL', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+}
+
+function dueMeta(bill) {
+    if (bill.status === 'paid' || !bill.due_date) return { label: bill.status === 'paid' ? 'E përfunduar' : 'Pa afat', cls: 'text-neutral-400' };
+
+    const due = parseLocalDate(bill.due_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days = Math.round((due - today) / 86400000);
+
+    if (days < 0) return { label: `${Math.abs(days)} ${Math.abs(days) === 1 ? 'ditë' : 'ditë'} vonesë`, cls: 'text-error-600' };
+    if (days === 0) return { label: 'Skadon sot', cls: 'text-error-600' };
+    if (days === 1) return { label: 'Skadon nesër', cls: 'text-warning-700' };
+    if (days <= 7) return { label: `Pas ${days} ditësh`, cls: 'text-warning-700' };
+    return { label: `Pas ${days} ditësh`, cls: 'text-neutral-400' };
+}
+
+function csvCell(value) {
+    return `"${String(value ?? '').replaceAll('"', '""')}"`;
+}
+
+function exportVisibleBills() {
+    const header = ['Furnitori', 'Nr. faturës', 'Data', 'Afati', 'Kategoria', 'Monedha', 'Totali', 'Mbetja EUR', 'Statusi'];
+    const rows = props.bills.data.map((bill) => [
+        bill.supplier,
+        bill.number || `#${bill.id}`,
+        bill.issue_date,
+        bill.due_date,
+        bill.category,
+        bill.currency,
+        bill.total,
+        bill.remaining_base,
+        statusPill[bill.status]?.text || bill.status,
+    ]);
+    const csv = `\uFEFF${[header, ...rows].map((row) => row.map(csvCell).join(';')).join('\n')}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `faturat-e-blerjeve-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+// -- new bill ---------------------------------------------------------------
+const showNew = ref(false);
+const todayString = new Date().toISOString().slice(0, 10);
+const form = useForm({
+    supplier_id: null,
+    number: '',
+    category: props.categories[0],
+    issue_date: todayString,
+    due_date: null,
+    currency: 'ALL',
+    fx_rate: props.fxRate,
+    total: null,
+    notes: '',
+});
+
+const selectedSupplier = computed(() => props.suppliers.find((supplier) => supplier.id === Number(form.supplier_id)));
+const billTotalBase = computed(() => {
+    const total = Number(form.total || 0);
+    if (form.currency === 'EUR') return total;
+    const rate = Number(form.fx_rate || 0);
+    return rate > 0 ? total / rate : 0;
+});
+
+function resetBillForm() {
+    form.reset();
+    form.category = props.categories[0];
+    form.issue_date = todayString;
+    form.currency = 'ALL';
+    form.fx_rate = props.fxRate;
+    form.clearErrors();
+}
+
+function closeNew() {
+    showNew.value = false;
+    form.clearErrors();
+}
+
+function submit() {
+    form.post(route('finance.bills.store'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            showNew.value = false;
+            resetBillForm();
+        },
+    });
+}
+
+// -- pay bill ---------------------------------------------------------------
 const paying = ref(null);
 const payForm = useForm({ account_id: props.accounts[0]?.id, amount: null, method: 'cash' });
+const selectedAccount = computed(() => props.accounts.find((account) => account.id === Number(payForm.account_id)));
+const paymentBase = computed(() => {
+    if (!paying.value) return 0;
+    const amount = Number(payForm.amount || 0);
+    return paying.value.currency === 'EUR' ? amount : amount / Number(paying.value.fx_rate || 1);
+});
+const remainingAfterPayment = computed(() => Math.max(0, Number(paying.value?.remaining_base || 0) - paymentBase.value));
+
 function openPay(bill) {
     paying.value = bill;
+    payForm.account_id = props.accounts[0]?.id;
+    payForm.method = 'cash';
     payForm.amount = bill.currency === 'EUR'
         ? bill.remaining_base
         : Math.round(bill.remaining_base * (bill.fx_rate || 1) * 100) / 100;
+    payForm.clearErrors();
 }
+
+function closePay() {
+    paying.value = null;
+    payForm.clearErrors();
+}
+
 function submitPay() {
     payForm.post(route('finance.bills.pay', paying.value.id), {
         preserveScroll: true,
-        onSuccess: () => { paying.value = null; },
+        onSuccess: () => {
+            paying.value = null;
+            payForm.reset('amount');
+        },
     });
 }
 </script>
 
 <template>
     <AppLayout>
-        <PageHeader title="Blerjet (Bills)" :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Financa' }, { label: 'Blerjet' }]">
+        <PageHeader title="Faturat e blerjeve" :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Financa' }, { label: 'Blerjet' }]">
             <template #actions>
-                <Button v-if="can.manageBills" @click="showNew = true">+ Faturë blerjeje</Button>
+                <Button variant="outline" :disabled="!bills.data.length" @click="exportVisibleBills">
+                    <Download class="h-4 w-4" /> Eksporto CSV
+                </Button>
+                <Link
+                    v-if="can.manageSuppliers"
+                    :href="route('finance.suppliers')"
+                    class="inline-flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-3.5 py-2 text-body-sm font-semibold text-neutral-700 no-underline shadow-sm hover:border-neutral-300 hover:bg-neutral-50"
+                >
+                    <Users class="h-4 w-4" /> Furnitorët
+                </Link>
+                <Button v-if="can.manageBills" @click="showNew = true">
+                    <Plus class="h-4 w-4" /> Faturë e re
+                </Button>
             </template>
         </PageHeader>
 
-        <div class="px-4 sm:px-6 pb-10 space-y-4">
-            <div class="flex gap-2 flex-wrap">
-                <button
-                    v-for="c in chips" :key="c.label" type="button"
-                    class="rounded-full border px-3.5 py-1.5 text-tiny font-semibold transition"
-                    :class="(filters.filter || null) === c.key ? 'bg-primary-900 border-primary-900 text-white' : 'bg-white border-neutral-200 text-neutral-500 hover:border-neutral-300'"
-                    @click="filter(c.key)"
-                >{{ c.label }}</button>
+        <p class="mt-1 text-body-sm text-neutral-500">Kontrollo detyrimet, afatet dhe pagesat e furnitorëve.</p>
+
+        <div class="mt-5 space-y-4 pb-6">
+            <!-- KPI summary -->
+            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <article class="rounded-lg border border-neutral-200 bg-white p-4 shadow-card">
+                    <div class="flex items-start justify-between gap-3">
+                        <p class="text-tiny font-semibold text-neutral-500">Detyrime të hapura</p>
+                        <span class="grid h-8 w-8 place-items-center rounded-lg bg-accent-50 text-accent-700"><CircleDollarSign class="h-4 w-4" /></span>
+                    </div>
+                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.open_total) }}</p>
+                    <p class="mt-2 text-tiny text-neutral-400"><b class="text-accent-700">{{ summary.open_count }} {{ summary.open_count === 1 ? 'faturë' : 'fatura' }}</b> · {{ summary.supplier_count }} {{ summary.supplier_count === 1 ? 'furnitor' : 'furnitorë' }}</p>
+                </article>
+
+                <article class="rounded-lg border border-neutral-200 bg-white p-4 shadow-card">
+                    <div class="flex items-start justify-between gap-3">
+                        <p class="text-tiny font-semibold text-neutral-500">Me vonesë</p>
+                        <span class="grid h-8 w-8 place-items-center rounded-lg bg-error-50 text-error-600"><AlertTriangle class="h-4 w-4" /></span>
+                    </div>
+                    <p class="mt-2 text-h2 font-bold tabular-nums" :class="summary.overdue_total > 0 ? 'text-error-600' : 'text-primary-900'">{{ money(summary.overdue_total) }}</p>
+                    <p class="mt-2 text-tiny text-neutral-400"><b :class="summary.overdue_count ? 'text-error-600' : 'text-accent-700'">{{ summary.overdue_count }} {{ summary.overdue_count === 1 ? 'faturë' : 'fatura' }}</b> {{ summary.overdue_count === 1 ? 'ka' : 'kanë' }} kaluar afatin</p>
+                </article>
+
+                <article class="rounded-lg border border-neutral-200 bg-white p-4 shadow-card">
+                    <div class="flex items-start justify-between gap-3">
+                        <p class="text-tiny font-semibold text-neutral-500">Skadojnë në 7 ditë</p>
+                        <span class="grid h-8 w-8 place-items-center rounded-lg bg-warning-50 text-warning-700"><Clock3 class="h-4 w-4" /></span>
+                    </div>
+                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.due_soon_total) }}</p>
+                    <p class="mt-2 text-tiny text-neutral-400"><b class="text-warning-700">{{ summary.due_soon_count }} {{ summary.due_soon_count === 1 ? 'pagesë' : 'pagesa' }}</b> për t'u planifikuar</p>
+                </article>
+
+                <article class="rounded-lg border border-neutral-200 bg-white p-4 shadow-card">
+                    <div class="flex items-start justify-between gap-3">
+                        <p class="text-tiny font-semibold text-neutral-500">Paguar këtë muaj</p>
+                        <span class="grid h-8 w-8 place-items-center rounded-lg bg-accent-50 text-accent-700"><CheckCircle2 class="h-4 w-4" /></span>
+                    </div>
+                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.month_paid_total) }}</p>
+                    <p class="mt-2 text-tiny text-neutral-400"><b class="text-accent-700">{{ summary.month_paid_count }} {{ summary.month_paid_count === 1 ? 'faturë' : 'fatura' }}</b> me pagesa të regjistruara</p>
+                </article>
             </div>
 
-            <div class="grid gap-4 lg:grid-cols-[2fr,1fr] items-start">
-                <Card>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-body-sm tabular-nums">
-                            <thead><tr class="text-tiny uppercase tracking-wide text-neutral-400 text-left border-b border-neutral-100">
-                                <th class="py-2 pr-3">Furnitori</th><th class="py-2 pr-3">Kategoria</th><th class="py-2 pr-3">Afati</th><th class="py-2 pr-3 text-right">Shuma</th><th class="py-2 pr-3 text-right">Mbetja</th><th class="py-2 pr-3">Statusi</th><th class="py-2"></th>
-                            </tr></thead>
-                            <tbody>
-                                <tr v-for="b in bills.data" :key="b.id" class="border-b border-neutral-50 last:border-0">
-                                    <td class="py-2.5 pr-3">
-                                        <span class="font-semibold text-primary-900">{{ b.supplier }}</span>
-                                        <span class="block text-tiny text-neutral-400">{{ b.number || '#' + b.id }} · {{ b.issue_date }}</span>
-                                    </td>
-                                    <td class="py-2.5 pr-3"><span class="text-tiny font-bold rounded-full bg-neutral-100 text-neutral-500 px-2 py-0.5">{{ b.category }}</span></td>
-                                    <td class="py-2.5 pr-3 whitespace-nowrap" :class="b.due_state === 'today' ? 'text-error-600 font-bold' : b.due_state === 'overdue' ? 'text-error-600' : 'text-neutral-500'">
-                                        {{ b.due_date || '—' }}<span v-if="b.due_state === 'today'"> · SOT</span>
-                                    </td>
-                                    <td class="py-2.5 pr-3 text-right whitespace-nowrap font-semibold">
-                                        {{ money(b.total, b.currency) }}
-                                        <span v-if="b.currency !== 'EUR'" class="block text-tiny font-normal text-neutral-400">≈ {{ money(b.total_base) }}</span>
-                                    </td>
-                                    <td class="py-2.5 pr-3 text-right whitespace-nowrap" :class="b.remaining_base > 0 ? 'text-error-600 font-semibold' : 'text-neutral-400'">
-                                        {{ money(b.remaining_base) }}
-                                    </td>
-                                    <td class="py-2.5 pr-3"><span class="text-tiny font-bold rounded-full px-2 py-0.5" :class="statusPill[b.status].cls">{{ statusPill[b.status].text }}</span></td>
-                                    <td class="py-2.5 text-right">
-                                        <Button v-if="can.payBills && b.status !== 'paid'" size="sm" variant="outline" @click="openPay(b)">Paguaj</Button>
-                                    </td>
-                                </tr>
-                                <tr v-if="!bills.data.length"><td colspan="7" class="py-6 text-center text-neutral-400">Asnjë faturë blerjeje me këto filtra.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div v-if="bills.prev_page_url || bills.next_page_url" class="flex justify-between items-center mt-3">
-                        <Button variant="ghost" size="sm" :disabled="!bills.prev_page_url" @click="router.get(bills.prev_page_url, {}, { preserveState: true })">← Para</Button>
-                        <span class="text-tiny text-neutral-400">Faqja {{ bills.current_page }} / {{ bills.last_page }}</span>
-                        <Button variant="ghost" size="sm" :disabled="!bills.next_page_url" @click="router.get(bills.next_page_url, {}, { preserveState: true })">Pas →</Button>
-                    </div>
-                </Card>
-
-                <Card>
-                    <h3 class="text-tiny font-bold uppercase tracking-wide text-neutral-400 mb-3">Shpenzimet e muajit sipas kategorive (EUR)</h3>
-                    <div class="space-y-3">
-                        <div v-for="(total, cat) in byCategory" :key="cat">
-                            <div class="flex justify-between text-body-sm mb-1">
-                                <span class="text-neutral-600">{{ cat }}</span>
-                                <b class="tabular-nums text-primary-900">{{ money(total) }}</b>
+            <div class="grid items-start gap-4 2xl:grid-cols-[minmax(0,1.7fr),minmax(280px,.65fr)]">
+                <div class="min-w-0">
+                    <!-- filters -->
+                    <div class="rounded-t-lg border border-neutral-200 bg-white p-3 shadow-card">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div class="inline-flex w-fit max-w-full overflow-x-auto rounded-lg border border-neutral-200 bg-neutral-50 p-1">
+                                <button
+                                    v-for="chip in chips"
+                                    :key="chip.label"
+                                    type="button"
+                                    class="whitespace-nowrap rounded-md px-3 py-1.5 text-tiny font-semibold transition"
+                                    :class="(filters.filter || null) === chip.key ? 'bg-white text-primary-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'"
+                                    @click="selectFilter(chip.key)"
+                                >{{ chip.label }}</button>
                             </div>
-                            <div class="h-2 rounded-full bg-neutral-100 overflow-hidden">
-                                <div class="h-full rounded-full bg-accent-500/80" :style="{ width: Math.round((total / Math.max(...Object.values(byCategory))) * 100) + '%' }" />
+
+                            <form class="flex min-w-0 flex-col gap-2 sm:flex-row" @submit.prevent="applySearch">
+                                <label class="relative min-w-0 flex-1 sm:w-64">
+                                    <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                                    <input v-model="search" type="search" class="w-full rounded-lg border-neutral-200 py-2 pl-9 pr-3 text-body-sm placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500" placeholder="Kërko furnitor ose nr. faturë…">
+                                </label>
+                                <select v-model="categoryFilter" class="rounded-lg border-neutral-200 py-2 pl-3 pr-8 text-body-sm text-neutral-600 focus:border-accent-500 focus:ring-accent-500" @change="applySearch">
+                                    <option value="">Të gjitha kategoritë</option>
+                                    <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
+                                </select>
+                                <Button type="submit" variant="outline" size="sm">Filtro</Button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- bills table -->
+                    <Card :padding="false" class="min-w-0 rounded-t-none border-t-0">
+                        <div class="overflow-x-auto">
+                            <table class="w-full min-w-[860px] text-body-sm tabular-nums">
+                                <thead>
+                                    <tr class="bg-neutral-50/70 text-left text-tiny uppercase tracking-wide text-neutral-400">
+                                        <th class="px-5 py-2.5">Furnitori / Fatura</th>
+                                        <th class="px-4 py-2.5">Kategoria</th>
+                                        <th class="px-4 py-2.5">Afati</th>
+                                        <th class="px-4 py-2.5 text-right">Shuma</th>
+                                        <th class="px-4 py-2.5 text-right">Mbetja</th>
+                                        <th class="px-4 py-2.5">Statusi</th>
+                                        <th class="px-5 py-2.5"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="bill in bills.data" :key="bill.id" class="border-t border-neutral-100 transition hover:bg-neutral-50/60">
+                                        <td class="px-5 py-3">
+                                            <span class="block font-bold text-primary-900">{{ bill.supplier }}</span>
+                                            <span class="mt-0.5 block text-tiny text-neutral-400">{{ bill.number || '#' + bill.id }} · {{ formatDate(bill.issue_date) }}</span>
+                                        </td>
+                                        <td class="px-4 py-3"><span class="rounded-md bg-neutral-100 px-2 py-1 text-tiny font-bold text-neutral-500">{{ bill.category }}</span></td>
+                                        <td class="px-4 py-3 whitespace-nowrap">
+                                            <span class="block font-semibold" :class="dueMeta(bill).cls">{{ formatDate(bill.due_date) }}</span>
+                                            <span class="mt-0.5 block text-tiny" :class="dueMeta(bill).cls">{{ dueMeta(bill).label }}</span>
+                                        </td>
+                                        <td class="px-4 py-3 text-right whitespace-nowrap font-bold text-primary-900">
+                                            {{ money(bill.total, bill.currency) }}
+                                            <span v-if="bill.currency !== 'EUR'" class="mt-0.5 block text-tiny font-normal text-neutral-400">≈ {{ money(bill.total_base) }}</span>
+                                        </td>
+                                        <td class="px-4 py-3 text-right whitespace-nowrap font-bold" :class="bill.remaining_base > 0 ? 'text-error-600' : 'text-accent-700'">{{ money(bill.remaining_base) }}</td>
+                                        <td class="px-4 py-3"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-tiny font-bold" :class="statusPill[bill.status]?.cls"><i class="h-1.5 w-1.5 rounded-full bg-current" />{{ statusPill[bill.status]?.text }}</span></td>
+                                        <td class="px-5 py-3 text-right">
+                                            <Button v-if="can.payBills && bill.status !== 'paid'" size="sm" variant="outline" @click="openPay(bill)">Paguaj</Button>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!bills.data.length">
+                                        <td colspan="7" class="px-5 py-12 text-center">
+                                            <span class="mx-auto grid h-11 w-11 place-items-center rounded-full bg-neutral-100 text-neutral-400"><ReceiptText class="h-5 w-5" /></span>
+                                            <strong class="mt-3 block text-body-sm text-primary-900">Asnjë faturë e gjetur</strong>
+                                            <p class="mt-1 text-tiny text-neutral-400">Ndrysho filtrat ose regjistro një faturë të re.</p>
+                                            <button v-if="hasFilters" type="button" class="mt-3 text-tiny font-bold text-accent-700" @click="clearFilters">Pastro filtrat</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div v-if="bills.total" class="flex flex-col gap-3 border-t border-neutral-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <span class="text-tiny text-neutral-400">{{ bills.from }}–{{ bills.to }} nga {{ bills.total }} fatura</span>
+                            <div class="flex items-center gap-1">
+                                <Button variant="ghost" size="sm" :disabled="!bills.prev_page_url" @click="router.get(bills.prev_page_url, {}, { preserveState: true, preserveScroll: true })"><ChevronLeft class="h-4 w-4" /> Para</Button>
+                                <span class="px-2 text-tiny font-semibold text-neutral-500">{{ bills.current_page }} / {{ bills.last_page }}</span>
+                                <Button variant="ghost" size="sm" :disabled="!bills.next_page_url" @click="router.get(bills.next_page_url, {}, { preserveState: true, preserveScroll: true })">Pas <ChevronRight class="h-4 w-4" /></Button>
                             </div>
                         </div>
-                        <p v-if="!Object.keys(byCategory).length" class="text-body-sm text-neutral-400">Ende pa shpenzime këtë muaj.</p>
-                    </div>
-                </Card>
+                    </Card>
+                </div>
+
+                <aside class="grid min-w-0 gap-4 md:grid-cols-2 2xl:grid-cols-1">
+                    <Card :padding="false" class="min-w-0">
+                        <template #header>
+                            <div>
+                                <h2 class="text-label font-bold text-primary-900">Shpenzimet sipas kategorive</h2>
+                                <p class="mt-0.5 text-tiny text-neutral-400">Muaji aktual · EUR</p>
+                            </div>
+                        </template>
+                        <div v-if="categoryEntries.length" class="divide-y divide-neutral-100 px-5 py-1">
+                            <div v-for="([category, total]) in categoryEntries" :key="category" class="py-3">
+                                <div class="flex items-center justify-between gap-3 text-body-sm"><span class="truncate text-neutral-600">{{ category }}</span><strong class="shrink-0 tabular-nums text-primary-900">{{ money(total) }}</strong></div>
+                                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100"><i class="block h-full rounded-full bg-accent-500" :style="{ width: categoryWidth(total) }" /></div>
+                            </div>
+                        </div>
+                        <div v-else class="px-5 py-8 text-center text-body-sm text-neutral-400">Ende pa shpenzime këtë muaj.</div>
+                    </Card>
+
+                    <Card :padding="false" class="min-w-0">
+                        <template #header>
+                            <div>
+                                <h2 class="text-label font-bold text-primary-900">Prioritetet e pagesës</h2>
+                                <p class="mt-0.5 text-tiny text-neutral-400">Renditur sipas afatit</p>
+                            </div>
+                        </template>
+                        <div v-if="priorities.length" class="divide-y divide-neutral-100 px-5">
+                            <button v-for="bill in priorities" :key="bill.id" type="button" class="flex w-full items-start gap-3 py-3.5 text-left" @click="can.payBills && openPay(bill)">
+                                <i class="mt-1.5 h-2 w-2 shrink-0 rounded-full" :class="bill.due_state === 'overdue' ? 'bg-error-500' : bill.due_state === 'today' ? 'bg-warning-500' : 'bg-accent-500'" />
+                                <span class="min-w-0 flex-1">
+                                    <strong class="block truncate text-body-sm text-primary-900">{{ bill.supplier }}</strong>
+                                    <span class="mt-1 block text-tiny" :class="dueMeta(bill).cls">{{ dueMeta(bill).label }} · {{ bill.number || '#' + bill.id }}</span>
+                                </span>
+                                <strong class="shrink-0 text-tiny tabular-nums" :class="bill.due_state === 'overdue' ? 'text-error-600' : 'text-warning-700'">{{ money(bill.remaining_base) }}</strong>
+                            </button>
+                        </div>
+                        <div v-else class="flex flex-col items-center px-5 py-9 text-center">
+                            <span class="grid h-11 w-11 place-items-center rounded-full bg-accent-50 text-accent-700"><CheckCircle2 class="h-5 w-5" /></span>
+                            <strong class="mt-3 text-body-sm text-primary-900">Asnjë pagesë urgjente</strong>
+                            <p class="mt-1 text-tiny text-neutral-400">Të gjitha detyrimet janë nën kontroll.</p>
+                        </div>
+                    </Card>
+                </aside>
             </div>
         </div>
 
-        <!-- new bill modal -->
-        <Modal :show="showNew" @close="showNew = false">
-            <div class="p-5 space-y-4">
-                <h3 class="text-h4 font-bold text-primary-900">Faturë blerjeje</h3>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Furnitori</label>
-                        <select v-model="form.supplier_id" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm">
-                            <option :value="null" disabled>Zgjidh…</option>
-                            <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
-                        </select>
-                        <p v-if="form.errors.supplier_id" class="text-tiny text-error-600 mt-1">{{ form.errors.supplier_id }}</p>
-                    </div>
-                    <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Nr. i faturës (ops.)</label>
-                        <TextInput v-model="form.number" class="w-full" placeholder="p.sh. 2026/145" />
-                    </div>
-                    <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Kategoria</label>
-                        <select v-model="form.category" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm">
-                            <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Monedha</label>
-                        <select v-model="form.currency" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm">
-                            <option value="ALL">LEK</option><option value="EUR">EUR €</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Data e faturës</label>
-                        <TextInput v-model="form.issue_date" type="date" class="w-full" />
-                    </div>
-                    <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Afati i pagesës</label>
-                        <TextInput v-model="form.due_date" type="date" class="w-full" />
-                    </div>
-                    <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Shuma ({{ form.currency }})</label>
-                        <TextInput v-model="form.total" type="number" min="0.01" step="0.01" class="w-full" placeholder="0.00" />
-                        <p v-if="form.errors.total" class="text-tiny text-error-600 mt-1">{{ form.errors.total }}</p>
-                    </div>
-                    <div v-if="form.currency === 'ALL'">
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Kursi (L për 1€)</label>
-                        <TextInput v-model="form.fx_rate" type="number" min="1" step="0.0001" class="w-full" />
-                        <p class="text-tiny text-neutral-400 mt-1">I mbushur nga kursi i ditës — ndryshoje po deshe. Ngrihet përgjithmonë në këtë faturë.</p>
-                    </div>
+        <!-- New bill modal -->
+        <Modal :show="showNew" title="Faturë e re blerjeje" max-width="2xl" @close="closeNew">
+            <div class="-mx-5 -my-4 grid lg:grid-cols-[minmax(0,1.65fr),minmax(230px,.75fr)]">
+                <div class="space-y-5 p-5">
+                    <section>
+                        <h4 class="mb-3 text-tiny font-bold uppercase tracking-wide text-neutral-400">1 · Të dhënat e faturës</h4>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">Furnitori</label>
+                                <select v-model="form.supplier_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                                    <option :value="null" disabled>Zgjidh furnitorin…</option>
+                                    <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option>
+                                </select>
+                                <p v-if="form.errors.supplier_id" class="mt-1 text-tiny text-error-600">{{ form.errors.supplier_id }}</p>
+                            </div>
+                            <div>
+                                <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>Numri i faturës</span><small class="font-normal text-neutral-400">Opsional</small></label>
+                                <TextInput v-model="form.number" class="w-full" placeholder="p.sh. 2026/145" />
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">Kategoria</label>
+                                <select v-model="form.category" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                                    <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">Monedha</label>
+                                <select v-model="form.currency" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                                    <option value="ALL">ALL · Lek</option>
+                                    <option value="EUR">EUR · Euro</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">Data e faturës</label>
+                                <TextInput v-model="form.issue_date" type="date" class="w-full" />
+                                <p v-if="form.errors.issue_date" class="mt-1 text-tiny text-error-600">{{ form.errors.issue_date }}</p>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">Afati i pagesës</label>
+                                <TextInput v-model="form.due_date" type="date" class="w-full" />
+                                <p v-if="form.errors.due_date" class="mt-1 text-tiny text-error-600">{{ form.errors.due_date }}</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="border-t border-neutral-100 pt-5">
+                        <h4 class="mb-3 text-tiny font-bold uppercase tracking-wide text-neutral-400">2 · Shuma dhe kursi</h4>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">Shuma ({{ form.currency }})</label>
+                                <TextInput v-model="form.total" type="number" min="0.01" step="0.01" class="w-full" placeholder="0.00" />
+                                <p v-if="form.errors.total" class="mt-1 text-tiny text-error-600">{{ form.errors.total }}</p>
+                            </div>
+                            <div :class="form.currency === 'EUR' && 'opacity-45'">
+                                <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>Kursi</span><small class="font-normal text-neutral-400">L për 1 €</small></label>
+                                <TextInput v-model="form.fx_rate" type="number" min="1" step="0.0001" class="w-full" :disabled="form.currency === 'EUR'" />
+                                <p v-if="form.currency === 'ALL'" class="mt-1 text-tiny text-neutral-400">Kursi i ditës ruhet përgjithmonë në faturë.</p>
+                                <p v-if="form.errors.fx_rate" class="mt-1 text-tiny text-error-600">{{ form.errors.fx_rate }}</p>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>Shënime</span><small class="font-normal text-neutral-400">Opsionale</small></label>
+                                <textarea v-model="form.notes" rows="3" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500" placeholder="p.sh. furnizim jave 29" />
+                                <p v-if="form.errors.notes" class="mt-1 text-tiny text-error-600">{{ form.errors.notes }}</p>
+                            </div>
+                        </div>
+                    </section>
                 </div>
-                <div>
-                    <label class="block text-body-sm font-semibold text-primary-900 mb-1">Shënime (ops.)</label>
-                    <TextInput v-model="form.notes" class="w-full" placeholder="p.sh. furnizim jave 29" />
-                </div>
-                <div class="flex justify-end gap-2">
-                    <Button variant="ghost" @click="showNew = false">Anulo</Button>
-                    <Button :disabled="form.processing || !form.supplier_id || !form.total" @click="submit">Ruaj faturën</Button>
-                </div>
+
+                <aside class="border-t border-neutral-200 bg-neutral-50 p-5 lg:border-l lg:border-t-0">
+                    <h4 class="text-body-sm font-bold text-primary-900">Përmbledhja</h4>
+                    <div class="mt-3 divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white px-3">
+                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">Furnitori</span><b class="text-right text-primary-900">{{ selectedSupplier?.name || '—' }}</b></div>
+                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">Nr. faturës</span><b class="text-right text-primary-900">{{ form.number || 'Pa numër' }}</b></div>
+                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">Afati</span><b class="text-right text-primary-900">{{ formatDate(form.due_date) }}</b></div>
+                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">Kursi i ngrirë</span><b class="text-right text-primary-900">{{ form.currency === 'ALL' ? (form.fx_rate || '—') : 'Nuk aplikohet' }}</b></div>
+                    </div>
+                    <div class="mt-3 rounded-lg bg-accent-50 p-3">
+                        <span class="text-tiny text-accent-800">Detyrimi në EUR</span>
+                        <strong class="mt-1 block text-h2 tabular-nums text-accent-700">{{ money(billTotalBase) }}</strong>
+                    </div>
+                    <p class="mt-3 rounded-lg border border-warning-200 bg-warning-50 p-3 text-tiny leading-relaxed text-warning-800">Fatura krijon detyrim ndaj furnitorit. Gjendja e arkës ose bankës ndryshon vetëm kur regjistrohet pagesa.</p>
+                </aside>
             </div>
+            <template #footer>
+                <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
+                    <p class="mr-auto text-tiny text-neutral-400">Fushat pa shenjën “opsionale” janë të detyrueshme.</p>
+                    <div class="flex gap-2">
+                        <Button variant="ghost" @click="closeNew">Anulo</Button>
+                        <Button :loading="form.processing" :disabled="!form.supplier_id || !form.total || !form.issue_date" @click="submit">Ruaj faturën</Button>
+                    </div>
+                </div>
+            </template>
         </Modal>
 
-        <!-- pay modal -->
-        <Modal :show="!!paying" @close="paying = null">
-            <div v-if="paying" class="p-5 space-y-4">
-                <h3 class="text-h4 font-bold text-primary-900">Paguaj — {{ paying.supplier }}</h3>
-                <p class="text-body-sm text-neutral-500">
-                    Fatura {{ paying.number || '#' + paying.id }} · mbetja <b class="text-error-600">{{ money(paying.remaining_base) }}</b>
-                    <template v-if="paying.currency !== 'EUR'"> (kursi i ngrirë: {{ paying.fx_rate }})</template>
-                </p>
-                <div class="grid grid-cols-2 gap-3">
+        <!-- Pay modal -->
+        <Modal :show="!!paying" title="Regjistro pagesën" max-width="xl" @close="closePay">
+            <div v-if="paying" class="space-y-4">
+                <div class="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Nga llogaria</label>
-                        <select v-model="payForm.account_id" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm">
-                            <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }} ({{ money(a.balance, a.currency) }})</option>
+                        <strong class="text-body-sm text-primary-900">{{ paying.supplier }} · {{ paying.number || '#' + paying.id }}</strong>
+                        <p class="mt-1 text-tiny text-neutral-400">Afati {{ formatDate(paying.due_date) }}<template v-if="paying.currency !== 'EUR'"> · kursi i ngrirë {{ paying.fx_rate }}</template></p>
+                    </div>
+                    <strong class="text-h3 tabular-nums text-error-600">{{ money(paying.remaining_base) }}</strong>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                        <label class="mb-1 block text-body-sm font-semibold text-primary-900">Nga llogaria</label>
+                        <select v-model="payForm.account_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                            <option v-for="account in accounts" :key="account.id" :value="account.id">{{ account.name }} ({{ money(account.balance, account.currency) }})</option>
+                        </select>
+                        <p v-if="payForm.errors.account_id" class="mt-1 text-tiny text-error-600">{{ payForm.errors.account_id }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-body-sm font-semibold text-primary-900">Shuma ({{ paying.currency }})</label>
+                        <TextInput v-model="payForm.amount" type="number" min="0.01" step="0.01" class="w-full" />
+                        <p v-if="payForm.errors.amount" class="mt-1 text-tiny text-error-600">{{ payForm.errors.amount }}</p>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="mb-1 block text-body-sm font-semibold text-primary-900">Metoda</label>
+                        <select v-model="payForm.method" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                            <option value="cash">Cash</option>
+                            <option value="card">Kartë</option>
+                            <option value="bank">Transfertë bankare</option>
                         </select>
                     </div>
-                    <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Shuma ({{ paying.currency }})</label>
-                        <TextInput v-model="payForm.amount" type="number" min="0.01" step="0.01" class="w-full" />
-                        <p v-if="payForm.errors.amount" class="text-tiny text-error-600 mt-1">{{ payForm.errors.amount }}</p>
-                    </div>
                 </div>
-                <div>
-                    <label class="block text-body-sm font-semibold text-primary-900 mb-1">Metoda</label>
-                    <select v-model="payForm.method" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm">
-                        <option value="cash">Cash</option><option value="card">Kartë</option><option value="bank">Bankë</option>
-                    </select>
-                </div>
-                <div class="flex justify-end gap-2">
-                    <Button variant="ghost" @click="paying = null">Anulo</Button>
-                    <Button :disabled="payForm.processing || !payForm.amount" @click="submitPay">Regjistro pagesën</Button>
+
+                <div class="flex items-center justify-between gap-3 rounded-lg bg-accent-50 px-3 py-2.5 text-body-sm text-accent-800">
+                    <span>Mbetja pas kësaj pagese</span>
+                    <b class="tabular-nums">{{ money(remainingAfterPayment) }}<template v-if="remainingAfterPayment <= 0.005"> · Fatura mbyllet</template></b>
                 </div>
             </div>
+            <template #footer>
+                <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
+                    <p class="mr-auto text-tiny text-neutral-400"><template v-if="selectedAccount">Gjendja e {{ selectedAccount.name }} do të ulet me {{ money(payForm.amount, paying?.currency) }}.</template></p>
+                    <div class="flex gap-2">
+                        <Button variant="ghost" @click="closePay">Anulo</Button>
+                        <Button :loading="payForm.processing" :disabled="!payForm.amount || !payForm.account_id" @click="submitPay">Konfirmo pagesën</Button>
+                    </div>
+                </div>
+            </template>
         </Modal>
     </AppLayout>
 </template>
