@@ -35,6 +35,12 @@ jobs:
             # Reload the queue worker so it picks up the new code (no-op if none runs).
             php artisan queue:restart || true
             chown -R www-data:www-data storage bootstrap/cache
+            # Clear stale OPcache after atomic code/cache replacement. Discover the
+            # running service instead of hard-coding the server's PHP minor version.
+            php_fpm_service="$(systemctl list-units --type=service --state=running 'php*-fpm.service' --no-legend | awk 'NR == 1 { print $1 }')"
+            if [ -n "$php_fpm_service" ]; then
+              systemctl reload "$php_fpm_service"
+            fi
             php artisan up
             trap - EXIT
             echo "Deployed at $(date)"
