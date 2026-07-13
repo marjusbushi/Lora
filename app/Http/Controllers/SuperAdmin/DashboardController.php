@@ -41,12 +41,46 @@ class DashboardController extends Controller
                 'domain' => $tenant->domains->firstWhere('is_primary', true)?->domain
                     ?? $tenant->domains->first()?->domain,
                 'created_at' => $tenant->created_at?->toIso8601String(),
+                'period_ends_at' => $summary['current_period_ends_at'] ?? null,
                 'modules' => collect($summary['modules'])
                     ->filter(fn (array $module) => $module['enabled'])
                     ->keys()
                     ->values(),
             ];
         });
+
+        // Operator's daily driver: hotels that need a human — payment lapsed,
+        // suspended, or a subscription/trial ending within 14 days.
+        $soon = now()->addDays(14);
+        $needsAttention = $rows
+            ->map(function (array $row) use ($soon) {
+                $reason = null;
+                $severity = 'info';
+                if ($row['status'] === 'suspended') {
+                    $reason = 'Hoteli është i pezulluar';
+                    $severity = 'danger';
+                } elseif ($row['subscription_status'] === 'past_due') {
+                    $reason = 'Pagesë e vonuar';
+                    $severity = 'danger';
+                } elseif ($row['period_ends_at']
+                    && \Illuminate\Support\Carbon::parse($row['period_ends_at'])->lte($soon)) {
+                    $reason = $row['subscription_status'] === 'trialing'
+                        ? 'Prova mbaron së shpejti'
+                        : 'Abonimi rinovohet së shpejti';
+                    $severity = 'warning';
+                }
+
+                return $reason ? [
+                    'id' => $row['id'],
+                    'name' => $row['name'],
+                    'reason' => $reason,
+                    'severity' => $severity,
+                    'date' => $row['period_ends_at'],
+                ] : null;
+            })
+            ->filter()
+            ->sortBy(fn (array $r) => ['danger' => 0, 'warning' => 1, 'info' => 2][$r['severity']] ?? 3)
+            ->values();
 
         $catalog = $billing->catalog();
         $moduleAdoption = collect($catalog)->map(function (array $module, string $code) use ($rows) {
@@ -69,6 +103,7 @@ class DashboardController extends Controller
                 'users_total' => $rows->sum('users_count'),
             ],
             'moduleAdoption' => $moduleAdoption,
+            'needsAttention' => $needsAttention,
             'recentTenants' => $rows->take(5)->values(),
         ]);
     }

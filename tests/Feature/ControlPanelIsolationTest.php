@@ -241,4 +241,25 @@ class ControlPanelIsolationTest extends TestCase
             ->get("https://admin.lorapms.test/super-admin/tenants/{$tenant->id}")
             ->assertForbidden();
     }
+    public function test_dashboard_flags_hotels_that_need_attention(): void
+    {
+        // A suspended hotel.
+        $suspended = Tenant::factory()->create(['name' => 'Hotel Suspended', 'status' => 'suspended']);
+
+        // A hotel whose subscription is past due.
+        $pastDue = Tenant::factory()->create(['name' => 'Hotel PastDue', 'status' => 'active']);
+        app(TenantBillingService::class)->provision($pastDue);
+        $pastDue->subscription->update(['status' => 'past_due']);
+
+        // The default hotel is active + healthy → must NOT be flagged.
+        $superAdmin = User::factory()->create(['is_super_admin' => true]);
+
+        $this->actingAs($superAdmin)
+            ->get('https://admin.lorapms.test/super-admin')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SuperAdmin/Dashboard')
+                ->has('needsAttention', 2)
+                ->where('needsAttention.0.severity', 'danger'));
+    }
 }
