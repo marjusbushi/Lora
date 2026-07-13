@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -17,6 +17,24 @@ function toggleSound() {
     soundMuted.value = !soundMuted.value;
     localStorage.setItem('msgSoundMuted', soundMuted.value ? '1' : '0');
 }
+
+// Guest/reservation side panel — collapsed by default, choice remembered.
+const panelOpen = ref(typeof window !== 'undefined' && localStorage.getItem('msgPanelOpen') === '1');
+function togglePanel() {
+    panelOpen.value = !panelOpen.value;
+    localStorage.setItem('msgPanelOpen', panelOpen.value ? '1' : '0');
+}
+
+// The page is a fixed frame; only the chat scrolls — so jump to the latest
+// message whenever a thread opens or a new message lands.
+const chatBox = ref(null);
+watch(
+    () => [props.selected?.id, props.selected?.messages?.length],
+    () => {
+        if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
+    },
+    { immediate: true, flush: 'post' },
+);
 
 const CHANNELS = {
     'booking.com': { label: 'Booking', badge: 'bg-[#eaf0fb] text-[#1a4fa0]', grad: 'linear-gradient(145deg,#2f6fd0,#1a4fa0)' },
@@ -110,7 +128,8 @@ function statusLabel(s) {
         </div>
 
         <div v-else class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-            <div class="grid min-h-[72vh] grid-cols-1 lg:grid-cols-[300px_1fr_300px]">
+            <div class="grid h-[calc(100vh-6.5rem)] grid-cols-1 sm:h-[calc(100vh-7.5rem)]"
+                :class="selected && panelOpen ? 'lg:grid-cols-[300px_1fr_300px]' : 'lg:grid-cols-[300px_1fr]'">
                 <!-- Thread list -->
                 <div class="flex min-h-0 flex-col border-r border-neutral-200">
                     <div class="px-4 pt-4">
@@ -157,7 +176,7 @@ function statusLabel(s) {
                 </div>
 
                 <!-- Conversation -->
-                <div class="flex min-w-0 flex-col bg-[#f5f8f6]">
+                <div class="flex min-h-0 min-w-0 flex-col bg-[#f5f8f6]">
                     <template v-if="selected">
                         <div class="flex items-center gap-3 border-b border-neutral-200 bg-white px-5 py-3">
                             <span class="grid h-9 w-9 place-items-center rounded-xl text-sm font-bold text-white" :style="{ background: chan(selected.channel).grad }">{{ initials(selected.guest_name) }}</span>
@@ -168,9 +187,16 @@ function statusLabel(s) {
                                     <span v-if="selected.reservation">· {{ selected.reservation.ref }}</span>
                                 </p>
                             </div>
+                            <button type="button" @click="togglePanel"
+                                :title="panelOpen ? 'Mbyll panelin e mysafirit' : 'Hap panelin e mysafirit'"
+                                class="ml-auto hidden h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition lg:inline-flex"
+                                :class="panelOpen ? 'border-[#83dcb2] bg-[#f2faf6] text-[#0c5a3e]' : 'border-neutral-200 text-neutral-500 hover:bg-neutral-50'">
+                                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd" /></svg>
+                                Mysafiri
+                            </button>
                         </div>
 
-                        <div class="flex-1 space-y-2 overflow-y-auto px-5 py-5">
+                        <div ref="chatBox" class="flex-1 space-y-2 overflow-y-auto px-5 py-5">
                             <template v-for="row in messageRows" :key="row.key">
                                 <div v-if="row.sep" class="my-3 flex justify-center">
                                     <span class="rounded-full border border-neutral-200 bg-white px-3.5 py-1 text-[10.5px] font-semibold text-neutral-400">{{ row.sep }}</span>
@@ -211,7 +237,7 @@ function statusLabel(s) {
                 </div>
 
                 <!-- Context panel -->
-                <aside v-if="selected" class="hidden flex-col gap-5 border-l border-neutral-200 bg-white p-5 lg:flex">
+                <aside v-if="selected && panelOpen" class="hidden min-h-0 flex-col gap-5 overflow-y-auto border-l border-neutral-200 bg-white p-5 lg:flex">
                     <div>
                         <h3 class="text-[10.5px] font-bold uppercase tracking-widest text-neutral-400">Mysafiri</h3>
                         <div class="mt-2.5 flex items-center gap-3">
