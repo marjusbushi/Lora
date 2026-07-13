@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\ChannexBookingImporter;
 use App\Services\ChannexClient;
+use App\Services\ChannexMessageImporter;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -25,6 +26,29 @@ class ChannexWebhookController extends Controller
         }
 
         $event = (string) $request->input('event');
+
+        // Guest messages: ingest into this hotel's inbox. The payload carries the
+        // text directly, so no callback is needed. Property is verified inside the
+        // importer so a misdelivered message can't reach another tenant.
+        if ($event === 'message') {
+            try {
+                $summary = app(ChannexMessageImporter::class)->importMessage(
+                    (array) $request->input('payload', []),
+                    $channex->propertyId(),
+                );
+
+                if (($summary['status'] ?? null) === 'foreign_property') {
+                    return response('ignored — foreign property', 200);
+                }
+            } catch (\Throwable $e) {
+                report($e);
+
+                return response('error', 500);
+            }
+
+            return response('ok', 200);
+        }
+
         $revisionId = (string) $request->input('payload.revision_id');
 
         // Only booking events carry a revision to import; ari/other events are no-ops.

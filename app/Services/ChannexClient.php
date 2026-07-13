@@ -344,6 +344,28 @@ class ChannexClient
         return $resp->successful();
     }
 
+    /** Fetch one guest-message thread (title = guest name, channel, status). */
+    public function getMessageThread(string $id): ?array
+    {
+        $resp = $this->http(idempotent: true)->get("{$this->baseUrl}/message_threads/{$id}");
+
+        return $resp->successful() ? $resp->json('data') : null;
+    }
+
+    /** Send a host reply into a message thread; returns Channex's created message. */
+    public function sendThreadMessage(string $threadId, string $message): array
+    {
+        $payload = ['message' => ['message' => $message]];
+        $resp = $this->http()->post("{$this->baseUrl}/message_threads/{$threadId}/messages", $payload);
+        $this->log('push', 'send_message', ['thread_id' => $threadId], $resp);
+
+        if (! $resp->successful()) {
+            throw new RuntimeException("Channex send message to {$threadId} failed: HTTP {$resp->status()}");
+        }
+
+        return $resp->json('data') ?? [];
+    }
+
     // -- internals --------------------------------------------------------
 
     protected function http(bool $idempotent = false, int $timeout = 30): PendingRequest
