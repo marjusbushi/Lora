@@ -56,6 +56,28 @@ Route::post('/contact', [WebsiteController::class, 'submitContact'])->middleware
 // Auth is a shared secret header validated in the controller — Channex has no HMAC.
 Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->middleware('throttle:120,1')->name('channex.webhook');
 
+// PWA manifest — dynamic so the installed app carries the hotel's own name
+// (same cached branding the <title> uses). display:standalone is what removes
+// the browser URL bar when the site is added to a phone's home screen.
+Route::get('/manifest.webmanifest', function () {
+    $brand = \Illuminate\Support\Facades\Cache::get('app.settings', []);
+    $name = $brand['hotel_name'] ?? 'Villa Mucho';
+
+    return response()->json([
+        'name' => $name,
+        'short_name' => $name,
+        'start_url' => '/dashboard',
+        'scope' => '/',
+        'display' => 'standalone',
+        'background_color' => '#fafaf9',
+        'theme_color' => '#2d6a4f',
+        'icons' => [
+            ['src' => '/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
+            ['src' => '/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
+        ],
+    ], 200, ['Content-Type' => 'application/manifest+json'])->setCache(['public' => true, 'max_age' => 3600]);
+})->name('pwa.manifest');
+
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])->name('dashboard');
 
