@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import Sidebar from '@/Components/UI/Sidebar.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
@@ -26,6 +26,76 @@ function can(permission) {
     return userPermissions.value.includes(permission);
 }
 
+// ── New-message alert: poll the unread count, ding on increase, badge the tab ──
+const messagingEnabled = computed(() => can('view_reservations'));
+const unreadMessages = ref(0);
+let pollTimer = null;
+let audioCtx = null;
+const baseTitle = typeof document !== 'undefined' ? document.title : '';
+
+function soundMuted() {
+    return typeof window !== 'undefined' && localStorage.getItem('msgSoundMuted') === '1';
+}
+function unlockAudio() {
+    try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) { /* audio unavailable — silent */ }
+}
+function beep(ctx, freq, at, dur) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(0.16, at + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start(at);
+    o.stop(at + dur);
+}
+function playDing() {
+    if (soundMuted()) return;
+    unlockAudio();
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    beep(audioCtx, 880, t, 0.14);
+    beep(audioCtx, 1174.66, t + 0.13, 0.18);
+}
+function refreshTitle() {
+    if (typeof document === 'undefined') return;
+    document.title = unreadMessages.value > 0 ? `(${unreadMessages.value}) ${baseTitle}` : baseTitle;
+}
+async function pollUnread() {
+    if (!messagingEnabled.value || (typeof document !== 'undefined' && document.hidden)) return;
+    try {
+        const res = await fetch(route('messages.unread'), { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+        if (!res.ok) return;
+        const { count } = await res.json();
+        if (count > unreadMessages.value) playDing();
+        unreadMessages.value = count;
+        refreshTitle();
+    } catch (e) { /* offline / transient — ignore */ }
+}
+
+onMounted(() => {
+    if (!messagingEnabled.value) return;
+    const unlockOnce = () => { unlockAudio(); window.removeEventListener('pointerdown', unlockOnce); window.removeEventListener('keydown', unlockOnce); };
+    window.addEventListener('pointerdown', unlockOnce);
+    window.addEventListener('keydown', unlockOnce);
+    document.addEventListener('visibilitychange', pollUnread);
+    pollUnread();
+    pollTimer = setInterval(pollUnread, 25000);
+});
+onUnmounted(() => {
+    if (pollTimer) clearInterval(pollTimer);
+    if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', pollUnread);
+        document.title = baseTitle;
+    }
+});
+
 // SVG icons for navigation
 const icons = {
     dashboard: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v2.5A2.25 2.25 0 004.25 9h2.5A2.25 2.25 0 009 6.75v-2.5A2.25 2.25 0 006.75 2h-2.5zm0 9A2.25 2.25 0 002 13.25v2.5A2.25 2.25 0 004.25 18h2.5A2.25 2.25 0 009 15.75v-2.5A2.25 2.25 0 006.75 11h-2.5zm9-9A2.25 2.25 0 0011 4.25v2.5A2.25 2.25 0 0013.25 9h2.5A2.25 2.25 0 0018 6.75v-2.5A2.25 2.25 0 0015.75 2h-2.5zm0 9A2.25 2.25 0 0011 13.25v2.5A2.25 2.25 0 0013.25 18h2.5A2.25 2.25 0 0018 15.75v-2.5A2.25 2.25 0 0015.75 11h-2.5z" clip-rule="evenodd" /></svg>',
@@ -36,6 +106,7 @@ const icons = {
     pos: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M2.5 4A1.5 1.5 0 001 5.5V6h18v-.5A1.5 1.5 0 0017.5 4h-15zM19 8.5H1v6A1.5 1.5 0 002.5 16h15a1.5 1.5 0 001.5-1.5v-6zM3 13.25a.75.75 0 01.75-.75h1.5a.75.75 0 010 1.5h-1.5a.75.75 0 01-.75-.75zm4.75-.75a.75.75 0 000 1.5h3.5a.75.75 0 000-1.5h-3.5z" clip-rule="evenodd" /></svg>',
     reports: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path d="M15.5 2a1.5 1.5 0 00-1.5 1.5v13a1.5 1.5 0 001.5 1.5h1a1.5 1.5 0 001.5-1.5v-13A1.5 1.5 0 0016.5 2h-1zM9.5 6A1.5 1.5 0 008 7.5v9A1.5 1.5 0 009.5 18h1a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0010.5 6h-1zM3.5 10A1.5 1.5 0 002 11.5v5A1.5 1.5 0 003.5 18h1A1.5 1.5 0 006 16.5v-5A1.5 1.5 0 004.5 10h-1z" /></svg>',
     users: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" /></svg>',
+    messages: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M10 2c-4.418 0-8 2.91-8 6.5 0 1.62.732 3.093 1.943 4.223-.055.842-.336 1.686-.87 2.475a.75.75 0 00.734 1.166 6.61 6.61 0 003.34-1.198A9.6 9.6 0 0010 15c4.418 0 8-2.91 8-6.5S14.418 2 10 2z" clip-rule="evenodd" /></svg>',
     settings: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.993 6.993 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>',
     history: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-12.25a.75.75 0 00-1.5 0V10c0 .25.125.484.334.623l2.5 1.667a.75.75 0 10.832-1.248l-2.166-1.444V5.75z" clip-rule="evenodd" /></svg>',
     pricing: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.94 6.94a.75.75 0 00-1.06-1.06A5.733 5.733 0 006.2 9.25H5.5a.75.75 0 000 1.5h.531a5.78 5.78 0 000 .5H5.5a.75.75 0 000 1.5h.7a5.733 5.733 0 001.68 3.37.75.75 0 101.06-1.06A4.235 4.235 0 017.733 13H10.5a.75.75 0 000-1.5H7.531a4.282 4.282 0 010-.5H10.5a.75.75 0 000-1.5H7.733a4.235 4.235 0 011.207-2.06z" clip-rule="evenodd" /></svg>',
@@ -47,6 +118,7 @@ const allNavItems = [
     { label: 'Dashboard', href: '/dashboard', routeName: 'dashboard', icon: icons.dashboard, permission: null },
     { label: 'Dhomat', href: '/pms/rooms', icon: icons.rooms, permission: 'view_rooms' },
     { label: 'Rezervimet', href: '/pms/reservations', match: '/pms/reservations', icon: icons.reservations, permission: 'view_reservations' },
+    { label: 'Mesazhet', href: '/pms/messages', match: '/pms/messages', icon: icons.messages, permission: 'view_reservations' },
     { label: 'Mysafiret', href: '/pms/guests', icon: icons.guests, permission: 'view_guests' },
     { label: 'Housekeeping', href: '/pms/housekeeping', icon: icons.housekeeping, permission: 'view_housekeeping' },
     { label: 'POS Bar/Restaurant', href: '/pms/pos', icon: icons.pos, permission: 'view_pos_orders' },

@@ -46,6 +46,7 @@ class Reservation extends TenantModel
         'notes',
         'channel',
         'channel_ref',
+        'channex_booking_id',
         'booking_group_id',
         'commission_amount',
         'payment_collect',

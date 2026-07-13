@@ -13,6 +13,7 @@ use App\Http\Controllers\PosShiftController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
+use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\SeasonCopyController;
@@ -98,6 +99,11 @@ Route::middleware('auth')->prefix('pms')->group(function () {
     // Reservations
     Route::middleware('permission:view_reservations')->group(function () {
         Route::get('/reservations', [ReservationController::class, 'index'])->name('reservations.index');
+
+        // Guest messaging (Channex Messages) — front desk replies to OTA guests.
+        Route::get('/messages', [MessagesController::class, 'index'])->middleware('permission:view_reservations')->name('messages.index');
+        Route::get('/messages/unread', [MessagesController::class, 'unread'])->middleware('permission:view_reservations')->name('messages.unread');
+        Route::post('/messages/{thread}/reply', [MessagesController::class, 'reply'])->middleware('permission:view_reservations')->name('messages.reply');
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         // Seasonal price quote for the create/edit form (server-computed; MUST stay before the {reservation} wildcard).
         Route::get('/reservations/quote', [ReservationController::class, 'quote'])->name('reservations.quote');

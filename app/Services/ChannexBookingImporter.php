@@ -113,6 +113,7 @@ class ChannexBookingImporter
                     'check_in_date' => $room['checkin_date'] ?? null,
                     'check_out_date' => $room['checkout_date'] ?? null,
                     'status' => 'confirmed',
+                    'channex_booking_id' => $rev['booking_id'] ?? null,
                     'total_amount' => (float) ($room['amount'] ?? 0),
                     'commission_amount' => $firstRoom ? (float) ($rev['ota_commission'] ?? 0) : 0,
                     'adults' => max(1, min(255, (int) ($room['occupancy']['adults'] ?? 1))),
