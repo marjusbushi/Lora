@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Bill;
+use App\Models\Supplier;
 use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
 use App\Models\Invoice;
@@ -162,6 +163,9 @@ class FinanceController extends Controller
         if (! $account) {
             abort(403); // never move money on an account this user cannot see
         }
+        if ($account['currency'] !== 'EUR' && $data['currency'] !== $account['currency']) {
+            return back()->with('error', "Kjo llogari mban vetëm {$account['currency']}.");
+        }
 
         FinancePayment::create([
             'direction' => $data['direction'],
@@ -218,6 +222,199 @@ class FinanceController extends Controller
         return back()->with('success', 'Transferta u krye.');
     }
 
+    // -- bills (Blerjet) ------------------------------------------------------
+
+    public function bills(Request $request): Response
+    {
+        FinanceAccount::ensureDefaults();
+        $filter = $request->input('filter');
+
+        // This month's spend per category (paid or not — commitment view),
+        // plus the auto OTA commissions which are never ledger rows.
+        $monthStart = CarbonImmutable::today()->startOfMonth();
+        $byCategory = Bill::where('issue_date', '>=', $monthStart->toDateString())
+            ->get(['category', 'total_base'])
+            ->groupBy('category')
+            ->map(fn ($g) => round((float) $g->sum('total_base'), 2))
+            ->sortDesc();
+        $commissions = (float) \App\Models\Reservation::whereNotIn('status', ['cancelled'])
+            ->whereDate('check_in_date', '>=', $monthStart->toDateString())
+            ->sum('commission_amount');
+        if ($commissions > 0) {
+            $byCategory->put('Komisione OTA (auto)', round($commissions, 2));
+        }
+
+        return Inertia::render('Finance/Bills', array_merge($this->shared($request), [
+            'accounts' => $this->visibleAccounts($request),
+            'suppliers' => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'categories' => Bill::categories(),
+            'filters' => ['filter' => $filter, 'category' => $request->input('category')],
+            'byCategory' => $byCategory,
+            'bills' => Bill::with('supplier:id,name')->latest('issue_date')->latest('id')
+                ->when($filter === 'unpaid', fn ($qq) => $qq->where('status', '!=', 'paid'))
+                ->when($filter === 'due', fn ($qq) => $qq->where('status', '!=', 'paid')->whereDate('due_date', '<=', today()))
+                ->when($request->filled('category'), fn ($qq) => $qq->where('category', $request->input('category')))
+                ->paginate(25)->withQueryString()->through(fn (Bill $b) => $this->billRow($b)),
+        ]));
+    }
+
+    public function storeBill(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'supplier_id' => ['required', 'integer', 'exists:suppliers,id'],
+            'number' => ['nullable', 'string', 'max:60'],
+            'category' => ['required', 'string', 'max:60'],
+            'issue_date' => ['required', 'date'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
+            'currency' => ['required', 'in:EUR,ALL'],
+            'fx_rate' => ['required_if:currency,ALL', 'nullable', 'numeric', 'min:1'],
+            'total' => ['required', 'numeric', 'min:0.01', 'max:9999999'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        Bill::create($data + ['status' => 'open']);
+
+        return back()->with('success', 'Fatura e blerjes u regjistrua.');
+    }
+
+    /** Pay a bill (fully or partially) from a visible account — atomic. */
+    public function payBill(Request $request, Bill $bill): RedirectResponse
+    {
+        $data = $request->validate([
+            'account_id' => ['required', 'integer'],
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'method' => ['required', 'in:cash,card,bank'],
+        ]);
+        $account = $this->visibleAccounts($request)->firstWhere('id', (int) $data['account_id']);
+        if (! $account) {
+            abort(403);
+        }
+
+        if ($account['currency'] !== 'EUR' && strtoupper($bill->currency) !== $account['currency']) {
+            return back()->with('error', "Kjo llogari mban vetëm {$account['currency']} — fatura është në {$bill->currency}.");
+        }
+
+        // Payment rides the BILL's currency + frozen fx, so remainder math is exact.
+        $amountBase = strtoupper($bill->currency) === 'EUR'
+            ? round((float) $data['amount'], 2)
+            : round((float) $data['amount'] / (float) $bill->fx_rate, 2);
+        if ($amountBase > $bill->remainingBase() + 0.01) {
+            return back()->with('error', 'Shuma e kalon mbetjen e faturës ('.number_format($bill->remainingBase(), 2).' € mbetje).');
+        }
+
+        DB::transaction(function () use ($data, $bill, $account, $request) {
+            FinancePayment::create([
+                'direction' => 'out',
+                'account_id' => $account['id'],
+                'amount' => $data['amount'],
+                'currency' => $bill->currency,
+                'fx_rate' => strtoupper($bill->currency) === 'EUR' ? null : $bill->fx_rate,
+                'method' => $data['method'],
+                'source' => 'manual',
+                'bill_id' => $bill->id,
+                'description' => 'Pagesë bill '.($bill->number ?: '#'.$bill->id).' — '.($bill->supplier?->name ?? ''),
+                'paid_at' => now(),
+                'created_by' => $request->user()->id,
+            ]);
+            $bill->refreshStatus();
+        });
+
+        return back()->with('success', 'Pagesa e faturës u regjistrua.');
+    }
+
+    // -- suppliers (Furnitorët) ----------------------------------------------
+
+    public function suppliers(Request $request): Response
+    {
+        $suppliers = Supplier::withCount('bills')->orderBy('name')->get()->map(fn (Supplier $s) => [
+            'id' => $s->id,
+            'name' => $s->name,
+            'nipt' => $s->nipt,
+            'category' => $s->category,
+            'phone' => $s->phone,
+            'email' => $s->email,
+            'address' => $s->address,
+            'payment_terms_days' => $s->payment_terms_days,
+            'is_active' => $s->is_active,
+            'bills_count' => $s->bills_count,
+            'open_balance' => $s->openBalanceBase(),
+            'ytd' => round((float) $s->bills()->whereYear('issue_date', now()->year)->sum('total_base'), 2),
+        ]);
+
+        return Inertia::render('Finance/Suppliers', array_merge($this->shared($request), [
+            'suppliers' => $suppliers,
+            'categories' => Bill::categories(),
+        ]));
+    }
+
+    public function storeSupplier(Request $request): RedirectResponse
+    {
+        Supplier::create($this->supplierData($request));
+
+        return back()->with('success', 'Furnitori u shtua.');
+    }
+
+    public function updateSupplier(Request $request, Supplier $supplier): RedirectResponse
+    {
+        $supplier->update($this->supplierData($request, $supplier->id));
+
+        return back()->with('success', 'Furnitori u përditësua.');
+    }
+
+    public function destroySupplier(Supplier $supplier): RedirectResponse
+    {
+        if ($supplier->bills()->where('status', '!=', 'paid')->exists()) {
+            return back()->with('error', 'Ky furnitor ka fatura të papaguara — paguaji ose anuloji përpara se ta heqësh.');
+        }
+        if ($supplier->bills()->exists()) {
+            // History stays intact: deactivate instead of deleting paid history.
+            $supplier->update(['is_active' => false]);
+
+            return back()->with('success', 'Furnitori u çaktivizua (historiku i faturave ruhet).');
+        }
+        $supplier->delete();
+
+        return back()->with('success', 'Furnitori u fshi.');
+    }
+
+    private function supplierData(Request $request, ?int $ignoreId = null): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:255', \App\Tenancy\TenantRule::unique('suppliers', 'name')->ignore($ignoreId)],
+            'nipt' => ['nullable', 'string', 'max:20'],
+            'category' => ['nullable', 'string', 'max:60'],
+            'phone' => ['nullable', 'string', 'max:40'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'payment_terms_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+    }
+
+    private function billRow(Bill $b): array
+    {
+        return [
+            'id' => $b->id,
+            'number' => $b->number,
+            'supplier' => $b->supplier?->name,
+            'supplier_id' => $b->supplier_id,
+            'category' => $b->category,
+            'issue_date' => $b->issue_date->toDateString(),
+            'due_date' => $b->due_date?->toDateString(),
+            'currency' => $b->currency,
+            'fx_rate' => $b->fx_rate ? (float) $b->fx_rate : null,
+            'total' => (float) $b->total,
+            'total_base' => (float) $b->total_base,
+            'paid_base' => $b->paidBase(),
+            'remaining_base' => $b->remainingBase(),
+            'status' => $b->status,
+            'due_state' => $b->status !== 'paid' && $b->due_date
+                ? ($b->due_date->isToday() ? 'today' : ($b->due_date->isPast() ? 'overdue' : 'ok'))
+                : 'ok',
+            'notes' => $b->notes,
+        ];
+    }
+
     // -- helpers ------------------------------------------------------------
 
     /** Active accounts with balances; banks hidden without view_bank_accounts. */
@@ -249,6 +446,8 @@ class FinanceController extends Controller
                 'payBills' => $request->user()->can('pay_bills'),
                 'transfers' => $request->user()->can('manage_transfers'),
                 'bank' => $request->user()->can('view_bank_accounts'),
+                'manageBills' => $request->user()->can('manage_bills'),
+                'manageSuppliers' => $request->user()->can('manage_suppliers'),
             ],
         ];
     }

@@ -176,6 +176,15 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::get('/payments', [FinanceController::class, 'payments'])->name('finance.payments');
         Route::post('/payments', [FinanceController::class, 'storePayment'])->middleware('permission:create_payment')->name('finance.payments.store');
         Route::post('/transfers', [FinanceController::class, 'storeTransfer'])->middleware('permission:manage_transfers')->name('finance.transfers.store');
+
+        // Phase 2: Blerjet (Bills) + Furnitorët
+        Route::get('/bills', [FinanceController::class, 'bills'])->name('finance.bills');
+        Route::post('/bills', [FinanceController::class, 'storeBill'])->middleware('permission:manage_bills')->name('finance.bills.store');
+        Route::post('/bills/{bill}/pay', [FinanceController::class, 'payBill'])->middleware('permission:pay_bills')->name('finance.bills.pay');
+        Route::get('/suppliers', [FinanceController::class, 'suppliers'])->name('finance.suppliers');
+        Route::post('/suppliers', [FinanceController::class, 'storeSupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.store');
+        Route::put('/suppliers/{supplier}', [FinanceController::class, 'updateSupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.update');
+        Route::delete('/suppliers/{supplier}', [FinanceController::class, 'destroySupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.destroy');
     });
 
     // Admin-only: User Management + Settings
