@@ -160,10 +160,11 @@ function statusLabel(s) {
             <p class="mt-1 text-sm text-neutral-500">Kur një mysafir të shkruajë nga Booking, Airbnb ose Expedia, biseda do të shfaqet këtu.</p>
         </div>
 
-        <!-- Mobile is full-bleed edge-to-edge (WhatsApp): the -m cancels the main
-             padding, and dvh (not vh) keeps the composer above the browser bar. -->
-        <div v-else class="-m-4 overflow-hidden border-y border-neutral-200 bg-white sm:m-0 sm:rounded-2xl sm:border sm:shadow-sm">
-            <div class="grid h-[calc(100dvh-2px)] grid-cols-1 sm:h-[calc(100dvh-3.1rem)]"
+        <!-- On phones the chat is PINNED over the whole viewport (fixed inset-0):
+             the page itself can no longer scroll, so no gesture ever drags the
+             header away. z-30 stays under the nav drawer (z-40/50). -->
+        <div v-else class="fixed inset-0 z-30 overflow-hidden bg-white sm:static sm:z-auto sm:rounded-2xl sm:border sm:border-neutral-200 sm:shadow-sm">
+            <div class="grid h-full grid-cols-1 sm:h-[calc(100dvh-3.1rem)]"
                 :class="selected && panelOpen ? 'lg:grid-cols-[300px_1fr_300px]' : 'lg:grid-cols-[300px_1fr]'">
                 <!-- Thread list (on mobile: hidden while a chat is open, like WhatsApp) -->
                 <div class="min-h-0 flex-col border-r border-neutral-200" :class="mobileChatOpen ? 'hidden lg:flex' : 'flex'">
@@ -195,7 +196,7 @@ function statusLabel(s) {
                             :class="filter === f[0] ? 'border-[#0f3b30] bg-[#0f3b30] text-white' : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'"
                             @click="filter = f[0]">{{ f[1] }}</button>
                     </div>
-                    <div class="flex-1 overflow-y-auto px-2.5 pb-3">
+                    <div class="flex-1 overflow-y-auto overscroll-contain px-2.5 pb-3">
                         <button v-for="t in filteredThreads" :key="t.id" type="button"
                             class="relative mb-0.5 flex w-full gap-2.5 rounded-xl p-2.5 text-left transition"
                             :class="selected && selected.id === t.id ? 'bg-[#eaf5ef]' : 'hover:bg-neutral-50'"
@@ -240,7 +241,7 @@ function statusLabel(s) {
                             </button>
                         </div>
 
-                        <div ref="chatBox" class="flex-1 space-y-2 overflow-y-auto px-5 py-5">
+                        <div ref="chatBox" class="flex-1 space-y-2 overflow-y-auto overscroll-contain px-5 py-5">
                             <template v-for="row in messageRows" :key="row.key">
                                 <div v-if="row.sep" class="my-3 flex justify-center">
                                     <span class="rounded-full border border-neutral-200 bg-white px-3 py-0.5 text-[10px] font-semibold text-neutral-400">{{ row.sep }}</span>
@@ -301,7 +302,7 @@ function statusLabel(s) {
                 </div>
 
                 <!-- Context panel -->
-                <aside v-if="selected && panelOpen" class="hidden min-h-0 flex-col gap-5 overflow-y-auto border-l border-neutral-200 bg-white p-5 lg:flex">
+                <aside v-if="selected && panelOpen" class="hidden min-h-0 flex-col gap-5 overflow-y-auto overscroll-contain border-l border-neutral-200 bg-white p-5 lg:flex">
                     <div>
                         <h3 class="text-[10.5px] font-bold uppercase tracking-widest text-neutral-400">Mysafiri</h3>
                         <div class="mt-2.5 flex items-center gap-3">
