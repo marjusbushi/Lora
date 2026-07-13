@@ -354,10 +354,13 @@ class FinanceController extends Controller
     {
         FinanceAccount::ensureDefaults();
         $filter = $request->input('filter');
+        $category = $request->input('category');
+        $search = trim((string) $request->input('search', ''));
+        $today = CarbonImmutable::today();
 
         // This month's spend per category (paid or not — commitment view),
         // plus the auto OTA commissions which are never ledger rows.
-        $monthStart = CarbonImmutable::today()->startOfMonth();
+        $monthStart = $today->startOfMonth();
         $byCategory = Bill::where('issue_date', '>=', $monthStart->toDateString())
             ->get(['category', 'total_base'])
             ->groupBy('category')
@@ -370,16 +373,60 @@ class FinanceController extends Controller
             $byCategory->put('Komisione OTA (auto)', round($commissions, 2));
         }
 
+        $openBills = Bill::query()
+            ->where('status', '!=', 'paid')
+            ->withSum('payments as paid_base', 'amount_base')
+            ->get(['id', 'total_base', 'due_date']);
+        $remainingBase = fn (Bill $bill) => max(0, round((float) $bill->total_base - (float) ($bill->paid_base ?? 0), 2));
+        $overdueBills = $openBills->filter(fn (Bill $bill) => $bill->due_date?->isBefore($today));
+        $dueSoonBills = $openBills->filter(fn (Bill $bill) => $bill->due_date
+            && $bill->due_date->betweenIncluded($today, $today->addDays(7)));
+        $monthPayments = FinancePayment::query()
+            ->whereNotNull('bill_id')
+            ->where('direction', 'out')
+            ->where('paid_at', '>=', $monthStart)
+            ->get(['bill_id', 'amount_base']);
+
+        $summary = [
+            'open_total' => round((float) $openBills->sum($remainingBase), 2),
+            'open_count' => $openBills->count(),
+            'supplier_count' => Bill::query()->where('status', '!=', 'paid')->distinct()->count('supplier_id'),
+            'overdue_total' => round((float) $overdueBills->sum($remainingBase), 2),
+            'overdue_count' => $overdueBills->count(),
+            'due_soon_total' => round((float) $dueSoonBills->sum($remainingBase), 2),
+            'due_soon_count' => $dueSoonBills->count(),
+            'month_paid_total' => round((float) $monthPayments->sum('amount_base'), 2),
+            'month_paid_count' => $monthPayments->pluck('bill_id')->unique()->count(),
+        ];
+
+        $priorities = Bill::with('supplier:id,name')
+            ->withSum('payments as paid_base', 'amount_base')
+            ->where('status', '!=', 'paid')
+            ->whereNotNull('due_date')
+            ->orderBy('due_date')
+            ->limit(4)
+            ->get()
+            ->map(fn (Bill $bill) => $this->billRow($bill))
+            ->values();
+
         return Inertia::render('Finance/Bills', array_merge($this->shared($request), [
             'accounts' => $this->visibleAccounts($request),
             'suppliers' => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'categories' => Bill::categories(),
-            'filters' => ['filter' => $filter, 'category' => $request->input('category')],
+            'filters' => ['filter' => $filter, 'category' => $category, 'search' => $search],
             'byCategory' => $byCategory,
-            'bills' => Bill::with('supplier:id,name')->latest('issue_date')->latest('id')
+            'summary' => $summary,
+            'priorities' => $priorities,
+            'bills' => Bill::with('supplier:id,name')->withSum('payments as paid_base', 'amount_base')
+                ->latest('issue_date')->latest('id')
                 ->when($filter === 'unpaid', fn ($qq) => $qq->where('status', '!=', 'paid'))
-                ->when($filter === 'due', fn ($qq) => $qq->where('status', '!=', 'paid')->whereDate('due_date', '<=', today()))
-                ->when($request->filled('category'), fn ($qq) => $qq->where('category', $request->input('category')))
+                ->when(in_array($filter, ['due', 'overdue'], true), fn ($qq) => $qq->where('status', '!=', 'paid')->whereDate('due_date', '<', $today->toDateString()))
+                ->when($filter === 'paid', fn ($qq) => $qq->where('status', 'paid'))
+                ->when($category, fn ($qq) => $qq->where('category', $category))
+                ->when($search !== '', fn ($qq) => $qq->where(function ($searchQuery) use ($search) {
+                    $searchQuery->where('number', 'like', "%{$search}%")
+                        ->orWhereHas('supplier', fn ($supplierQuery) => $supplierQuery->where('name', 'like', "%{$search}%"));
+                }))
                 ->paginate(25)->withQueryString()->through(fn (Bill $b) => $this->billRow($b)),
         ]));
     }
@@ -519,6 +566,10 @@ class FinanceController extends Controller
 
     private function billRow(Bill $b): array
     {
+        $paidBase = array_key_exists('paid_base', $b->getAttributes())
+            ? round((float) $b->paid_base, 2)
+            : $b->paidBase();
+
         return [
             'id' => $b->id,
             'number' => $b->number,
@@ -531,8 +582,8 @@ class FinanceController extends Controller
             'fx_rate' => $b->fx_rate ? (float) $b->fx_rate : null,
             'total' => (float) $b->total,
             'total_base' => (float) $b->total_base,
-            'paid_base' => $b->paidBase(),
-            'remaining_base' => $b->remainingBase(),
+            'paid_base' => $paidBase,
+            'remaining_base' => max(0, round((float) $b->total_base - $paidBase, 2)),
             'status' => $b->status,
             'due_state' => $b->status !== 'paid' && $b->due_date
                 ? ($b->due_date->isToday() ? 'today' : ($b->due_date->isPast() ? 'overdue' : 'ok'))

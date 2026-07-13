@@ -8,6 +8,7 @@ use App\Models\FinancePayment;
 use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -141,6 +142,7 @@ class FinanceBillsTest extends TestCase
 
     public function test_bills_page_ships_rows_and_category_totals(): void
     {
+        $this->travelTo(CarbonImmutable::parse('2026-07-13 12:00:00'));
         $this->withoutVite();
         $manager = $this->role('manager');
         $bill = $this->lekBill($this->supplier());
@@ -152,7 +154,41 @@ class FinanceBillsTest extends TestCase
                 ->component('Finance/Bills')
                 ->where('bills.data.0.remaining_base', 100)
                 ->where('byCategory.Ushqim & Pije', 100)
+                ->where('summary.open_total', 100)
+                ->where('summary.open_count', 1)
+                ->where('summary.supplier_count', 1)
+                ->where('summary.overdue_count', 0)
+                ->where('summary.due_soon_count', 0)
+                ->has('priorities', 1)
                 ->has('suppliers')
                 ->has('categories'));
+    }
+
+    public function test_bills_page_filters_overdue_rows_by_supplier_and_category(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-07-13 12:00:00'));
+        $this->withoutVite();
+        $manager = $this->role('manager');
+        $overdue = $this->lekBill($this->supplier('Eco Market'));
+        $overdue->update(['number' => 'EM-184', 'issue_date' => '2026-07-01', 'due_date' => '2026-07-12']);
+
+        $future = $this->lekBill($this->supplier('Lavanderi Adriatik'), 4935);
+        $future->update(['category' => 'Lavanderi', 'issue_date' => '2026-07-10', 'due_date' => '2026-07-16']);
+
+        $this->actingAs($manager)->get(route('finance.bills', [
+            'filter' => 'overdue',
+            'category' => 'Ushqim & Pije',
+            'search' => 'Eco',
+        ]))->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('filters.filter', 'overdue')
+                ->where('filters.category', 'Ushqim & Pije')
+                ->where('filters.search', 'Eco')
+                ->where('bills.total', 1)
+                ->where('bills.data.0.number', 'EM-184')
+                ->where('summary.open_count', 2)
+                ->where('summary.overdue_count', 1)
+                ->where('summary.due_soon_count', 1)
+                ->has('priorities', 2));
     }
 }
