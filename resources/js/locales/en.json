@@ -366,7 +366,10 @@
             "edit": "Edit",
             "move": "Move room",
             "openProfile": "Open profile",
-            "manage": "Manage reservation"
+            "manage": "Manage reservation",
+            "cancelConfirmation": "Cancel {guest}'s reservation — room {room}?",
+            "checkoutFailed": "Check-out failed.",
+            "guestCreated": "Guest added."
         },
         "generated": {
             "k_00001da4b7fd": "Dashboard",

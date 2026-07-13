@@ -366,7 +366,10 @@
             "edit": "Ndrysho",
             "move": "Lëviz dhomën",
             "openProfile": "Hap profilin",
-            "manage": "Menaxho rezervimin"
+            "manage": "Menaxho rezervimin",
+            "cancelConfirmation": "Anulo rezervimin e {guest} — dhoma {room}?",
+            "checkoutFailed": "Check-out dështoi.",
+            "guestCreated": "Mysafiri u shtua."
         },
         "generated": {
             "k_00001da4b7fd": "Paneli",
