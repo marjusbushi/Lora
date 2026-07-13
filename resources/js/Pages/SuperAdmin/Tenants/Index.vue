@@ -165,6 +165,41 @@ function tenantStatusLabel(status) {
     return status === 'active' ? 'Aktiv' : (status === 'suspended' ? 'Pezulluar' : status);
 }
 
+const openMenuId = ref(null);
+function toggleMenu(id) { openMenuId.value = openMenuId.value === id ? null : id; }
+function closeMenu() { openMenuId.value = null; }
+
+function enabledCount(tenant) {
+    return Object.values(tenant.billing.modules).filter((m) => m.enabled).length;
+}
+
+function shortDate(value) {
+    return new Intl.DateTimeFormat('sq-AL', { day: '2-digit', month: '2-digit' }).format(new Date(value));
+}
+
+// One status per hotel: suspension and billing trouble collapse into a single
+// clear pill instead of two separate 'Aktiv' badges.
+function hotelStatus(tenant) {
+    if (tenant.status === 'suspended') return { label: 'Pezulluar', tone: 'bad' };
+    const b = tenant.billing || {};
+    if (b.status === 'past_due') return { label: 'Pagesë e vonuar', tone: 'warn' };
+    if (['suspended', 'canceled', 'inactive'].includes(b.status)) return { label: statusLabel(b.status), tone: 'warn' };
+    if (b.current_period_ends_at) {
+        const ends = new Date(b.current_period_ends_at);
+        const soon = new Date();
+        soon.setDate(soon.getDate() + 14);
+        if (ends <= soon) return { label: `Rinovim më ${shortDate(b.current_period_ends_at)}`, tone: 'warn' };
+    }
+    return { label: 'Aktiv', tone: 'ok' };
+}
+
+function statusPillClass(tone) {
+    return { ok: 'bg-emerald-50 text-emerald-700', warn: 'bg-amber-50 text-amber-700', bad: 'bg-red-50 text-red-700' }[tone] || 'bg-neutral-100 text-neutral-600';
+}
+function statusDotClass(tone) {
+    return { ok: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-red-500' }[tone] || 'bg-neutral-400';
+}
+
 function openBilling(tenant) {
     editingTenant.value = tenant;
     billingForm.status = tenant.billing.status;
@@ -239,68 +274,62 @@ function statusLabel(status) {
                         />
                     </div>
 
-                    <div v-if="filteredTenants.length" class="divide-y divide-neutral-100">
-                        <article v-for="tenant in filteredTenants" :key="tenant.id" class="p-5">
-                            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div class="min-w-0 flex-1">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <Link :href="route('super-admin.tenants.show', tenant.id)" class="font-semibold text-neutral-900 no-underline hover:text-emerald-700">{{ tenant.name }}</Link>
-                                    <span v-if="tenant.id === currentTenantId" class="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">Aktual</span>
-                                    <span class="rounded-full px-2 py-0.5 text-xs font-medium" :class="tenantStatusClass(tenant.status)">{{ tenantStatusLabel(tenant.status) }}</span>
-                                    <span
-                                        class="rounded-full px-2 py-0.5 text-xs font-medium"
-                                        :class="tenant.billing.status === 'active' || tenant.billing.status === 'trialing'
-                                            ? 'bg-emerald-50 text-emerald-700'
-                                            : 'bg-amber-50 text-amber-700'"
-                                    >
-                                        {{ statusLabel(tenant.billing.status) }}
-                                    </span>
-                                </div>
-                                <p class="mt-1 text-sm text-neutral-500">{{ tenant.primary_domain || 'Pa domain' }} · {{ tenant.users_count }} përdorues</p>
-                                <p class="mt-1 text-xs text-neutral-400">{{ tenant.slug }} · {{ tenant.timezone }} · {{ tenant.currency }}</p>
-
-                                <div class="mt-3 flex flex-wrap gap-1.5">
-                                    <span
-                                        v-for="module in Object.values(tenant.billing.modules).filter((item) => item.enabled)"
-                                        :key="module.code"
-                                        class="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-[11px] font-medium text-neutral-600"
-                                    >
-                                        {{ module.name }}
-                                        <template v-if="['tiered_per_room', 'per_user', 'per_pos'].includes(module.billing_model)"> · {{ module.quantity }}</template>
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div class="shrink-0 text-left sm:text-right">
-                                <p class="text-sm font-semibold text-neutral-900">
-                                    {{ tenant.billing.billing_cycle === 'annual'
-                                        ? money(tenant.billing.annual_cents, tenant.billing.currency)
-                                        : money(tenant.billing.monthly_fixed_cents, tenant.billing.currency) }}
-                                </p>
-                                <p class="text-xs text-neutral-400">{{ tenant.billing.billing_cycle === 'annual' ? '/ vit' : '/ muaj' }} + tarifa variabël</p>
-                                <div class="mt-3 flex flex-wrap gap-2 sm:justify-end">
-                                    <Button size="sm" variant="outline" @click="openBilling(tenant)">Abonimi</Button>
-                                    <Button size="sm" variant="outline" @click="openConfig(tenant)">Konfigurimi</Button>
-                                    <Button
-                                        size="sm"
-                                        :variant="tenant.id === currentTenantId ? 'outline' : 'primary'"
-                                        :disabled="tenant.id === currentTenantId || tenant.status !== 'active'"
-                                        @click="switchTenant(tenant)"
-                                    >
-                                        {{ tenant.id === currentTenantId ? 'Në përdorim' : 'Hap hotelin' }}
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        :class="tenant.status === 'active' ? 'text-red-600' : 'text-success-700'"
-                                        @click="toggleStatus(tenant)"
-                                    >
-                                        {{ tenant.status === 'active' ? 'Pezullo' : 'Aktivizo' }}
-                                    </Button>
-                                </div>
-                            </div>
-                            </div>
-                        </article>
+                    <div v-if="filteredTenants.length" class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-neutral-200 text-left text-[11px] uppercase tracking-wide text-neutral-400">
+                                    <th class="px-5 py-3 font-semibold">Hoteli</th>
+                                    <th class="px-3 py-3 text-right font-semibold">Përdorues</th>
+                                    <th class="px-3 py-3 font-semibold">Modulet</th>
+                                    <th class="px-3 py-3 text-right font-semibold">Plani</th>
+                                    <th class="px-3 py-3 font-semibold">Statusi</th>
+                                    <th class="px-5 py-3 text-right font-semibold">Veprime</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-neutral-100">
+                                <tr v-for="tenant in filteredTenants" :key="tenant.id" class="hover:bg-neutral-50/60">
+                                    <td class="px-5 py-3">
+                                        <div class="flex items-center gap-2">
+                                            <Link :href="route('super-admin.tenants.show', tenant.id)" class="font-semibold text-neutral-900 no-underline hover:text-emerald-700">{{ tenant.name }}</Link>
+                                            <span v-if="tenant.id === currentTenantId" class="rounded bg-primary-50 px-1.5 py-0.5 text-[10px] font-bold text-primary-700">AKTUAL</span>
+                                        </div>
+                                        <p class="mt-0.5 text-xs text-neutral-400">{{ tenant.primary_domain || tenant.slug }} · {{ tenant.timezone }} · {{ tenant.currency }}</p>
+                                    </td>
+                                    <td class="px-3 py-3 text-right tabular-nums text-neutral-700">{{ tenant.users_count }}</td>
+                                    <td class="px-3 py-3 text-neutral-600"><span class="font-semibold text-neutral-900">{{ enabledCount(tenant) }}</span> {{ enabledCount(tenant) === 1 ? 'modul' : 'module' }}</td>
+                                    <td class="px-3 py-3 text-right">
+                                        <div class="font-semibold tabular-nums text-neutral-900">{{ tenant.billing.billing_cycle === 'annual' ? money(tenant.billing.annual_cents, tenant.billing.currency) : money(tenant.billing.monthly_fixed_cents, tenant.billing.currency) }}</div>
+                                        <div class="text-[10px] text-neutral-400">{{ tenant.billing.billing_cycle === 'annual' ? '/ vit' : '/ muaj' }}</div>
+                                    </td>
+                                    <td class="px-3 py-3">
+                                        <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium" :class="statusPillClass(hotelStatus(tenant).tone)">
+                                            <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(hotelStatus(tenant).tone)" />
+                                            {{ hotelStatus(tenant).label }}
+                                        </span>
+                                    </td>
+                                    <td class="px-5 py-3">
+                                        <div class="flex items-center justify-end gap-2">
+                                            <Button
+                                                size="sm"
+                                                :variant="tenant.id === currentTenantId ? 'outline' : 'primary'"
+                                                :disabled="tenant.id === currentTenantId || tenant.status !== 'active'"
+                                                @click="switchTenant(tenant)"
+                                            >
+                                                {{ tenant.id === currentTenantId ? 'Në përdorim' : 'Hap' }}
+                                            </Button>
+                                            <div class="relative">
+                                                <button type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-neutral-200 text-lg leading-none text-neutral-500 hover:bg-neutral-50" @click.stop="toggleMenu(tenant.id)">⋯</button>
+                                                <div v-if="openMenuId === tenant.id" class="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-xl border border-neutral-200 bg-white py-1 text-left shadow-lg">
+                                                    <button type="button" class="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="closeMenu(); openBilling(tenant)">Abonimi</button>
+                                                    <button type="button" class="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="closeMenu(); openConfig(tenant)">Konfigurimi</button>
+                                                    <button type="button" class="block w-full px-4 py-2 text-left text-sm hover:bg-neutral-50" :class="tenant.status === 'active' ? 'text-red-600' : 'text-success-700'" @click="closeMenu(); toggleStatus(tenant)">{{ tenant.status === 'active' ? 'Pezullo' : 'Aktivizo' }}</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
 
                     <div v-else-if="tenants.length" class="px-5 py-12 text-center text-sm text-neutral-500">
@@ -313,6 +342,7 @@ function statusLabel(status) {
                     </div>
                 </section>
 
+            <div v-if="openMenuId" class="fixed inset-0 z-40" @click="closeMenu" />
         </div>
 
         <Teleport to="body">
