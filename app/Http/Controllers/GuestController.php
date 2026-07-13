@@ -49,7 +49,6 @@ class GuestController extends Controller
         $sort = (string) ($validated['sort'] ?? 'last_stay');
         $nationalityAliases = $nationality !== '' ? $this->nationalityAliases($nationality) : [];
 
-        $returningGuestIds = $this->returningGuestIds();
         $columns = [
             'id', 'first_name', 'last_name', 'email', 'phone',
             'nationality', 'document_type', 'created_at',
@@ -96,7 +95,7 @@ class GuestController extends Controller
                 ->where('status', 'confirmed')
                 ->whereNull('no_show_at')
                 ->whereBetween('check_in_date', [$todayString, $windowEndString])),
-            'returning' => $query->whereIn('id', $returningGuestIds->all()),
+            'returning' => $this->whereReturningGuest($query),
             'incomplete' => $this->whereProfileIncomplete($query),
             'attention' => $this->whereNeedsAttention($query),
             default => null,
@@ -266,13 +265,13 @@ class GuestController extends Controller
                 ->where('status', 'confirmed')
                 ->whereNull('no_show_at')
                 ->whereBetween('check_in_date', [$todayString, $windowEndString]))->count(),
-            'arriving_returning' => Guest::whereIn('id', $returningGuestIds->all())
+            'arriving_returning' => $this->returningGuestsQuery()
                 ->whereHas('reservations', fn (Builder $reservation) => $reservation
                     ->where('status', 'confirmed')
                     ->whereNull('no_show_at')
                     ->whereBetween('check_in_date', [$todayString, $windowEndString]))
                 ->count(),
-            'returning' => $returningGuestIds->count(),
+            'returning' => $this->returningGuestsQuery()->count(),
             'incomplete' => $this->profileIncompleteQuery()->count(),
             'duplicate_profiles' => $this->duplicateGuestsQuery()->count(),
             'attention' => $this->needsAttentionQuery()->count(),
@@ -592,19 +591,22 @@ class GuestController extends Controller
         return "CASE WHEN reservations.booking_group_id IS NULL THEN CONCAT('reservation:', reservations.id) ELSE CONCAT('group:', reservations.booking_group_id) END";
     }
 
-    /** @return Collection<int, int> */
-    private function returningGuestIds(): Collection
+    private function returningGuestsQuery(): Builder
     {
-        return Reservation::query()
+        return $this->whereReturningGuest(Guest::query());
+    }
+
+    private function whereReturningGuest(Builder $query): Builder
+    {
+        $returningGuestIds = Reservation::query()
             ->select('guest_id')
             ->whereNotNull('guest_id')
             ->where('status', 'checked_out')
             ->whereHas('guest')
             ->groupBy('guest_id')
-            ->havingRaw('COUNT(DISTINCT '.$this->visitKeySql().') >= 2')
-            ->pluck('guest_id')
-            ->map(fn ($id) => (int) $id)
-            ->values();
+            ->havingRaw('COUNT(DISTINCT '.$this->visitKeySql().') >= 2');
+
+        return $query->whereIn('id', $returningGuestIds);
     }
 
     /** @return list<string> */
