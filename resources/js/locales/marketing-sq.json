@@ -1,0 +1,202 @@
+{
+    "meta": {
+        "title": "Lora PMS — Menaxho hotelin. Jo kaosin.",
+        "description": "Lora PMS bashkon rezervimet, Channel Manager, Booking Online, Housekeeping, POS, Financat dhe Çmimet Inteligjente në një sistem të vetëm.",
+        "ogDescription": "PMS modern për hotele: rezervime, kanale, pagesa dhe operacione në një ekran."
+    },
+    "common": {
+        "login": "Hyr",
+        "bookDemo": "Rezervo Demo",
+        "contact": "Na kontakto",
+        "month": "/ muaj",
+        "monthlyPayment": "me pagesë mujore",
+        "discover": "Zbulo më shumë"
+    },
+    "nav": {
+        "features": "Funksionet",
+        "integrations": "Integrimet",
+        "pricing": "Çmimet",
+        "hotels": "Për hotelet",
+        "mainLabel": "Navigimi kryesor",
+        "homeLabel": "Lora PMS — Kryefaqja",
+        "openMenu": "Hap menunë",
+        "closeMenu": "Mbyll menunë"
+    },
+    "hero": {
+        "eyebrow": "PMS i ndërtuar për hotelierë",
+        "title1": "Menaxho hotelin.",
+        "title2": "Jo kaosin.",
+        "body": "Rezervime, Booking.com & Expedia, housekeeping, pagesa, POS dhe çmime inteligjente — në një sistem.",
+        "seeHow": "Shiko si funksionon",
+        "assisted": "Konfigurim i asistuar",
+        "noContract": "Pa kontratë afatgjatë"
+    },
+    "dashboard": {
+        "search": "Kërko rezervim…",
+        "hotel": "Hotel Lora",
+        "overview": "Përmbledhje",
+        "today": "Sot · 11 Korrik",
+        "yesterday": "nga dje",
+        "nav": ["Rezervimet", "Kalendari", "Dhomat", "Housekeeping", "Çmimet", "Raportet", "Pagesat", "POS"],
+        "metrics": ["Okupanca sot", "Mbërritje sot", "Të pastruara", "Të ardhura sot"],
+        "arrivals": "Arritjet sot",
+        "viewAll": "Shiko të gjitha",
+        "roomTypes": ["Deluxe me pamje nga deti", "Dhomë superiore", "Dhomë deluxe"],
+        "rooms": "dhoma",
+        "revenue": "Të ardhura · 30 ditët e fundit"
+    },
+    "integrations": {
+        "caption": "Ndërtuar nga eksperienca reale e Villa Mucho",
+        "left": "Lëviz logot majtas",
+        "right": "Lëviz logot djathtas"
+    },
+    "features": {
+        "eyebrow": "Gjithçka që të duhet",
+        "title": "Një PMS që punon si ekipi yt.",
+        "body": "Modulet lidhen mes tyre, që informacioni të shkruhet një herë dhe të përdoret kudo.",
+        "groups": [
+            {
+                "title": "Shit më shumë",
+                "description": "Më shumë kanale, më shumë rezervime direkte dhe çmime që reagojnë ndaj kërkesës.",
+                "items": ["Channel Manager", "Booking Online", "Çmime Inteligjente"]
+            },
+            {
+                "title": "Menaxho çdo ditë",
+                "description": "Nga rezervimi te check-out-i, çdo veprim i recepsionit në një rrjedhë të qartë.",
+                "items": ["Rezervime", "Check-in / Check-out", "Dhomat & Folio"]
+            },
+            {
+                "title": "Ekipi në kontroll",
+                "description": "Detyra të qarta, role të sigurta dhe histori e plotë për çdo ndryshim.",
+                "items": ["Housekeeping", "Rolet & Lejet", "Historia"]
+            },
+            {
+                "title": "Shiko biznesin qartë",
+                "description": "Të ardhurat, arkëtimet dhe performanca e hotelit pa tabela të shpërndara.",
+                "items": ["Raporte", "Pagesa & Folio", "POS"]
+            }
+        ]
+    },
+    "product": {
+        "eyebrow": "Tur i produktit",
+        "newAction": "+ Veprim i ri",
+        "tabs": {
+            "reservations": "Rezervimet",
+            "housekeeping": "Housekeeping",
+            "pos": "POS",
+            "pricing": "Çmimet"
+        },
+        "copy": {
+            "reservations": {
+                "eyebrow": "Recepsioni",
+                "title": "Çdo rezervim, në vendin e vet.",
+                "body": "OTA, website, telefon ose walk-in — të gjitha shfaqen në një kalendar dhe një listë të vetme."
+            },
+            "housekeeping": {
+                "eyebrow": "Operacionet",
+                "title": "Pastrimi që nuk ka nevojë për telefonata.",
+                "body": "Stafi sheh dhomat prioritare, checklistën dhe raportimin e problemeve direkt nga telefoni."
+            },
+            "pos": {
+                "eyebrow": "Bar & Restorant",
+                "title": "Porositë dhe arka lidhen me hotelin.",
+                "body": "Menaxho porositë, turnet dhe pagesat; kalo shpenzimet te folio e dhomës pa punë të dyfishtë."
+            },
+            "pricing": {
+                "eyebrow": "Revenue",
+                "title": "Çmime më të zgjuara, me kontrollin tënd.",
+                "body": "Shiko mbushjen, kërkesën dhe sugjerimin për çdo ditë. Ti vendos çfarë aplikohet."
+            }
+        },
+        "reservationHeaders": ["Kodi", "Mysafiri", "Dhoma", "Check-in", "Check-out", "Statusi", "Kanali", "Shuma"],
+        "confirmed": "Konfirmuar",
+        "website": "Faqja web",
+        "may": "Maj",
+        "housekeepingRooms": [
+            { "state": "RUSH", "detail": "Mbërritje 13:30" },
+            { "state": "Në pastrim", "detail": "6 / 10 detyra" },
+            { "state": "Për inspektim", "detail": "Përfunduar 12:08" }
+        ],
+        "deluxeFloor": "Dhomë deluxe · Kati 2",
+        "posItems": ["Espresso", "Aperol Spritz", "Club Sandwich", "Pasta", "Ujë", "Ëmbëlsirë"],
+        "order": "Porosia #184",
+        "total": "Total",
+        "payOrRoom": "Paguaj / Kalo në dhomë",
+        "occupancy": "Mbushja · Korrik",
+        "suggestion": "Sugjerimi për 18 Korrik",
+        "suggestionBody": "Kërkesa është rritur dhe kanë mbetur vetëm 2 dhoma.",
+        "applyPrice": "Apliko çmimin"
+    },
+    "pricing": {
+        "eyebrow": "Çmime transparente",
+        "title": "Paguaj vetëm çfarë përdor.",
+        "body": "Lora Core është baza. Modulet e tjera aktivizohen sipas mënyrës si punon hoteli yt.",
+        "billingPeriod": "Periudha e faturimit",
+        "monthly": "Mujore",
+        "annual": "Vjetore",
+        "cards": {
+            "core": { "title": "Lora Core", "unit": "/ muaj", "note": "Baza e PMS-it" },
+            "channel": { "title": "Channel Manager", "unit": "/ dhomë", "note": "50 të parat · pastaj €5", "annualNote": "50 të parat · pastaj €4" },
+            "booking": { "title": "Booking Online", "unit": "", "note": "Vetëm rezervimet direkte" },
+            "housekeeping": { "title": "Housekeeping", "unit": "/ muaj", "note": "Tarifë fikse për modulin" },
+            "pos": { "title": "POS", "unit": "/ pikë shitjeje", "note": "Bar ose restorant" },
+            "smart": { "title": "Çmimet Inteligjente", "unit": "/ muaj", "note": "Sugjerime & autopilot" },
+            "finance": { "title": "Financa", "unit": "/ muaj", "note": "Arka, pagesa, fatura & shpenzime" }
+        },
+        "calculatorEyebrow": "Kalkulator interaktiv",
+        "calculatorTitle": "Kalkulo planin tënd",
+        "changeModules": "Ndrysho çdo modul",
+        "coreAlwaysActive": "Lora Core është gjithmonë aktiv",
+        "smartPricing": "Çmimet Inteligjente",
+        "finance": "Financa",
+        "rooms": "Dhoma",
+        "removeRoom": "Hiq një dhomë",
+        "addRoom": "Shto një dhomë",
+        "posPoints": "Pika POS",
+        "removePos": "Hiq një pikë POS",
+        "addPos": "Shto një pikë POS",
+        "totalAnnual": "Totali vjetor",
+        "totalMonthly": "Totali mujor",
+        "directBookings": "+ 1% rezervimet direkte",
+        "annualPayment": "Me pagesë vjetore",
+        "save20": "Kurse 20%",
+        "annualInvoice": "{invoice} faturuar për vit · kursen {savings}",
+        "annualNote": "Ulja vjetore aplikohet te abonimet fikse; tarifa 1% nuk ndryshon.",
+        "start": "Fillo konfigurimin"
+    },
+    "onboarding": {
+        "eyebrow": "Ne të shoqërojmë",
+        "title": "Nuk të lëmë vetëm me një login.",
+        "body": "Ne të ndihmojmë me konfigurimin, migrimin dhe lidhjen me kanalet.",
+        "steps": [
+            { "title": "Krijo hotelin", "body": "Vendos dhomat, tipologjitë, çmimet dhe përdoruesit." },
+            { "title": "Lidh kanalet", "body": "Lidh Booking.com, Expedia dhe kanalet e tjera." },
+            { "title": "Fillo punën", "body": "Trajno ekipin dhe kalo live me mbështetjen tonë." }
+        ]
+    },
+    "faq": {
+        "eyebrow": "Pyetje të shpeshta",
+        "title": "Përgjigje të qarta para se të fillosh.",
+        "items": [
+            { "q": "A lidhet Lora PMS me Booking.com dhe Expedia?", "a": "Po. Lora PMS përdor Channel Manager për të dërguar automatikisht disponueshmërinë dhe çmimet, si edhe për të marrë rezervimet e reja." },
+            { "q": "Sa kohë zgjat implementimi?", "a": "Për një hotel të vogël konfigurimi bazë mund të përfundojë brenda ditës. Lidhja e kanaleve dhe migrimi bëhen bashkë me ekipin tonë." },
+            { "q": "A mund të importoj rezervimet ekzistuese?", "a": "Po. Planifikojmë migrimin e dhomave, çmimeve, rezervimeve të ardhshme dhe profileve të mysafirëve para kalimit live." },
+            { "q": "A mund të aktivizoj vetëm modulet që më duhen?", "a": "Po. Lora Core është baza dhe modulet Channel Manager, Booking Online, Housekeeping, POS, Çmimet Inteligjente dhe Financa aktivizohen sipas nevojës." }
+        ]
+    },
+    "cta": {
+        "title": "Gati ta menaxhosh hotelin më thjesht?",
+        "body": "Na trego si punon hoteli yt. Ne të tregojmë konfigurimin që të përshtatet."
+    },
+    "footer": {
+        "tagline": "Menaxho hotelin. Jo kaosin.",
+        "product": "Produkti",
+        "support": "Mbështetje",
+        "help": "Qendra e ndihmës",
+        "contact": "Kontakto",
+        "legal": "Ligjore",
+        "terms": "Kushtet e përdorimit",
+        "privacy": "Privatësia",
+        "cookies": "Cookies"
+    }
+}

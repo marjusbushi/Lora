@@ -1,6 +1,8 @@
 import { createI18n } from 'vue-i18n';
 import sq from './locales/sq.json';
 import en from './locales/en.json';
+import marketingSq from './locales/marketing-sq.json';
+import marketingEn from './locales/marketing-en.json';
 
 const SUPPORTED = ['sq', 'en'];
 const DEFAULT = 'sq';
@@ -21,7 +23,10 @@ export const i18n = createI18n({
     globalInjection: true, // enables $t in templates
     locale,
     fallbackLocale: DEFAULT,
-    messages: { sq, en },
+    messages: {
+        sq: { ...sq, marketing: marketingSq },
+        en: { ...en, marketing: marketingEn },
+    },
 });
 
 export function setLocale(next) {

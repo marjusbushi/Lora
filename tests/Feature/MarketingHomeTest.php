@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Arr;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -57,5 +58,21 @@ class MarketingHomeTest extends TestCase
                 ->component('Auth/Login')
                 ->where('settings.hotel_name', 'Lora PMS')
                 ->where('tenant', null));
+    }
+
+    public function test_marketing_translations_have_matching_albanian_and_english_keys(): void
+    {
+        $read = fn (string $locale): array => json_decode(
+            file_get_contents(resource_path("js/locales/marketing-{$locale}.json")),
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        );
+
+        $sqKeys = array_keys(Arr::dot($read('sq')));
+        $enKeys = array_keys(Arr::dot($read('en')));
+        sort($sqKeys);
+        sort($enKeys);
+
+        $this->assertSame($sqKeys, $enKeys);
     }
 }

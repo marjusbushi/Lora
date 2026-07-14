@@ -1,0 +1,202 @@
+{
+    "meta": {
+        "title": "Lora PMS — Run your hotel. Not the chaos.",
+        "description": "Lora PMS brings reservations, Channel Manager, Booking Online, Housekeeping, POS, Finance and Smart Pricing into one system.",
+        "ogDescription": "A modern hotel PMS for reservations, channels, payments and operations in one place."
+    },
+    "common": {
+        "login": "Log in",
+        "bookDemo": "Book a Demo",
+        "contact": "Contact us",
+        "month": "/ month",
+        "monthlyPayment": "with monthly billing",
+        "discover": "Learn more"
+    },
+    "nav": {
+        "features": "Features",
+        "integrations": "Integrations",
+        "pricing": "Pricing",
+        "hotels": "For hotels",
+        "mainLabel": "Main navigation",
+        "homeLabel": "Lora PMS — Homepage",
+        "openMenu": "Open menu",
+        "closeMenu": "Close menu"
+    },
+    "hero": {
+        "eyebrow": "A PMS built for hoteliers",
+        "title1": "Run your hotel.",
+        "title2": "Not the chaos.",
+        "body": "Reservations, Booking.com & Expedia, housekeeping, payments, POS and smart pricing — in one system.",
+        "seeHow": "See how it works",
+        "assisted": "Assisted setup",
+        "noContract": "No long-term contract"
+    },
+    "dashboard": {
+        "search": "Search reservations…",
+        "hotel": "Hotel Lora",
+        "overview": "Overview",
+        "today": "Today · July 11",
+        "yesterday": "vs yesterday",
+        "nav": ["Reservations", "Calendar", "Rooms", "Housekeeping", "Pricing", "Reports", "Payments", "POS"],
+        "metrics": ["Occupancy today", "Arrivals today", "Rooms cleaned", "Revenue today"],
+        "arrivals": "Today's arrivals",
+        "viewAll": "View all",
+        "roomTypes": ["Deluxe Sea View", "Superior Room", "Deluxe Room"],
+        "rooms": "rooms",
+        "revenue": "Revenue · last 30 days"
+    },
+    "integrations": {
+        "caption": "Built from Villa Mucho's real hospitality experience",
+        "left": "Move logos left",
+        "right": "Move logos right"
+    },
+    "features": {
+        "eyebrow": "Everything you need",
+        "title": "A PMS that works like your team.",
+        "body": "The modules work together, so information is entered once and used everywhere.",
+        "groups": [
+            {
+                "title": "Sell more",
+                "description": "More channels, more direct bookings and prices that respond to demand.",
+                "items": ["Channel Manager", "Booking Online", "Smart Pricing"]
+            },
+            {
+                "title": "Run every day",
+                "description": "From booking to check-out, every front-desk action follows one clear flow.",
+                "items": ["Reservations", "Check-in / Check-out", "Rooms & Folio"]
+            },
+            {
+                "title": "Keep the team in control",
+                "description": "Clear tasks, secure roles and a complete history of every change.",
+                "items": ["Housekeeping", "Roles & Permissions", "History"]
+            },
+            {
+                "title": "See the business clearly",
+                "description": "Revenue, collections and hotel performance without scattered spreadsheets.",
+                "items": ["Reports", "Payments & Folio", "POS"]
+            }
+        ]
+    },
+    "product": {
+        "eyebrow": "Product tour",
+        "newAction": "+ New action",
+        "tabs": {
+            "reservations": "Reservations",
+            "housekeeping": "Housekeeping",
+            "pos": "POS",
+            "pricing": "Pricing"
+        },
+        "copy": {
+            "reservations": {
+                "eyebrow": "Front desk",
+                "title": "Every reservation in its place.",
+                "body": "OTA, website, phone or walk-in — everything appears in one calendar and one list."
+            },
+            "housekeeping": {
+                "eyebrow": "Operations",
+                "title": "Housekeeping without the phone calls.",
+                "body": "Staff see priority rooms, checklists and issue reporting directly from their phones."
+            },
+            "pos": {
+                "eyebrow": "Bar & Restaurant",
+                "title": "Orders and the till connect to the hotel.",
+                "body": "Manage orders, shifts and payments; post charges to the room folio without double entry."
+            },
+            "pricing": {
+                "eyebrow": "Revenue",
+                "title": "Smarter pricing, under your control.",
+                "body": "See occupancy, demand and the daily suggestion. You decide what gets applied."
+            }
+        },
+        "reservationHeaders": ["Code", "Guest", "Room", "Check-in", "Check-out", "Status", "Channel", "Amount"],
+        "confirmed": "Confirmed",
+        "website": "Website",
+        "may": "May",
+        "housekeepingRooms": [
+            { "state": "RUSH", "detail": "Arrival 13:30" },
+            { "state": "Cleaning", "detail": "6 / 10 tasks" },
+            { "state": "For inspection", "detail": "Completed 12:08" }
+        ],
+        "deluxeFloor": "Deluxe Room · Floor 2",
+        "posItems": ["Espresso", "Aperol Spritz", "Club Sandwich", "Pasta", "Water", "Dessert"],
+        "order": "Order #184",
+        "total": "Total",
+        "payOrRoom": "Pay / Charge to room",
+        "occupancy": "Occupancy · July",
+        "suggestion": "Suggestion for July 18",
+        "suggestionBody": "Demand has increased and only 2 rooms remain.",
+        "applyPrice": "Apply price"
+    },
+    "pricing": {
+        "eyebrow": "Transparent pricing",
+        "title": "Pay only for what you use.",
+        "body": "Lora Core is the foundation. Activate the other modules to match the way your hotel works.",
+        "billingPeriod": "Billing period",
+        "monthly": "Monthly",
+        "annual": "Annual",
+        "cards": {
+            "core": { "title": "Lora Core", "unit": "/ month", "note": "The PMS foundation" },
+            "channel": { "title": "Channel Manager", "unit": "/ room", "note": "First 50 · then €5", "annualNote": "First 50 · then €4" },
+            "booking": { "title": "Booking Online", "unit": "", "note": "Direct bookings only" },
+            "housekeeping": { "title": "Housekeeping", "unit": "/ month", "note": "One flat module fee" },
+            "pos": { "title": "POS", "unit": "/ sales point", "note": "Bar or restaurant" },
+            "smart": { "title": "Smart Pricing", "unit": "/ month", "note": "Suggestions & autopilot" },
+            "finance": { "title": "Finance", "unit": "/ month", "note": "Cash, payments, bills & expenses" }
+        },
+        "calculatorEyebrow": "Interactive calculator",
+        "calculatorTitle": "Calculate your plan",
+        "changeModules": "Change any module",
+        "coreAlwaysActive": "Lora Core is always active",
+        "smartPricing": "Smart Pricing",
+        "finance": "Finance",
+        "rooms": "Rooms",
+        "removeRoom": "Remove one room",
+        "addRoom": "Add one room",
+        "posPoints": "POS points",
+        "removePos": "Remove one POS point",
+        "addPos": "Add one POS point",
+        "totalAnnual": "Annual total",
+        "totalMonthly": "Monthly total",
+        "directBookings": "+ 1% of direct bookings",
+        "annualPayment": "With annual billing",
+        "save20": "Save 20%",
+        "annualInvoice": "{invoice} billed yearly · save {savings}",
+        "annualNote": "The annual discount applies to subscriptions; the 1% fee does not change.",
+        "start": "Start configuration"
+    },
+    "onboarding": {
+        "eyebrow": "We are with you",
+        "title": "We do not leave you with just a login.",
+        "body": "We help with setup, migration and channel connections.",
+        "steps": [
+            { "title": "Create your hotel", "body": "Set up rooms, room types, prices and users." },
+            { "title": "Connect channels", "body": "Connect Booking.com, Expedia and your other channels." },
+            { "title": "Start working", "body": "Train your team and go live with our support." }
+        ]
+    },
+    "faq": {
+        "eyebrow": "Frequently asked questions",
+        "title": "Clear answers before you start.",
+        "items": [
+            { "q": "Does Lora PMS connect with Booking.com and Expedia?", "a": "Yes. Lora PMS uses Channel Manager to send availability and prices automatically and receive new reservations." },
+            { "q": "How long does implementation take?", "a": "For a small hotel, the basic setup can be completed within a day. Channel connections and migration are handled together with our team." },
+            { "q": "Can I import my existing reservations?", "a": "Yes. Before going live, we plan the migration of rooms, prices, future reservations and guest profiles." },
+            { "q": "Can I activate only the modules I need?", "a": "Yes. Lora Core is the foundation, while Channel Manager, Booking Online, Housekeeping, POS, Smart Pricing and Finance can be activated as needed." }
+        ]
+    },
+    "cta": {
+        "title": "Ready to run your hotel more simply?",
+        "body": "Tell us how your hotel works. We will show you the setup that fits."
+    },
+    "footer": {
+        "tagline": "Run your hotel. Not the chaos.",
+        "product": "Product",
+        "support": "Support",
+        "help": "Help center",
+        "contact": "Contact",
+        "legal": "Legal",
+        "terms": "Terms of use",
+        "privacy": "Privacy",
+        "cookies": "Cookies"
+    }
+}
