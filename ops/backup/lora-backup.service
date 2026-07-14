@@ -1,0 +1,25 @@
+[Unit]
+Description=Lora PMS encrypted offsite backup
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/var/www/villamucho
+Environment=LORA_APP_PATH=/var/www/villamucho
+ExecStart=/usr/local/sbin/lora-offsite-backup
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+NoNewPrivileges=true
+LockPersonality=true
+ReadWritePaths=/var/lib/lora-backup /var/cache/restic /var/www/villamucho/storage /var/www/villamucho/bootstrap/cache
+
+[Install]
+WantedBy=multi-user.target

@@ -2,12 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ResolvesTenantContext;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomInventorySnapshot;
 use App\Models\RoomType;
 use App\Tenancy\TenantContext;
-use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -51,7 +51,7 @@ class PricingSnapshot extends Command
 
         $rows = [];
         $now = now();
-        $tenantId = app(TenantContext::class)->idOrDefault();
+        $tenantId = app(TenantContext::class)->requireId();
 
         foreach ($types as $typeId) {
             $typeRooms = $rooms->get($typeId, collect());

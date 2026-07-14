@@ -2,6 +2,7 @@
 
 use App\Console\TenantCommandRunner;
 use App\Http\Middleware\EnsureControlPanelHost;
+use App\Http\Middleware\EnsureHotelHost;
 use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\EnsureTenantModuleEnabled;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -49,7 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'super_admin' => EnsureSuperAdmin::class,
             'control_panel_host' => EnsureControlPanelHost::class,
             'dedicated_control_redirect' => RedirectDedicatedControlPanel::class,
-            'hotel_host' => \App\Http\Middleware\EnsureHotelHost::class,
+            'hotel_host' => EnsureHotelHost::class,
             'module' => EnsureTenantModuleEnabled::class,
         ]);
     })
@@ -58,7 +59,10 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withSchedule(function (Schedule $schedule): void {
         // Retention: channel sync audit (90d) + website search demand log (2y).
-        $schedule->command('model:prune', ['--model' => [ChannelSyncLog::class, WebsiteSearchLog::class]])->daily();
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run(
+            'model:prune',
+            ['--model' => [ChannelSyncLog::class, WebsiteSearchLog::class]],
+        ))->name('tenants:model:prune')->daily();
         // Catch-up: re-pull any OTA booking a missed webhook left unacknowledged.
         $schedule->call(fn () => app(TenantCommandRunner::class)->run(
             'channex:pull-bookings',

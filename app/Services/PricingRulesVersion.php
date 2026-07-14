@@ -28,7 +28,7 @@ class PricingRulesVersion
         // Self-heal older or partially migrated installations. The unique
         // (group, key) index makes this safe when two requests race to create it.
         Setting::query()->insertOrIgnore([
-            'tenant_id' => app(TenantContext::class)->idOrDefault(),
+            'tenant_id' => app(TenantContext::class)->requireId(),
             'group' => 'pricing',
             'key' => 'rules_version',
             'value' => '0',

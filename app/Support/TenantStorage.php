@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Tenancy\TenantContext;
+use InvalidArgumentException;
 
 /**
  * New uploads live under tenants/{id}/… so hotels never share directories
@@ -14,8 +15,11 @@ class TenantStorage
 {
     public static function path(string $dir): string
     {
-        $tenantId = app(TenantContext::class)->id();
+        $dir = trim($dir, '/');
+        if ($dir === '' || in_array('..', explode('/', $dir), true)) {
+            throw new InvalidArgumentException('Tenant storage directory must be a safe relative path.');
+        }
 
-        return $tenantId === null ? $dir : "tenants/{$tenantId}/{$dir}";
+        return 'tenants/'.app(TenantContext::class)->requireId().'/'.$dir;
     }
 }

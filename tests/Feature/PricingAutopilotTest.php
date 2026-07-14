@@ -12,6 +12,7 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\TenantKey;
 use Carbon\Carbon;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -138,7 +139,7 @@ class PricingAutopilotTest extends TestCase
     {
         $this->fullNight();
         $this->enable();
-        $lock = Cache::lock('pricing:autopilot:run:'.app(\App\Tenancy\TenantContext::class)->id(), 60);
+        $lock = Cache::lock(TenantKey::make('pricing:autopilot:run'), 60);
         $this->assertTrue($lock->get());
 
         try {

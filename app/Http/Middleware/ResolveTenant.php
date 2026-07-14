@@ -88,7 +88,7 @@ class ResolveTenant
         // webhooks — always belong to the host that was called. A visitor's
         // login (or a super admin's tenant switch) must never move a public
         // page, a booking, or a webhook onto another hotel.
-        if ($request->routeIs('website.*', 'channex.webhook')) {
+        if ($request->routeIs('website.*', 'channex.webhook', 'tenant-handoff.consume')) {
             return $this->resolveFromDomain($request);
         }
 

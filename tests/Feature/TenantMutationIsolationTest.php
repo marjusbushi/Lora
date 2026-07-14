@@ -2,19 +2,33 @@
 
 namespace Tests\Feature;
 
+use App\Models\Bill;
 use App\Models\CleaningTask;
+use App\Models\FinanceAccount;
+use App\Models\FinancePayment;
 use App\Models\Guest;
+use App\Models\GuestDocument;
+use App\Models\InventoryItem;
+use App\Models\MaintenanceAttachment;
+use App\Models\MaintenanceIssue;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
+use App\Models\PosOrder;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
+use App\Models\Supplier;
 use App\Models\Tenant;
+use App\Models\TenantIntegration;
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Services\TenantBillingService;
 use App\Services\TenantRoleService;
+use App\Support\TenantStorage;
 use App\Tenancy\TenantContext;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -33,7 +47,7 @@ class TenantMutationIsolationTest extends TestCase
 
     private User $admin;
 
-    /** @var array<string, \Illuminate\Database\Eloquent\Model> */
+    /** @var array<string, Model> */
     private array $foreignRecords = [];
 
     protected function setUp(): void
@@ -48,6 +62,7 @@ class TenantMutationIsolationTest extends TestCase
         $this->foreign = Tenant::factory()->create(['name' => 'Hotel Foreign']);
         app(TenantBillingService::class)->provision($this->foreign, enableAll: true);
         app(TenantRoleService::class)->provision($this->foreign);
+        Storage::fake('local');
 
         $context->set($this->home);
         $this->admin = User::factory()->create(['current_tenant_id' => $this->home->id]);
@@ -57,7 +72,7 @@ class TenantMutationIsolationTest extends TestCase
         $type = RoomType::create(['name' => 'F-Type', 'base_price' => 90, 'max_occupancy' => 2, 'amenities' => []]);
         $room = Room::create(['room_type_id' => $type->id, 'room_number' => 'F1', 'floor' => 1, 'status' => 'available']);
         $guest = Guest::create(['first_name' => 'For', 'last_name' => 'Eign', 'email' => 'foreign@example.test']);
-        $staff = User::factory()->create();
+        $staff = User::factory()->create(['name' => 'B-SECRET-STAFF']);
         $reservation = Reservation::create([
             'room_id' => $room->id,
             'guest_id' => $guest->id,
@@ -71,9 +86,148 @@ class TenantMutationIsolationTest extends TestCase
         $task = CleaningTask::create(['room_id' => $room->id, 'type' => 'checkout_clean', 'status' => 'pending']);
         $category = MenuCategory::create(['name' => 'Pije', 'sort_order' => 1]);
         $menuItem = MenuItem::create(['menu_category_id' => $category->id, 'name' => 'Uje', 'price' => 2, 'is_available' => true]);
+        $account = FinanceAccount::create([
+            'name' => 'B-SECRET-BANK', 'type' => 'bank', 'currency' => 'EUR', 'is_active' => true,
+        ]);
+        $payment = FinancePayment::create([
+            'direction' => 'in',
+            'account_id' => $account->id,
+            'amount' => 73,
+            'currency' => 'EUR',
+            'method' => 'bank',
+            'source' => 'manual',
+            'description' => 'B-SECRET-FINANCE',
+            'paid_at' => now(),
+            'created_by' => $staff->id,
+        ]);
+        $supplier = Supplier::create(['name' => 'B-SECRET-SUPPLIER']);
+        $bill = Bill::create([
+            'supplier_id' => $supplier->id,
+            'number' => 'B-SECRET-BILL',
+            'category' => 'Të tjera',
+            'issue_date' => today(),
+            'currency' => 'EUR',
+            'total' => 41,
+            'status' => 'open',
+        ]);
+        $posOrder = PosOrder::create([
+            'table_number' => 'B-SECRET',
+            'status' => 'open',
+            'total_amount' => 9,
+            'created_by' => $staff->id,
+        ]);
+        $warehouse = Warehouse::create([
+            'name' => 'B-SECRET-WAREHOUSE', 'type' => 'central', 'is_default' => true, 'is_active' => true,
+        ]);
+        $inventoryItem = InventoryItem::create([
+            'name' => 'B-SECRET-STOCK', 'sku' => 'B-SECRET-SKU', 'type' => 'product', 'unit' => 'piece', 'is_active' => true,
+        ]);
+        $maintenanceIssue = MaintenanceIssue::create([
+            'room_id' => $room->id,
+            'reported_by' => $staff->id,
+            'title' => 'B-SECRET-MAINTENANCE',
+            'category' => 'other',
+            'priority' => 'medium',
+            'status' => 'reported',
+        ]);
+        $documentPath = TenantStorage::path("guest-documents/{$guest->id}/b-secret.pdf");
+        Storage::disk('local')->put($documentPath, 'hotel-b-private-document');
+        $guestDocument = GuestDocument::create([
+            'guest_id' => $guest->id,
+            'type' => 'passport',
+            'original_name' => 'B-SECRET-PASSPORT.pdf',
+            'path' => $documentPath,
+            'mime' => 'application/pdf',
+            'size' => 24,
+            'uploaded_by' => $staff->id,
+        ]);
+        $attachmentPath = TenantStorage::path("maintenance/{$maintenanceIssue->id}/b-secret.pdf");
+        Storage::disk('local')->put($attachmentPath, 'hotel-b-private-maintenance-file');
+        $maintenanceAttachment = MaintenanceAttachment::create([
+            'maintenance_issue_id' => $maintenanceIssue->id,
+            'uploaded_by' => $staff->id,
+            'disk' => 'local',
+            'path' => $attachmentPath,
+            'original_name' => 'B-SECRET-MAINTENANCE.pdf',
+            'mime_type' => 'application/pdf',
+            'size' => 34,
+        ]);
+        $integration = TenantIntegration::create([
+            'provider' => 'channex',
+            'enabled' => true,
+            'credentials' => ['api_key' => 'B-SECRET-KEY'],
+            'configuration' => ['property_id' => 'B-SECRET-PROPERTY'],
+        ]);
         $context->clear();
 
-        $this->foreignRecords = compact('type', 'room', 'guest', 'reservation', 'task', 'menuItem');
+        $this->foreignRecords = compact(
+            'type',
+            'room',
+            'guest',
+            'reservation',
+            'task',
+            'menuItem',
+            'account',
+            'payment',
+            'supplier',
+            'bill',
+            'posOrder',
+            'warehouse',
+            'inventoryItem',
+            'maintenanceIssue',
+            'guestDocument',
+            'maintenanceAttachment',
+            'integration',
+        );
+    }
+
+    public function test_hotel_a_cannot_read_hotel_b_data_across_core_modules(): void
+    {
+        $context = app(TenantContext::class);
+        $context->set($this->home);
+
+        foreach ($this->foreignRecords as $name => $record) {
+            $this->assertNull(
+                $record::query()->find($record->getKey()),
+                "Hotel A could read Hotel B's {$name} record.",
+            );
+        }
+
+        $context->clear();
+        $this->withoutVite();
+
+        $pages = [
+            [route('rooms.index'), 'F1'],
+            [route('guests.index'), 'foreign@example.test'],
+            [route('reservations.index'), 'foreign@example.test'],
+            [route('finance.index'), 'B-SECRET-FINANCE'],
+            [route('pos.index'), 'B-SECRET'],
+            [route('inventory.items'), 'B-SECRET-STOCK'],
+            [route('maintenance.index'), 'B-SECRET-MAINTENANCE'],
+            [route('users.index'), 'B-SECRET-STAFF'],
+        ];
+
+        foreach ($pages as [$url, $secret]) {
+            $this->actingAs($this->admin)
+                ->get($url)
+                ->assertOk()
+                ->assertDontSee($secret, false);
+        }
+
+        $this->actingAs($this->admin)
+            ->get(route('guests.documents.show', $this->foreignRecords['guestDocument']))
+            ->assertNotFound();
+        $this->actingAs($this->admin)
+            ->get(route('maintenance.attachments.show', $this->foreignRecords['maintenanceAttachment']))
+            ->assertNotFound();
+
+        $context->set($this->foreign);
+        foreach ($this->foreignRecords as $name => $record) {
+            $this->assertNotNull(
+                $record::query()->find($record->getKey()),
+                "Hotel B could not read its own {$name} record.",
+            );
+        }
     }
 
     public function test_admin_cannot_update_or_delete_records_of_another_hotel(): void
@@ -89,6 +243,16 @@ class TenantMutationIsolationTest extends TestCase
             ['delete', route('reservations.destroy', $r['reservation']->id)],
             ['patch', route('housekeeping.status', $r['task']->id)],
             ['put', route('settings.menu-items.update', $r['menuItem']->id)],
+            ['put', route('finance.accounts.toggle', $r['account']->id)],
+            ['post', route('finance.bills.pay', $r['bill']->id)],
+            ['put', route('finance.suppliers.update', $r['supplier']->id)],
+            ['delete', route('finance.suppliers.destroy', $r['supplier']->id)],
+            ['post', route('pos.cancel', $r['posOrder']->id)],
+            ['put', route('inventory.items.update', $r['inventoryItem']->id)],
+            ['put', route('inventory.warehouses.update', $r['warehouse']->id)],
+            ['patch', route('maintenance.update', $r['maintenanceIssue']->id)],
+            ['delete', route('guests.documents.destroy', $r['guestDocument']->id)],
+            ['delete', route('maintenance.attachments.destroy', $r['maintenanceAttachment']->id)],
         ];
 
         foreach ($attempts as [$method, $url]) {
@@ -102,6 +266,16 @@ class TenantMutationIsolationTest extends TestCase
         $this->assertNotNull(Room::withoutGlobalScopes()->find($r['room']->id));
         $this->assertNotNull(Guest::withoutGlobalScopes()->find($r['guest']->id));
         $this->assertNotNull(MenuItem::withoutGlobalScopes()->find($r['menuItem']->id));
+        $this->assertTrue(FinanceAccount::withoutGlobalScopes()->findOrFail($r['account']->id)->is_active);
+        $this->assertSame('open', Bill::withoutGlobalScopes()->findOrFail($r['bill']->id)->status);
+        $this->assertNull(Supplier::withoutGlobalScopes()->findOrFail($r['supplier']->id)->deleted_at);
+        $this->assertSame('open', PosOrder::withoutGlobalScopes()->findOrFail($r['posOrder']->id)->status);
+        $this->assertSame('B-SECRET-STOCK', InventoryItem::withoutGlobalScopes()->findOrFail($r['inventoryItem']->id)->name);
+        $this->assertSame('reported', MaintenanceIssue::withoutGlobalScopes()->findOrFail($r['maintenanceIssue']->id)->status);
+        $this->assertNotNull(GuestDocument::withoutGlobalScopes()->find($r['guestDocument']->id));
+        $this->assertNotNull(MaintenanceAttachment::withoutGlobalScopes()->find($r['maintenanceAttachment']->id));
+        Storage::disk('local')->assertExists($r['guestDocument']->path);
+        Storage::disk('local')->assertExists($r['maintenanceAttachment']->path);
     }
 
     public function test_forged_session_tenant_id_of_a_non_member_is_ignored(): void

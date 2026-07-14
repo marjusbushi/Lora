@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ResolvesTenantContext;
 use App\Jobs\PushRoomTypeAri;
 use App\Models\AuditLog;
 use App\Models\PricingAutopilotLog;
@@ -12,7 +13,7 @@ use App\Models\Setting;
 use App\Services\PricingEngine;
 use App\Services\PricingRulesVersion;
 use App\Services\RoomPricing;
-use App\Console\Concerns\ResolvesTenantContext;
+use App\Support\TenantKey;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -44,7 +45,7 @@ class PricingAutopilot extends Command
         // Fast overlap gate for normal deployments. Correctness does not rely
         // on this cache being shared: DB rule-version/type/log locks below are
         // the final cross-process authority.
-        $runLock = Cache::lock('pricing:autopilot:run:'.app(\App\Tenancy\TenantContext::class)->id(), 3600);
+        $runLock = Cache::lock(TenantKey::make('pricing:autopilot:run'), 3600);
         if (! $runLock->get()) {
             $this->warn('Autopiloti është tashmë në punë — kjo thirrje u anashkalua.');
 

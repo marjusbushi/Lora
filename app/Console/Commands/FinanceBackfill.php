@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ResolvesTenantContext;
 use App\Models\FinanceAccount;
 use App\Models\Payment;
 use App\Models\PosShift;
@@ -17,12 +18,18 @@ use Illuminate\Console\Command;
  */
 class FinanceBackfill extends Command
 {
-    protected $signature = 'finance:backfill {--from=2026-01-01 : Backfill records created on/after this date}';
+    use ResolvesTenantContext;
+
+    protected $signature = 'finance:backfill {--from=2026-01-01 : Backfill records created on/after this date} {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Create finance ledger rows from existing folio payments + closed POS shifts (idempotent)';
 
     public function handle(FinanceLedger $ledger): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         FinanceAccount::ensureDefaults();
         $from = (string) $this->option('from');
 

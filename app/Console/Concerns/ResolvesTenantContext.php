@@ -7,22 +7,30 @@ use App\Tenancy\TenantContext;
 
 /**
  * Manual artisan runs must name the hotel they operate on. Without a tenant
- * context every tenant-scoped query silently sees ALL hotels' rows and any
- * write has no owner — with more than one hotel that mixes data across
- * tenants. Scheduled runs arrive with the context already set per tenant by
- * TenantCommandRunner; manual runs must pass --tenant=<ID>.
+ * context, tenant-scoped reads and writes fail closed. Scheduled runs arrive
+ * with the context already set per tenant by TenantCommandRunner; manual runs
+ * must pass --tenant=<ID>.
  */
 trait ResolvesTenantContext
 {
     protected function ensureTenantContext(): bool
     {
         $context = app(TenantContext::class);
+        $option = $this->hasOption('tenant') ? $this->option('tenant') : null;
 
         if ($context->id() !== null) {
+            if ($option !== null && $option !== '') {
+                $tenantId = $this->validatedTenantId($option);
+
+                if ($tenantId === null || $tenantId !== $context->id()) {
+                    $this->error('Tenant-i i kërkuar nuk përputhet me kontekstin aktiv.');
+
+                    return false;
+                }
+            }
+
             return true;
         }
-
-        $option = $this->hasOption('tenant') ? $this->option('tenant') : null;
 
         if ($option === null || $option === '') {
             // Tests exercise commands against the single migrated tenant.
@@ -35,7 +43,15 @@ trait ResolvesTenantContext
             return false;
         }
 
-        $tenant = Tenant::query()->active()->find((int) $option);
+        $tenantId = $this->validatedTenantId($option);
+
+        if ($tenantId === null) {
+            $this->error('Opsioni --tenant duhet të jetë një ID numerike pozitive.');
+
+            return false;
+        }
+
+        $tenant = Tenant::query()->active()->find($tenantId);
 
         if (! $tenant) {
             $this->error("Tenant {$option} nuk ekziston ose nuk është aktiv.");
@@ -46,5 +62,14 @@ trait ResolvesTenantContext
         $context->set($tenant);
 
         return true;
+    }
+
+    private function validatedTenantId(mixed $value): ?int
+    {
+        $tenantId = filter_var($value, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1],
+        ]);
+
+        return $tenantId === false ? null : $tenantId;
     }
 }

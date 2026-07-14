@@ -1,0 +1,185 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Services\TenantIntegrityAuditor;
+use Illuminate\Console\Command;
+use JsonException;
+use RuntimeException;
+use Throwable;
+
+class VerifyTenantIntegrity extends Command
+{
+    protected $signature = 'tenants:verify-integrity
+                            {--snapshot= : Write a PII-free counts/totals baseline to this JSON file}
+                            {--compare= : Compare current counts/totals with this JSON baseline}
+                            {--allow-additive-schema : Allow new tables and permission growth while preserving every existing count/total}';
+
+    protected $description = 'Fail if tenant ownership or same-tenant relations are invalid';
+
+    public function handle(TenantIntegrityAuditor $auditor): int
+    {
+        if ($this->option('snapshot') && $this->option('compare')) {
+            $this->error('Use either --snapshot or --compare, not both.');
+
+            return self::INVALID;
+        }
+
+        if ($this->option('allow-additive-schema') && ! $this->option('compare')) {
+            $this->error('--allow-additive-schema requires --compare.');
+
+            return self::INVALID;
+        }
+
+        $violations = $auditor->violations();
+        if ($violations !== []) {
+            foreach ($violations as $violation) {
+                $this->error($violation);
+            }
+
+            return self::FAILURE;
+        }
+
+        try {
+            $snapshot = $auditor->snapshot();
+
+            if ($path = $this->option('snapshot')) {
+                $this->writeSnapshot((string) $path, $snapshot);
+                $this->info("Tenant integrity passed; baseline written to {$path}.");
+
+                return self::SUCCESS;
+            }
+
+            if ($path = $this->option('compare')) {
+                $baseline = $this->readSnapshot((string) $path);
+                if ($this->option('allow-additive-schema')) {
+                    $changes = $this->baselineChanges($baseline, $snapshot);
+                    if ($changes !== []) {
+                        foreach ($changes as $change) {
+                            $this->error("Baseline value changed: {$change}");
+                        }
+
+                        return self::FAILURE;
+                    }
+
+                    $this->info('Tenant integrity passed; existing counts and financial totals are unchanged (additive schema allowed).');
+
+                    return self::SUCCESS;
+                }
+
+                if ($baseline !== $snapshot) {
+                    $this->error('Tenant counts or financial totals changed from the baseline.');
+
+                    return self::FAILURE;
+                }
+
+                $this->info('Tenant integrity passed; counts and financial totals are unchanged.');
+
+                return self::SUCCESS;
+            }
+        } catch (Throwable $exception) {
+            $this->error($exception->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $this->info('Tenant integrity passed.');
+
+        return self::SUCCESS;
+    }
+
+    /** @param array<string, mixed> $snapshot */
+    private function writeSnapshot(string $path, array $snapshot): void
+    {
+        $directory = dirname($path);
+        if (! is_dir($directory) || ! is_writable($directory)) {
+            throw new RuntimeException("Snapshot directory is not writable: {$directory}");
+        }
+
+        $json = json_encode($snapshot, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        if (file_put_contents($path, $json."\n", LOCK_EX) === false) {
+            throw new RuntimeException("Could not write snapshot: {$path}");
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function readSnapshot(string $path): array
+    {
+        if (! is_readable($path)) {
+            throw new RuntimeException("Snapshot is not readable: {$path}");
+        }
+
+        try {
+            $snapshot = json_decode((string) file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
+        } catch (JsonException $exception) {
+            throw new RuntimeException("Snapshot is invalid JSON: {$path}", previous: $exception);
+        }
+
+        if (! is_array($snapshot)) {
+            throw new RuntimeException("Snapshot has an invalid structure: {$path}");
+        }
+
+        return $snapshot;
+    }
+
+    /**
+     * Compare every baseline leaf while allowing new keys in the current
+     * snapshot. Permission rows may grow because additive migrations seed new
+     * permissions, but they may never shrink.
+     *
+     * @param  array<string, mixed>  $baseline
+     * @param  array<string, mixed>  $current
+     * @return list<string>
+     */
+    private function baselineChanges(array $baseline, array $current, string $prefix = ''): array
+    {
+        $changes = [];
+
+        foreach ($baseline as $key => $expected) {
+            $path = $prefix === '' ? (string) $key : "{$prefix}.{$key}";
+
+            if (! array_key_exists($key, $current)) {
+                $changes[] = $path;
+
+                continue;
+            }
+
+            $actual = $current[$key];
+
+            if ($path === 'central_counts.permissions') {
+                if (! is_int($expected) || ! is_int($actual) || $actual < $expected) {
+                    $changes[] = $path;
+                }
+
+                continue;
+            }
+
+            if (is_array($expected)) {
+                if (! is_array($actual)) {
+                    $changes[] = $path;
+
+                    continue;
+                }
+
+                array_push($changes, ...$this->baselineChanges($expected, $actual, $path));
+
+                // Only these two maps may gain new top-level metrics/tables
+                // during an additive migration. New tenant IDs or dimensions
+                // inside an existing table/metric remain data changes.
+                if (! in_array($path, ['tenant_counts', 'financial_totals'], true)) {
+                    foreach (array_keys(array_diff_key($actual, $expected)) as $addedKey) {
+                        $changes[] = "{$path}.{$addedKey}";
+                    }
+                }
+
+                continue;
+            }
+
+            if ($actual !== $expected) {
+                $changes[] = $path;
+            }
+        }
+
+        return $changes;
+    }
+}

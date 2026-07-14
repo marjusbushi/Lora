@@ -12,6 +12,10 @@ return [
     */
     'control_panel_url' => rtrim((string) env('LORA_CONTROL_PANEL_URL', env('APP_URL', 'http://localhost')), '/'),
 
+    // One-time Control Panel -> hotel-domain sign-in code lifetime. Kept short
+    // and capped in code so a deployment misconfiguration cannot make it long-lived.
+    'tenant_handoff_ttl_seconds' => (int) env('LORA_TENANT_HANDOFF_TTL_SECONDS', 60),
+
     'control_panel_hosts' => array_values(array_filter(array_map(
         static fn (string $host): string => strtolower(trim($host)),
         explode(',', (string) env(

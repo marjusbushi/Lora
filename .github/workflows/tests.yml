@@ -3,6 +3,7 @@ name: Tests
 on:
   push:
     branches:
+      - main
       - staging
       - 'feat/**'
   pull_request:
@@ -165,10 +166,8 @@ jobs:
       - name: Build current staging database
         run: php artisan migrate:fresh --force
 
-      - name: Seed current roles and assignments
-        run: |
-          php artisan db:seed --class='Database\Seeders\RolePermissionSeeder' --force
-          php artisan tinker --execute="\$user = \App\Models\User::factory()->create(); \$user->assignRole('admin');"
+      - name: Seed representative staging data
+        run: php artisan db:seed --force
 
       - name: Checkout candidate code
         uses: actions/checkout@v5
@@ -176,11 +175,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           clean: false
 
+      - name: Snapshot pre-upgrade integrity
+        run: php artisan tenants:verify-integrity --snapshot=/tmp/lora-upgrade-baseline.json
+
       - name: Verify upgrade from staging
         run: php artisan migrate --force
 
-      - name: Verify role backfill
-        run: |
-          php artisan tinker --execute="throw_unless(\Illuminate\Support\Facades\DB::table('roles')->whereNull('team_id')->doesntExist());"
-          php artisan tinker --execute="throw_unless(\Illuminate\Support\Facades\DB::table('model_has_roles')->whereNull('team_id')->doesntExist());"
-          php artisan tinker --execute="throw_unless(\Illuminate\Support\Facades\DB::table('tenant_user')->where('is_active', false)->doesntExist());"
+      - name: Verify post-upgrade integrity and totals
+        run: php artisan tenants:verify-integrity --compare=/tmp/lora-upgrade-baseline.json

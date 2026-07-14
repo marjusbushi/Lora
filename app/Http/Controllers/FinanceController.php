@@ -469,6 +469,8 @@ class FinanceController extends Controller
 
         return Inertia::render('Finance/Bills', array_merge($this->shared($request), [
             'accounts' => $this->visibleAccounts($request),
+            'suppliers' => Supplier::where('is_active', true)->orderBy('name')
+                ->get(['id', 'name', 'nipt', 'category', 'payment_terms_days']),
             'categories' => Bill::categories(),
             'filters' => ['filter' => $filter, 'category' => $category, 'search' => $search, 'bill_id' => $billId],
             'byCategory' => $byCategory,

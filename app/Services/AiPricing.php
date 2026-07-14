@@ -8,6 +8,7 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\WebsiteSearchLog;
+use App\Support\TenantKey;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -74,7 +75,7 @@ class AiPricing
             'occupancy_pct' => $day['occupancy_pct'],
         ];
 
-        $cacheKey = 'ai.explain.'.app(\App\Tenancy\TenantContext::class)->id().'.'.md5(json_encode($payload));
+        $cacheKey = TenantKey::make('ai.explain.'.md5(json_encode($payload)));
 
         return Cache::remember($cacheKey, now()->addDays(7), function () use ($payload) {
             $out = app(GeminiClient::class)->structured(
