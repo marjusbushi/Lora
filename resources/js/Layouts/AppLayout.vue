@@ -6,7 +6,7 @@ import LanguageSwitcher from '@/Components/LanguageSwitcher.vue';
 import NotificationBell from '@/Components/NotificationBell.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
-import { ChevronDown, KeyRound, LogOut, Settings, UserRound } from 'lucide-vue-next';
+import { ChevronDown, LogOut, Settings, UserRound } from 'lucide-vue-next';
 
 // Persist the collapsed state so it survives Inertia navigations
 // (AppLayout re-mounts per page, so we restore from localStorage).
@@ -63,7 +63,7 @@ const allNavItems = [
     { label: 'POS Bar/Restaurant', href: '/pms/pos', icon: icons.pos, permission: 'view_pos_orders', module: 'pos' },
     {
         label: 'Financa',
-        icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path d="M1 4.25C1 3.56 1.56 3 2.25 3h15.5c.69 0 1.25.56 1.25 1.25v2a.75.75 0 01-.75.75 2 2 0 100 4 .75.75 0 01.75.75v2c0 .69-.56 1.25-1.25 1.25H2.25C1.56 15 1 14.44 1 13.75v-2a.75.75 0 01.75-.75 2 2 0 100-4A.75.75 0 011 6.25v-2z"/></svg>',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="M20 7V6a2 2 0 0 0-2-2H5a3 3 0 0 0 0 6h15v8a2 2 0 0 1-2 2H5a3 3 0 0 1-3-3V7"/><path d="M16 14h4"/></svg>',
         permission: 'view_finance',
         module: 'finance',
         children: [
@@ -154,7 +154,7 @@ const navItems = computed(() =>
                 <!-- User dropdown -->
                 <div class="flex items-center gap-4">
                     <NotificationBell v-if="can('view_reservations')" />
-                    <LanguageSwitcher class="text-neutral-500" />
+                    <LanguageSwitcher variant="select" />
                     <Dropdown align="right" width="72" content-classes="overflow-hidden rounded-xl bg-white p-2">
                         <template #trigger>
                             <button class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-sm text-neutral-600 transition-colors duration-150 hover:bg-neutral-50 hover:text-neutral-900">
@@ -178,18 +178,12 @@ const navItems = computed(() =>
                                 </div>
                             </div>
 
-                            <p class="px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-400">{{ $t('accountCenter.account') }}</p>
                             <Link :href="route('profile.edit')" class="flex items-center gap-3 rounded-lg px-2.5 py-2.5 no-underline transition hover:bg-accent-50">
                                 <span class="grid h-8 w-8 place-items-center rounded-lg bg-neutral-100 text-neutral-600"><UserRound class="h-4 w-4" /></span>
                                 <span><strong class="block text-body-sm text-primary-900">{{ $t('accountCenter.myProfile') }}</strong><small class="block text-tiny text-neutral-500">{{ $t('accountCenter.profileHint') }}</small></span>
                             </Link>
-                            <Link :href="`${route('profile.edit')}?section=security`" class="flex items-center gap-3 rounded-lg px-2.5 py-2.5 no-underline transition hover:bg-accent-50">
-                                <span class="grid h-8 w-8 place-items-center rounded-lg bg-neutral-100 text-neutral-600"><KeyRound class="h-4 w-4" /></span>
-                                <span><strong class="block text-body-sm text-primary-900">{{ $t('accountCenter.security') }}</strong><small class="block text-tiny text-neutral-500">{{ $t('accountCenter.securityHint') }}</small></span>
-                            </Link>
 
                             <template v-if="canAccessSettings">
-                                <p class="px-2.5 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-400">{{ $t('accountCenter.hotel') }}</p>
                                 <Link :href="route('settings.index')" class="flex items-center gap-3 rounded-lg px-2.5 py-2.5 no-underline transition hover:bg-accent-50">
                                     <span class="grid h-8 w-8 place-items-center rounded-lg bg-accent-50 text-accent-700"><Settings class="h-4 w-4" /></span>
                                     <span><strong class="block text-body-sm text-primary-900">{{ $t('accountCenter.hotelSettings') }}</strong><small class="block text-tiny text-neutral-500">{{ $t('accountCenter.settingsHint') }}</small></span>
