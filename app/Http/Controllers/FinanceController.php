@@ -467,13 +467,7 @@ class FinanceController extends Controller
 
         return Inertia::render('Finance/Bills', array_merge($this->shared($request), [
             'accounts' => $this->visibleAccounts($request),
-            'suppliers' => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'categories' => Bill::categories(),
-            'inventoryItems' => InventoryItem::where('is_active', true)->orderBy('name')
-                ->get(['id', 'name', 'sku', 'type', 'unit', 'average_cost']),
-            'warehouses' => Warehouse::where('is_active', true)->orderByDesc('is_default')->orderBy('name')
-                ->get(['id', 'name', 'is_default']),
-            'openCreate' => $request->boolean('create'),
             'filters' => ['filter' => $filter, 'category' => $category, 'search' => $search, 'bill_id' => $billId],
             'byCategory' => $byCategory,
             'summary' => $summary,
@@ -492,6 +486,21 @@ class FinanceController extends Controller
                         ->orWhereHas('supplier', fn ($supplierQuery) => $supplierQuery->where('name', 'like', "%{$search}%"));
                 }))
                 ->paginate(25)->withQueryString()->through(fn (Bill $b) => $this->billRow($b)),
+        ]));
+    }
+
+    public function createBill(Request $request): Response
+    {
+        Warehouse::ensureDefault();
+
+        return Inertia::render('Finance/BillCreate', array_merge($this->shared($request), [
+            'suppliers' => Supplier::where('is_active', true)->orderBy('name')
+                ->get(['id', 'name', 'nipt', 'category', 'payment_terms_days']),
+            'categories' => Bill::categories(),
+            'inventoryItems' => InventoryItem::where('is_active', true)->orderBy('name')
+                ->get(['id', 'name', 'sku', 'type', 'unit', 'average_cost']),
+            'warehouses' => Warehouse::where('is_active', true)->orderByDesc('is_default')->orderBy('name')
+                ->get(['id', 'name', 'is_default']),
         ]));
     }
 
@@ -553,7 +562,7 @@ class FinanceController extends Controller
             }
         });
 
-        return back()->with('success', $lines->isNotEmpty()
+        return redirect()->route('finance.bills')->with('success', $lines->isNotEmpty()
             ? 'Fatura dhe rreshtat e inventarit u regjistruan.'
             : 'Fatura e blerjes u regjistrua.');
     }

@@ -28,7 +28,7 @@ function formatDate(value) {
                         <Link :href="route('inventory.warehouses')" class="inline-flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-4 py-2 text-body-sm font-medium text-neutral-700 hover:bg-neutral-50">
                             <ArrowLeftRight class="h-4 w-4" /> {{ $t('inventory.actions.transfer') }}
                         </Link>
-                        <Link v-if="can.manageInventory" :href="route('finance.bills', { create: 1 })" class="inline-flex items-center gap-2 rounded-md bg-accent-600 px-4 py-2 text-body-sm font-medium text-white shadow-sm hover:bg-accent-700">
+                        <Link v-if="can.manageInventory" :href="route('finance.bills.create')" class="inline-flex items-center gap-2 rounded-md bg-accent-600 px-4 py-2 text-body-sm font-medium text-white shadow-sm hover:bg-accent-700">
                             <Plus class="h-4 w-4" /> {{ $t('inventory.actions.purchase') }}
                         </Link>
                     </template>
