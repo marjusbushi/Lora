@@ -21,6 +21,7 @@ import {
     Store,
     UsersRound,
     UtensilsCrossed,
+    WalletCards,
     X,
     Zap,
 } from 'lucide-vue-next';
@@ -31,7 +32,6 @@ const demoMail = 'mailto:hello@lorapms.com?subject=Kërkesë%20për%20demo%20të
 const mobileOpen = ref(false);
 const annualBilling = ref(false);
 const rooms = ref(10);
-const housekeepingUsers = ref(2);
 const posPoints = ref(1);
 const carouselReverse = ref(false);
 const activeProduct = ref('Rezervimet');
@@ -43,6 +43,7 @@ const modules = ref({
     housekeeping: true,
     pos: true,
     smartPricing: true,
+    finance: true,
 });
 
 const navigation = [
@@ -100,9 +101,10 @@ const pricingCards = [
     { title: 'Lora Core', price: '€29', unit: '/ muaj', note: 'Baza e PMS-it', icon: ShieldCheck },
     { title: 'Channel Manager', price: '€7', unit: '/ dhomë', note: '50 të parat · pastaj €5', icon: Zap },
     { title: 'Booking Online', price: '1%', unit: '', note: 'Vetëm rezervimet direkte', icon: Globe2 },
-    { title: 'Housekeeping', price: '€9', unit: '/ përdorues', note: 'Vetëm përdoruesit aktivë', icon: UsersRound },
+    { title: 'Housekeeping', price: '€9', unit: '/ muaj', note: 'Tarifë fikse për modulin', icon: UsersRound },
     { title: 'POS', price: '€19', unit: '/ pikë shitjeje', note: 'Bar ose restorant', icon: Store },
     { title: 'Çmimet Inteligjente', price: '€19', unit: '/ muaj', note: 'Sugjerime & autopilot', icon: Sparkles },
+    { title: 'Financa', price: '€19', unit: '/ muaj', note: 'Arka, pagesa, fatura & shpenzime', icon: WalletCards },
 ];
 
 const productTabs = ['Rezervimet', 'Housekeeping', 'POS', 'Çmimet'];
@@ -145,12 +147,11 @@ const faqs = [
     },
     {
         q: 'A mund të aktivizoj vetëm modulet që më duhen?',
-        a: 'Po. Lora Core është baza dhe modulet Channel Manager, Booking Online, Housekeeping, POS dhe Çmimet Inteligjente aktivizohen sipas nevojës.',
+        a: 'Po. Lora Core është baza dhe modulet Channel Manager, Booking Online, Housekeeping, POS, Çmimet Inteligjente dhe Financa aktivizohen sipas nevojës.',
     },
 ];
 
 const normalizedRooms = computed(() => Math.min(300, Math.max(1, Number(rooms.value) || 1)));
-const normalizedHousekeepingUsers = computed(() => Math.min(100, Math.max(0, Number(housekeepingUsers.value) || 0)));
 const normalizedPosPoints = computed(() => Math.min(30, Math.max(0, Number(posPoints.value) || 0)));
 
 const channelCost = computed(() => {
@@ -163,9 +164,10 @@ const channelCost = computed(() => {
 const monthlyFixed = computed(() => {
     return 29
         + channelCost.value
-        + (modules.value.housekeeping ? normalizedHousekeepingUsers.value * 9 : 0)
+        + (modules.value.housekeeping ? 9 : 0)
         + (modules.value.pos ? normalizedPosPoints.value * 19 : 0)
-        + (modules.value.smartPricing ? 19 : 0);
+        + (modules.value.smartPricing ? 19 : 0)
+        + (modules.value.finance ? 19 : 0);
 });
 
 const annualMonthly = computed(() => monthlyFixed.value * 0.8);
@@ -182,14 +184,13 @@ const money = (value) => new Intl.NumberFormat('en-IE', {
 
 const adjust = (target, amount) => {
     if (target === 'rooms') rooms.value = Math.min(300, Math.max(1, normalizedRooms.value + amount));
-    if (target === 'housekeeping') housekeepingUsers.value = Math.min(100, Math.max(0, normalizedHousekeepingUsers.value + amount));
     if (target === 'pos') posPoints.value = Math.min(30, Math.max(0, normalizedPosPoints.value + amount));
 };
 </script>
 
 <template>
     <Head title="Lora PMS — Menaxho hotelin. Jo kaosin.">
-        <meta head-key="description" name="description" content="Lora PMS bashkon rezervimet, Channel Manager, Booking Online, Housekeeping, POS dhe Çmimet Inteligjente në një sistem të vetëm." />
+        <meta head-key="description" name="description" content="Lora PMS bashkon rezervimet, Channel Manager, Booking Online, Housekeeping, POS, Financat dhe Çmimet Inteligjente në një sistem të vetëm." />
         <meta head-key="og-title" property="og:title" content="Lora PMS — Menaxho hotelin. Jo kaosin." />
         <meta head-key="og-description" property="og:description" content="PMS modern për hotele: rezervime, kanale, pagesa dhe operacione në një ekran." />
     </Head>
@@ -500,7 +501,7 @@ const adjust = (target, amount) => {
                         </div>
                     </div>
 
-                    <div class="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                    <div class="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
                         <article v-for="card in pricingCards" :key="card.title" class="flex min-h-[13.5rem] flex-col rounded-2xl border border-[#123d32]/10 bg-white p-5 shadow-[0_15px_40px_-38px_rgba(18,61,50,.5)]">
                             <span class="grid h-10 w-10 place-items-center rounded-xl bg-[#edf7f1] text-[#16875d]"><component :is="card.icon" class="h-5 w-5" /></span>
                             <h3 class="mt-5 min-h-[2.5rem] text-sm font-semibold leading-5 text-[#33403b]">{{ card.title }}</h3>
@@ -529,6 +530,7 @@ const adjust = (target, amount) => {
                                             { key: 'housekeeping', label: 'Housekeeping' },
                                             { key: 'pos', label: 'POS' },
                                             { key: 'smartPricing', label: 'Çmimet Inteligjente' },
+                                            { key: 'finance', label: 'Financa' },
                                         ]" :key="module.key" class="flex cursor-pointer items-center justify-between rounded-xl bg-[#f7f8f5] px-4 py-3">
                                             <span class="text-sm font-medium text-[#4a5651]">{{ module.label }}</span>
                                             <input v-model="modules[module.key]" type="checkbox" class="peer sr-only" />
@@ -543,14 +545,6 @@ const adjust = (target, amount) => {
                                                 <button type="button" class="grid place-items-center text-[#65706b] hover:bg-[#f4f7f5]" aria-label="Hiq një dhomë" @click="adjust('rooms', -1)"><Minus class="h-4 w-4" /></button>
                                                 <input id="rooms" v-model.number="rooms" type="number" min="1" max="300" class="h-12 border-x border-y-0 border-[#123d32]/10 bg-transparent p-0 text-center text-sm font-semibold text-[#26332e] focus:border-[#16875d] focus:ring-0" />
                                                 <button type="button" class="grid place-items-center text-[#65706b] hover:bg-[#f4f7f5]" aria-label="Shto një dhomë" @click="adjust('rooms', 1)"><Plus class="h-4 w-4" /></button>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label for="housekeeping-users" class="mb-2 block text-xs font-semibold text-[#58635e]">Përdorues Housekeeping</label>
-                                            <div class="grid grid-cols-[2.75rem_1fr_2.75rem] overflow-hidden rounded-xl border border-[#123d32]/10 bg-white" :class="!modules.housekeeping ? 'opacity-45' : ''">
-                                                <button type="button" class="grid place-items-center text-[#65706b] hover:bg-[#f4f7f5]" :disabled="!modules.housekeeping" aria-label="Hiq një përdorues" @click="adjust('housekeeping', -1)"><Minus class="h-4 w-4" /></button>
-                                                <input id="housekeeping-users" v-model.number="housekeepingUsers" type="number" min="0" max="100" :disabled="!modules.housekeeping" class="h-12 border-x border-y-0 border-[#123d32]/10 bg-transparent p-0 text-center text-sm font-semibold text-[#26332e] focus:border-[#16875d] focus:ring-0" />
-                                                <button type="button" class="grid place-items-center text-[#65706b] hover:bg-[#f4f7f5]" :disabled="!modules.housekeeping" aria-label="Shto një përdorues" @click="adjust('housekeeping', 1)"><Plus class="h-4 w-4" /></button>
                                             </div>
                                         </div>
                                         <div>
