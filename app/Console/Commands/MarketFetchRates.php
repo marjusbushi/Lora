@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\MarketRates;
+use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 
 /**
@@ -16,14 +17,21 @@ use Illuminate\Console\Command;
  */
 class MarketFetchRates extends Command
 {
+    use ResolvesTenantContext;
+
     protected $signature = 'market:fetch-rates
         {--days=30 : Stay dates ahead to fetch}
-        {--scheduled : Invoked by the scheduler — respect the configured frequency}';
+        {--scheduled : Invoked by the scheduler — respect the configured frequency}
+        {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Fetch competitor nightly prices for the comp-set into comp_rates (owner-controlled, Settings)';
 
     public function handle(MarketRates $market): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         if (! MarketRates::enabled()) {
             $this->info('Market rates are OFF (or no API key) — nothing fetched. Enable in Settings → Çmimet e Tregut.');
 

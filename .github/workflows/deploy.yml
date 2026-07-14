@@ -1,12 +1,23 @@
 name: Deploy to Hetzner
 
 on:
-  push:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
     branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
@@ -15,20 +26,39 @@ jobs:
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            set -e
+            set -Eeuo pipefail
             cd /var/www/villamucho
-            # Maintenance mode during the deploy: in-flight requests get a clean 503
-            # instead of a mid-migration 500 (new code querying a table the migration
-            # has not created yet). The trap guarantees the site comes back even on failure.
+
+            # Fail closed: a partial deploy must remain in maintenance until it is
+            # explicitly repaired or rolled back.
             php artisan down --retry=15 || true
-            trap 'cd /var/www/villamucho && php artisan up || true' EXIT
+            deploy_succeeded=false
+            trap 'if [ "$deploy_succeeded" = true ]; then php artisan up || true; else echo "Deploy failed; production remains in maintenance mode." >&2; fi' EXIT
+
+            state_dir=/var/lib/lora-backup/releases
+            state_file="$state_dir/$(date --utc +%Y%m%dT%H%M%SZ)-deploy.env"
+            install -d -m 0700 "$state_dir"
+            umask 077
+            pre_deploy_commit="$(git rev-parse HEAD)"
+            previous_batch="$(php artisan tinker --execute='echo DB::table("migrations")->max("batch");')"
+            printf 'PRE_DEPLOY_COMMIT=%q\nPREVIOUS_BATCH=%q\n' \
+              "$pre_deploy_commit" "$previous_batch" > "$state_file"
+
             git fetch origin main --quiet
             git reset --hard origin/main
             export COMPOSER_ALLOW_SUPERUSER=1
             composer install --no-dev --optimize-autoloader -q
             npm ci --no-audit --no-fund
             npm run build
+            php artisan tenants:verify-integrity \
+              --snapshot=/var/lib/lora-backup/pre-release.json
             php artisan migrate --force
+            release_batch="$(php artisan tinker --execute='echo DB::table("migrations")->max("batch");')"
+            printf 'RELEASE_COMMIT=%q\nRELEASE_BATCH=%q\n' \
+              "$(git rev-parse HEAD)" "$release_batch" >> "$state_file"
+            php artisan tenants:verify-integrity \
+              --compare=/var/lib/lora-backup/pre-release.json \
+              --allow-additive-schema
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
@@ -46,5 +76,6 @@ jobs:
             nginx -t
             systemctl reload nginx
             php artisan up
+            deploy_succeeded=true
             trap - EXIT
             echo "Deployed at $(date)"

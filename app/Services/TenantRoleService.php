@@ -31,6 +31,7 @@ class TenantRoleService
                 // finance settings and deleting records (owner-only).
                 'view_finance', 'create_payment', 'pay_bills', 'manage_transfers',
                 'manage_invoices', 'manage_bills', 'manage_suppliers',
+                'view_inventory', 'manage_inventory',
             ],
             'receptionist' => [
                 'view_rooms', 'update_rooms',
@@ -82,6 +83,7 @@ class TenantRoleService
             'view_finance', 'view_bank_accounts', 'create_payment', 'pay_bills',
             'manage_transfers', 'manage_invoices', 'manage_bills',
             'manage_suppliers', 'manage_finance_settings', 'delete_finance_records',
+            'view_inventory', 'manage_inventory',
         ];
 
         return collect($resources)

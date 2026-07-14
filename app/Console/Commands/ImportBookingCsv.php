@@ -8,6 +8,7 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\User;
+use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -20,12 +21,18 @@ use Illuminate\Support\Carbon;
  */
 class ImportBookingCsv extends Command
 {
-    protected $signature = 'booking:import {file : path to the CSV} {--dry-run : show the plan without writing}';
+    use ResolvesTenantContext;
+
+    protected $signature = 'booking:import {file : path to the CSV} {--dry-run : show the plan without writing} {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Import Booking.com reservations (CSV) into the PMS';
 
     public function handle(): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         $path = $this->argument('file');
         if (! is_file($path)) {
             $this->error("File not found: {$path}");

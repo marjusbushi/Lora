@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tenant extends Model
@@ -59,6 +60,9 @@ class Tenant extends Model
     {
         $meta = $this->metadata ?? [];
         $meta['addons'] = array_values(array_unique([...$this->addons(), $key]));
+        if (array_key_exists($key, config('lora_modules.modules', [])) && is_array($meta['billing_access'] ?? null)) {
+            $meta['billing_access']['modules'][$key] = true;
+        }
         $this->update(['metadata' => $meta]);
     }
 
@@ -66,6 +70,9 @@ class Tenant extends Model
     {
         $meta = $this->metadata ?? [];
         $meta['addons'] = array_values(array_diff($this->addons(), [$key]));
+        if (array_key_exists($key, config('lora_modules.modules', [])) && is_array($meta['billing_access'] ?? null)) {
+            $meta['billing_access']['modules'][$key] = false;
+        }
         $this->update(['metadata' => $meta]);
     }
 
@@ -86,6 +93,16 @@ class Tenant extends Model
     public function integrations(): HasMany
     {
         return $this->hasMany(TenantIntegration::class);
+    }
+
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(TenantSubscription::class);
+    }
+
+    public function moduleEntitlements(): HasMany
+    {
+        return $this->hasMany(TenantModuleEntitlement::class);
     }
 
     public function scopeActive($query)

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ResolvesTenantContext;
 use App\Jobs\PushRoomTypeAri;
 use App\Models\AuditLog;
 use App\Models\PricingAutopilotLog;
@@ -12,6 +13,7 @@ use App\Models\Setting;
 use App\Services\PricingEngine;
 use App\Services\PricingRulesVersion;
 use App\Services\RoomPricing;
+use App\Support\TenantKey;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -28,16 +30,22 @@ use Illuminate\Support\Facades\DB;
  */
 class PricingAutopilot extends Command
 {
-    protected $signature = 'pricing:autopilot {--days=60 : How far ahead to price}';
+    use ResolvesTenantContext;
+
+    protected $signature = 'pricing:autopilot {--days=60 : How far ahead to price} {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Auto-apply engine price suggestions within the owner\'s guardrails';
 
     public function handle(): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         // Fast overlap gate for normal deployments. Correctness does not rely
         // on this cache being shared: DB rule-version/type/log locks below are
         // the final cross-process authority.
-        $runLock = Cache::lock('pricing:autopilot:run', 3600);
+        $runLock = Cache::lock(TenantKey::make('pricing:autopilot:run'), 3600);
         if (! $runLock->get()) {
             $this->warn('Autopiloti është tashmë në punë — kjo thirrje u anashkalua.');
 

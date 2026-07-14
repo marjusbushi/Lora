@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ResolvesTenantContext;
 use App\Services\CurrencyRates;
 use Illuminate\Console\Command;
 
@@ -11,12 +12,18 @@ use Illuminate\Console\Command;
  */
 class CurrencyFetchRates extends Command
 {
-    protected $signature = 'currency:fetch-rates';
+    use ResolvesTenantContext;
+
+    protected $signature = 'currency:fetch-rates {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Fetch today\'s exchange rates for the tracked currencies (Settings → Monedhat)';
 
     public function handle(CurrencyRates $rates): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         if (! CurrencyRates::enabled()) {
             $this->info('Currency rates are OFF (or no API key) — nothing fetched.');
 

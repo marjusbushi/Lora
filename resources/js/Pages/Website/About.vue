@@ -1,9 +1,11 @@
 <script setup>
 import { computed } from 'vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, usePage } from '@inertiajs/vue3';
 import { Waves, UtensilsCrossed } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
+
+const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
 
 const props = defineProps({ hotel: Object, about: Object });
 
@@ -33,7 +35,7 @@ const staffImage = computed(() => img('staff_image'));
 </script>
 
 <template>
-    <Head :title="$t('about.meta.title')" />
+    <Head :title="$t('about.meta.title', { hotel: brandName })" />
     <WebsiteLayout>
         <!-- Hero -->
         <section class="relative h-[40vh] min-h-[300px] flex items-center justify-center bg-primary-950">

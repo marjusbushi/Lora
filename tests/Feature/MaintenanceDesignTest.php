@@ -9,6 +9,7 @@ use App\Models\RoomType;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -143,5 +144,28 @@ class MaintenanceDesignTest extends TestCase
             ->assertOk()
             ->assertHeader('content-type', 'image/jpeg')
             ->assertHeader('content-disposition', 'inline; filename="photo.jpg"');
+    }
+
+    public function test_new_attachment_is_stored_in_the_tenant_private_directory(): void
+    {
+        Storage::fake('local');
+        $admin = $this->admin();
+        $issue = MaintenanceIssue::create([
+            'reported_by' => $admin->id,
+            'title' => 'Foto e re',
+            'category' => 'other',
+            'kind' => 'corrective',
+            'priority' => 'medium',
+            'status' => 'reported',
+            'source' => 'manual',
+        ]);
+
+        $this->actingAs($admin)->post(route('maintenance.attachments.store', $issue), [
+            'file' => UploadedFile::fake()->image('problem.jpg'),
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $attachment = $issue->attachments()->sole();
+        $this->assertStringStartsWith("tenants/{$issue->tenant_id}/maintenance/{$issue->id}/", $attachment->path);
+        Storage::disk('local')->assertExists($attachment->path);
     }
 }

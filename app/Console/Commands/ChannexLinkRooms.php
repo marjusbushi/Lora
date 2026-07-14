@@ -6,6 +6,7 @@ use App\Models\ChannelMapping;
 use App\Models\RoomType;
 use App\Services\ChannelSync;
 use App\Services\ChannexClient;
+use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
@@ -23,12 +24,18 @@ use Illuminate\Support\Str;
  */
 class ChannexLinkRooms extends Command
 {
-    protected $signature = 'channex:link-rooms {--dry : Show the matches without saving}';
+    use ResolvesTenantContext;
+
+    protected $signature = 'channex:link-rooms {--dry : Show the matches without saving} {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Map each PMS room type to its Channex room type + rate plan (channel_mappings)';
 
     public function handle(ChannexClient $channex): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         if (! $channex->configured()) {
             $this->error('CHANNEX_API_KEY is not set (.env).');
 

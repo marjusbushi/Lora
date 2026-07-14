@@ -356,4 +356,56 @@ class ChannexBookingImportTest extends TestCase
 
         $this->assertSame(1, Reservation::first()->payments()->where('method', 'ota')->count()); // not duplicated
     }
+    public function test_foreign_property_revision_is_not_imported_and_flagged_for_no_ack(): void
+    {
+        $this->studio();
+
+        $summary = app(ChannexBookingImporter::class)->importRevision(
+            $this->revision(['property_id' => 'PROP-OTHER']),
+            'PROP-1',
+        );
+
+        $this->assertSame('foreign_property', $summary['status']);
+        $this->assertSame(0, Reservation::count());
+        $this->assertSame(0, Guest::count());
+        $this->assertTrue(
+            ChannelSyncLog::where('action', 'booking.foreign_property')->where('status', 'skipped')->exists(),
+        );
+    }
+
+    public function test_own_property_revision_imports_normally_with_property_check(): void
+    {
+        $this->studio();
+
+        $summary = app(ChannexBookingImporter::class)->importRevision(
+            $this->revision(['property_id' => 'PROP-1']),
+            'PROP-1',
+        );
+
+        $this->assertSame(1, $summary['created']);
+        $this->assertSame(1, Reservation::count());
+    }
+
+    public function test_unmapped_room_type_leaves_a_sync_log_trace(): void
+    {
+        // No studio()/mapping created — the revision's room type is unknown.
+        $summary = app(ChannexBookingImporter::class)->importRevision($this->revision());
+
+        $this->assertSame(0, Reservation::count());
+        $this->assertNotEmpty($summary['flagged']);
+        $this->assertTrue(
+            ChannelSyncLog::where('action', 'booking.room_type_unmapped')->where('status', 'skipped')->exists(),
+        );
+    }
+    public function test_unverifiable_property_refuses_import_entirely(): void
+    {
+        $this->studio();
+
+        // Expected property UNKNOWN ('' = misconfigured tenant): nothing may be
+        // imported or acked — ownership cannot be verified.
+        $summary = app(ChannexBookingImporter::class)->importRevision($this->revision(), '');
+
+        $this->assertSame('foreign_property', $summary['status']);
+        $this->assertSame(0, Reservation::count());
+    }
 }

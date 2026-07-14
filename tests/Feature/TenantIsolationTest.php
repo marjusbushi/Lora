@@ -2,19 +2,26 @@
 
 namespace Tests\Feature;
 
+use App\Console\TenantCommandRunner;
 use App\Jobs\Middleware\UseTenantContext;
 use App\Jobs\PushRoomTypeAri;
+use App\Models\ChannelSyncLog;
 use App\Models\Guest;
+use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\Tenant;
+use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
 use App\Services\ChannexConfiguration;
+use App\Services\PokConfiguration;
 use App\Tenancy\TenantContext;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use RuntimeException;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class TenantIsolationTest extends TestCase
@@ -88,6 +95,12 @@ class TenantIsolationTest extends TestCase
     public function test_hotel_application_does_not_expose_lora_control_panel_routes(): void
     {
         $default = Tenant::query()->sole();
+        TenantDomain::query()->create([
+            'tenant_id' => $default->id,
+            'domain' => 'admin.villamucho.test',
+            'is_primary' => false,
+        ]);
+
         app(TenantContext::class)->set($default);
 
         $superAdmin = User::factory()->create(['is_super_admin' => true]);
@@ -96,15 +109,15 @@ class TenantIsolationTest extends TestCase
         app(TenantContext::class)->clear();
 
         $this->actingAs($regularUser)
-            ->get('/super-admin/tenants')
-            ->assertNotFound();
+            ->get('https://admin.villamucho.test/super-admin/tenants')
+            ->assertForbidden();
 
         $this->actingAs($superAdmin)
-            ->get('/super-admin/tenants')
-            ->assertNotFound();
+            ->get('https://admin.villamucho.test/super-admin/tenants')
+            ->assertRedirect(config('lora.control_panel_url').'/super-admin/tenants');
 
         $this->actingAs($superAdmin)
-            ->post('/super-admin/tenants', [
+            ->post('https://admin.villamucho.test/super-admin/tenants', [
                 'name' => 'Hotel Riviera',
                 'slug' => 'hotel-riviera',
                 'primary_domain' => 'riviera.lorapms.test',
@@ -114,6 +127,78 @@ class TenantIsolationTest extends TestCase
             ->assertNotFound();
 
         $this->assertDatabaseMissing('tenants', ['slug' => 'hotel-riviera']);
+    }
+
+    public function test_only_super_admin_can_create_and_switch_tenants(): void
+    {
+        config(['lora.control_panel_hosts' => ['localhost']]);
+
+        $default = Tenant::query()->sole();
+        app(TenantContext::class)->set($default);
+
+        $superAdmin = User::factory()->create(['is_super_admin' => true]);
+        $regularUser = User::factory()->create();
+
+        app(TenantContext::class)->clear();
+
+        $this->actingAs($regularUser)
+            ->get(route('super-admin.tenants.index'))
+            ->assertForbidden();
+
+        $this->actingAs($superAdmin)
+            ->get(route('super-admin.tenants.index'))
+            ->assertOk();
+
+        $this->actingAs($superAdmin)
+            ->post(route('super-admin.tenants.store'), [
+                'name' => 'Hotel Riviera',
+                'slug' => 'hotel-riviera',
+                'primary_domain' => 'riviera.lorapms.test',
+                'timezone' => 'Europe/Tirane',
+                'currency' => 'EUR',
+            ])
+            ->assertRedirect();
+
+        $tenant = Tenant::query()->where('slug', 'hotel-riviera')->firstOrFail();
+
+        $this->assertDatabaseHas('tenant_user', [
+            'tenant_id' => $tenant->id,
+            'user_id' => $superAdmin->id,
+            'is_owner' => true,
+        ]);
+
+        app(TenantContext::class)->set($tenant);
+        $this->assertSame(6, Role::query()->where('team_id', $tenant->id)->count());
+        $this->assertTrue(Role::query()->where('team_id', $tenant->id)->where('name', 'maintenance')->exists());
+        $this->assertTrue($superAdmin->unsetRelation('roles')->hasRole('admin'));
+        app(TenantContext::class)->clear();
+
+        $switchResponse = $this->actingAs($superAdmin)
+            ->post(route('super-admin.tenants.switch', $tenant))
+            ->assertRedirectContains('http://riviera.lorapms.test/tenant-handoff?token=');
+
+        $handoffUrl = $switchResponse->headers->get('Location');
+
+        // A custom domain does not receive the Control Panel cookie. The
+        // one-time handoff must establish a fresh destination session itself.
+        $this->post(route('logout'))->assertRedirect('/');
+
+        $handoffResponse = $this->get($handoffUrl)
+            ->assertRedirect('http://riviera.lorapms.test/dashboard')
+            ->assertHeader('Referrer-Policy', 'no-referrer')
+            ->assertSessionHas('tenant_id', $tenant->id);
+
+        $this->assertStringContainsString('no-store', (string) $handoffResponse->headers->get('Cache-Control'));
+
+        $this->assertAuthenticatedAs($superAdmin);
+
+        $this->assertSame($tenant->id, $superAdmin->fresh()->current_tenant_id);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'tenant_id' => $tenant->id,
+            'action' => 'tenant.switch',
+            'causer_id' => $superAdmin->id,
+        ]);
     }
 
     public function test_validation_rejects_room_and_guest_ids_from_another_tenant(): void
@@ -186,5 +271,237 @@ class TenantIsolationTest extends TestCase
         });
 
         $this->assertSame($second->id, $context->id());
+    }
+
+    public function test_console_writes_without_context_fail_closed_outside_testing(): void
+    {
+        app(TenantContext::class)->clear();
+        $this->app['env'] = 'production';
+
+        try {
+            $this->expectException(RuntimeException::class);
+            RoomType::create(['name' => 'Phantom', 'base_price' => 50, 'max_occupancy' => 2, 'amenities' => []]);
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+    }
+
+    public function test_reads_without_context_fail_closed_outside_testing(): void
+    {
+        $context = app(TenantContext::class);
+        $tenant = Tenant::query()->sole();
+
+        $context->set($tenant);
+        $type = RoomType::create([
+            'name' => 'Private type',
+            'base_price' => 80,
+            'max_occupancy' => 2,
+            'amenities' => [],
+        ]);
+        $context->clear();
+        $this->app['env'] = 'production';
+
+        try {
+            $this->assertSame(0, RoomType::query()->count());
+            $this->assertNull(RoomType::query()->find($type->id));
+            $this->assertSame(1, RoomType::withoutGlobalScopes()->whereKey($type->id)->count());
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+    }
+
+    public function test_tenant_id_cannot_be_assigned_or_changed_across_tenants(): void
+    {
+        $context = app(TenantContext::class);
+        $first = Tenant::query()->sole();
+        $second = Tenant::factory()->create();
+
+        $context->set($first);
+        $type = RoomType::create([
+            'name' => 'Stable tenant type',
+            'base_price' => 80,
+            'max_occupancy' => 2,
+            'amenities' => [],
+        ]);
+
+        $forged = new RoomType([
+            'name' => 'Forged tenant type',
+            'base_price' => 90,
+            'max_occupancy' => 2,
+            'amenities' => [],
+        ]);
+        $forged->tenant_id = $second->id;
+
+        try {
+            $forged->save();
+            $this->fail('Creating a tenant model for another tenant should fail.');
+        } catch (RuntimeException) {
+            $this->assertFalse($forged->exists);
+        }
+
+        $type->tenant_id = $second->id;
+        try {
+            $type->save();
+            $this->fail('Moving a model to another tenant should fail.');
+        } catch (RuntimeException) {
+            $this->assertSame($first->id, $type->getOriginal('tenant_id'));
+        }
+
+        $type->tenant_id = $first->id;
+        $type->syncOriginalAttribute('tenant_id');
+        $context->set($second);
+        $type->name = 'Cross-tenant update';
+
+        $this->expectException(RuntimeException::class);
+        $type->save();
+    }
+
+    public function test_integration_credentials_are_not_used_without_context_outside_testing(): void
+    {
+        config([
+            'services.channex.api_key' => 'legacy-key',
+            'services.channex.property_id' => 'PROP-LEGACY',
+            'services.pok.key_id' => 'legacy-pok',
+            'services.pok.key_secret' => 'legacy-secret',
+            'services.pok.merchant_id' => 'legacy-merchant',
+        ]);
+        app(TenantContext::class)->clear();
+        $this->app['env'] = 'production';
+
+        try {
+            $this->assertFalse(app(ChannexConfiguration::class)->configured());
+            $this->assertSame('', app(ChannexConfiguration::class)->get('api_key'));
+            $this->assertFalse(app(PokConfiguration::class)->configured());
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+    }
+
+    public function test_manual_tenant_commands_require_the_tenant_option_outside_testing(): void
+    {
+        $commands = [
+            ['housekeeping:archive-inspected', []],
+            ['channex:bootstrap-rooms', []],
+            ['channex:link-rooms', []],
+            ['channex:ping', []],
+            ['channex:pull-bookings', []],
+            ['channex:push-ari', []],
+            ['currency:fetch-rates', []],
+            ['finance:backfill', []],
+            ['hotel:setup', []],
+            ['booking:import', ['file' => 'missing.csv']],
+            ['market:fetch-rates', []],
+            ['pricing:autopilot', []],
+            ['pricing:snapshot', []],
+            ['pricing:weekly-report', []],
+            ['pok:release-unpaid', []],
+        ];
+
+        $this->app['env'] = 'production';
+
+        try {
+            foreach ($commands as [$command, $parameters]) {
+                app(TenantContext::class)->clear();
+                $this->artisan($command, $parameters)
+                    ->expectsOutputToContain('shto --tenant=<ID>')
+                    ->assertFailed();
+            }
+
+            $this->artisan('finance:backfill', ['--tenant' => '1invalid'])
+                ->expectsOutputToContain('ID numerike pozitive')
+                ->assertFailed();
+
+            $this->artisan('housekeeping:archive-inspected', [
+                '--tenant' => Tenant::query()->sole()->id,
+            ])->assertSuccessful();
+        } finally {
+            app(TenantContext::class)->clear();
+            $this->app['env'] = 'testing';
+        }
+    }
+
+    public function test_manual_command_rejects_a_tenant_that_differs_from_active_context(): void
+    {
+        $context = app(TenantContext::class);
+        $first = Tenant::query()->sole();
+        $second = Tenant::factory()->create();
+        $context->set($first);
+        $this->app['env'] = 'production';
+
+        try {
+            $this->artisan('currency:fetch-rates', ['--tenant' => $second->id])
+                ->expectsOutputToContain('nuk përputhet me kontekstin aktiv')
+                ->assertFailed();
+        } finally {
+            $context->clear();
+            $this->app['env'] = 'testing';
+        }
+    }
+
+    public function test_scheduled_pruning_runs_inside_each_active_tenant_context(): void
+    {
+        $context = app(TenantContext::class);
+        $tenants = collect([
+            Tenant::query()->sole(),
+            Tenant::factory()->create(),
+        ]);
+
+        foreach ($tenants as $tenant) {
+            $context->run($tenant, function () {
+                ChannelSyncLog::create([
+                    'direction' => 'push',
+                    'status' => 'ok',
+                    'created_at' => now()->subDays(91),
+                ]);
+                ChannelSyncLog::create([
+                    'direction' => 'push',
+                    'status' => 'ok',
+                    'created_at' => now()->subDays(89),
+                ]);
+            });
+        }
+
+        app(TenantCommandRunner::class)->run('model:prune', [
+            '--model' => [ChannelSyncLog::class],
+        ]);
+
+        $this->assertSame(0, ChannelSyncLog::withoutGlobalScopes()->where('created_at', '<', now()->subDays(90))->count());
+        $this->assertSame(2, ChannelSyncLog::withoutGlobalScopes()->count());
+        $this->assertNull($context->id());
+    }
+
+    public function test_pok_order_ids_are_unique_per_tenant_not_globally(): void
+    {
+        $context = app(TenantContext::class);
+        $first = Tenant::query()->sole();
+        $second = Tenant::factory()->create();
+
+        foreach ([$first, $second] as $i => $tenant) {
+            $context->set($tenant);
+            $type = RoomType::create(['name' => 'Std', 'base_price' => 50, 'max_occupancy' => 2, 'amenities' => []]);
+            $room = Room::create(['room_type_id' => $type->id, 'room_number' => '10'.$i, 'floor' => 1, 'status' => 'available']);
+            $guest = Guest::create(['first_name' => 'G', 'last_name' => (string) $i, 'email' => "g{$i}@example.test"]);
+            $staff = User::factory()->create();
+
+            Reservation::create([
+                'room_id' => $room->id,
+                'guest_id' => $guest->id,
+                'created_by' => $staff->id,
+                'check_in_date' => today()->addDays(2)->toDateString(),
+                'check_out_date' => today()->addDays(4)->toDateString(),
+                'status' => 'pending',
+                'total_amount' => 100,
+                'adults' => 2,
+                'pok_order_id' => 'POK-SAME-ORDER',
+            ]);
+        }
+
+        $context->clear();
+
+        // Both hotels hold the SAME POK order id — no cross-tenant collision.
+        $this->assertSame(
+            2,
+            Reservation::withoutGlobalScopes()->where('pok_order_id', 'POK-SAME-ORDER')->count(),
+        );
     }
 }

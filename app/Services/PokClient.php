@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Tenancy\TenantContext;
+use App\Support\TenantKey;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -21,7 +21,6 @@ class PokClient
 {
     public function __construct(
         private readonly PokConfiguration $configuration,
-        private readonly TenantContext $context,
     ) {}
 
     public function configured(): bool
@@ -78,7 +77,7 @@ class PokClient
 
     private function tokenCacheKey(): string
     {
-        return 'pok.access_token.tenant.'.($this->context->id() ?? 'legacy');
+        return TenantKey::make('pok.access_token');
     }
 
     /**

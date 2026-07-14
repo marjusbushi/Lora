@@ -6,6 +6,7 @@ use App\Jobs\PushRoomTypeAri;
 use App\Models\Amenity;
 use App\Models\CleaningTask;
 use App\Models\Floor;
+use App\Models\InventoryItem;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Reservation;
@@ -13,18 +14,28 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\RoomTypeImage;
 use App\Models\Setting;
+use App\Models\Warehouse;
+use App\Services\AuditTimeline;
+use App\Services\CurrencyRates;
+use App\Services\MarketRates;
 use App\Services\PricingRulesVersion;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Support\TenantStorage;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class SettingsController extends Controller
 {
-    public function index(): Response
+    public function index(
+        Request $request,
+        UserController $userController,
+        AuditLogController $auditLogController,
+        AuditTimeline $timeline,
+    ): Response
     {
         $settings = Setting::allGrouped();
 
@@ -33,6 +44,7 @@ class SettingsController extends Controller
         $settings['ai'] = [
             'gemini_configured' => ! empty($aiKey) || ! empty(config('services.gemini.key')),
             'gemini_key_hint' => $aiKey ? str_repeat('•', 6).substr((string) $aiKey, -4) : null,
+            'ai_hotel_context' => Setting::get('ai.hotel_context', ''),
             'gemini_from_env' => empty($aiKey) && ! empty(config('services.gemini.key')),
         ];
 
@@ -42,9 +54,9 @@ class SettingsController extends Controller
             'enabled' => (bool) ($settings['currencies']['enabled'] ?? false),
             'configured' => $curKey !== '',
             'api_key_hint' => $curKey !== '' ? str_repeat('•', 6).substr($curKey, -4) : null,
-            'rates' => \App\Services\CurrencyRates::rates(),
-            'updated_at' => \App\Services\CurrencyRates::updatedAt(),
-            'tracked' => \App\Services\CurrencyRates::CURRENCIES,
+            'rates' => CurrencyRates::rates(),
+            'updated_at' => CurrencyRates::updatedAt(),
+            'tracked' => CurrencyRates::CURRENCIES,
             'fallback_all' => (float) Setting::get('financial.fx_all_per_eur', 0) ?: null,
         ];
 
@@ -54,20 +66,28 @@ class SettingsController extends Controller
             'enabled' => (bool) ($settings['market_rates']['enabled'] ?? false),
             'configured' => $marketKey !== '',
             'api_key_hint' => $marketKey !== '' ? str_repeat('•', 6).substr($marketKey, -4) : null,
-            'competitors' => \App\Services\MarketRates::competitors(),
-            'frequency' => \App\Services\MarketRates::frequency(),
-            'search_query' => \App\Services\MarketRates::searchQuery(),
+            'competitors' => MarketRates::competitors(),
+            'frequency' => MarketRates::frequency(),
+            'search_query' => MarketRates::searchQuery(),
         ];
 
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
             'checklistDefaults' => CleaningTask::DEFAULT_CHECKLISTS,
             'roomTypes' => RoomType::withCount('rooms')->with('images')->orderBy('name')->get(),
-            'menuCategories' => MenuCategory::with(['items' => fn ($q) => $q->orderBy('name')])
+            'menuCategories' => MenuCategory::with([
+                'items' => fn ($q) => $q->with('inventoryComponents')->orderBy('name'),
+            ])
                 ->orderBy('sort_order')
                 ->get(),
+            'inventoryItems' => InventoryItem::where('is_active', true)->where('type', '!=', 'service')
+                ->orderBy('name')->get(['id', 'name', 'sku', 'unit']),
+            'inventoryWarehouses' => Warehouse::where('is_active', true)
+                ->orderByDesc('is_default')->orderBy('name')->get(['id', 'name', 'type']),
             'floors' => Floor::orderBy('number')->get(),
             'amenities' => Amenity::orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
+            'userManagement' => $userController->pageData($request, 'user_'),
+            'auditHistory' => $auditLogController->pageData($request, $timeline, 'audit_'),
         ]);
     }
 
@@ -140,7 +160,7 @@ class SettingsController extends Controller
         }
 
         if ($request->hasFile('logo')) {
-            $path = $request->file('logo')->store('logos', 'public');
+            $path = $request->file('logo')->store(TenantStorage::path('logos'), 'public');
             Setting::set('hotel.logo', $path, 'image');
         }
 
@@ -164,7 +184,7 @@ class SettingsController extends Controller
 
         if ($request->hasFile('logo')) {
             $oldLogo = Setting::get('hotel.logo');
-            $path = $request->file('logo')->store('branding', 'public');
+            $path = $request->file('logo')->store(TenantStorage::path('branding'), 'public');
             Setting::set('hotel.logo', $path, 'image');
             if ($oldLogo) {
                 Storage::disk('public')->delete($oldLogo);
@@ -173,7 +193,7 @@ class SettingsController extends Controller
 
         if ($request->hasFile('hero_image')) {
             $oldHero = Setting::get('hotel.hero_image');
-            $path = $request->file('hero_image')->store('branding', 'public');
+            $path = $request->file('hero_image')->store(TenantStorage::path('branding'), 'public');
             Setting::set('hotel.hero_image', $path, 'image');
             if ($oldHero) {
                 Storage::disk('public')->delete($oldHero);
@@ -229,7 +249,7 @@ class SettingsController extends Controller
         foreach (['hero_image', 'story_image', 'staff_image'] as $imgKey) {
             if ($request->hasFile($imgKey)) {
                 $old = Setting::get("about.{$imgKey}");
-                $path = $request->file($imgKey)->store('about', 'public');
+                $path = $request->file($imgKey)->store(TenantStorage::path('about'), 'public');
                 Setting::set("about.{$imgKey}", $path, 'image');
                 if ($old) {
                     Storage::disk('public')->delete($old);
@@ -272,8 +292,8 @@ class SettingsController extends Controller
     public function updatePricingPrograms(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'direct_discount_enabled' => ['required', 'boolean'],
-            'direct_discount_pct' => ['required', 'numeric', 'min:0', 'max:50'],
+            'direct_discount_enabled' => ['sometimes', 'boolean'],
+            'direct_discount_pct' => ['sometimes', 'numeric', 'min:0', 'max:50'],
             'booking_genius_enabled' => ['required', 'boolean'],
             'booking_genius_pct' => ['required', 'numeric', 'min:0', 'max:50'],
             'booking_mobile_enabled' => ['required', 'boolean'],
@@ -343,8 +363,13 @@ class SettingsController extends Controller
     {
         $data = $request->validate([
             'gemini_key' => ['nullable', 'string', 'max:200'],
+            'hotel_context' => ['nullable', 'string', 'max:1000'],
             'clear' => ['nullable', 'boolean'],
         ]);
+
+        if ($request->has('hotel_context')) {
+            Setting::set('ai.hotel_context', trim((string) ($data['hotel_context'] ?? '')), 'text');
+        }
 
         if ($request->boolean('clear')) {
             Setting::set('ai.gemini_key', '', 'text');
@@ -384,11 +409,11 @@ class SettingsController extends Controller
     /** "Rifresko tani" — inline fetch so the owner sees fresh rates instantly. */
     public function refreshCurrencies(): RedirectResponse
     {
-        if (! \App\Services\CurrencyRates::enabled()) {
+        if (! CurrencyRates::enabled()) {
             return back()->with('error', 'Aktivizo modulin dhe vendos çelësin API më parë.');
         }
         try {
-            $count = app(\App\Services\CurrencyRates::class)->fetch();
+            $count = app(CurrencyRates::class)->fetch();
         } catch (\Throwable $e) {
             report($e);
 
@@ -550,23 +575,27 @@ class SettingsController extends Controller
     // --- Menu Categories CRUD ---
     public function storeMenuCategory(Request $request): RedirectResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255', TenantRule::unique('menu_categories', 'name')],
+            'outlet' => ['nullable', 'in:bar,restaurant'],
+            'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
         ]);
 
         $maxOrder = MenuCategory::max('sort_order') ?? 0;
-        MenuCategory::create(['name' => $request->name, 'sort_order' => $maxOrder + 1]);
+        MenuCategory::create($data + ['sort_order' => $maxOrder + 1]);
 
         return back()->with('success', 'Kategoria u shtua.');
     }
 
     public function updateMenuCategory(Request $request, MenuCategory $menuCategory): RedirectResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255', TenantRule::unique('menu_categories', 'name')->ignore($menuCategory->id)],
+            'outlet' => ['nullable', 'in:bar,restaurant'],
+            'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
         ]);
 
-        $menuCategory->update(['name' => $request->name]);
+        $menuCategory->update($data);
 
         return back()->with('success', 'Kategoria u perditesua.');
     }
@@ -585,48 +614,65 @@ class SettingsController extends Controller
     // --- Menu Items CRUD ---
     public function storeMenuItem(Request $request): RedirectResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'menu_category_id' => ['required', TenantRule::exists('menu_categories')],
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0.01'],
             'image' => ['nullable', 'image', 'max:2048'],
+            'inventory_components' => ['nullable', 'array', 'max:20'],
+            'inventory_components.*.inventory_item_id' => [
+                'required', 'distinct', TenantRule::exists('inventory_items')->where('is_active', true)->whereNot('type', 'service'),
+            ],
+            'inventory_components.*.quantity' => ['required', 'numeric', 'min:0.0001', 'max:9999999'],
         ]);
 
-        $data = [
-            'menu_category_id' => $request->menu_category_id,
-            'name' => $request->name,
-            'price' => $request->price,
+        $itemData = [
+            'menu_category_id' => $data['menu_category_id'],
+            'name' => $data['name'],
+            'price' => $data['price'],
             'is_available' => true,
         ];
 
         if ($request->hasFile('image')) {
-            $data['image_path'] = $request->file('image')->store('menu', 'public');
+            $itemData['image_path'] = $request->file('image')->store(TenantStorage::path('menu'), 'public');
         }
 
-        MenuItem::create($data);
+        DB::transaction(function () use ($itemData, $data) {
+            $item = MenuItem::create($itemData);
+            $item->inventoryComponents()->createMany($data['inventory_components'] ?? []);
+        });
 
         return back()->with('success', 'Artikulli u shtua.');
     }
 
     public function updateMenuItem(Request $request, MenuItem $menuItem): RedirectResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0.01'],
             'image' => ['nullable', 'image', 'max:2048'],
+            'inventory_components' => ['nullable', 'array', 'max:20'],
+            'inventory_components.*.inventory_item_id' => [
+                'required', 'distinct', TenantRule::exists('inventory_items')->where('is_active', true)->whereNot('type', 'service'),
+            ],
+            'inventory_components.*.quantity' => ['required', 'numeric', 'min:0.0001', 'max:9999999'],
         ]);
 
-        $data = $request->only('name', 'price');
+        $itemData = collect($data)->only('name', 'price')->all();
 
         if ($request->hasFile('image')) {
             // Delete old image
             if ($menuItem->image_path) {
                 Storage::disk('public')->delete($menuItem->image_path);
             }
-            $data['image_path'] = $request->file('image')->store('menu', 'public');
+            $itemData['image_path'] = $request->file('image')->store(TenantStorage::path('menu'), 'public');
         }
 
-        $menuItem->update($data);
+        DB::transaction(function () use ($menuItem, $itemData, $data) {
+            $menuItem->update($itemData);
+            $menuItem->inventoryComponents()->delete();
+            $menuItem->inventoryComponents()->createMany($data['inventory_components'] ?? []);
+        });
 
         return back()->with('success', 'Artikulli u perditesua.');
     }
@@ -665,7 +711,7 @@ class SettingsController extends Controller
         $maxOrder = $roomType->images()->max('sort_order') ?? -1;
 
         foreach ($request->file('images') as $image) {
-            $path = $image->store('room-types', 'public');
+            $path = $image->store(TenantStorage::path('room-types'), 'public');
             $roomType->images()->create([
                 'path' => $path,
                 'sort_order' => ++$maxOrder,

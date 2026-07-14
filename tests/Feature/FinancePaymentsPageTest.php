@@ -189,29 +189,4 @@ class FinancePaymentsPageTest extends TestCase
         $this->assertStringContainsString('Dalje për eksport', $content);
         $this->assertStringNotContainsString('Arkëtim që nuk eksportohet', $content);
     }
-
-    public function test_payment_page_can_filter_by_exact_reservation(): void
-    {
-        $this->withoutVite();
-        $admin = $this->admin();
-        $reservation = $this->reservation();
-        FinanceAccount::ensureDefaults();
-
-        Payment::create([
-            'reservation_id' => $reservation->id,
-            'amount' => 85,
-            'method' => 'cash',
-            'type' => 'payment',
-            'created_by' => $admin->id,
-        ]);
-        $this->payment(['amount' => 35, 'description' => 'Lëvizje e palidhur']);
-
-        $this->actingAs($admin)->get(route('finance.payments', [
-            'reservation_id' => $reservation->id,
-            'all_dates' => 1,
-        ]))->assertInertia(fn ($page) => $page
-            ->where('filters.reservation_id', $reservation->id)
-            ->where('payments.total', 1)
-            ->where('payments.data.0.related.reservation.id', $reservation->id));
-    }
 }

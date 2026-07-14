@@ -6,6 +6,7 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Services\ChannelSync;
 use App\Services\ChannexClient;
+use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
@@ -28,12 +29,18 @@ use Illuminate\Support\Str;
  */
 class ChannexBootstrapRooms extends Command
 {
-    protected $signature = 'channex:bootstrap-rooms {--dry : Show what would be created without creating}';
+    use ResolvesTenantContext;
+
+    protected $signature = 'channex:bootstrap-rooms {--dry : Show what would be created without creating} {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Create a Channex room type + base and per-channel rate plans for each PMS room type (idempotent)';
 
     public function handle(ChannexClient $channex): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         if (! $channex->configured()) {
             $this->error('CHANNEX_API_KEY is not set (.env).');
 

@@ -7,7 +7,7 @@ use App\Models\MaintenanceIssue;
 use App\Models\Room;
 use App\Models\User;
 use App\Services\MaintenanceIssueService;
-use App\Tenancy\TenantContext;
+use App\Support\TenantStorage;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -182,9 +182,8 @@ class MaintenanceController extends Controller
 
     private function saveAttachment(MaintenanceIssue $issue, $file, int $userId): void
     {
-        $tenantId = app(TenantContext::class)->id();
         $name = Str::uuid().'.'.$file->guessExtension();
-        $path = $file->storeAs("maintenance/{$tenantId}/{$issue->id}", $name, 'local');
+        $path = $file->storeAs(TenantStorage::path("maintenance/{$issue->id}"), $name, 'local');
 
         $issue->attachments()->create([
             'uploaded_by' => $userId,

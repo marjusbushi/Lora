@@ -4,11 +4,14 @@ namespace App\Tenancy;
 
 use App\Models\Tenant;
 use Closure;
+use RuntimeException;
 use Spatie\Permission\PermissionRegistrar;
 
 class TenantContext
 {
     private ?Tenant $tenant = null;
+
+    private int $schemaBootstrapDepth = 0;
 
     public function set(?Tenant $tenant): void
     {
@@ -26,9 +29,17 @@ class TenantContext
         return $this->tenant?->getKey();
     }
 
+    public function requireId(): int
+    {
+        return $this->idOrDefault() ?? throw new RuntimeException('Tenant context is required for this operation.');
+    }
+
     public function idOrDefault(): ?int
     {
-        return $this->id() ?? (app()->runningInConsole()
+        // Only tests fall back to the single migrated tenant; in production a
+        // missing context must stay null (fail-closed) instead of silently
+        // resolving to the first hotel.
+        return $this->id() ?? (app()->environment('testing')
             ? Tenant::query()->active()->orderBy('id')->value('id')
             : null);
     }
@@ -36,6 +47,21 @@ class TenantContext
     public function clear(): void
     {
         $this->set(null);
+    }
+
+    public function beginSchemaBootstrap(): void
+    {
+        $this->schemaBootstrapDepth++;
+    }
+
+    public function endSchemaBootstrap(): void
+    {
+        $this->schemaBootstrapDepth = max(0, $this->schemaBootstrapDepth - 1);
+    }
+
+    public function schemaBootstrapActive(): bool
+    {
+        return $this->schemaBootstrapDepth > 0;
     }
 
     public function run(Tenant $tenant, Closure $callback): mixed

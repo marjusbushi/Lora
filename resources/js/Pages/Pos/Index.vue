@@ -1,5 +1,5 @@
 <script setup>
-import { getIntlLocale, translate } from '@/i18n';
+import { getIntlLocale, i18n, translate } from '@/i18n';
 import { ref, computed } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -183,6 +183,11 @@ function getItemEmoji(item) {
 function addToCart(menuItem) {
     if (!hasOpenShift.value) { toasts.value?.error(translate('admin.generated.k_d4d2e4579cbb')); return; }
     const existing = cart.value.find((c) => c.id === menuItem.id);
+    if (menuItem.inventory_tracked && menuItem.available_portions !== null
+        && Number(existing?.qty || 0) >= Math.max(0, Number(menuItem.available_portions))) {
+        toasts.value?.error(i18n.global.t('inventory.pos.insufficient'));
+        return;
+    }
     if (existing) {
         existing.qty++;
     } else {
@@ -192,6 +197,8 @@ function addToCart(menuItem) {
             price: parseFloat(menuItem.price),
             qty: 1,
             emoji: getItemEmoji(menuItem),
+            inventory_tracked: menuItem.inventory_tracked,
+            available_portions: menuItem.available_portions,
         });
     }
 }
@@ -201,6 +208,11 @@ function removeFromCart(index) {
 }
 
 function updateQty(index, delta) {
+    if (delta > 0 && cart.value[index].inventory_tracked && cart.value[index].available_portions !== null
+        && cart.value[index].qty >= Math.max(0, Number(cart.value[index].available_portions))) {
+        toasts.value?.error(i18n.global.t('inventory.pos.insufficient'));
+        return;
+    }
     cart.value[index].qty += delta;
     if (cart.value[index].qty <= 0) cart.value.splice(index, 1);
 }
@@ -247,6 +259,9 @@ function submitPay() {
         onSuccess: () => {
             showPayModal.value = false;
             toasts.value?.success(translate('admin.generated.k_4d1af80f8706'));
+        },
+        onError: (errors) => {
+            if (errors.inventory) toasts.value?.error(errors.inventory);
         },
     });
 }
@@ -422,7 +437,7 @@ function formatTime(d) {
                             v-for="item in activeMenuItems"
                             :key="item.id"
                             class="group relative overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-accent-300 hover:shadow-lg"
-                            :class="!item.is_available && 'opacity-50 pointer-events-none'"
+                            :class="(!item.is_available || (item.inventory_tracked && item.available_portions !== null && item.available_portions <= 0)) && 'pointer-events-none opacity-60'"
                             @click="addToCart(item)"
                         >
                             <!-- Image/Emoji area -->
@@ -440,7 +455,8 @@ function formatTime(d) {
                                 <p class="min-h-8 text-body-sm font-semibold leading-tight text-primary-900">{{ item.name }}</p>
                                 <div class="mt-1 flex items-center justify-between gap-2">
                                     <p class="text-label text-accent-700">{{ money(item.price) }}</p>
-                                    <span v-if="item.sales_count" class="text-tiny text-neutral-400">{{ item.sales_count }} shitje</span>
+                                    <span v-if="item.inventory_tracked" class="text-tiny font-semibold" :class="item.available_portions === null ? 'text-warning-600' : item.available_portions > 0 ? 'text-neutral-400' : 'text-error-600'">{{ item.available_portions === null ? $t('inventory.pos.stockUnknown') : item.available_portions > 0 ? item.available_portions + ' ' + $t('inventory.pos.available') : $t('inventory.pos.outOfStock') }}</span>
+                                    <span v-else-if="item.sales_count" class="text-tiny text-neutral-400">{{ $t('admin.pos.salesCount', { count: item.sales_count }) }}</span>
                                 </div>
                             </div>
                             <!-- Hover add indicator -->

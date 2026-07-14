@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\CleaningTask;
+use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 
 /**
@@ -12,12 +13,18 @@ use Illuminate\Console\Command;
  */
 class ArchiveInspectedCleaningTasks extends Command
 {
-    protected $signature = 'housekeeping:archive-inspected';
+    use ResolvesTenantContext;
+
+    protected $signature = 'housekeeping:archive-inspected {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Archive inspected cleaning tasks (drop them off the board; keep the rows for records)';
 
     public function handle(): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         $count = CleaningTask::where('status', 'inspected')
             ->whereNull('archived_at')
             ->update(['archived_at' => now()]);

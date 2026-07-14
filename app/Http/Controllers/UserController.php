@@ -22,15 +22,20 @@ class UserController extends Controller
 {
     public function index(Request $request): Response
     {
+        return Inertia::render('Users/Index', $this->pageData($request));
+    }
+
+    public function pageData(Request $request, string $prefix = ''): array
+    {
         $tenantId = app(TenantContext::class)->id();
         $roles = Role::query()
             ->where('team_id', $tenantId)
             ->orderBy('name');
         $roleNames = (clone $roles)->pluck('name');
 
-        $searchInput = $request->input('search', '');
-        $roleInput = $request->input('role', '');
-        $statusInput = $request->input('status', '');
+        $searchInput = $request->input($prefix.'search', '');
+        $roleInput = $request->input($prefix.'role', '');
+        $statusInput = $request->input($prefix.'status', '');
         $filters = [
             'search' => is_string($searchInput) ? mb_substr(trim($searchInput), 0, 100) : '',
             'role' => is_string($roleInput) && $roleNames->contains($roleInput) ? $roleInput : '',
@@ -72,7 +77,7 @@ class UserController extends Controller
         $users = $userQuery
             ->orderByDesc('tenant_user.is_active')
             ->orderBy('users.name')
-            ->paginate(15)
+            ->paginate(15, ['*'], $prefix.'page')
             ->withQueryString();
 
         $membershipStats = DB::table('tenant_user')
@@ -83,7 +88,7 @@ class UserController extends Controller
         $total = (int) ($membershipStats->total ?? 0);
         $active = (int) ($membershipStats->active ?? 0);
 
-        return Inertia::render('Users/Index', [
+        return [
             'users' => $users,
             'roles' => $roleNames,
             'filters' => $filters,
@@ -101,7 +106,7 @@ class UserController extends Controller
                 // The admin role keeps full access and is not editable, so an admin can never lock themselves out.
                 'editable' => $r->name !== 'admin',
             ]),
-        ]);
+        ];
     }
 
     /** Modules + their CRUD-style actions; permission name = "{action}_{key}". */
@@ -252,7 +257,7 @@ class UserController extends Controller
         // The self-seeded system user that every public/website booking is attributed to.
         // Deleting it (it was soft-deleted once, causing an 11-day booking outage) must be
         // impossible from the UI — the booking funnel depends on it existing.
-        if ($user->email === 'system@villamucho.local') {
+        if (User::isSystemEmail($user->email)) {
             return back()->with('error', 'Ky eshte perdoruesi i sistemit per rezervimet online — nuk mund te fshihet.');
         }
 

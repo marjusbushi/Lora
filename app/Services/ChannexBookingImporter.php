@@ -38,7 +38,7 @@ class ChannexBookingImporter
      * @param  array  $resource  the JSON:API revision ({id, attributes:{...}}) or a bare attributes array
      * @return array{status:string,channel:string,ref:string,created:int,updated:int,cancelled:int,flagged:array<int,string>}
      */
-    public function importRevision(array $resource): array
+    public function importRevision(array $resource, ?string $expectedPropertyId = null): array
     {
         $rev = $resource['attributes'] ?? $resource;
         $revisionId = $resource['id'] ?? ($rev['id'] ?? null);
@@ -53,8 +53,25 @@ class ChannexBookingImporter
             'created' => 0, 'updated' => 0, 'cancelled' => 0, 'flagged' => [],
         ];
 
+        // One Channex account serves many hotels: a revision belonging to another
+        // property (= another tenant) must never be imported here — and the caller
+        // must not ack it, or the owning hotel loses the booking permanently.
+        // An EMPTY expected property means ownership cannot be verified at all
+        // (misconfigured tenant) — refuse everything rather than import blind.
+        $revisionProperty = (string) ($rev['property_id'] ?? '');
+        if ($expectedPropertyId !== null
+            && ($expectedPropertyId === ''
+                || ($revisionProperty !== '' && $revisionProperty !== $expectedPropertyId))) {
+            $summary['status'] = 'foreign_property';
+            $summary['flagged'][] = "revision belongs to property {$revisionProperty} — not ours, skipped";
+            $this->log($channel, $ref !== '' ? $ref : (string) $revisionId, $revisionId, 'booking.foreign_property', null, null, 'skipped');
+
+            return $summary;
+        }
+
         if ($ref === '') {
             $summary['flagged'][] = 'revision with no reference — skipped';
+            $this->log($channel, (string) $revisionId, $revisionId, 'booking.no_reference', null, null, 'skipped');
 
             return $summary;
         }
@@ -94,6 +111,9 @@ class ChannexBookingImporter
                     : null;
                 if (! $roomTypeId) {
                     $summary['flagged'][] = "room type {$channexRoomTypeId} not mapped";
+                    // A mapping gap silently loses an OTA booking — leave a trace
+                    // the front desk / support can find.
+                    $this->log($channel, $ref, $revisionId, 'booking.room_type_unmapped', null, null, 'skipped');
 
                     continue;
                 }
@@ -101,6 +121,7 @@ class ChannexBookingImporter
                 [$physical, $overbooked] = $this->pickRoom($roomTypeId, $channel, $ref, $room['checkin_date'] ?? null, $room['checkout_date'] ?? null, $taken);
                 if (! $physical) {
                     $summary['flagged'][] = "no room for type {$roomTypeId}";
+                    $this->log($channel, $ref, $revisionId, 'booking.no_room_available', null, $roomTypeId, 'skipped');
 
                     continue;
                 }
@@ -263,7 +284,7 @@ class ChannexBookingImporter
         return User::systemForCurrentTenant()->id;
     }
 
-    private function log(string $channel, string $ref, ?string $revisionId, string $action, ?int $reservationId, ?int $roomTypeId): void
+    private function log(string $channel, string $ref, ?string $revisionId, string $action, ?int $reservationId, ?int $roomTypeId, string $status = 'ok'): void
     {
         ChannelSyncLog::record([
             'channel' => $channel,
@@ -271,7 +292,7 @@ class ChannexBookingImporter
             'action' => $action,
             'reservation_id' => $reservationId,
             'room_type_id' => $roomTypeId,
-            'status' => 'ok',
+            'status' => $status,
             'request' => ['ref' => $ref, 'revision_id' => $revisionId], // IDs only — no guest PII
         ]);
     }

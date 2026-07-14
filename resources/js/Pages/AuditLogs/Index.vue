@@ -10,9 +10,14 @@ import TextInput from '@/Components/UI/TextInput.vue';
 import Select from '@/Components/UI/Select.vue';
 import DatePicker from '@/Components/UI/DatePicker.vue';
 import AuditTimeline from '@/Components/AuditTimeline.vue';
+import SettingsSidebar from '@/Components/SettingsSidebar.vue';
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next';
 
-const props = defineProps({ logs: Object, filters: Object });
+const props = defineProps({
+    logs: Object,
+    filters: Object,
+    embedded: { type: Boolean, default: false },
+});
 const search = ref(props.filters?.search || '');
 const category = ref(props.filters?.category || 'all');
 const source = ref(props.filters?.source || 'all');
@@ -41,7 +46,7 @@ const sourceOptions = [
 ];
 
 function params(extra = {}) {
-    return {
+    const filters = {
         search: search.value || undefined,
         category: category.value,
         source: source.value,
@@ -49,9 +54,21 @@ function params(extra = {}) {
         date_to: dateTo.value || undefined,
         ...extra,
     };
+
+    if (!props.embedded) return filters;
+
+    return {
+        tab: 'history',
+        ...Object.fromEntries(Object.entries(filters).map(([key, value]) => [`audit_${key}`, value])),
+    };
 }
 function applyFilters() {
-    router.get(route('audit-logs.index'), params(), { preserveState: true, preserveScroll: true });
+    router.get(props.embedded ? route('settings.index') : route('audit-logs.index'), params(), {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+        only: props.embedded ? ['auditHistory'] : ['logs', 'filters'],
+    });
 }
 function clearFilters() {
     search.value = ''; category.value = 'all'; source.value = 'all'; dateFrom.value = ''; dateTo.value = '';
@@ -59,8 +76,12 @@ function clearFilters() {
 }
 function pageTo(url) {
     if (!url) return;
-    const page = new URL(url, window.location.origin).searchParams.get('page');
-    router.get(route('audit-logs.index'), params({ page }), { preserveState: true, preserveScroll: true });
+    const page = new URL(url, window.location.origin).searchParams.get(props.embedded ? 'audit_page' : 'page');
+    router.get(props.embedded ? route('settings.index') : route('audit-logs.index'), params({ page }), {
+        preserveState: true,
+        preserveScroll: true,
+        only: props.embedded ? ['auditHistory'] : ['logs', 'filters'],
+    });
 }
 
 watch(() => props.filters, (value) => {
@@ -73,10 +94,15 @@ watch(() => props.filters, (value) => {
 </script>
 
 <template>
-    <AppLayout>
-        <PageHeader :title="$t('admin.generated.k_4e78119c5f07')" :breadcrumbs="[{ label: $t('admin.generated.k_11d1231873df'), href: '/dashboard' }, { label: $t('admin.generated.k_5f16315d6c7b') }]" />
+    <component :is="embedded ? 'div' : AppLayout">
+        <PageHeader v-if="!embedded" :title="$t('accountCenter.auditHistory')" :breadcrumbs="[{ label: $t('admin.sidebar.dashboard'), href: '/dashboard' }, { label: $t('admin.audit.history') }]" />
+        <p v-if="!embedded" class="mt-1 text-body-sm text-neutral-500">{{ $t('admin.audit.subtitle') }}</p>
 
-        <Card class="mt-6">
+        <div :class="embedded ? '' : 'mt-6 flex flex-col gap-6 lg:flex-row'">
+            <SettingsSidebar v-if="!embedded" active-item="history" />
+
+            <div class="min-w-0 flex-1">
+        <Card>
             <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-6 xl:items-end">
                 <div class="xl:col-span-2"><TextInput v-model="search" :placeholder="$t('admin.generated.k_fb4efe685e9f')" @keyup.enter="applyFilters" /></div>
                 <Select v-model="category" :options="categoryOptions" @change="applyFilters" />
@@ -105,5 +131,7 @@ watch(() => props.filters, (value) => {
                 </div>
             </div>
         </Card>
-    </AppLayout>
+            </div>
+        </div>
+    </component>
 </template>

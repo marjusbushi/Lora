@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ResolvesTenantContext;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomInventorySnapshot;
@@ -19,12 +20,18 @@ use Illuminate\Support\Carbon;
  */
 class PricingSnapshot extends Command
 {
-    protected $signature = 'pricing:snapshot {--days=365 : How many future stay dates to snapshot}';
+    use ResolvesTenantContext;
+
+    protected $signature = 'pricing:snapshot {--days=365 : How many future stay dates to snapshot} {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Record on-the-books occupancy per future stay date and room type';
 
     public function handle(): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         $today = Carbon::today();
         $days = max(1, (int) $this->option('days'));
         $horizon = $today->copy()->addDays($days - 1);
@@ -44,7 +51,7 @@ class PricingSnapshot extends Command
 
         $rows = [];
         $now = now();
-        $tenantId = app(TenantContext::class)->idOrDefault();
+        $tenantId = app(TenantContext::class)->requireId();
 
         foreach ($types as $typeId) {
             $typeRooms = $rooms->get($typeId, collect());

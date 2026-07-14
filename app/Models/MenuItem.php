@@ -19,4 +19,9 @@ class MenuItem extends TenantModel
     {
         return $this->belongsTo(MenuCategory::class, 'menu_category_id');
     }
+
+    public function inventoryComponents()
+    {
+        return $this->hasMany(MenuItemInventory::class);
+    }
 }

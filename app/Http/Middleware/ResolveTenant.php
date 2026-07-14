@@ -22,6 +22,24 @@ class ResolveTenant
             return redirect()->away($canonicalUrl, Response::HTTP_PERMANENTLY_REDIRECT);
         }
 
+        $productHome = $request->routeIs('website.home')
+            && ($this->isMarketingHost($request) || $this->isDedicatedControlPanelHost($request));
+        $productAuth = ($request->is('login')
+            || $request->routeIs('login', 'logout', 'password.*', 'verification.*'))
+            && ($this->isMarketingHost($request) || $this->isControlPanelHost($request));
+        $controlPlane = $request->routeIs('super-admin.*')
+            && $this->isControlPanelHost($request);
+
+        if ($productHome || $productAuth || $controlPlane) {
+            $this->context->clear();
+
+            try {
+                return $next($request);
+            } finally {
+                $this->context->clear();
+            }
+        }
+
         $tenant = $this->resolve($request);
 
         abort_unless($tenant, 404, 'Hotel not found.');
@@ -37,8 +55,43 @@ class ResolveTenant
         }
     }
 
+    private function isMarketingHost(Request $request): bool
+    {
+        return in_array(
+            strtolower($request->getHost()),
+            config('lora.marketing_hosts', []),
+            true,
+        );
+    }
+
+    private function isControlPanelHost(Request $request): bool
+    {
+        return in_array(
+            strtolower($request->getHost()),
+            config('lora.control_panel_hosts', []),
+            true,
+        );
+    }
+
+    private function isDedicatedControlPanelHost(Request $request): bool
+    {
+        return in_array(
+            strtolower($request->getHost()),
+            config('lora.dedicated_control_panel_hosts', []),
+            true,
+        );
+    }
+
     private function resolve(Request $request): ?Tenant
     {
+        // Public surfaces — the guest website, booking engine, and external
+        // webhooks — always belong to the host that was called. A visitor's
+        // login (or a super admin's tenant switch) must never move a public
+        // page, a booking, or a webhook onto another hotel.
+        if ($request->routeIs('website.*', 'channex.webhook', 'tenant-handoff.consume')) {
+            return $this->resolveFromDomain($request);
+        }
+
         $user = $request->user();
         $requestedTenantId = $request->session()->get('tenant_id');
 
@@ -63,12 +116,9 @@ class ResolveTenant
             }
         }
 
-        $domainTenant = TenantDomain::query()
-            ->where('domain', strtolower($request->getHost()))
-            ->with('tenant')
-            ->first()?->tenant;
+        $domainTenant = $this->resolveFromDomain($request);
 
-        if ($domainTenant?->status === 'active') {
+        if ($domainTenant) {
             if (! $user || $user->is_super_admin || $user->activeTenants()->whereKey($domainTenant->id)->exists()) {
                 return $domainTenant;
             }
@@ -79,5 +129,15 @@ class ResolveTenant
         }
 
         return null;
+    }
+
+    private function resolveFromDomain(Request $request): ?Tenant
+    {
+        $tenant = TenantDomain::query()
+            ->where('domain', strtolower($request->getHost()))
+            ->with('tenant')
+            ->first()?->tenant;
+
+        return $tenant?->status === 'active' ? $tenant : null;
     }
 }

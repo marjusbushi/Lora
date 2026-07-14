@@ -85,7 +85,9 @@ class BookingSystemUserSoftDeletedTest extends TestCase
         $response->assertSessionHasNoErrors();
         $response->assertRedirect();
 
-        $this->assertDatabaseHas('users', ['email' => 'system@villamucho.local', 'deleted_at' => null]);
+        // Self-seeded PER-TENANT identity — a fresh hotel never shares the legacy user.
+        $tenantId = \App\Models\Tenant::query()->sole()->id;
+        $this->assertDatabaseHas('users', ['email' => "system+t{$tenantId}@lora.local", 'deleted_at' => null]);
         $this->assertDatabaseHas('reservations', ['room_id' => $room->id, 'channel' => 'direct']);
     }
 }

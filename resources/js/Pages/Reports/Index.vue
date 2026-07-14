@@ -1,7 +1,7 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
 import { computed, onMounted, ref } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import {
@@ -33,14 +33,19 @@ import {
 
 defineProps({ currency: { type: String, default: '€' } });
 
-const categories = [
-    { key: 'all', label: translate('admin.generated.k_f0e749e2985a') },
-    { key: 'finance', label: translate('admin.generated.k_d359295e4a5a') },
-    { key: 'reservations', label: translate('admin.generated.k_376236923413') },
-    { key: 'operations', label: translate('admin.generated.k_1a888fc9c944') },
-    { key: 'guests', label: translate('admin.generated.k_35d556dcf262') },
-    { key: 'pos', label: translate('admin.generated.k_2a596915a572') },
+const page = usePage();
+const activeModules = computed(() => page.props.modules || {});
+const hasModule = (module) => !module || activeModules.value[module] === true;
+
+const allCategories = [
+    { key: 'all', label: translate('admin.reports.catalog.all') },
+    { key: 'finance', label: translate('admin.reports.catalog.finance') },
+    { key: 'reservations', label: translate('admin.reports.catalog.reservations') },
+    { key: 'operations', label: translate('admin.reports.catalog.operations') },
+    { key: 'guests', label: translate('admin.reports.catalog.guests') },
+    { key: 'pos', label: 'POS' },
 ];
+const categories = computed(() => allCategories.filter((category) => category.key !== 'pos' || hasModule('pos')));
 
 const groups = [
     {
@@ -49,9 +54,9 @@ const groups = [
         category: 'finance',
         icon: ChartNoAxesCombined,
         reports: [
-            { name: 'Pasqyra ekzekutive', desc: translate('admin.generated.k_ae504df14db4'), to: 'reports.executive', icon: BarChart3 },
-            { name: 'ADR / RevPAR / Mbushja', desc: translate('admin.generated.k_ad4fb73d0b26'), to: 'reports.performance', icon: TrendingUp },
-            { name: 'Tempo & Pickup', desc: translate('admin.generated.k_cce552012b85'), to: 'reports.pace', icon: Clock3 },
+            { name: translate('admin.reports.catalog.executive'), desc: translate('admin.generated.k_ae504df14db4'), to: 'reports.executive', icon: BarChart3 },
+            { name: translate('admin.reports.catalog.performance'), desc: translate('admin.generated.k_ad4fb73d0b26'), to: 'reports.performance', icon: TrendingUp },
+            { name: translate('admin.reports.catalog.pace'), desc: translate('admin.generated.k_cce552012b85'), to: 'reports.pace', icon: Clock3 },
         ],
     },
     {
@@ -60,22 +65,22 @@ const groups = [
         category: 'reservations',
         icon: CalendarCheck,
         reports: [
-            { name: 'Prodhimi sipas kanaleve', desc: translate('admin.generated.k_6d6dfc8c5f41'), to: 'reports.channels', icon: ChartNoAxesCombined },
-            { name: 'Anulime & No-Show', desc: translate('admin.generated.k_c895712ad4ee'), to: 'reports.cancellations', icon: CalendarX },
-            { name: 'Sjellja e rezervimit', desc: translate('admin.generated.k_2d1fcb13fa71'), to: 'reports.bookingBehavior', icon: ClipboardList },
+            { name: translate('admin.reports.catalog.channels'), desc: translate('admin.generated.k_6d6dfc8c5f41'), to: 'reports.channels', icon: ChartNoAxesCombined },
+            { name: translate('admin.reports.catalog.cancellations'), desc: translate('admin.generated.k_c895712ad4ee'), to: 'reports.cancellations', icon: CalendarX },
+            { name: translate('admin.reports.catalog.bookingBehavior'), desc: translate('admin.generated.k_2d1fcb13fa71'), to: 'reports.bookingBehavior', icon: ClipboardList },
         ],
     },
     {
         key: 'operations',
-        name: 'Operacione',
+        name: translate('admin.reports.catalog.operations'),
         category: 'operations',
         icon: BedDouble,
         reports: [
-            { name: translate('admin.generated.k_1ba89e3e9473'), desc: translate('admin.generated.k_f0cd5aad3c02'), to: 'reports.arrivalsManifest', icon: UserRoundCheck },
-            { name: 'Manifesti i nisjeve', desc: translate('admin.generated.k_6658aa4b9cc4'), to: 'reports.departuresManifest', icon: CalendarCheck },
-            { name: 'Statusi i dhomave', desc: translate('admin.generated.k_389c393e02da'), to: 'reports.roomStatus', icon: BedDouble },
-            { name: 'Raporti i pastrimit', desc: translate('admin.generated.k_750008a3b9ce'), to: 'reports.housekeepingReport', icon: Sparkles },
-            { name: translate('admin.generated.k_9ee675c413cf'), desc: translate('admin.generated.k_56da3f20d55b'), to: 'reports.inHouse', icon: House },
+            { name: translate('admin.reports.catalog.arrivals'), desc: translate('admin.reports.catalog.arrivalsDesc'), to: 'reports.arrivalsManifest', icon: UserRoundCheck },
+            { name: translate('admin.reports.catalog.departures'), desc: translate('admin.reports.catalog.departuresDesc'), to: 'reports.departuresManifest', icon: CalendarCheck },
+            { name: translate('admin.reports.catalog.roomStatus'), desc: translate('admin.reports.catalog.roomStatusDesc'), to: 'reports.roomStatus', icon: BedDouble },
+            { name: translate('admin.reports.catalog.housekeeping'), desc: translate('admin.reports.catalog.housekeepingDesc'), to: 'reports.housekeepingReport', icon: Sparkles, module: 'housekeeping' },
+            { name: translate('admin.reports.catalog.inHouse'), desc: translate('admin.reports.catalog.inHouseDesc'), to: 'reports.inHouse', icon: House },
         ],
     },
     {
@@ -85,9 +90,9 @@ const groups = [
         icon: Banknote,
         reports: [
             { name: translate('admin.generated.k_9510fd30116d'), desc: translate('admin.generated.k_958f73cee249'), to: 'reports.outstanding', icon: ReceiptText },
-            { name: 'Z-Report / Mbyllje turni', desc: translate('admin.generated.k_bf9a4f411063'), to: 'reports.shifts', icon: WalletCards },
+            { name: translate('admin.reports.catalog.zReport'), desc: translate('admin.generated.k_bf9a4f411063'), to: 'reports.shifts', icon: WalletCards },
             { name: translate('admin.generated.k_176dd4832014'), desc: translate('admin.generated.k_d0dd07049135'), to: 'reports.payments', icon: HandCoins },
-            { name: 'Raport TVSH', desc: translate('admin.generated.k_a1af7e68c583'), to: 'reports.vat', icon: Percent },
+            { name: translate('admin.reports.catalog.vat'), desc: translate('admin.generated.k_a1af7e68c583'), to: 'reports.vat', icon: Percent },
             { name: translate('admin.generated.k_c1b454fb69dd'), desc: translate('admin.generated.k_c2bfd6b01875'), to: 'reports.discounts', icon: CircleDollarSign },
         ],
     },
@@ -104,19 +109,24 @@ const groups = [
     },
     {
         key: 'pos',
-        name: 'Bar & restorant',
+        name: translate('admin.reports.catalog.barRestaurant'),
         category: 'pos',
+        module: 'pos',
         icon: Utensils,
         reports: [
             { name: translate('admin.generated.k_443dc45fa745'), desc: translate('admin.generated.k_f8476b1b0151'), to: 'reports.posSales', icon: ShoppingBasket },
             { name: translate('admin.generated.k_598ef37ef3c9'), desc: translate('admin.generated.k_5c43b8be2406'), to: 'reports.posHourly', icon: Clock3 },
-            { name: 'Mix i pagesave POS', desc: translate('admin.generated.k_fe6e775c6227'), to: 'reports.posPaymentMix', icon: CreditCard },
-            { name: 'Anulime & Voids POS', desc: translate('admin.generated.k_22c51f5e6a35'), to: 'reports.posVoids', icon: CalendarX },
+            { name: translate('admin.reports.catalog.posPaymentMix'), desc: translate('admin.generated.k_fe6e775c6227'), to: 'reports.posPaymentMix', icon: CreditCard },
+            { name: translate('admin.reports.catalog.posVoids'), desc: translate('admin.generated.k_22c51f5e6a35'), to: 'reports.posVoids', icon: CalendarX },
         ],
     },
 ];
 
-const allReports = groups.flatMap((group) => group.reports.map((report) => ({ ...report, category: group.category })));
+const allReports = computed(() => groups
+    .filter((group) => hasModule(group.module))
+    .flatMap((group) => group.reports
+        .filter((report) => hasModule(report.module))
+        .map((report) => ({ ...report, category: group.category }))));
 const quickRouteNames = ['reports.executive', 'reports.arrivalsManifest', 'reports.departuresManifest', 'reports.outstanding'];
 const query = ref('');
 const activeCategory = ref('all');
@@ -125,10 +135,12 @@ const recentRouteNames = ref([]);
 const normalizedQuery = computed(() => query.value.trim().toLocaleLowerCase(getIntlLocale()));
 
 const visibleGroups = computed(() => groups
+    .filter((group) => hasModule(group.module))
     .filter((group) => activeCategory.value === 'all' || group.category === activeCategory.value)
     .map((group) => ({
         ...group,
         reports: group.reports.filter((report) => {
+            if (!hasModule(report.module)) return false;
             if (!normalizedQuery.value) return true;
             return `${report.name} ${report.desc}`.toLocaleLowerCase(getIntlLocale()).includes(normalizedQuery.value);
         }),
@@ -136,12 +148,12 @@ const visibleGroups = computed(() => groups
     .filter((group) => group.reports.length));
 
 const quickReports = computed(() => quickRouteNames
-    .map((routeName) => allReports.find((report) => report.to === routeName))
+    .map((routeName) => allReports.value.find((report) => report.to === routeName))
     .filter(Boolean));
 
 const recentReports = computed(() => {
     const routes = recentRouteNames.value.length ? recentRouteNames.value : quickRouteNames;
-    return routes.map((routeName) => allReports.find((report) => report.to === routeName)).filter(Boolean).slice(0, 4);
+    return routes.map((routeName) => allReports.value.find((report) => report.to === routeName)).filter(Boolean).slice(0, 4);
 });
 
 function rememberReport(report) {
@@ -153,7 +165,7 @@ function rememberReport(report) {
 onMounted(() => {
     try {
         const stored = JSON.parse(window.localStorage.getItem('pms-recent-reports') || '[]');
-        if (Array.isArray(stored)) recentRouteNames.value = stored.filter((routeName) => allReports.some((report) => report.to === routeName));
+        if (Array.isArray(stored)) recentRouteNames.value = stored.filter((routeName) => allReports.value.some((report) => report.to === routeName));
     } catch {
         recentRouteNames.value = [];
     }

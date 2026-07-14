@@ -10,7 +10,10 @@ class ChannexConfiguration
 {
     private ?array $resolved = null;
 
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(
+        private readonly TenantContext $context,
+        private readonly TenantBillingService $billing,
+    ) {}
 
     public function all(): array
     {
@@ -20,9 +23,19 @@ class ChannexConfiguration
 
         // Existing unit/feature tests intentionally configure isolated fake API
         // credentials in config and never contain real tenant secrets.
-        if ($this->context->id() === null
-            || (app()->environment('testing') && config('services.channex.testing_legacy_fallback', true))) {
+        // Legacy env credentials exist ONLY for the test suite. In production a
+        // missing tenant context must resolve to NO credentials — never to the
+        // first hotel's (Villa Mucho's) live account.
+        if (app()->environment('testing') && config('services.channex.testing_legacy_fallback', true)) {
             return $this->resolved = $this->legacyConfig();
+        }
+
+        if ($this->context->id() === null) {
+            return $this->resolved = $this->emptyConfig();
+        }
+
+        if (! $this->billing->enabled(TenantBillingService::CHANNEL_MANAGER, $this->context->tenant())) {
+            return $this->resolved = $this->emptyConfig();
         }
 
         $integration = TenantIntegration::query()

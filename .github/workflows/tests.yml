@@ -3,6 +3,7 @@ name: Tests
 on:
   push:
     branches:
+      - main
       - staging
       - 'feat/**'
   pull_request:
@@ -146,10 +147,10 @@ jobs:
       MAIL_MAILER: array
 
     steps:
-      - name: Checkout current staging schema
+      - name: Checkout target branch schema
         uses: actions/checkout@v5
         with:
-          ref: staging
+          ref: ${{ github.event.pull_request.base.sha || github.event.before || 'staging' }}
           fetch-depth: 0
 
       - name: PHP
@@ -162,25 +163,55 @@ jobs:
       - name: Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
-      - name: Build current staging database
+      - name: Build target branch database
         run: php artisan migrate:fresh --force
 
-      - name: Seed current roles and assignments
-        run: |
-          php artisan db:seed --class='Database\Seeders\RolePermissionSeeder' --force
-          php artisan tinker --execute="\$user = \App\Models\User::factory()->create(); \$user->assignRole('admin');"
+      - name: Seed representative staging data
+        run: php artisan db:seed --force
 
       - name: Checkout candidate code
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          clean: false
+          clean: true
 
-      - name: Verify upgrade from staging
+      - name: Refresh candidate Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Snapshot pre-upgrade schema and data
+        run: |
+          mysqldump -h 127.0.0.1 -P 3307 -uroot -proot \
+            --no-data --skip-comments --skip-dump-date --compact testing_upgrade \
+            | php scripts/canonicalize-mysql-schema.php \
+            > /tmp/lora-schema-before.sql
+          checksum_sql="$(mysql -h 127.0.0.1 -P 3307 -uroot -proot -N -e \
+            "SET SESSION group_concat_max_len = 1000000; SELECT CONCAT('CHECKSUM TABLE ', GROUP_CONCAT(CONCAT('testing_upgrade.', table_name) ORDER BY table_name SEPARATOR ', '), ';') FROM information_schema.tables WHERE table_schema = 'testing_upgrade' AND table_type = 'BASE TABLE'")"
+          mysql -h 127.0.0.1 -P 3307 -uroot -proot -N -e "$checksum_sql" \
+            > /tmp/lora-data-before.tsv
+
+      - name: Snapshot pre-upgrade integrity
+        run: php artisan tenants:verify-integrity --snapshot=/tmp/lora-upgrade-baseline.json
+
+      - name: Verify upgrade from target branch
         run: php artisan migrate --force
 
-      - name: Verify role backfill
+      - name: Verify post-upgrade integrity and totals
+        run: php artisan tenants:verify-integrity --compare=/tmp/lora-upgrade-baseline.json --allow-additive-schema
+
+      - name: Verify exact database rollback
         run: |
-          php artisan tinker --execute="throw_unless(\Illuminate\Support\Facades\DB::table('roles')->whereNull('team_id')->doesntExist());"
-          php artisan tinker --execute="throw_unless(\Illuminate\Support\Facades\DB::table('model_has_roles')->whereNull('team_id')->doesntExist());"
-          php artisan tinker --execute="throw_unless(\Illuminate\Support\Facades\DB::table('tenant_user')->where('is_active', false)->doesntExist());"
+          release_batch="$(mysql -h 127.0.0.1 -P 3307 -uroot -proot -N \
+            testing_upgrade -e 'SELECT MAX(batch) FROM migrations')"
+          test -n "$release_batch"
+          php artisan migrate:rollback --batch="$release_batch" --force
+          php artisan tenants:verify-integrity --compare=/tmp/lora-upgrade-baseline.json
+          mysqldump -h 127.0.0.1 -P 3307 -uroot -proot \
+            --no-data --skip-comments --skip-dump-date --compact testing_upgrade \
+            | php scripts/canonicalize-mysql-schema.php \
+            > /tmp/lora-schema-after-rollback.sql
+          diff -u /tmp/lora-schema-before.sql /tmp/lora-schema-after-rollback.sql
+          checksum_sql="$(mysql -h 127.0.0.1 -P 3307 -uroot -proot -N -e \
+            "SET SESSION group_concat_max_len = 1000000; SELECT CONCAT('CHECKSUM TABLE ', GROUP_CONCAT(CONCAT('testing_upgrade.', table_name) ORDER BY table_name SEPARATOR ', '), ';') FROM information_schema.tables WHERE table_schema = 'testing_upgrade' AND table_type = 'BASE TABLE'")"
+          mysql -h 127.0.0.1 -P 3307 -uroot -proot -N -e "$checksum_sql" \
+            > /tmp/lora-data-after-rollback.tsv
+          diff -u /tmp/lora-data-before.tsv /tmp/lora-data-after-rollback.tsv

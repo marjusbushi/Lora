@@ -1,9 +1,11 @@
 <script setup>
-import { ref, onMounted } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { ref, onMounted, computed } from 'vue';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { Check, X } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
+
+const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
 
 defineProps({ reservation: Object, hotel: Object, status: { type: String, default: 'confirmed' } });
 
@@ -16,7 +18,7 @@ onMounted(() => headingEl.value?.focus({ preventScroll: true }));
 </script>
 
 <template>
-    <Head :title="$t('confirmation.pageTitle')" />
+    <Head :title="$t('confirmation.pageTitle', { hotel: brandName })" />
     <WebsiteLayout>
         <section class="py-20">
             <div class="max-w-lg mx-auto px-4 text-center">

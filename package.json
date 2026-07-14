@@ -4,7 +4,8 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "check:i18n": "node scripts/check-i18n.mjs"
     },
     "devDependencies": {
         "@inertiajs/vue3": "^2.0.0",
@@ -12,7 +13,7 @@
         "@tailwindcss/vite": "^4.0.0",
         "@vitejs/plugin-vue": "^6.0.0",
         "autoprefixer": "^10.4.12",
-        "axios": ">=1.11.0 <=1.14.0",
+        "axios": "^1.18.1",
         "concurrently": "^9.0.1",
         "laravel-echo": "^2.3.3",
         "laravel-vite-plugin": "^3.0.0",

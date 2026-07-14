@@ -82,7 +82,9 @@ const canStartReservation = computed(() => (
     canViewReservations.value && canCreateReservation.value && canViewGuests.value
 ));
 const canUpdateReservation = computed(() => userPerms.value.includes('update_reservations'));
-const canViewHousekeeping = computed(() => userPerms.value.includes('view_housekeeping'));
+const canViewHousekeeping = computed(() => (
+    userPerms.value.includes('view_housekeeping') && page.props.modules?.housekeeping === true
+));
 
 const menuItemClass = 'flex w-full items-center gap-2.5 px-3 py-2 text-left text-body-sm text-neutral-700 transition-colors hover:bg-neutral-50';
 

@@ -3,21 +3,26 @@
 namespace App\Http\Controllers;
 
 use App\Models\Bill;
+use App\Models\BillItem;
 use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
+use App\Models\InventoryItem;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Setting;
 use App\Models\Supplier;
+use App\Models\Warehouse;
 use App\Services\CurrencyRates;
+use App\Services\InventoryLedger;
 use App\Tenancy\TenantRule;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -30,6 +35,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class FinanceController extends Controller
 {
+    public function __construct(private readonly InventoryLedger $inventoryLedger) {}
+
     public function index(Request $request): Response
     {
         FinanceAccount::ensureDefaults();
@@ -402,6 +409,7 @@ class FinanceController extends Controller
     public function bills(Request $request): Response
     {
         FinanceAccount::ensureDefaults();
+        Warehouse::ensureDefault();
         $filter = $request->input('filter');
         $category = $request->input('category');
         $search = trim((string) $request->input('search', ''));
@@ -461,18 +469,21 @@ class FinanceController extends Controller
 
         return Inertia::render('Finance/Bills', array_merge($this->shared($request), [
             'accounts' => $this->visibleAccounts($request),
-            'suppliers' => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'suppliers' => Supplier::where('is_active', true)->orderBy('name')
+                ->get(['id', 'name', 'nipt', 'category', 'payment_terms_days']),
             'categories' => Bill::categories(),
             'filters' => ['filter' => $filter, 'category' => $category, 'search' => $search, 'bill_id' => $billId],
             'byCategory' => $byCategory,
             'summary' => $summary,
             'priorities' => $priorities,
             'bills' => Bill::with('supplier:id,name')->withSum('payments as paid_base', 'amount_base')
+                ->withCount('items')
+                ->withCount(['items as received_items_count' => fn ($query) => $query->whereNotNull('received_at')])
                 ->latest('issue_date')->latest('id')
+                ->when($billId, fn ($qq) => $qq->whereKey($billId))
                 ->when($filter === 'unpaid', fn ($qq) => $qq->where('status', '!=', 'paid'))
                 ->when(in_array($filter, ['due', 'overdue'], true), fn ($qq) => $qq->where('status', '!=', 'paid')->whereDate('due_date', '<', $today->toDateString()))
                 ->when($filter === 'paid', fn ($qq) => $qq->where('status', 'paid'))
-                ->when($billId, fn ($qq) => $qq->whereKey($billId))
                 ->when($category, fn ($qq) => $qq->where('category', $category))
                 ->when($search !== '', fn ($qq) => $qq->where(function ($searchQuery) use ($search) {
                     $searchQuery->where('number', 'like', "%{$search}%")
@@ -482,10 +493,25 @@ class FinanceController extends Controller
         ]));
     }
 
+    public function createBill(Request $request): Response
+    {
+        Warehouse::ensureDefault();
+
+        return Inertia::render('Finance/BillCreate', array_merge($this->shared($request), [
+            'suppliers' => Supplier::where('is_active', true)->orderBy('name')
+                ->get(['id', 'name', 'nipt', 'category', 'payment_terms_days']),
+            'categories' => Bill::categories(),
+            'inventoryItems' => InventoryItem::where('is_active', true)->orderBy('name')
+                ->get(['id', 'name', 'sku', 'type', 'unit', 'average_cost']),
+            'warehouses' => Warehouse::where('is_active', true)->orderByDesc('is_default')->orderBy('name')
+                ->get(['id', 'name', 'is_default']),
+        ]));
+    }
+
     public function storeBill(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'supplier_id' => ['required', 'integer', 'exists:suppliers,id'],
+            'supplier_id' => ['required', 'integer', TenantRule::exists('suppliers')],
             'number' => ['nullable', 'string', 'max:60'],
             'category' => ['required', 'string', 'max:60'],
             'issue_date' => ['required', 'date'],
@@ -494,11 +520,69 @@ class FinanceController extends Controller
             'fx_rate' => ['required_if:currency,ALL', 'nullable', 'numeric', 'min:1'],
             'total' => ['required', 'numeric', 'min:0.01', 'max:9999999'],
             'notes' => ['nullable', 'string', 'max:500'],
+            'receive_stock' => ['nullable', 'boolean'],
+            'items' => ['nullable', 'array', 'max:50'],
+            'items.*.inventory_item_id' => ['required', 'integer', TenantRule::exists('inventory_items')->where('is_active', true)],
+            'items.*.warehouse_id' => ['nullable', 'integer', TenantRule::exists('warehouses')->where('is_active', true)],
+            'items.*.quantity' => ['required', 'numeric', 'min:0.0001', 'max:9999999'],
+            'items.*.unit_cost' => ['required', 'numeric', 'min:0', 'max:9999999'],
         ]);
 
-        Bill::create($data + ['status' => 'open']);
+        $lines = collect($data['items'] ?? [])->values();
+        if ($lines->isNotEmpty()) {
+            $data['total'] = round((float) $lines->sum(fn ($line) => (float) $line['quantity'] * (float) $line['unit_cost']), 2);
+            if ($data['total'] < 0.01) {
+                throw ValidationException::withMessages(['total' => 'Totali i artikujve duhet të jetë më i madh se zero.']);
+            }
+        }
 
-        return back()->with('success', 'Fatura e blerjes u regjistrua.');
+        DB::transaction(function () use ($data, $lines, $request) {
+            $bill = Bill::create(collect($data)->except(['items', 'receive_stock'])->all() + ['status' => 'open']);
+
+            foreach ($lines as $index => $lineData) {
+                $item = InventoryItem::findOrFail($lineData['inventory_item_id']);
+                $stockable = $item->type !== 'service';
+                if ($stockable && empty($lineData['warehouse_id'])) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.warehouse_id" => 'Zgjidh magazinën ku do të hyjë stoku.',
+                    ]);
+                }
+
+                $line = BillItem::create([
+                    'bill_id' => $bill->id,
+                    'inventory_item_id' => $item->id,
+                    'warehouse_id' => $lineData['warehouse_id'] ?? null,
+                    'description' => $item->name,
+                    'quantity' => $lineData['quantity'],
+                    'unit' => $item->unit,
+                    'unit_cost' => $lineData['unit_cost'],
+                    'line_total' => round((float) $lineData['quantity'] * (float) $lineData['unit_cost'], 2),
+                    'received_at' => $stockable ? null : now(),
+                ]);
+
+                if (($data['receive_stock'] ?? false) && $stockable) {
+                    $this->inventoryLedger->receiveBillItem($line, $request->user()->id);
+                }
+            }
+        });
+
+        return redirect()->route('finance.bills')->with('success', $lines->isNotEmpty()
+            ? 'Fatura dhe rreshtat e inventarit u regjistruan.'
+            : 'Fatura e blerjes u regjistrua.');
+    }
+
+    public function receiveBill(Request $request, Bill $bill): RedirectResponse
+    {
+        DB::transaction(function () use ($bill, $request) {
+            $pending = $bill->items()->with('item')->whereNull('received_at')->get();
+            foreach ($pending as $line) {
+                if ($line->item?->type !== 'service') {
+                    $this->inventoryLedger->receiveBillItem($line, $request->user()->id);
+                }
+            }
+        });
+
+        return back()->with('success', 'Stoku i faturës u pranua në magazinë.');
     }
 
     public function storeBillCategory(Request $request): RedirectResponse
@@ -718,6 +802,8 @@ class FinanceController extends Controller
                 ? ($b->due_date->isToday() ? 'today' : ($b->due_date->isPast() ? 'overdue' : 'ok'))
                 : 'ok',
             'notes' => $b->notes,
+            'items_count' => (int) ($b->items_count ?? 0),
+            'received_items_count' => (int) ($b->received_items_count ?? 0),
         ];
     }
 
@@ -903,6 +989,7 @@ class FinanceController extends Controller
                 'transfers' => $request->user()->can('manage_transfers'),
                 'bank' => $request->user()->can('view_bank_accounts'),
                 'manageBills' => $request->user()->can('manage_bills'),
+                'manageInventory' => $request->user()->can('manage_inventory'),
                 'manageSuppliers' => $request->user()->can('manage_suppliers'),
                 'manageAccounts' => $request->user()->can('manage_finance_settings'),
             ],

@@ -10,7 +10,7 @@
     <div style="max-width:560px;margin:0 auto;padding:24px;">
         <div style="background:#1F1D1A;color:#FAF7F1;padding:20px 24px;">
             <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#B08F5E;">Rezervim i ri</div>
-            <div style="font-size:22px;margin-top:4px;">Villa Mucho</div>
+            <div style="font-size:22px;margin-top:4px;">{{ $hotelName }}</div>
         </div>
         <div style="background:#ffffff;padding:24px;border:1px solid #EFE9DE;">
             <p style="margin:0 0 16px;font-size:15px;">Erdhi një rezervim i ri nga faqja:</p>

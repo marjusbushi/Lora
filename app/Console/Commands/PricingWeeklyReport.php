@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\PricingReport;
 use App\Services\AiPricing;
+use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -14,12 +15,18 @@ use Illuminate\Support\Carbon;
  */
 class PricingWeeklyReport extends Command
 {
-    protected $signature = 'pricing:weekly-report';
+    use ResolvesTenantContext;
+
+    protected $signature = 'pricing:weekly-report {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Generate and store the weekly Albanian pricing report';
 
     public function handle(): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         if (! AiPricing::configured()) {
             $this->info('Gemini not configured — skipping the weekly report.');
 

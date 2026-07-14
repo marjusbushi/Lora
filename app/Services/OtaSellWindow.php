@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ChannelMapping;
 use App\Models\Setting;
+use App\Support\TenantKey;
 use App\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -141,9 +142,7 @@ class OtaSellWindow
      */
     public function withAriLock(Closure $callback): mixed
     {
-        $tenantId = app(TenantContext::class)->id() ?? 'global';
-
-        return Cache::lock(self::ARI_LOCK.':'.$tenantId, self::ARI_LOCK_SECONDS)->block(30, $callback);
+        return Cache::lock(TenantKey::make(self::ARI_LOCK), self::ARI_LOCK_SECONDS)->block(30, $callback);
     }
 
     /**
@@ -184,7 +183,7 @@ class OtaSellWindow
         }
 
         Setting::query()->insertOrIgnore([
-            'tenant_id' => app(TenantContext::class)->idOrDefault(),
+            'tenant_id' => app(TenantContext::class)->requireId(),
             'group' => 'channex',
             'key' => 'sell_window_version',
             'value' => '0',

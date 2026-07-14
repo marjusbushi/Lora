@@ -21,6 +21,7 @@ const props = defineProps({
 });
 
 const toasts = ref(null);
+const channelManagerEnabled = computed(() => usePage().props.modules?.channel_manager === true);
 
 function formatDate(value) {
     if (!value) return '—';
@@ -396,7 +397,7 @@ function fmtRange(s) {
 
         <div class="mt-6 space-y-6">
             <!-- Channel manager (Channex) -->
-            <Card>
+            <Card v-if="channelManagerEnabled">
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div class="min-w-0">
                         <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_5786b449b811') }}</h3>

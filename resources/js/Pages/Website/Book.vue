@@ -9,6 +9,7 @@ import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { countryOptions, PRIORITY_COUNTRIES } from '@/countries';
 
 const { t, locale } = useI18n();
+const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
 
 const props = defineProps({
     roomTypes: Array,

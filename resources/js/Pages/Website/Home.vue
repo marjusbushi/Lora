@@ -1,16 +1,19 @@
 <script setup>
 import { computed } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 import { Waves, Wifi, Coffee, Wine } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { amenityIcon } from '@/Components/Website/amenities';
 
+const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
+
 const props = defineProps({
     roomTypes: Array,
     hotel: Object,
 });
+const bookingEnabled = computed(() => usePage().props.modules?.booking_engine === true);
 
 // Present the rooms as a graded collection, not identical tiles: the "Suite"
 // (or, failing that, the priciest type) gets a wider featured treatment.
@@ -68,7 +71,7 @@ const features = computed(() => [
 </script>
 
 <template>
-    <Head :title="$t('home.meta.title')" />
+    <Head :title="$t('home.meta.title', { hotel: brandName })" />
     <WebsiteLayout :transparent-header="true">
         <!-- Hero -->
         <section class="relative h-[90vh] min-h-[560px] w-full overflow-hidden">
@@ -76,7 +79,7 @@ const features = computed(() => [
                 :src="heroSrc"
                 :srcset="heroSrcset"
                 sizes="100vw"
-                :alt="$t('home.hero.imageAlt')"
+                :alt="$t('home.hero.imageAlt', { hotel: brandName })"
                 fetchpriority="high"
                 class="absolute inset-0 h-full w-full object-cover hero-kenburns"
             />
@@ -93,7 +96,7 @@ const features = computed(() => [
                     {{ heroSubtitle }}
                 </p>
                 <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mt-9">
-                    <Link href="/book" class="btn-reserve">{{ $t('home.hero.bookNow') }}</Link>
+                    <Link v-if="bookingEnabled" href="/book" class="btn-reserve">{{ $t('home.hero.bookNow') }}</Link>
                     <Link href="/rooms" class="inline-flex items-center justify-center px-7 py-3 border border-bone/40 text-bone text-sm font-medium tracking-wide hover:bg-bone/10 transition-colors no-underline">
                         {{ $t('home.hero.viewRooms') }}
                     </Link>
@@ -150,7 +153,7 @@ const features = computed(() => [
                                 </template>
                                 <span v-else>{{ $t('home.rooms.checkDates') }}</span>
                             </p>
-                            <Link :href="`/book?room_type=${featured.id}`" class="btn-reserve">{{ $t('home.rooms.reserve') }}</Link>
+                            <Link v-if="bookingEnabled" :href="`/book?room_type=${featured.id}`" class="btn-reserve">{{ $t('home.rooms.reserve') }}</Link>
                         </div>
                     </div>
                 </div>
@@ -184,7 +187,7 @@ const features = computed(() => [
                             </div>
 
                             <div class="mt-auto pt-5 border-t border-driftwood/15">
-                                <Link :href="`/book?room_type=${room.id}`" class="btn-reserve w-full">
+                                <Link v-if="bookingEnabled" :href="`/book?room_type=${room.id}`" class="btn-reserve w-full">
                                     {{ $t('home.rooms.reserve') }}
                                 </Link>
                             </div>
@@ -200,7 +203,7 @@ const features = computed(() => [
                 <span class="eyebrow text-brass-light">{{ $t('home.cta.eyebrow') }}</span>
                 <h2 class="text-display text-bone mt-3">{{ $t('home.cta.heading') }}</h2>
                 <p class="text-lead text-bone/60 mt-3">{{ $t('home.cta.subheading') }}</p>
-                <Link href="/book" class="btn-reserve-light mt-8 px-8 py-3.5">
+                <Link v-if="bookingEnabled" href="/book" class="btn-reserve-light mt-8 px-8 py-3.5">
                     {{ $t('home.cta.bookNow') }}
                 </Link>
             </div>

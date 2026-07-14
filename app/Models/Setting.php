@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Tenancy\TenantContext;
+use App\Support\TenantKey;
 use Illuminate\Support\Facades\Cache;
 
 class Setting extends TenantModel
@@ -80,6 +80,6 @@ class Setting extends TenantModel
 
     public static function cacheKey(): string
     {
-        return 'app.settings.'.(app(TenantContext::class)->id() ?? 'global');
+        return TenantKey::make('app.settings');
     }
 }

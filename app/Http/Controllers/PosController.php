@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\FolioItem;
+use App\Models\InventoryMovement;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\PosOrder;
@@ -11,6 +12,8 @@ use App\Models\PosOrderItem;
 use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Setting;
+use App\Models\Warehouse;
+use App\Services\InventoryLedger;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,6 +23,8 @@ use Inertia\Response;
 
 class PosController extends Controller
 {
+    public function __construct(private readonly InventoryLedger $inventoryLedger) {}
+
     public function index(Request $request): Response
     {
         $query = PosOrder::select(
@@ -75,16 +80,37 @@ class PosController extends Controller
             ->groupBy('menu_item_id')
             ->pluck('quantity_sold', 'menu_item_id');
 
-        $menu = MenuCategory::with(['items' => fn ($query) => $query->where('is_available', true)])
+        $warehouses = Warehouse::where('is_active', true)->get()->keyBy('id');
+        $defaultWarehouse = $warehouses->firstWhere('is_default', true) ?? $warehouses->first();
+        $warehouseStocks = InventoryMovement::query()
+            ->selectRaw('warehouse_id, inventory_item_id, SUM(quantity) as quantity')
+            ->groupBy('warehouse_id', 'inventory_item_id')->get()
+            ->groupBy('warehouse_id')->map(fn ($rows) => $rows->pluck('quantity', 'inventory_item_id'));
+
+        $menu = MenuCategory::with(['items' => fn ($query) => $query
+            ->where('is_available', true)->with('inventoryComponents')])
             ->orderBy('sort_order')
             ->get()
-            ->each(function (MenuCategory $category) use ($salesCounts) {
-                $category->items->each(fn (MenuItem $item) => $item->setAttribute(
-                    'sales_count',
-                    (int) ($salesCounts[$item->id] ?? 0)
-                ));
-            });
+            ->each(function (MenuCategory $category) use ($salesCounts, $warehouses, $defaultWarehouse, $warehouseStocks) {
+                $warehouse = $warehouses->get($category->warehouse_id)
+                    ?? $warehouses->firstWhere('type', $category->outlet)
+                    ?? $defaultWarehouse;
+                $category->items->each(function (MenuItem $item) use ($salesCounts, $warehouse, $warehouseStocks) {
+                    $components = $item->inventoryComponents;
+                    $available = $components->isEmpty() || ! $warehouse
+                        ? null
+                        : (int) floor($components->min(function ($component) use ($warehouse, $warehouseStocks) {
+                            $stock = (float) ($warehouseStocks->get($warehouse->id)?->get($component->inventory_item_id) ?? 0);
 
+                            return $stock / max(0.0001, (float) $component->quantity);
+                        }));
+                    $item->setAttribute('sales_count', (int) ($salesCounts[$item->id] ?? 0));
+                    $item->setAttribute('inventory_tracked', $components->isNotEmpty());
+                    $item->setAttribute('available_portions', $available);
+                    $item->setAttribute('inventory_warehouse', $warehouse?->name);
+                    $item->unsetRelation('inventoryComponents');
+                });
+            });
         return Inertia::render('Pos/Index', [
             'orders' => $query->paginate(15),
             'menu' => $menu,
@@ -202,6 +228,11 @@ class PosController extends Controller
                     'type' => $posOrder->items->first()?->menuItem?->category?->name === 'Pije' ? 'bar' : 'restaurant',
                     'charge_date' => today(),
                 ]);
+            }
+
+            $posOrder->loadMissing('items.menuItem.inventoryComponents');
+            foreach ($posOrder->items as $orderItem) {
+                $this->inventoryLedger->consumePosOrderItem($orderItem, $request->user()->id);
             }
         });
 

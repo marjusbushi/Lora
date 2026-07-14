@@ -126,6 +126,8 @@ class FinanceBillsTest extends TestCase
         $rec = $this->role('receptionist');
         $supplier = $this->supplier();
 
+        $this->actingAs($rec)->get(route('finance.bills.create'))->assertForbidden();
+
         $this->actingAs($rec)->post(route('finance.bills.store'), [
             'supplier_id' => $supplier->id, 'category' => 'Të tjera',
             'issue_date' => '2026-07-10', 'currency' => 'EUR', 'total' => 50,
@@ -194,8 +196,25 @@ class FinanceBillsTest extends TestCase
                 ->where('summary.overdue_count', 0)
                 ->where('summary.due_soon_count', 0)
                 ->has('priorities', 1)
-                ->has('suppliers')
                 ->has('categories'));
+    }
+
+    public function test_bill_create_is_a_dedicated_page_with_document_options(): void
+    {
+        $this->withoutVite();
+        $manager = $this->role('manager');
+        $supplier = $this->supplier();
+
+        $this->actingAs($manager)->get(route('finance.bills.create'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Finance/BillCreate')
+                ->where('suppliers.0.id', $supplier->id)
+                ->where('suppliers.0.payment_terms_days', 14)
+                ->has('categories')
+                ->has('inventoryItems', 0)
+                ->has('warehouses', 1)
+                ->where('can.manageBills', true));
     }
 
     public function test_bills_page_filters_overdue_rows_by_supplier_and_category(): void

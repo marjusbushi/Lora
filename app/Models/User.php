@@ -59,7 +59,9 @@ class User extends Authenticatable
     {
         $tenantId = app(TenantContext::class)->id();
 
-        if ($tenantId === null && app()->runningInConsole()) {
+        // Only tests fall back to the single migrated tenant — a console run
+        // without context must NOT silently attach users to the first hotel.
+        if ($tenantId === null && app()->environment('testing')) {
             $tenantId = Tenant::query()->active()->orderBy('id')->value('id');
         }
 
@@ -97,11 +99,39 @@ class User extends Authenticatable
         return $this->belongsTo(Tenant::class, 'current_tenant_id');
     }
 
-    /** Shared technical identity, attached separately to every active hotel. */
+    /** The legacy shared system identity of the first migrated hotel. */
+    public const LEGACY_SYSTEM_EMAIL = 'system@villamucho.local';
+
+    /** True for any hotel's technical booking identity (legacy or per-tenant). */
+    public static function isSystemEmail(?string $email): bool
+    {
+        return $email === self::LEGACY_SYSTEM_EMAIL
+            || ($email !== null && preg_match('/^system\+t\d+@lora\.local$/', $email) === 1);
+    }
+
+    /**
+     * Technical identity that public/OTA bookings are attributed to — one PER
+     * HOTEL, so tenants never share a creator account. The first migrated
+     * hotel keeps its historic legacy identity (old reservations' created_by
+     * stays meaningful); every other hotel gets its own system+t{id} user.
+     */
     public static function systemForCurrentTenant(): self
     {
-        $user = static::withoutGlobalScopes()->withTrashed()->firstOrCreate(
-            ['email' => 'system@villamucho.local'],
+        $tenantId = app(TenantContext::class)->id();
+
+        $user = null;
+        if ($tenantId !== null) {
+            $legacy = static::withoutGlobalScopes()->withTrashed()
+                ->where('email', self::LEGACY_SYSTEM_EMAIL)
+                ->first();
+
+            if ($legacy && $legacy->tenants()->whereKey($tenantId)->exists()) {
+                $user = $legacy;
+            }
+        }
+
+        $user ??= static::withoutGlobalScopes()->withTrashed()->firstOrCreate(
+            ['email' => $tenantId === null ? self::LEGACY_SYSTEM_EMAIL : "system+t{$tenantId}@lora.local"],
             ['name' => 'Website Booking', 'password' => Str::random(40)],
         );
 
@@ -109,7 +139,7 @@ class User extends Authenticatable
             $user->restore();
         }
 
-        $tenantId = app(TenantContext::class)->id() ?? $user->current_tenant_id;
+        $tenantId = $tenantId ?? $user->current_tenant_id;
         if ($tenantId) {
             $user->tenants()->syncWithoutDetaching([
                 $tenantId => ['is_owner' => false, 'is_active' => true],

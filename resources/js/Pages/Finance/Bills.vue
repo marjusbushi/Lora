@@ -11,6 +11,7 @@ import {
     Clock3,
     Download,
     Plus,
+    PackagePlus,
     ReceiptText,
     Search,
     Users,
@@ -25,14 +26,12 @@ import { money } from './financeShared.js';
 
 const props = defineProps({
     bills: Object,
-    suppliers: Array,
     categories: Array,
     accounts: Array,
     byCategory: Object,
     filters: Object,
     summary: Object,
     priorities: Array,
-    fxRate: Number,
     can: Object,
 });
 
@@ -150,68 +149,8 @@ function exportVisibleBills() {
     URL.revokeObjectURL(url);
 }
 
-// -- new bill ---------------------------------------------------------------
-const showNew = ref(false);
-const todayString = new Date().toISOString().slice(0, 10);
-const form = useForm({
-    supplier_id: null,
-    number: '',
-    category: props.categories[0],
-    issue_date: todayString,
-    due_date: null,
-    currency: 'ALL',
-    fx_rate: props.fxRate,
-    total: null,
-    notes: '',
-});
-const showSupplierCreate = ref(false);
-const showCategoryCreate = ref(false);
-const supplierForm = useForm({
-    name: '',
-    nipt: '',
-    category: '',
-    phone: '',
-    email: '',
-    address: '',
-    payment_terms_days: 0,
-    is_active: true,
-});
-const categoryForm = useForm({ name: '' });
-
-const selectedSupplier = computed(() => props.suppliers.find((supplier) => supplier.id === Number(form.supplier_id)));
-const billTotalBase = computed(() => {
-    const total = Number(form.total || 0);
-    if (form.currency === 'EUR') return total;
-    const rate = Number(form.fx_rate || 0);
-    return rate > 0 ? total / rate : 0;
-});
-
-function resetBillForm() {
-    form.reset();
-    form.category = props.categories[0];
-    form.issue_date = todayString;
-    form.currency = 'ALL';
-    form.fx_rate = props.fxRate;
-    form.clearErrors();
-}
-
-function closeNew() {
-    showNew.value = false;
-    showSupplierCreate.value = false;
-    showCategoryCreate.value = false;
-    form.clearErrors();
-    supplierForm.clearErrors();
-    categoryForm.clearErrors();
-}
-
-function submit() {
-    form.post(route('finance.bills.store'), {
-        preserveScroll: true,
-        onSuccess: () => {
-            showNew.value = false;
-            resetBillForm();
-        },
-    });
+function receiveStock(bill) {
+    router.post(route('finance.bills.receive', bill.id), {}, { preserveScroll: true });
 }
 
 function openSupplierCreate() {
@@ -305,9 +244,15 @@ function submitPay() {
                     :href="route('finance.suppliers')"
                     class="inline-flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-3.5 py-2 text-body-sm font-semibold text-neutral-700 no-underline shadow-sm hover:border-neutral-300 hover:bg-neutral-50"
                 >
-                    <Users class="h-4 w-4" /> {{ $t('admin.generated.k_4473b23d7169') }} </Link>
-                <Button v-if="can.manageBills" @click="showNew = true">
-                    <Plus class="h-4 w-4" /> {{ $t('admin.generated.k_db3efa565cd7') }} </Button>
+                    <Users class="h-4 w-4" /> {{ $t('admin.sidebar.suppliers') }}
+                </Link>
+                <Link
+                    v-if="can.manageBills"
+                    :href="route('finance.bills.create')"
+                    class="inline-flex items-center gap-2 rounded-md bg-accent-600 px-4 py-2 text-body-sm font-medium text-white no-underline shadow-sm transition-colors hover:bg-accent-700"
+                >
+                    <Plus class="h-4 w-4" /> {{ $t('admin.finance.billCreate.breadcrumbNew') }}
+                </Link>
             </template>
         </PageHeader>
 
@@ -403,6 +348,7 @@ function submitPay() {
                                         <td class="px-5 py-3">
                                             <Link :href="route('finance.suppliers', { supplier_id: bill.supplier_id })" class="block font-bold text-primary-900 no-underline hover:text-accent-700 hover:underline">{{ bill.supplier }}</Link>
                                             <span class="mt-0.5 block text-tiny text-neutral-400">{{ bill.number || '#' + bill.id }} · {{ formatDate(bill.issue_date) }}</span>
+                                            <span v-if="bill.items_count" class="mt-1 inline-flex items-center gap-1 rounded-full bg-info-50 px-2 py-0.5 text-tiny font-semibold text-info-700"><PackagePlus class="h-3 w-3" /> {{ bill.received_items_count }}/{{ bill.items_count }} stok</span>
                                         </td>
                                         <td class="px-4 py-3"><span class="rounded-md bg-neutral-100 px-2 py-1 text-tiny font-bold text-neutral-500">{{ bill.category }}</span></td>
                                         <td class="px-4 py-3 whitespace-nowrap">
@@ -415,9 +361,10 @@ function submitPay() {
                                         </td>
                                         <td class="px-4 py-3 text-right whitespace-nowrap font-bold" :class="bill.remaining_base > 0 ? 'text-error-600' : 'text-accent-700'">{{ money(bill.remaining_base) }}</td>
                                         <td class="px-4 py-3"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-tiny font-bold" :class="statusPill[bill.status]?.cls"><i class="h-1.5 w-1.5 rounded-full bg-current" />{{ statusPill[bill.status]?.text }}</span></td>
-                                        <td class="px-5 py-3 text-right">
+                                        <td class="px-5 py-3 text-right"><div class="flex justify-end gap-2">
+                                            <Button v-if="can.manageInventory && bill.items_count > bill.received_items_count" size="sm" variant="success" @click="receiveStock(bill)">{{ $t('inventory.bill.receiveNow') }}</Button>
                                             <Button v-if="can.payBills && bill.status !== 'paid'" size="sm" variant="outline" @click="openPay(bill)">{{ $t('admin.generated.k_1be1a3546eed') }}</Button>
-                                        </td>
+                                        </div></td>
                                     </tr>
                                     <tr v-if="!bills.data.length">
                                         <td colspan="7" class="px-5 py-12 text-center">
@@ -484,175 +431,6 @@ function submitPay() {
                 </aside>
             </div>
         </div>
-
-        <!-- New bill modal -->
-        <Modal :show="showNew" :title="$t('admin.generated.k_050d3287f387')" max-width="2xl" @close="closeNew">
-            <div class="-mx-5 -my-4 grid lg:grid-cols-[minmax(0,1.65fr),minmax(230px,.75fr)]">
-                <div class="space-y-5 p-5">
-                    <section>
-                        <h4 class="mb-3 text-tiny font-bold uppercase tracking-wide text-neutral-400">{{ $t('admin.generated.k_041acfaa230b') }}</h4>
-                        <div class="grid gap-3 sm:grid-cols-2">
-                            <div>
-                                <div class="mb-1 flex items-center justify-between gap-2">
-                                    <label class="text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_3265a32a5fd6') }}</label>
-                                    <button v-if="can.manageSuppliers" type="button" class="inline-flex items-center gap-1 text-tiny font-bold text-accent-700 hover:text-accent-800" @click="openSupplierCreate">
-                                        <Plus class="h-3.5 w-3.5" /> {{ $t('admin.generated.k_5be76aee92a3') }} </button>
-                                </div>
-                                <select v-model="form.supplier_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
-                                    <option :value="null" disabled>{{ $t('admin.generated.k_672f8df460b8') }}</option>
-                                    <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option>
-                                </select>
-                                <p v-if="form.errors.supplier_id" class="mt-1 text-tiny text-error-600">{{ form.errors.supplier_id }}</p>
-                            </div>
-                            <div>
-                                <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>{{ $t('admin.generated.k_32b6ab32f7cc') }}</span><small class="font-normal text-neutral-400">{{ $t('admin.generated.k_eebd8a270e2c') }}</small></label>
-                                <TextInput v-model="form.number" class="w-full" :placeholder="$t('admin.generated.k_b209b413919b')" />
-                            </div>
-                            <div v-if="showSupplierCreate" class="space-y-3 rounded-lg border border-accent-200 bg-accent-50/50 p-4 sm:col-span-2">
-                                <div class="flex items-start justify-between gap-3">
-                                    <div>
-                                        <h5 class="text-body-sm font-bold text-primary-900">{{ $t('admin.generated.k_9f33dcf8e0b6') }}</h5>
-                                        <p class="mt-0.5 text-tiny text-neutral-500">{{ $t('admin.generated.k_d1a78015a317') }}</p>
-                                    </div>
-                                    <button type="button" class="text-tiny font-semibold text-neutral-500 hover:text-neutral-700" @click="showSupplierCreate = false">{{ $t('admin.generated.k_9de52ccf8141') }}</button>
-                                </div>
-                                <div class="grid gap-3 sm:grid-cols-2">
-                                    <div class="sm:col-span-2">
-                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('admin.generated.k_442d0306797e') }}</label>
-                                        <TextInput v-model="supplierForm.name" class="w-full" :placeholder="$t('admin.generated.k_22347661fc1e')" />
-                                        <p v-if="supplierForm.errors.name" class="mt-1 text-tiny text-error-600">{{ supplierForm.errors.name }}</p>
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('admin.generated.k_3690fd7be122') }} <span class="font-normal text-neutral-400">{{ $t('admin.generated.k_2b64f36cacb7') }}</span></label>
-                                        <TextInput v-model="supplierForm.nipt" class="w-full" :placeholder="$t('admin.generated.k_f0043d67bfbb')" />
-                                        <p v-if="supplierForm.errors.nipt" class="mt-1 text-tiny text-error-600">{{ supplierForm.errors.nipt }}</p>
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('admin.generated.k_577ba88f4a88') }}</label>
-                                        <select v-model="supplierForm.category" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
-                                            <option value="">—</option>
-                                            <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('admin.generated.k_05f37004640c') }}</label>
-                                        <TextInput v-model="supplierForm.phone" class="w-full" placeholder="+355…" />
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('admin.generated.k_608bca908745') }}</label>
-                                        <TextInput v-model="supplierForm.email" type="email" class="w-full" :placeholder="$t('admin.generated.k_3b53a6ed423c')" />
-                                        <p v-if="supplierForm.errors.email" class="mt-1 text-tiny text-error-600">{{ supplierForm.errors.email }}</p>
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('admin.generated.k_fd560c8036d5') }}</label>
-                                        <TextInput v-model="supplierForm.address" class="w-full" />
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('admin.generated.k_718e685cffb4') }}</label>
-                                        <div class="relative">
-                                            <TextInput v-model="supplierForm.payment_terms_days" type="number" min="0" max="365" class="w-full pr-12" />
-                                            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-tiny text-neutral-400">{{ $t('admin.generated.k_33334d3dfe37') }}</span>
-                                        </div>
-                                        <p v-if="supplierForm.errors.payment_terms_days" class="mt-1 text-tiny text-error-600">{{ supplierForm.errors.payment_terms_days }}</p>
-                                    </div>
-                                </div>
-                                <div class="flex justify-end gap-2">
-                                    <Button variant="ghost" size="sm" @click="showSupplierCreate = false">{{ $t('admin.generated.k_a6d5ed67d888') }}</Button>
-                                    <Button size="sm" :loading="supplierForm.processing" :disabled="!supplierForm.name.trim()" @click="submitSupplier">{{ $t('admin.generated.k_62f4d1826b66') }}</Button>
-                                </div>
-                            </div>
-                            <div>
-                                <div class="mb-1 flex items-center justify-between gap-2">
-                                    <label class="text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_577ba88f4a88') }}</label>
-                                    <button v-if="can.manageBills" type="button" class="inline-flex items-center gap-1 text-tiny font-bold text-accent-700 hover:text-accent-800" @click="openCategoryCreate">
-                                        <Plus class="h-3.5 w-3.5" /> {{ $t('admin.generated.k_dbd78eea9291') }} </button>
-                                </div>
-                                <select v-model="form.category" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
-                                    <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_ad22e550fa06') }}</label>
-                                <select v-model="form.currency" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
-                                    <option value="ALL">{{ $t('admin.generated.k_5aa6fa033044') }}</option>
-                                    <option value="EUR">{{ $t('admin.generated.k_f3f82a540b59') }}</option>
-                                </select>
-                            </div>
-                            <div v-if="showCategoryCreate" class="rounded-lg border border-accent-200 bg-accent-50/50 p-4 sm:col-span-2">
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
-                                    <div class="min-w-0 flex-1">
-                                        <label class="mb-1 block text-body-sm font-bold text-primary-900">{{ $t('admin.generated.k_f1890f388920') }}</label>
-                                        <TextInput v-model="categoryForm.name" class="w-full" :placeholder="$t('admin.generated.k_c031bff636d1')" @keyup.enter="submitCategory" />
-                                        <p v-if="categoryForm.errors.name" class="mt-1 text-tiny text-error-600">{{ categoryForm.errors.name }}</p>
-                                        <p v-else class="mt-1 text-tiny text-neutral-500">{{ $t('admin.generated.k_6341ce4547d0') }}</p>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <Button variant="ghost" size="sm" @click="showCategoryCreate = false">{{ $t('admin.generated.k_a6d5ed67d888') }}</Button>
-                                        <Button size="sm" :loading="categoryForm.processing" :disabled="!categoryForm.name.trim()" @click="submitCategory">{{ $t('admin.generated.k_62f4d1826b66') }}</Button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div>
-                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_834bfbf40e49') }}</label>
-                                <TextInput v-model="form.issue_date" type="date" class="w-full" />
-                                <p v-if="form.errors.issue_date" class="mt-1 text-tiny text-error-600">{{ form.errors.issue_date }}</p>
-                            </div>
-                            <div>
-                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_8ca828cf59a0') }}</label>
-                                <TextInput v-model="form.due_date" type="date" class="w-full" />
-                                <p v-if="form.errors.due_date" class="mt-1 text-tiny text-error-600">{{ form.errors.due_date }}</p>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="border-t border-neutral-100 pt-5">
-                        <h4 class="mb-3 text-tiny font-bold uppercase tracking-wide text-neutral-400">{{ $t('admin.generated.k_5c2ce112243e') }}</h4>
-                        <div class="grid gap-3 sm:grid-cols-2">
-                            <div>
-                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_fe7e86c8fe2c') }}{{ form.currency }})</label>
-                                <TextInput v-model="form.total" type="number" min="0.01" step="0.01" class="w-full" placeholder="0.00" />
-                                <p v-if="form.errors.total" class="mt-1 text-tiny text-error-600">{{ form.errors.total }}</p>
-                            </div>
-                            <div :class="form.currency === 'EUR' && 'opacity-45'">
-                                <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>{{ $t('admin.generated.k_3844e08a59f4') }}</span><small class="font-normal text-neutral-400">{{ $t('admin.generated.k_e378c67ec7c9') }}</small></label>
-                                <TextInput v-model="form.fx_rate" type="number" min="1" step="0.0001" class="w-full" :disabled="form.currency === 'EUR'" />
-                                <p v-if="form.currency === 'ALL'" class="mt-1 text-tiny text-neutral-400">{{ $t('admin.generated.k_986554b5dee5') }}</p>
-                                <p v-if="form.errors.fx_rate" class="mt-1 text-tiny text-error-600">{{ form.errors.fx_rate }}</p>
-                            </div>
-                            <div class="sm:col-span-2">
-                                <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>{{ $t('admin.generated.k_8db14a4d30c3') }}</span><small class="font-normal text-neutral-400">{{ $t('admin.generated.k_895e35b18992') }}</small></label>
-                                <textarea v-model="form.notes" rows="3" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('admin.generated.k_5982c3ea5565')" />
-                                <p v-if="form.errors.notes" class="mt-1 text-tiny text-error-600">{{ form.errors.notes }}</p>
-                            </div>
-                        </div>
-                    </section>
-                </div>
-
-                <aside class="border-t border-neutral-200 bg-neutral-50 p-5 lg:border-l lg:border-t-0">
-                    <h4 class="text-body-sm font-bold text-primary-900">{{ $t('admin.generated.k_6341a5b56435') }}</h4>
-                    <div class="mt-3 divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white px-3">
-                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">{{ $t('admin.generated.k_3265a32a5fd6') }}</span><b class="text-right text-primary-900">{{ selectedSupplier?.name || '—' }}</b></div>
-                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">{{ $t('admin.generated.k_7af9506ad5a9') }}</span><b class="text-right text-primary-900">{{ form.number || $t('admin.generated.k_96b10100b8c8') }}</b></div>
-                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">{{ $t('admin.generated.k_3150b7f0ee0d') }}</span><b class="text-right text-primary-900">{{ formatDate(form.due_date) }}</b></div>
-                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">{{ $t('admin.generated.k_e63b3779056d') }}</span><b class="text-right text-primary-900">{{ form.currency === 'ALL' ? (form.fx_rate || '—') : $t('admin.generated.k_bef58060168d') }}</b></div>
-                    </div>
-                    <div class="mt-3 rounded-lg bg-accent-50 p-3">
-                        <span class="text-tiny text-accent-800">{{ $t('admin.generated.k_a84ffda16628') }}</span>
-                        <strong class="mt-1 block text-h2 tabular-nums text-accent-700">{{ money(billTotalBase) }}</strong>
-                    </div>
-                    <p class="mt-3 rounded-lg border border-warning-200 bg-warning-50 p-3 text-tiny leading-relaxed text-warning-800">{{ $t('admin.generated.k_72ffa8e796a8') }}</p>
-                </aside>
-            </div>
-            <template #footer>
-                <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
-                    <p class="mr-auto text-tiny text-neutral-400">{{ $t('admin.generated.k_7bde3a9ce83f') }}</p>
-                    <div class="flex gap-2">
-                        <Button variant="ghost" @click="closeNew">{{ $t('admin.generated.k_a6d5ed67d888') }}</Button>
-                        <Button :loading="form.processing" :disabled="!form.supplier_id || !form.total || !form.issue_date" @click="submit">{{ $t('admin.generated.k_2c7a6722a90c') }}</Button>
-                    </div>
-                </div>
-            </template>
-        </Modal>
 
         <!-- Pay modal -->
         <Modal :show="!!paying" :title="$t('admin.generated.k_f8dbe9cde071')" max-width="xl" @close="closePay">

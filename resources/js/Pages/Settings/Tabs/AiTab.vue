@@ -10,6 +10,14 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 const props = defineProps({ settings: Object, toasts: Object });
 
 const form = useForm({ gemini_key: '' });
+const contextForm = useForm({ hotel_context: props.settings.ai_hotel_context || '' });
+
+function saveContext() {
+    contextForm.put(route('settings.ai'), {
+        preserveScroll: true,
+        onSuccess: () => props.toasts?.success('Konteksti i hotelit u ruajt.'),
+    });
+}
 
 function submit() {
     if (!form.gemini_key.trim()) {
@@ -83,6 +91,26 @@ function removeKey() {
 {{ $t('admin.generated.k_b86ec194f1c4') }} <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener"
                        class="text-accent-600 underline hover:text-accent-700">{{ $t('admin.generated.k_7c8b4ad51b97') }}</a>
 {{ $t('admin.generated.k_f66ce5e93e16') }} </p>
+            </form>
+
+            <!-- Hotel context for richer AI reasoning -->
+            <form @submit.prevent="saveContext" class="space-y-3 border-t border-neutral-200 pt-5">
+                <FormGroup
+                    :label="$t('admin.ai.hotelContextOptional')"
+                    :error="contextForm.errors.hotel_context"
+                >
+                    <textarea
+                        v-model="contextForm.hotel_context"
+                        rows="3"
+                        maxlength="1000"
+                        class="w-full rounded-lg border-neutral-300 text-sm"
+                        :placeholder="$t('admin.ai.hotelContextPlaceholder')"
+                    />
+                </FormGroup>
+                <p class="text-body-xs text-neutral-500">
+                    {{ $t('admin.ai.hotelContextHint') }}
+                </p>
+                <Button type="submit" variant="outline" size="sm" :loading="contextForm.processing">{{ $t('admin.ai.saveContext') }}</Button>
             </form>
         </div>
     </Card>

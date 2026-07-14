@@ -28,6 +28,8 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
 const widthClass = computed(() => {
     return {
         48: 'w-48',
+        64: 'w-64',
+        72: 'w-72',
     }[props.width.toString()];
 });
 

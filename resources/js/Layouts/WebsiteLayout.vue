@@ -22,7 +22,8 @@ function closeMenu() {
 }
 const page = usePage();
 const settings = computed(() => page.props.settings || {});
-const hotelName = settings.value.hotel_name || 'Villa Mucho';
+const bookingEnabled = computed(() => page.props.modules?.booking_engine === true);
+const hotelName = computed(() => settings.value.hotel_name || 'Hotel');
 const logo = computed(() => settings.value.logo ? `/storage/${settings.value.logo}` : null);
 
 // Contact details → actionable links
@@ -50,13 +51,14 @@ onMounted(() => {
 });
 onUnmounted(() => window.removeEventListener('scroll', onScroll));
 
-const navLinks = [
+const allNavLinks = [
     { key: 'home', href: '/' },
     { key: 'rooms', href: '/rooms' },
     { key: 'book', href: '/book' },
     { key: 'about', href: '/about' },
     { key: 'contact', href: '/contact' },
 ];
+const navLinks = computed(() => allNavLinks.filter((link) => link.key !== 'book' || bookingEnabled.value));
 
 function isActive(href) {
     if (href === '/') return page.url === '/';
@@ -109,7 +111,7 @@ function isActive(href) {
                         >
                             {{ $t('nav.' + link.key) }}
                         </Link>
-                        <Link href="/book" class="btn-reserve ml-3 !px-5 !py-2">
+                        <Link v-if="bookingEnabled" href="/book" class="btn-reserve ml-3 !px-5 !py-2">
                             {{ $t('nav.reserve') }}
                         </Link>
                         <LanguageSwitcher :class="['ml-3', solid ? 'text-ink' : 'text-bone']" />
@@ -146,7 +148,7 @@ function isActive(href) {
                     >
                         {{ $t('nav.' + link.key) }}
                     </Link>
-                    <Link href="/book" class="btn-reserve mt-3 mx-3 flex px-4 py-3 text-center" @click="mobileMenu = false">
+                    <Link v-if="bookingEnabled" href="/book" class="btn-reserve mt-3 mx-3 flex px-4 py-3 text-center" @click="mobileMenu = false">
                         {{ $t('nav.reserve') }}
                     </Link>
                     <div class="mt-4 px-3 text-ink"><LanguageSwitcher /></div>

@@ -48,6 +48,7 @@ const showAllRooms = ref(false);
 const loadedAt = new Date();
 
 const sharedPermissions = computed(() => page.props.auth?.user?.permissions || []);
+const activeModules = computed(() => page.props.modules || {});
 
 function hasPermission(name, ...fallbackNames) {
     const names = [name, ...fallbackNames];
@@ -71,10 +72,11 @@ function hasPermission(name, ...fallbackNames) {
 const canViewReservations = computed(() => hasPermission('view_reservations'));
 const canCreateReservations = computed(() => hasPermission('create_reservations'));
 const canUpdateReservations = computed(() => hasPermission('update_reservations'));
-const canViewHousekeeping = computed(() => hasPermission('view_housekeeping'));
-const canViewPos = computed(() => hasPermission('view_pos', 'view_pos_orders'));
+const canViewHousekeeping = computed(() => hasPermission('view_housekeeping') && activeModules.value.housekeeping === true);
+const canViewPos = computed(() => hasPermission('view_pos', 'view_pos_orders') && activeModules.value.pos === true);
 const canViewFinancials = computed(() => hasPermission('view_financials', 'view_reports'));
 const canViewPricing = computed(() => hasPermission('view_pricing'));
+const canViewSmartPricing = computed(() => canViewPricing.value && activeModules.value.smart_pricing === true);
 
 const number = (value) => {
     const parsed = Number(value);
@@ -650,7 +652,7 @@ function topChannelLabel(channel) {
                         </p>
                     </div>
                     <Button
-                        v-if="canViewPricing"
+                        v-if="canViewSmartPricing"
                         variant="ghost"
                         size="sm"
                         @click="router.visit(route('pricing.smart.index'))"

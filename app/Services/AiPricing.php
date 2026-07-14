@@ -8,6 +8,7 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\WebsiteSearchLog;
+use App\Support\TenantKey;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -22,7 +23,28 @@ use Illuminate\Support\Facades\Cache;
  */
 class AiPricing
 {
-    private const HOTEL_CONTEXT = 'Small beach hotel "Villa Mucho" in Ksamil, Sarandë, Albania (8 rooms; guests mostly Albanian, Italian, Greek, Kosovar; peak July–August, Ferragosto floods the town).';
+    /**
+     * Built per-tenant from the hotel's own settings + live room count, so
+     * the model reasons about THIS hotel — never a hardcoded property.
+     */
+    private static function hotelContext(): string
+    {
+        $name = (string) (Setting::get('hotel.name') ?: config('app.name'));
+        $address = trim((string) (Setting::get('hotel.address') ?: ''));
+        $rooms = Room::query()->count();
+
+        // Owner-written flavor (guest mix, seasonality, local anchors) makes the
+        // model's explanations far richer — Settings → Asistenti AI.
+        $custom = trim((string) (Setting::get('ai.hotel_context') ?: ''));
+
+        return sprintf(
+            'Hotel "%s"%s (%d rooms).%s',
+            $name,
+            $address !== '' ? ', '.$address : '',
+            $rooms,
+            $custom !== '' ? ' '.$custom : '',
+        );
+    }
 
     public static function configured(): bool
     {
@@ -53,12 +75,12 @@ class AiPricing
             'occupancy_pct' => $day['occupancy_pct'],
         ];
 
-        $cacheKey = 'ai.explain.'.md5(json_encode($payload));
+        $cacheKey = TenantKey::make('ai.explain.'.md5(json_encode($payload)));
 
         return Cache::remember($cacheKey, now()->addDays(7), function () use ($payload) {
             $out = app(GeminiClient::class)->structured(
                 'You explain hotel price suggestions to a non-technical Albanian owner. '
-                .self::HOTEL_CONTEXT.' You are given the DETERMINISTIC factor breakdown that '
+                .self::hotelContext().' You are given the DETERMINISTIC factor breakdown that '
                 .'produced a suggested price. Write ONE short, warm, concrete sentence in '
                 .'ALBANIAN that explains WHY, citing the strongest factors in human terms. '
                 .'Never invent numbers not present in the data. Always call submit_explanation.',
@@ -96,11 +118,12 @@ class AiPricing
             ->values()->all();
 
         $out = app(GeminiClient::class)->structured(
-            'You maintain the demand-events calendar for pricing. '.self::HOTEL_CONTEXT.' '
+            'You maintain the demand-events calendar for pricing. '.self::hotelContext().' '
             .'Suggest REAL demand-relevant events in the given window that are MISSING from the '
-            .'existing list: Albanian & Kosovar public/religious holidays (incl. Bajram dates for '
-            .'the actual year), Italian holidays that push Ksamil demand, Saranda/Ksamil festivals, '
-            .'diaspora waves. For each: exact dates, a conservative uplift_pct suggestion (5-20, or '
+            .'existing list: national public/religious holidays of the hotel\'s country and its '
+            .'main guest markets (incl. movable dates for the actual year), local festivals and '
+            .'events around the hotel\'s own location, diaspora/holiday travel waves. For each: '
+            .'exact dates, a conservative uplift_pct suggestion (5-20, or '
             .'null if purely informational), and a one-line Albanian reason. Skip anything already '
             .'covered. Always call submit_event_suggestions.',
             json_encode([
@@ -151,7 +174,7 @@ class AiPricing
     {
         $out = app(GeminiClient::class)->structured(
             'You write the weekly pricing report for a non-technical Albanian hotel owner. '
-            .self::HOTEL_CONTEXT.' You are given DETERMINISTIC stats (occupancy, engine '
+            .self::hotelContext().' You are given DETERMINISTIC stats (occupancy, engine '
             .'suggestions, lost searches, applied prices). Write in ALBANIAN: a short title, '
             .'a friendly 4-8 sentence body (what happened, what stands out, what to do this '
             .'week), and 2-4 one-line highlights. Cite only numbers present in the data. '
@@ -216,7 +239,7 @@ class AiPricing
 
         $out = app(GeminiClient::class)->structured(
             'You answer a hotel owner\'s pricing questions in ALBANIAN, grounded STRICTLY in '
-            .'the provided deterministic engine data. '.self::HOTEL_CONTEXT.' If the data does '
+            .'the provided deterministic engine data. '.self::hotelContext().' If the data does '
             .'not contain the answer, say so honestly. Keep it to 2-4 sentences, concrete, '
             .'citing the dates/factors from the data. You may give advice, but NEVER present a '
             .'price of your own invention as the system\'s. Always call submit_answer.',

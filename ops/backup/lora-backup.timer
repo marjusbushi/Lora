@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Lora PMS offsite backup every night
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Europe/Tirane
+RandomizedDelaySec=15m
+Persistent=true
+Unit=lora-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -8,19 +8,23 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\GuestController;
 use App\Http\Controllers\GuestMergeController;
+use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\MaintenanceController;
+use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosShiftController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
-use App\Http\Controllers\MessagesController;
-use App\Http\Controllers\MaintenanceController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SmartPricingController;
+use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
+use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantController;
+use App\Http\Controllers\TenantHandoffController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebsiteController;
 use Illuminate\Http\Request;
@@ -28,9 +32,17 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 // ===== PUBLIC WEBSITE =====
-// Root is host-aware: the admin subdomain (admin.villamucho.com) goes straight
-// to the back-office; every other host (apex, www, localhost) gets the public site.
+// Root is host-aware: Lora product hosts get the marketing site, the admin
+// subdomain goes to the back-office, and hotel domains keep their booking site.
 Route::get('/', function (Request $request) {
+    if (in_array(strtolower($request->getHost()), config('lora.marketing_hosts', []), true)) {
+        return Inertia::render('Marketing/Home');
+    }
+
+    if (in_array(strtolower($request->getHost()), config('lora.dedicated_control_panel_hosts', []), true)) {
+        return redirect()->route($request->user()?->is_super_admin ? 'super-admin.dashboard' : 'login');
+    }
+
     if (str_starts_with($request->getHost(), 'admin.')) {
         return redirect()->route('dashboard');
     }
@@ -38,17 +50,17 @@ Route::get('/', function (Request $request) {
     return app(WebsiteController::class)->home();
 })->name('website.home');
 Route::get('/rooms', [WebsiteController::class, 'rooms'])->name('website.rooms');
-Route::get('/book', [WebsiteController::class, 'bookingForm'])->name('website.book');
-Route::post('/book/check', [WebsiteController::class, 'checkAvailability'])->middleware('throttle:30,1')->name('website.book.check');
-Route::get('/book/availability', [WebsiteController::class, 'availability'])->middleware('throttle:60,1')->name('website.book.availability');
-Route::post('/book', [WebsiteController::class, 'submitBooking'])->middleware('throttle:10,1')->name('website.book.submit');
-Route::get('/book/confirmation/{token}', [WebsiteController::class, 'bookingConfirmation'])->name('website.booking.confirmation');
+Route::get('/book', [WebsiteController::class, 'bookingForm'])->middleware('module:booking_engine')->name('website.book');
+Route::post('/book/check', [WebsiteController::class, 'checkAvailability'])->middleware(['module:booking_engine', 'throttle:30,1'])->name('website.book.check');
+Route::get('/book/availability', [WebsiteController::class, 'availability'])->middleware(['module:booking_engine', 'throttle:60,1'])->name('website.book.availability');
+Route::post('/book', [WebsiteController::class, 'submitBooking'])->middleware(['module:booking_engine', 'throttle:10,1'])->name('website.book.submit');
+Route::get('/book/confirmation/{token}', [WebsiteController::class, 'bookingConfirmation'])->middleware('module:booking_engine')->name('website.booking.confirmation');
 
 // POK card payment (embedded) for a pending website booking.
-Route::get('/book/pay/{token}', [WebsiteController::class, 'bookingPayment'])->name('website.pay.show');
-Route::post('/book/pay/{token}', [WebsiteController::class, 'confirmPayment'])->middleware('throttle:20,1')->name('website.pay.confirm');
+Route::get('/book/pay/{token}', [WebsiteController::class, 'bookingPayment'])->middleware('module:booking_engine')->name('website.pay.show');
+Route::post('/book/pay/{token}', [WebsiteController::class, 'confirmPayment'])->middleware(['module:booking_engine', 'throttle:20,1'])->name('website.pay.confirm');
 // POK server-to-server webhook (CSRF-excluded in bootstrap/app.php; verifies via getOrder, never trusts the body).
-Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware('throttle:120,1')->name('website.pay.webhook');
+Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware(['module:booking_engine', 'throttle:120,1'])->name('website.pay.webhook');
 
 Route::get('/about', [WebsiteController::class, 'about'])->name('website.about');
 Route::get('/contact', [WebsiteController::class, 'contact'])->name('website.contact');
@@ -56,7 +68,12 @@ Route::post('/contact', [WebsiteController::class, 'submitContact'])->middleware
 
 // Inbound Channex booking webhook (server-to-server; CSRF-excluded in bootstrap/app.php).
 // Auth is a shared secret header validated in the controller — Channex has no HMAC.
-Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->middleware('throttle:120,1')->name('channex.webhook');
+Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->middleware(['module:channel_manager', 'throttle:channex-webhook'])->name('channex.webhook');
+
+// Short-lived, one-time Control Panel -> hotel-domain authentication callback.
+Route::get('/tenant-handoff', TenantHandoffController::class)
+    ->middleware(['hotel_host', 'throttle:10,1'])
+    ->name('tenant-handoff.consume');
 
 // PWA manifest — dynamic so the installed app carries the hotel's own name
 // (same cached branding the <title> uses). display:standalone is what removes
@@ -81,15 +98,36 @@ Route::get('/manifest.webmanifest', function () {
 })->name('pwa.manifest');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified'])->name('dashboard');
+    ->middleware(['auth', 'verified', 'hotel_host', 'dedicated_control_redirect'])->name('dashboard');
+
+Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
+    ->prefix('super-admin')
+    ->name('super-admin.')
+    ->group(function () {
+        Route::get('/', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/activity', [SuperAdminDashboardController::class, 'activity'])->name('activity');
+        Route::get('/tenants', [SuperAdminTenantController::class, 'index'])->name('tenants.index');
+        Route::get('/tenants/{tenant}', [SuperAdminTenantController::class, 'show'])->name('tenants.show');
+        Route::post('/tenants', [SuperAdminTenantController::class, 'store'])->name('tenants.store');
+        Route::put('/tenants/{tenant}/subscription', [SuperAdminTenantController::class, 'updateSubscription'])->name('tenants.subscription.update');
+        Route::post('/tenants/{tenant}/switch', [SuperAdminTenantController::class, 'switch'])->name('tenants.switch');
+        Route::patch('/tenants/{tenant}/status', [SuperAdminTenantController::class, 'updateStatus'])->name('tenants.status');
+        Route::put('/tenants/{tenant}/integrations/{provider}', [SuperAdminTenantController::class, 'updateIntegration'])
+            ->whereIn('provider', ['channex', 'pok'])->name('tenants.integrations.update');
+        Route::post('/tenants/{tenant}/domains', [SuperAdminTenantController::class, 'storeDomain'])->name('tenants.domains.store');
+        Route::delete('/tenants/{tenant}/domains/{domain}', [SuperAdminTenantController::class, 'destroyDomain'])
+            ->scopeBindings()->name('tenants.domains.destroy');
+        Route::patch('/tenants/{tenant}/domains/{domain}/primary', [SuperAdminTenantController::class, 'makePrimaryDomain'])
+            ->scopeBindings()->name('tenants.domains.primary');
+    });
 
 // Internal component gallery (dev reference) — no data, but staff-only (not public).
 Route::get('/design-system', function () {
     return Inertia::render('DesignSystem');
-})->middleware(['auth'])->name('design-system');
+})->middleware(['auth', 'hotel_host'])->name('design-system');
 
 // ===== PMS (authenticated) =====
-Route::middleware('auth')->prefix('pms')->group(function () {
+Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -147,12 +185,12 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::get('/reservations', [ReservationController::class, 'index'])->name('reservations.index');
 
         // Guest messaging (Channex Messages) — front desk replies to OTA guests.
-        Route::get('/messages', [MessagesController::class, 'index'])->middleware('permission:view_reservations')->name('messages.index');
-        Route::get('/messages/unread', [MessagesController::class, 'unread'])->middleware('permission:view_reservations')->name('messages.unread');
-        Route::post('/messages/{thread}/reply', [MessagesController::class, 'reply'])->middleware('permission:view_reservations')->name('messages.reply');
-        Route::post('/messages/quick-replies', [MessagesController::class, 'saveQuickReplies'])->middleware('permission:view_reservations')->name('messages.quick-replies');
-        Route::post('/messages/{thread}/close', [MessagesController::class, 'close'])->middleware('permission:view_reservations')->name('messages.close');
-        Route::post('/messages/{thread}/reopen', [MessagesController::class, 'reopen'])->middleware('permission:view_reservations')->name('messages.reopen');
+        Route::get('/messages', [MessagesController::class, 'index'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.index');
+        Route::get('/messages/unread', [MessagesController::class, 'unread'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.unread');
+        Route::post('/messages/{thread}/reply', [MessagesController::class, 'reply'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.reply');
+        Route::post('/messages/quick-replies', [MessagesController::class, 'saveQuickReplies'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.quick-replies');
+        Route::post('/messages/{thread}/close', [MessagesController::class, 'close'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.close');
+        Route::post('/messages/{thread}/reopen', [MessagesController::class, 'reopen'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.reopen');
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         Route::get('/reservations/calendar-design', fn () => Inertia::render('Reservations/CalendarDesign'))->name('reservations.calendar-design');
         // Seasonal price quote for the create/edit form (server-computed; MUST stay before the {reservation} wildcard).
@@ -165,16 +203,18 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::post('/reservations/{reservation}/check-in', [ReservationController::class, 'checkIn'])->middleware('permission:update_reservations')->name('reservations.check-in');
         Route::post('/reservations/{reservation}/check-out', [ReservationController::class, 'checkOut'])->middleware('permission:update_reservations')->name('reservations.check-out');
         // Front desk asks housekeeping for a stayover (daily) clean while the guest is in-house.
-        Route::post('/reservations/{reservation}/request-cleaning', [ReservationController::class, 'requestCleaning'])->middleware('permission:update_reservations')->name('reservations.request-cleaning');
+        Route::post('/reservations/{reservation}/request-cleaning', [ReservationController::class, 'requestCleaning'])->middleware(['module:housekeeping', 'permission:update_reservations'])->name('reservations.request-cleaning');
         Route::post('/reservations/{reservation}/cancel', [ReservationController::class, 'cancel'])->middleware('permission:update_reservations')->name('reservations.cancel');
         Route::post('/reservations/{reservation}/move-room', [ReservationController::class, 'moveRoom'])->middleware('permission:update_reservations')->name('reservations.move-room');
         Route::post('/reservations/{reservation}/resolve-conflict', [ReservationController::class, 'resolveConflict'])->middleware('permission:update_reservations')->name('reservations.resolve-conflict');
         Route::post('/reservations/{reservation}/folio', [ReservationController::class, 'addFolioLine'])->middleware('permission:update_reservations')->name('reservations.folio.add');
+        Route::post('/reservations/{reservation}/folio/inventory', [ReservationController::class, 'addInventoryFolioLine'])
+            ->middleware(['module:finance', 'permission:update_reservations'])->name('reservations.folio.inventory');
         Route::post('/reservations/{reservation}/payment', [ReservationController::class, 'recordPayment'])->middleware('permission:update_reservations')->name('reservations.payment');
     });
 
     // Housekeeping
-    Route::middleware('permission:view_housekeeping')->group(function () {
+    Route::middleware(['module:housekeeping', 'permission:view_housekeeping'])->group(function () {
         Route::get('/housekeeping', [CleaningTaskController::class, 'index'])->name('housekeeping.index');
         Route::get('/housekeeping/{cleaningTask}/clean', [CleaningTaskController::class, 'clean'])->name('housekeeping.clean');
         Route::post('/housekeeping', [CleaningTaskController::class, 'store'])->middleware('permission:create_housekeeping')->name('housekeeping.store');
@@ -185,7 +225,7 @@ Route::middleware('auth')->prefix('pms')->group(function () {
     });
 
     // POS Bar/Restaurant
-    Route::middleware('permission:view_pos_orders')->group(function () {
+    Route::middleware(['module:pos', 'permission:view_pos_orders'])->group(function () {
         Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
         Route::post('/pos', [PosController::class, 'store'])->middleware('permission:create_pos_orders')->name('pos.store');
         Route::post('/pos/{posOrder}/complete', [PosController::class, 'complete'])->middleware('permission:update_pos_orders')->name('pos.complete');
@@ -204,7 +244,7 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::get('/reports/outstanding', [ReportsController::class, 'outstanding'])->name('reports.outstanding');
         Route::get('/reports/shifts', [ReportsController::class, 'shifts'])->name('reports.shifts');
         Route::get('/reports/guests', [ReportsController::class, 'guests'])->name('reports.guests');
-        Route::get('/reports/pos-sales', [ReportsController::class, 'posSales'])->name('reports.posSales');
+        Route::get('/reports/pos-sales', [ReportsController::class, 'posSales'])->middleware('module:pos')->name('reports.posSales');
         Route::get('/reports/arrivals', [ReportsController::class, 'arrivalsManifest'])->name('reports.arrivalsManifest');
         Route::get('/reports/departures', [ReportsController::class, 'departuresManifest'])->name('reports.departuresManifest');
         Route::get('/reports/pace', [ReportsController::class, 'pace'])->name('reports.pace');
@@ -215,11 +255,11 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::get('/reports/repeat-guests', [ReportsController::class, 'repeatGuests'])->name('reports.repeatGuests');
         Route::get('/reports/nationality', [ReportsController::class, 'nationality'])->name('reports.nationality');
         Route::get('/reports/booking-behavior', [ReportsController::class, 'bookingBehavior'])->name('reports.bookingBehavior');
-        Route::get('/reports/pos-hourly', [ReportsController::class, 'posHourly'])->name('reports.posHourly');
-        Route::get('/reports/pos-payment-mix', [ReportsController::class, 'posPaymentMix'])->name('reports.posPaymentMix');
-        Route::get('/reports/pos-voids', [ReportsController::class, 'posVoids'])->name('reports.posVoids');
+        Route::get('/reports/pos-hourly', [ReportsController::class, 'posHourly'])->middleware('module:pos')->name('reports.posHourly');
+        Route::get('/reports/pos-payment-mix', [ReportsController::class, 'posPaymentMix'])->middleware('module:pos')->name('reports.posPaymentMix');
+        Route::get('/reports/pos-voids', [ReportsController::class, 'posVoids'])->middleware('module:pos')->name('reports.posVoids');
         Route::get('/reports/room-status', [ReportsController::class, 'roomStatus'])->name('reports.roomStatus');
-        Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->name('reports.housekeepingReport');
+        Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->middleware('module:housekeeping')->name('reports.housekeepingReport');
         Route::get('/reports/in-house', [ReportsController::class, 'inHouse'])->name('reports.inHouse');
         Route::get('/reports/discounts', [ReportsController::class, 'discounts'])->name('reports.discounts');
     });
@@ -227,7 +267,7 @@ Route::middleware('auth')->prefix('pms')->group(function () {
     // Finance (module #11): NOT admin-only — the view gate is view_finance and
     // every write carries its own permission (receptionist can record an
     // arkëtim; only pay_bills/manage_transfers roles can move money out).
-    Route::prefix('finance')->middleware(['addon:finance', 'permission:view_finance'])->group(function () {
+    Route::prefix('finance')->middleware(['module:finance', 'permission:view_finance'])->group(function () {
         Route::get('/', [FinanceController::class, 'index'])->name('finance.index');
         Route::get('/accounts', [FinanceController::class, 'accounts'])->name('finance.accounts');
         Route::post('/accounts', [FinanceController::class, 'storeAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.store');
@@ -238,14 +278,27 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::post('/transfers', [FinanceController::class, 'storeTransfer'])->middleware('permission:manage_transfers')->name('finance.transfers.store');
 
         // Phase 2: Blerjet (Bills) + Furnitorët
+        Route::get('/bills/create', [FinanceController::class, 'createBill'])->middleware('permission:manage_bills')->name('finance.bills.create');
         Route::get('/bills', [FinanceController::class, 'bills'])->name('finance.bills');
         Route::post('/bills', [FinanceController::class, 'storeBill'])->middleware('permission:manage_bills')->name('finance.bills.store');
+        Route::post('/bills/{bill}/receive', [FinanceController::class, 'receiveBill'])->middleware('permission:manage_inventory')->name('finance.bills.receive');
         Route::post('/bills/categories', [FinanceController::class, 'storeBillCategory'])->middleware('permission:manage_bills')->name('finance.bill-categories.store');
         Route::post('/bills/{bill}/pay', [FinanceController::class, 'payBill'])->middleware('permission:pay_bills')->name('finance.bills.pay');
         Route::get('/suppliers', [FinanceController::class, 'suppliers'])->name('finance.suppliers');
         Route::post('/suppliers', [FinanceController::class, 'storeSupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.store');
         Route::put('/suppliers/{supplier}', [FinanceController::class, 'updateSupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.update');
         Route::delete('/suppliers/{supplier}', [FinanceController::class, 'destroySupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.destroy');
+    });
+
+    Route::prefix('inventory')->middleware(['module:finance', 'permission:view_inventory'])->group(function () {
+        Route::get('/', [InventoryController::class, 'index'])->name('inventory.index');
+        Route::get('/items', [InventoryController::class, 'items'])->name('inventory.items');
+        Route::post('/items', [InventoryController::class, 'storeItem'])->middleware('permission:manage_inventory')->name('inventory.items.store');
+        Route::put('/items/{item}', [InventoryController::class, 'updateItem'])->middleware('permission:manage_inventory')->name('inventory.items.update');
+        Route::get('/warehouses', [InventoryController::class, 'warehouses'])->name('inventory.warehouses');
+        Route::post('/warehouses', [InventoryController::class, 'storeWarehouse'])->middleware('permission:manage_inventory')->name('inventory.warehouses.store');
+        Route::put('/warehouses/{warehouse}', [InventoryController::class, 'updateWarehouse'])->middleware('permission:manage_inventory')->name('inventory.warehouses.update');
+        Route::post('/transfers', [InventoryController::class, 'transfer'])->middleware('permission:manage_inventory')->name('inventory.transfers.store');
     });
 
     // Admin-only: User Management + Settings
@@ -272,28 +325,32 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::delete('/pricing/seasons/{season}', [PricingController::class, 'destroySeason'])->name('pricing.seasons.destroy');
         Route::post('/pricing/rates', [PricingController::class, 'saveRates'])->name('pricing.rates.save');
 
-        // Çmim Inteligjent — occupancy-based price suggestions (suggest-only; Apply writes a date override)
-        Route::get('/pricing/smart', [SmartPricingController::class, 'index'])->name('pricing.smart.index');
-        Route::post('/pricing/smart/apply', [SmartPricingController::class, 'apply'])->name('pricing.smart.apply');
-        Route::post('/pricing/smart/remove', [SmartPricingController::class, 'remove'])->name('pricing.smart.remove');
-        // AI Pricing Assistant — generate a reasoned plan (JSON) + apply one recommendation
-        Route::post('/pricing/smart/apply-range', [SmartPricingController::class, 'applyRange'])->name('pricing.smart.apply-range');
-        Route::post('/pricing/smart/explain', [SmartPricingController::class, 'explain'])->name('pricing.smart.explain');
-        Route::post('/pricing/smart/ask', [SmartPricingController::class, 'ask'])->name('pricing.smart.ask');
-        Route::post('/pricing/smart/events/suggest', [SmartPricingController::class, 'suggestEvents'])->name('pricing.smart.events.suggest');
-        Route::post('/pricing/smart/events', [SmartPricingController::class, 'approveEvent'])->name('pricing.smart.events.approve');
-        Route::put('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'updateEvent'])->name('pricing.smart.events.update');
-        Route::delete('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'destroyEvent'])->name('pricing.smart.events.destroy');
-        Route::post('/pricing/smart/report', [SmartPricingController::class, 'generateReport'])->name('pricing.smart.report');
-        Route::post('/pricing/smart/autopilot', [SmartPricingController::class, 'updateAutopilot'])->name('pricing.smart.autopilot');
-        Route::post('/pricing/smart/autopilot/revert/{log}', [SmartPricingController::class, 'revertAutopilot'])->name('pricing.smart.autopilot.revert');
-        Route::post('/pricing/smart/strategy', [SmartPricingController::class, 'updateStrategy'])->name('pricing.smart.strategy');
-        Route::put('/pricing/smart/bounds/{roomType}', [SmartPricingController::class, 'updateBounds'])->name('pricing.smart.bounds');
+        Route::middleware('module:smart_pricing')->group(function () {
+            // Çmim Inteligjent — occupancy-based price suggestions (suggest-only; Apply writes a date override)
+            Route::get('/pricing/smart', [SmartPricingController::class, 'index'])->name('pricing.smart.index');
+            Route::post('/pricing/smart/apply', [SmartPricingController::class, 'apply'])->name('pricing.smart.apply');
+            Route::post('/pricing/smart/remove', [SmartPricingController::class, 'remove'])->name('pricing.smart.remove');
+            // AI Pricing Assistant — generate a reasoned plan (JSON) + apply one recommendation
+            Route::post('/pricing/smart/apply-range', [SmartPricingController::class, 'applyRange'])->name('pricing.smart.apply-range');
+            Route::post('/pricing/smart/explain', [SmartPricingController::class, 'explain'])->name('pricing.smart.explain');
+            Route::post('/pricing/smart/ask', [SmartPricingController::class, 'ask'])->name('pricing.smart.ask');
+            Route::post('/pricing/smart/events/suggest', [SmartPricingController::class, 'suggestEvents'])->name('pricing.smart.events.suggest');
+            Route::post('/pricing/smart/events', [SmartPricingController::class, 'approveEvent'])->name('pricing.smart.events.approve');
+            Route::put('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'updateEvent'])->name('pricing.smart.events.update');
+            Route::delete('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'destroyEvent'])->name('pricing.smart.events.destroy');
+            Route::post('/pricing/smart/report', [SmartPricingController::class, 'generateReport'])->name('pricing.smart.report');
+            Route::post('/pricing/smart/autopilot', [SmartPricingController::class, 'updateAutopilot'])->name('pricing.smart.autopilot');
+            Route::post('/pricing/smart/autopilot/revert/{log}', [SmartPricingController::class, 'revertAutopilot'])->name('pricing.smart.autopilot.revert');
+            Route::post('/pricing/smart/strategy', [SmartPricingController::class, 'updateStrategy'])->name('pricing.smart.strategy');
+            Route::put('/pricing/smart/bounds/{roomType}', [SmartPricingController::class, 'updateBounds'])->name('pricing.smart.bounds');
+        });
 
         // Channel manager (Channex) — manual full re-sync
-        Route::post('/channex/sync', [ChannexController::class, 'sync'])->name('channex.sync');
-        Route::post('/channex/sell-window/preview', [ChannexController::class, 'previewSellWindow'])->name('channex.sell-window.preview');
-        Route::put('/channex/sell-window', [ChannexController::class, 'updateSellWindow'])->name('channex.sell-window.update');
+        Route::middleware('module:channel_manager')->group(function () {
+            Route::post('/channex/sync', [ChannexController::class, 'sync'])->name('channex.sync');
+            Route::post('/channex/sell-window/preview', [ChannexController::class, 'previewSellWindow'])->name('channex.sell-window.preview');
+            Route::put('/channex/sell-window', [ChannexController::class, 'updateSellWindow'])->name('channex.sell-window.update');
+        });
 
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
         Route::put('/settings/hotel', [SettingsController::class, 'updateHotel'])->name('settings.hotel');
@@ -301,10 +358,10 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::post('/settings/about', [SettingsController::class, 'updateAbout'])->name('settings.about');
         Route::put('/settings/financial', [SettingsController::class, 'updateFinancial'])->name('settings.financial');
         Route::put('/settings/market-rates', [SettingsController::class, 'updateMarketRates'])->name('settings.market-rates');
-        Route::put('/settings/currencies', [SettingsController::class, 'updateCurrencies'])->middleware('addon:finance')->name('settings.currencies');
-        Route::post('/settings/currencies/refresh', [SettingsController::class, 'refreshCurrencies'])->middleware('addon:finance')->name('settings.currencies.refresh');
+        Route::put('/settings/currencies', [SettingsController::class, 'updateCurrencies'])->middleware('module:finance')->name('settings.currencies');
+        Route::post('/settings/currencies/refresh', [SettingsController::class, 'refreshCurrencies'])->middleware('module:finance')->name('settings.currencies.refresh');
         Route::put('/settings/pricing-programs', [SettingsController::class, 'updatePricingPrograms'])->name('settings.pricing-programs');
-        Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->name('settings.housekeeping');
+        Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->middleware('module:housekeeping')->name('settings.housekeeping');
         Route::put('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai');
 
         // Settings: Room Types
@@ -327,13 +384,15 @@ Route::middleware('auth')->prefix('pms')->group(function () {
         Route::post('/settings/room-types/{roomType}/images/reorder', [SettingsController::class, 'reorderRoomTypeImages'])->name('settings.room-types.images.reorder');
 
         // Settings: Menu
-        Route::post('/settings/menu-categories', [SettingsController::class, 'storeMenuCategory'])->name('settings.menu-categories.store');
-        Route::put('/settings/menu-categories/{menuCategory}', [SettingsController::class, 'updateMenuCategory'])->name('settings.menu-categories.update');
-        Route::delete('/settings/menu-categories/{menuCategory}', [SettingsController::class, 'destroyMenuCategory'])->name('settings.menu-categories.destroy');
-        Route::post('/settings/menu-items', [SettingsController::class, 'storeMenuItem'])->name('settings.menu-items.store');
-        Route::put('/settings/menu-items/{menuItem}', [SettingsController::class, 'updateMenuItem'])->name('settings.menu-items.update');
-        Route::patch('/settings/menu-items/{menuItem}/toggle', [SettingsController::class, 'toggleMenuItem'])->name('settings.menu-items.toggle');
-        Route::delete('/settings/menu-items/{menuItem}', [SettingsController::class, 'destroyMenuItem'])->name('settings.menu-items.destroy');
+        Route::middleware('module:pos')->group(function () {
+            Route::post('/settings/menu-categories', [SettingsController::class, 'storeMenuCategory'])->name('settings.menu-categories.store');
+            Route::put('/settings/menu-categories/{menuCategory}', [SettingsController::class, 'updateMenuCategory'])->name('settings.menu-categories.update');
+            Route::delete('/settings/menu-categories/{menuCategory}', [SettingsController::class, 'destroyMenuCategory'])->name('settings.menu-categories.destroy');
+            Route::post('/settings/menu-items', [SettingsController::class, 'storeMenuItem'])->name('settings.menu-items.store');
+            Route::put('/settings/menu-items/{menuItem}', [SettingsController::class, 'updateMenuItem'])->name('settings.menu-items.update');
+            Route::patch('/settings/menu-items/{menuItem}/toggle', [SettingsController::class, 'toggleMenuItem'])->name('settings.menu-items.toggle');
+            Route::delete('/settings/menu-items/{menuItem}', [SettingsController::class, 'destroyMenuItem'])->name('settings.menu-items.destroy');
+        });
     });
 });
 

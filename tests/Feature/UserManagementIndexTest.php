@@ -68,5 +68,21 @@ class UserManagementIndexTest extends TestCase
                 ->where('users.from', 1)
                 ->where('users.to', 1)
                 ->where('users.total', 1));
+
+        $this->get(route('settings.index', [
+            'tab' => 'users',
+            'user_search' => 'erion',
+            'user_role' => 'receptionist',
+            'user_status' => 'inactive',
+        ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Settings/Index')
+                ->where('userManagement.filters.search', 'erion')
+                ->where('userManagement.filters.role', 'receptionist')
+                ->where('userManagement.filters.status', 'inactive')
+                ->has('userManagement.users.data', 1)
+                ->where('userManagement.users.data.0.id', $inactiveReceptionist->id)
+                ->has('auditHistory.logs.data'));
     }
 }

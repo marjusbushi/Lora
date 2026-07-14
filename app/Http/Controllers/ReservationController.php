@@ -6,15 +6,22 @@ use App\Http\Requests\ReservationStoreRequest;
 use App\Http\Requests\ReservationUpdateRequest;
 use App\Models\AuditLog;
 use App\Models\CleaningTask;
+use App\Models\FolioItem;
 use App\Models\Guest;
+use App\Models\InventoryItem;
+use App\Models\InventoryMovement;
 use App\Models\Payment;
 use App\Models\PosOrder;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Setting;
+use App\Models\Warehouse;
 use App\Services\AuditTimeline;
+use App\Services\InventoryLedger;
 use App\Services\ReservationConflictService;
 use App\Services\RoomPricing;
+use App\Services\TenantBillingService;
+use App\Tenancy\TenantContext;
 use App\Tenancy\TenantRule;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -272,6 +279,44 @@ class ReservationController extends Controller
             ->limit(50)
             ->get();
 
+        $tenant = app(TenantContext::class)->tenant();
+        $inventoryEnabled = app(TenantBillingService::class)->enabled('finance', $tenant);
+        $inventoryItems = collect();
+        $inventoryWarehouses = collect();
+        if ($inventoryEnabled) {
+            $inventoryWarehouses = Warehouse::query()
+                ->where('is_active', true)
+                ->orderByRaw("CASE WHEN type = 'rooms' THEN 0 WHEN is_default = 1 THEN 1 ELSE 2 END")
+                ->orderBy('name')
+                ->get(['id', 'name', 'type', 'is_default']);
+
+            $items = InventoryItem::query()
+                ->where('is_active', true)
+                ->where('type', 'product')
+                ->whereNotNull('selling_price')
+                ->where('selling_price', '>', 0)
+                ->orderBy('name')
+                ->get(['id', 'name', 'sku', 'unit', 'selling_price']);
+            $stockMap = InventoryMovement::query()
+                ->whereIn('inventory_item_id', $items->pluck('id'))
+                ->whereIn('warehouse_id', $inventoryWarehouses->pluck('id'))
+                ->selectRaw('inventory_item_id, warehouse_id, SUM(quantity) as quantity')
+                ->groupBy('inventory_item_id', 'warehouse_id')
+                ->get()
+                ->groupBy('inventory_item_id');
+
+            $inventoryItems = $items->map(fn (InventoryItem $item) => [
+                'id' => $item->id,
+                'name' => $item->name,
+                'sku' => $item->sku,
+                'unit' => $item->unit,
+                'selling_price' => (float) $item->selling_price,
+                'warehouse_stock' => collect($stockMap->get($item->id, []))
+                    ->mapWithKeys(fn ($stock) => [(string) $stock->warehouse_id => round((float) $stock->quantity, 4)])
+                    ->all(),
+            ])->values();
+        }
+
         return Inertia::render('Reservations/Show', [
             'reservation' => [
                 'id' => $reservation->id,
@@ -326,6 +371,9 @@ class ReservationController extends Controller
             ]),
             'openPosOrders' => $openPosOrders,
             'history' => $timeline->entries($history),
+            'inventoryEnabled' => $inventoryEnabled,
+            'inventoryItems' => $inventoryItems,
+            'inventoryWarehouses' => $inventoryWarehouses,
             'currency' => Setting::get('financial.default_currency_symbol', '€'),
         ]);
     }
@@ -346,6 +394,12 @@ class ReservationController extends Controller
             'amount' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
             'charge_date' => ['nullable', 'date'],
         ]);
+
+        if ($data['type'] === 'minibar' && app(TenantBillingService::class)->enabled('finance', app(TenantContext::class)->tenant())) {
+            throw ValidationException::withMessages([
+                'type' => 'Shto produktin e minibar-it nga inventari që stoku dhe folio të përditësohen bashkë.',
+            ]);
+        }
 
         if ($data['type'] === 'discount') {
             $charges = (float) $reservation->total_amount
@@ -370,6 +424,87 @@ class ReservationController extends Controller
         AuditLog::record('folio.add_line', $reservation, ['type' => $data['type'], 'amount' => $data['amount']]);
 
         return back()->with('success', 'Tarifa u shtua ne llogarine e mysafirit.');
+    }
+
+    public function addInventoryFolioLine(
+        Request $request,
+        Reservation $reservation,
+        InventoryLedger $ledger,
+    ): RedirectResponse {
+        $data = $request->validate([
+            'inventory_item_id' => [
+                'required', 'integer',
+                TenantRule::exists('inventory_items')->where('is_active', true)->where('type', 'product'),
+            ],
+            'warehouse_id' => [
+                'required', 'integer',
+                TenantRule::exists('warehouses')->where('is_active', true),
+            ],
+            'quantity' => ['required', 'numeric', 'min:0.0001', 'max:10000'],
+            'inventory_reference' => ['required', 'uuid'],
+        ]);
+
+        [$folioItem, $wasCreated] = DB::transaction(function () use ($reservation, $data, $request, $ledger) {
+            $lockedReservation = Reservation::query()->lockForUpdate()->findOrFail($reservation->id);
+            if ($lockedReservation->status !== 'checked_in') {
+                throw ValidationException::withMessages([
+                    'inventory_item_id' => 'Minibari mund të regjistrohet vetëm gjatë një qëndrimi aktiv.',
+                ]);
+            }
+
+            $existingFolioItem = FolioItem::query()
+                ->where('inventory_reference', $data['inventory_reference'])
+                ->first();
+            if ($existingFolioItem) {
+                if ((int) $existingFolioItem->reservation_id !== (int) $lockedReservation->id) {
+                    throw ValidationException::withMessages([
+                        'inventory_reference' => 'Kjo kërkesë është përdorur më parë.',
+                    ]);
+                }
+
+                $ledger->consumeFolioItem($existingFolioItem, $request->user()->id);
+
+                return [$existingFolioItem, false];
+            }
+
+            $item = InventoryItem::query()->lockForUpdate()->findOrFail($data['inventory_item_id']);
+            $price = (float) $item->selling_price;
+            if ($price <= 0) {
+                throw ValidationException::withMessages([
+                    'inventory_item_id' => 'Artikulli nuk ka çmim shitjeje të vlefshëm.',
+                ]);
+            }
+
+            $quantity = round((float) $data['quantity'], 4);
+            $folioItem = FolioItem::query()->create([
+                'inventory_reference' => $data['inventory_reference'],
+                'reservation_id' => $lockedReservation->id,
+                'inventory_item_id' => $item->id,
+                'warehouse_id' => $data['warehouse_id'],
+                'inventory_quantity' => $quantity,
+                'unit_price' => $price,
+                'description' => 'Minibar · '.$item->name.' × '.rtrim(rtrim(number_format($quantity, 4, '.', ''), '0'), '.'),
+                'amount' => round($quantity * $price, 2),
+                'type' => 'minibar',
+                'charge_date' => today(),
+            ]);
+
+            $ledger->consumeFolioItem($folioItem, $request->user()->id);
+
+            return [$folioItem, true];
+        });
+
+        if ($wasCreated) {
+            AuditLog::record('folio.add_inventory', $reservation, [
+                'folio_item_id' => $folioItem->id,
+                'inventory_item_id' => $folioItem->inventory_item_id,
+                'warehouse_id' => $folioItem->warehouse_id,
+                'quantity' => (float) $folioItem->inventory_quantity,
+                'amount' => (float) $folioItem->amount,
+            ]);
+        }
+
+        return back()->with('success', 'Minibari u shtua në folio dhe stoku u përditësua.');
     }
 
     public function recordPayment(Request $request, Reservation $reservation): JsonResponse|RedirectResponse

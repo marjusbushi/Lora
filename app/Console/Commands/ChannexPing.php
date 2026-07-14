@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ResolvesTenantContext;
 use App\Services\ChannexClient;
 use Illuminate\Console\Command;
 
@@ -12,12 +13,18 @@ use Illuminate\Console\Command;
  */
 class ChannexPing extends Command
 {
-    protected $signature = 'channex:ping';
+    use ResolvesTenantContext;
+
+    protected $signature = 'channex:ping {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
     protected $description = 'Verify the Channex connection by listing the account properties';
 
     public function handle(ChannexClient $channex): int
     {
+        if (! $this->ensureTenantContext()) {
+            return self::FAILURE;
+        }
+
         if (! $channex->configured()) {
             $this->error('CHANNEX_API_KEY is not set (.env) — cannot reach Channex.');
 

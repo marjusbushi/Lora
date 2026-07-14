@@ -14,13 +14,26 @@ class AuditLogController extends Controller
 {
     public function index(Request $request, AuditTimeline $timeline): Response
     {
-        $filters = $request->validate([
-            'search' => ['nullable', 'string', 'max:100'],
-            'category' => ['nullable', 'in:all,reservation,guest,payment,folio,housekeeping,pos,user,pricing,channex'],
-            'source' => ['nullable', 'in:all,staff,channex,website,import,system'],
-            'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+        return Inertia::render('AuditLogs/Index', $this->pageData($request, $timeline));
+    }
+
+    public function pageData(Request $request, AuditTimeline $timeline, string $prefix = ''): array
+    {
+        $validated = $request->validate([
+            $prefix.'search' => ['nullable', 'string', 'max:100'],
+            $prefix.'category' => ['nullable', 'in:all,reservation,guest,payment,folio,housekeeping,pos,user,pricing,channex'],
+            $prefix.'source' => ['nullable', 'in:all,staff,channex,website,import,system'],
+            $prefix.'date_from' => ['nullable', 'date'],
+            $prefix.'date_to' => ['nullable', 'date', 'after_or_equal:'.$prefix.'date_from'],
         ]);
+
+        $filters = [
+            'search' => $validated[$prefix.'search'] ?? '',
+            'category' => $validated[$prefix.'category'] ?? 'all',
+            'source' => $validated[$prefix.'source'] ?? 'all',
+            'date_from' => $validated[$prefix.'date_from'] ?? null,
+            'date_to' => $validated[$prefix.'date_to'] ?? null,
+        ];
 
         $search = trim((string) ($filters['search'] ?? ''));
         $category = (string) ($filters['category'] ?? 'all');
@@ -51,17 +64,14 @@ class AuditLogController extends Controller
             $query->whereDate('created_at', '<=', $filters['date_to']);
         }
 
-        $logs = $query->paginate(50)->withQueryString();
+        $logs = $query->paginate(50, ['*'], $prefix.'page')->withQueryString();
         $subjects = $this->subjects(collect($logs->items()));
         $logs->through(fn (AuditLog $log) => $timeline->entry($log, $subjects[$log->id] ?? null));
 
-        return Inertia::render('AuditLogs/Index', [
+        return [
             'logs' => $logs,
-            'filters' => array_merge([
-                'search' => '', 'category' => 'all', 'source' => 'all',
-                'date_from' => null, 'date_to' => null,
-            ], $filters),
-        ]);
+            'filters' => $filters,
+        ];
     }
 
     /** @return array<int, array{label:string,url:?string}> */
