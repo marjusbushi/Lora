@@ -30,7 +30,20 @@ Lora PMS do të përdorë një aplikacion dhe një databazë të përbashkët. �
 - [x] 7. MySQL fresh/upgrade dhe kontroll integriteti.
 - [x] 8. CI para deploy-it dhe branch protection.
 - [ ] 9. Backup off-server dhe provë restore — **në punë**.
+  - [x] 9.1. Ofruesi: Backblaze B2 EU me Restic dhe Object Lock.
+  - [ ] 9.2. Bucket privat i dedikuar, Object Lock dhe retention të konfiguruar.
+  - [ ] 9.3. Kredenciale të kufizuara vetëm te bucket-i, të ruajtura jashtë kodit.
+  - [ ] 9.4. Backup automatik i DB + storage, kontroll integriteti dhe alarm në dështim.
+  - [ ] 9.5. Restore real në ambient të izoluar dhe krahasim para/pas.
 - [ ] 10. Integrim me translations, staging pilot dhe aprovim për `main`.
+
+### Arkitektura e backup-it off-server
+
+- Aplikacioni dhe databaza aktive mbeten në Hetzner; në Backblaze ruhet vetëm kopja rezervë e enkriptuar.
+- Bucket-i duhet të jetë privat, në rajonin EU dhe i dedikuar vetëm për Lora PMS.
+- Object Lock aktivizohet që në krijimin e bucket-it; retention-i final vendoset vetëm pasi të provohet cikli backup/restore.
+- Application Key kufizohet vetëm te ky bucket. Kredencialet dhe fjalëkalimi i Restic nuk ruhen në git, chat ose `.env.example`.
+- Backup-i konsiderohet i vlefshëm vetëm pasi një restore real të kalojë kontrollin `tenants:verify-integrity`.
 
 ## Porta e sigurisë për Villa Mucho
 
