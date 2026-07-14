@@ -41,6 +41,13 @@ return [
             'unit_label' => 'pikë shitjeje',
             'unit_price_cents' => 1900,
         ],
+        'finance' => [
+            'name' => 'Financa & Inventari',
+            'description' => 'Arka, banka, pagesa, fatura blerjeje, furnitorë, artikuj dhe magazina.',
+            'billing_model' => 'flat',
+            'unit_label' => 'muaj',
+            'unit_price_cents' => 2900,
+        ],
         'smart_pricing' => [
             'name' => 'Çmime Inteligjente',
             'description' => 'Sugjerime çmimesh dhe autopilot.',

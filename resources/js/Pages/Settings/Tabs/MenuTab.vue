@@ -9,7 +9,13 @@ import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import { Package, Plus, Trash2 } from 'lucide-vue-next';
 
-const props = defineProps({ categories: Array, inventoryItems: Array, warehouses: Array, toasts: Object });
+const props = defineProps({
+    categories: Array,
+    inventoryItems: Array,
+    warehouses: Array,
+    inventoryEnabled: { type: Boolean, default: false },
+    toasts: Object,
+});
 
 // Category
 const showCatModal = ref(false);
@@ -150,7 +156,7 @@ function deleteItem(item) {
                     <div class="flex items-center gap-2">
                         <h4 class="text-label text-primary-900">{{ cat.name }}</h4>
                         <Badge variant="neutral" size="sm">{{ cat.items?.length || 0 }} {{ $t('admin.generated.k_d24c59d8b853') }}</Badge>
-                        <Badge v-if="cat.warehouse_id" variant="success" size="sm"><Package class="h-3 w-3" /> {{ warehouses.find(warehouse => warehouse.id === cat.warehouse_id)?.name }}</Badge>
+                        <Badge v-if="inventoryEnabled && cat.warehouse_id" variant="success" size="sm"><Package class="h-3 w-3" /> {{ warehouses.find(warehouse => warehouse.id === cat.warehouse_id)?.name }}</Badge>
                     </div>
                     <div class="flex gap-1.5">
                         <Button size="sm" variant="ghost" @click="openCreateItem(cat.id)">+ Artikull</Button>
@@ -202,7 +208,7 @@ function deleteItem(item) {
                         <option value="">—</option><option value="bar">Bar</option><option value="restaurant">Restorant</option>
                     </select>
                 </FormGroup>
-                <FormGroup :label="$t('inventory.pos.sourceWarehouse')" :error="catForm.errors.warehouse_id">
+                <FormGroup v-if="inventoryEnabled" :label="$t('inventory.pos.sourceWarehouse')" :error="catForm.errors.warehouse_id">
                     <select v-model="catForm.warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
                         <option :value="null">{{ $t('inventory.pos.automaticWarehouse') }}</option><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
                     </select>
@@ -249,7 +255,7 @@ function deleteItem(item) {
                 </FormGroup>
             </div>
 
-            <section class="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+            <section v-if="inventoryEnabled" class="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                 <div class="flex items-start justify-between gap-3">
                     <div><h4 class="text-body-sm font-bold text-primary-900">{{ $t('inventory.pos.recipe') }}</h4><p class="mt-1 text-tiny text-neutral-500">{{ $t('inventory.pos.recipeHint') }}</p></div>
                     <Button v-if="inventoryItems.length" size="sm" variant="outline" @click="addInventoryComponent"><Plus class="h-4 w-4" /> {{ $t('inventory.pos.addComponent') }}</Button>

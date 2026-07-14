@@ -1,5 +1,5 @@
 <script setup>
-import { translate } from '@/i18n';
+import { i18n } from '@/i18n';
 import { ref, computed } from 'vue';
 import { useForm, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -164,7 +164,7 @@ function addToCart(menuItem) {
     const existing = cart.value.find((c) => c.id === menuItem.id);
     if (menuItem.inventory_tracked && menuItem.available_portions !== null
         && Number(existing?.qty || 0) >= Math.max(0, Number(menuItem.available_portions))) {
-        toasts.value?.error(translate('inventory.pos.insufficient'));
+        toasts.value?.error(i18n.global.t('inventory.pos.insufficient'));
         return;
     }
     if (existing) {
@@ -189,7 +189,7 @@ function removeFromCart(index) {
 function updateQty(index, delta) {
     if (delta > 0 && cart.value[index].inventory_tracked && cart.value[index].available_portions !== null
         && cart.value[index].qty >= Math.max(0, Number(cart.value[index].available_portions))) {
-        toasts.value?.error(translate('inventory.pos.insufficient'));
+        toasts.value?.error(i18n.global.t('inventory.pos.insufficient'));
         return;
     }
     cart.value[index].qty += delta;

@@ -20,6 +20,8 @@ class TenantBillingService
 
     public const POS = 'pos';
 
+    public const FINANCE = 'finance';
+
     public const SMART_PRICING = 'smart_pricing';
 
     public function catalog(): array

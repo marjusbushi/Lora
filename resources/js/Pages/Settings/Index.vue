@@ -45,7 +45,7 @@ const allTabs = [
     { id: 'financial', label: 'Financiare' },
     { id: 'pricing-programs', label: 'Çmimet & OTA' },
     { id: 'market-rates', label: 'Çmimet e Tregut' },
-    { id: 'currencies', label: 'Monedhat' },
+    { id: 'currencies', label: 'Monedhat', module: 'finance' },
     { id: 'ai', label: 'Asistenti AI' },
 ];
 const tabs = computed(() => allTabs.filter((tab) => !tab.module || modules.value[tab.module] === true));
@@ -86,7 +86,7 @@ const tabs = computed(() => allTabs.filter((tab) => !tab.module || modules.value
                 <RoomTypesTab v-else-if="activeTab === 'room-types'" :room-types="roomTypes" :amenities="amenities" :toasts="toasts" />
                 <AmenitiesTab v-else-if="activeTab === 'amenities'" :amenities="amenities" :toasts="toasts" />
                 <FloorsTab v-else-if="activeTab === 'floors'" :floors="floors" :toasts="toasts" />
-                <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :toasts="toasts" />
+                <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :inventory-enabled="modules.finance === true" :toasts="toasts" />
                 <HousekeepingTab v-else-if="activeTab === 'housekeeping'" :settings="settings.housekeeping || {}" :checklist-defaults="checklistDefaults" :toasts="toasts" />
                 <FinancialTab v-else-if="activeTab === 'financial'" :settings="settings.financial || {}" :toasts="toasts" />
                 <PricingProgramsTab v-else-if="activeTab === 'pricing-programs'" :settings="settings.pricing_programs || {}" :financial="settings.financial || {}" :toasts="toasts" />
