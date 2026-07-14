@@ -117,6 +117,21 @@ return new class extends Migration
         }
 
         foreach (array_reverse($this->parentTables) as $tableName) {
+            // MySQL may remove the old single-column tenant_id index as
+            // redundant when the (tenant_id, id) unique index is created.
+            // The table's own tenant_id foreign key still needs an index, so
+            // restore one before dropping the composite unique on rollback.
+            if (DB::getDriverName() === 'mysql') {
+                $hasTenantIndex = collect(Schema::getIndexes($tableName))
+                    ->contains(fn (array $index) => array_values($index['columns']) === ['tenant_id']);
+
+                if (! $hasTenantIndex) {
+                    Schema::table($tableName, function (Blueprint $table) {
+                        $table->index('tenant_id');
+                    });
+                }
+            }
+
             Schema::table($tableName, function (Blueprint $table) {
                 $table->dropUnique(['tenant_id', 'id']);
             });

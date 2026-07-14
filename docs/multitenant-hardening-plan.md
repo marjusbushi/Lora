@@ -27,8 +27,8 @@ Lora PMS do të përdorë një aplikacion dhe një databazë të përbashkët. �
 - [x] 4. DB: `tenant_id NOT NULL` dhe kontrolle same-tenant.
 - [x] 5. Handoff i sigurt Control Panel → custom domain.
 - [x] 6. Teste Hotel A/B për modulet kryesore.
-- [ ] 7. MySQL fresh/upgrade dhe kontroll integriteti — **në punë**.
-- [ ] 8. CI para deploy-it dhe branch protection.
+- [x] 7. MySQL fresh/upgrade dhe kontroll integriteti.
+- [ ] 8. CI para deploy-it dhe branch protection — **në punë**.
 - [ ] 9. Backup off-server dhe provë restore.
 - [ ] 10. Integrim me translations, staging pilot dhe aprovim për `main`.
 
@@ -48,6 +48,18 @@ Asnjë migrim multitenant nuk ekzekutohet në production pa kaluar të gjitha pi
 8. Deploy-i bëhet me maintenance mode dhe me ndalim të përkohshëm të queue/scheduler kur kërkohet.
 9. Pas deploy-it ekzekutohet smoke test për rezervime, pagesa, finance, POS dhe website.
 10. Villa Mucho monitorohet para se të krijohet tenant-i i dytë real.
+
+## Kontrolli para/pas migrimit
+
+Snapshot-i përmban vetëm numra rekordesh dhe totale financiare sipas tenant-it; nuk ruan PII ose kredenciale.
+
+```bash
+php artisan tenants:verify-integrity --snapshot=/path/secure/lora-before.json
+php artisan migrate --force
+php artisan tenants:verify-integrity --compare=/path/secure/lora-before.json
+```
+
+Nëse ka `tenant_id` të pavlefshëm, lidhje cross-tenant, role pa `team_id`, ndryshim numrash ose ndryshim totalësh financiarë, komanda dështon dhe deploy-i ndalet.
 
 ## Kushtet e përfundimit
 
