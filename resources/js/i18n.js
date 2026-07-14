@@ -48,3 +48,13 @@ export function setLocale(next) {
         document.documentElement.lang = next;
     }
 }
+
+/** Translate outside Vue templates and setup hooks. */
+export function translate(key, params = {}) {
+    return i18n.global.t(key, params);
+}
+
+/** Return a browser Intl-compatible locale for the active UI language. */
+export function getIntlLocale() {
+    return i18n.global.locale.value === 'en' ? 'en-GB' : 'sq-AL';
+}

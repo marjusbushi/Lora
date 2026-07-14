@@ -345,36 +345,36 @@ function toggleAccount(a) {
         <!-- new account modal -->
         <Modal :show="showNewAccount" @close="showNewAccount = false">
             <div class="p-5 space-y-4">
-                <h3 class="text-h4 font-bold text-primary-900">Llogari e re</h3>
+                <h3 class="text-h4 font-bold text-primary-900">{{ $t('admin.generated.k_ca129bc2d44a') }}</h3>
                 <div>
-                    <label class="block text-body-sm font-semibold text-primary-900 mb-1">Emri</label>
+                    <label class="block text-body-sm font-semibold text-primary-900 mb-1">{{ $t('accountCenter.name') }}</label>
                     <TextInput v-model="account.name" class="w-full" placeholder='p.sh. "Arka e Restorantit" ose "BKT"' maxlength="60" />
                     <p v-if="account.errors.name" class="text-tiny text-error-600 mt-1">{{ account.errors.name }}</p>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Lloji</label>
+                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">{{ $t('maintenance.type') }}</label>
                         <select v-model="account.type" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm">
-                            <option value="cash">💵 Arkë (kesh)</option>
-                            <option value="bank">🏦 Bankë</option>
+                            <option value="cash">💵 {{ $t('admin.finance.accounts.cash') }}</option>
+                            <option value="bank">🏦 {{ $t('admin.finance.accounts.bank') }}</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">Monedha</label>
+                        <label class="block text-body-sm font-semibold text-primary-900 mb-1">{{ $t('admin.finance.billCreate.currency') }}</label>
                         <select v-model="account.currency" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm">
                             <option v-for="c in currencies" :key="c" :value="c">{{ c === 'ALL' ? 'ALL (Lek)' : c }}</option>
                         </select>
                     </div>
                 </div>
                 <div v-if="account.type === 'bank'">
-                    <label class="block text-body-sm font-semibold text-primary-900 mb-1">IBAN (ops.)</label>
+                    <label class="block text-body-sm font-semibold text-primary-900 mb-1">{{ $t('admin.finance.accounts.ibanOptional') }}</label>
                     <TextInput v-model="account.iban" class="w-full" placeholder="AL__ ____ ____ ____" maxlength="40" />
                     <p v-if="account.errors.iban" class="text-tiny text-error-600 mt-1">{{ account.errors.iban }}</p>
                 </div>
-                <p class="text-tiny text-neutral-400">Llogaria e re nis me bilanc 0 — lëvizjet i regjistron te Pagesat ose me Transfertë.</p>
+                <p class="text-tiny text-neutral-400">{{ $t('admin.finance.accounts.newAccountHint') }}</p>
                 <div class="flex justify-end gap-2">
-                    <Button variant="ghost" @click="showNewAccount = false">Anulo</Button>
-                    <Button :disabled="account.processing || !account.name" @click="submitAccount">Krijo llogarinë</Button>
+                    <Button variant="ghost" @click="showNewAccount = false">{{ $t('admin.common.cancel') }}</Button>
+                    <Button :disabled="account.processing || !account.name" @click="submitAccount">{{ $t('admin.generated.k_481f2250c6dd') }}</Button>
                 </div>
             </div>
         </Modal>

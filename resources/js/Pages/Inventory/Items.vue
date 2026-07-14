@@ -9,13 +9,14 @@ import Button from '@/Components/UI/Button.vue';
 import Modal from '@/Components/UI/Modal.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import { money } from '@/Pages/Finance/financeShared.js';
+import { translate } from '@/i18n';
 
 const props = defineProps({ items: Array, warehouses: Array, filters: Object, can: Object });
 const search = ref(props.filters.search || '');
 const status = ref(props.filters.status || 'active');
 const editing = ref(null);
-const unitLabels = { piece: 'Copë', kg: 'Kg', liter: 'Litër', pack: 'Paketë' };
-const typeLabels = { product: 'Produkt shitjeje', ingredient: 'Përbërës', consumable: 'Material konsumi', service: 'Shërbim' };
+const unitLabels = { piece: translate('inventory.units.piece'), kg: translate('inventory.units.kg'), liter: translate('inventory.units.liter'), pack: translate('inventory.units.pack') };
+const typeLabels = { product: translate('inventory.types.product'), ingredient: translate('inventory.types.ingredient'), consumable: translate('inventory.types.consumable'), service: translate('inventory.types.service') };
 
 watch(() => props.filters, value => { search.value = value.search || ''; status.value = value.status || 'active'; }, { deep: true });
 
@@ -80,7 +81,7 @@ function submit() {
                                 <td class="px-5 py-3.5"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent-50 text-accent-700"><Package class="h-4 w-4" /></span><div><strong class="block text-body-sm text-primary-900">{{ item.name }}</strong><span class="text-tiny text-neutral-400">{{ item.sku }}<template v-if="item.category"> · {{ item.category }}</template></span></div></div></td>
                                 <td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ typeLabels[item.type] }}</td>
                                 <td class="px-5 py-3.5"><div class="flex max-w-[240px] flex-wrap gap-1"><span v-for="stock in item.warehouses" :key="stock.id" class="rounded-full bg-neutral-100 px-2 py-1 text-tiny text-neutral-600">{{ stock.name }}: {{ stock.quantity }}</span><span v-if="!item.warehouses.length" class="text-tiny text-neutral-400">—</span></div></td>
-                                <td class="px-5 py-3.5 text-right"><strong class="text-body-sm tabular-nums" :class="item.is_low ? 'text-warning-700' : 'text-primary-900'">{{ item.stock }} {{ unitLabels[item.unit] }}</strong><span v-if="item.is_low" class="mt-1 flex items-center justify-end gap-1 text-tiny text-warning-700"><AlertTriangle class="h-3 w-3" /> minimumi {{ item.minimum_stock }}</span></td>
+                                <td class="px-5 py-3.5 text-right"><strong class="text-body-sm tabular-nums" :class="item.is_low ? 'text-warning-700' : 'text-primary-900'">{{ item.stock }} {{ unitLabels[item.unit] }}</strong><span v-if="item.is_low" class="mt-1 flex items-center justify-end gap-1 text-tiny text-warning-700"><AlertTriangle class="h-3 w-3" /> {{ $t('inventory.items.minimum', { value: item.minimum_stock }) }}</span></td>
                                 <td class="px-5 py-3.5 text-right"><strong class="text-body-sm text-primary-900">{{ money(item.average_cost) }}</strong><span class="block text-tiny text-neutral-400">{{ money(item.stock_value) }}</span></td>
                                 <td class="px-5 py-3.5"><span class="rounded-full px-2 py-1 text-tiny font-bold" :class="item.is_active ? 'bg-accent-50 text-accent-700' : 'bg-neutral-100 text-neutral-500'">{{ item.is_active ? $t('inventory.status.active') : $t('inventory.status.inactive') }}</span></td>
                                 <td class="px-5 py-3.5 text-right"><button v-if="can.manageInventory" class="rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" @click="openEdit(item)"><Pencil class="h-4 w-4" /></button></td>

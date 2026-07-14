@@ -1,4 +1,5 @@
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { computed, ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
@@ -13,6 +14,7 @@ import {
     Users,
 } from 'lucide-vue-next';
 
+const { t } = useI18n();
 const props = defineProps({
     stats: Object,
     moduleAdoption: Array,
@@ -28,34 +30,34 @@ function ratio(value, total) {
 
 const kpis = computed(() => [
     {
-        label: 'Hotele aktive',
+        label: t('superAdmin.auto.copy017'),
         value: props.stats.hotels_active,
         lead: `${ratio(props.stats.hotels_active, props.stats.hotels_total)}%`,
         leadClass: 'text-emerald-700',
-        detail: 'e portofolit aktiv',
+        detail: t('superAdmin.dynamic.activePortfolio'),
         icon: Building2,
         tone: 'emerald',
     },
     {
-        label: 'MRR i parashikuar',
+        label: t('superAdmin.dynamic.projectedMrr'),
         value: money(props.stats.mrr_cents),
-        detail: 'Pa tarifat variabël 1%',
+        detail: t('superAdmin.dynamic.excludesVariableFees'),
         icon: CreditCard,
         tone: 'blue',
     },
     {
-        label: 'Abonime aktive',
+        label: t('superAdmin.dynamic.activeSubscriptions'),
         value: props.stats.subscriptions_active,
         lead: props.stats.subscriptions_attention,
         leadClass: props.stats.subscriptions_attention ? 'text-amber-700' : 'text-emerald-700',
-        detail: 'me pagesë të vonuar',
+        detail: t('superAdmin.dynamic.latePayments'),
         icon: Layers3,
         tone: 'emerald',
     },
     {
-        label: 'Përdorues',
+        label: t('superAdmin.auto.copy051'),
         value: props.stats.users_total,
-        detail: 'Në të gjitha hotelet',
+        detail: t('superAdmin.dynamic.allHotels'),
         icon: Users,
         tone: 'violet',
     },
@@ -63,19 +65,19 @@ const kpis = computed(() => [
 
 const signals = computed(() => [
     {
-        label: 'Abonimet',
+        label: t('superAdmin.auto.copy132'),
         value: props.stats.subscriptions_active,
         total: props.stats.hotels_total,
         tone: props.stats.subscriptions_attention ? 'attention' : 'ok',
     },
     {
-        label: 'Domain-et',
+        label: t('superAdmin.dynamic.domains'),
         value: props.stats.domains_configured,
         total: props.stats.hotels_total,
         tone: props.stats.domains_configured === props.stats.hotels_total ? 'ok' : 'attention',
     },
     {
-        label: 'Integrimet',
+        label: t('superAdmin.auto.copy088'),
         value: props.stats.integrations_ready,
         total: props.stats.integrations_total,
         tone: props.stats.integrations_ready === props.stats.integrations_total ? 'ok' : 'attention',
@@ -83,14 +85,14 @@ const signals = computed(() => [
 ]);
 
 const healthLabel = computed(() => {
-    if (props.stats.health_score >= 85) return 'Gjendje shumë e mirë';
-    if (props.stats.health_score >= 65) return 'Gjendje e mirë';
-    return 'Kërkon vëmendje';
+    if (props.stats.health_score >= 85) return t('superAdmin.dynamic.healthExcellent');
+    if (props.stats.health_score >= 65) return t('superAdmin.dynamic.healthGood');
+    return t('superAdmin.auto.copy064');
 });
 
 const healthDetail = computed(() => props.stats.subscriptions_attention
-    ? 'Disa abonime kërkojnë ndërhyrje.'
-    : 'Abonimet janë aktive; plotëso domain-et dhe integrimet e mbetura.');
+    ? t('superAdmin.dynamic.subscriptionsNeedAttention')
+    : t('superAdmin.dynamic.subscriptionsHealthyDetail'));
 
 function toneClass(tone) {
     return {
@@ -115,8 +117,8 @@ function date(value) {
 
 function statusLabel(status) {
     return {
-        trialing: 'Provë', active: 'Aktiv', past_due: 'Pagesë e vonuar',
-        suspended: 'Pezulluar', canceled: 'Anuluar', inactive: 'Joaktiv',
+        trialing: t('superAdmin.auto.copy049'), active: t('superAdmin.auto.copy005'), past_due: t('superAdmin.auto.copy042'),
+        suspended: t('superAdmin.auto.copy044'), canceled: t('superAdmin.auto.copy009'), inactive: t('superAdmin.dynamic.inactive'),
     }[status] || status;
 }
 
@@ -150,16 +152,16 @@ function refresh() {
 </script>
 
 <template>
-    <SuperAdminLayout title="Përmbledhje — Lora Control Panel">
+    <SuperAdminLayout :title="$t('superAdmin.auto.copy145')">
         <div class="mx-auto max-w-[1480px] space-y-5">
             <div>
                 <div class="text-xs text-neutral-400">
-                    <span>Control Panel</span><span class="mx-2">/</span><span>Përmbledhje</span>
+                    <span>Control Panel</span><span class="mx-2">/</span><span>{{ $t('superAdmin.auto.copy120') }}</span>
                 </div>
                 <div class="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h1 class="text-3xl font-semibold tracking-tight text-neutral-950">Përmbledhje</h1>
-                        <p class="mt-2 text-sm text-neutral-500">Gjendja operative dhe financiare e platformës sot.</p>
+                        <h1 class="text-3xl font-semibold tracking-tight text-neutral-950">{{ $t('superAdmin.auto.copy120') }}</h1>
+                        <p class="mt-2 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy136') }}</p>
                     </div>
                     <div class="flex flex-wrap gap-2">
                         <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-700 shadow-sm hover:bg-neutral-50 disabled:opacity-60" :disabled="refreshing" @click="refresh">
@@ -167,7 +169,7 @@ function refresh() {
                             {{ refreshing ? 'Duke rifreskuar…' : 'Rifresko' }}
                         </button>
                         <Link href="/super-admin/tenants" class="inline-flex items-center gap-2 rounded-xl bg-[#17745c] px-4 py-2.5 text-sm font-semibold text-white no-underline shadow-sm hover:bg-[#125f4c]">
-                            Menaxho hotelet <ArrowRight class="h-4 w-4" />
+                            {{ t('superAdmin.dynamic.manageHotels') }} <ArrowRight class="h-4 w-4" />
                         </Link>
                     </div>
                 </div>
@@ -195,17 +197,17 @@ function refresh() {
                 <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
                     <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
                         <div>
-                            <h2 class="text-lg font-semibold text-neutral-900">Prioritetet e sotme</h2>
-                            <p class="mt-1 text-sm text-neutral-500">Çfarë kërkon ndërhyrjen e super-adminit.</p>
+                            <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy141') }}</h2>
+                            <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy144') }}</p>
                         </div>
-                        <span class="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-600">{{ needsAttention.length }} urgjente</span>
+                        <span class="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-600">{{ t('superAdmin.dynamic.urgentCount', { count: needsAttention.length }) }}</span>
                     </div>
 
                     <div v-if="!needsAttention.length" class="m-5 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
                         <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700"><Check class="h-5 w-5" :stroke-width="2.4" /></span>
                         <div>
-                            <p class="font-semibold text-emerald-800">Abonimet janë në rregull</p>
-                            <p class="mt-1 text-xs text-emerald-700/70">Asnjë pagesë e vonuar ose hotel i pezulluar.</p>
+                            <p class="font-semibold text-emerald-800">{{ $t('superAdmin.auto.copy133') }}</p>
+                            <p class="mt-1 text-xs text-emerald-700/70">{{ $t('superAdmin.auto.copy135') }}</p>
                         </div>
                     </div>
 
@@ -237,8 +239,8 @@ function refresh() {
 
                 <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
                     <div class="border-b border-neutral-200 px-5 py-4">
-                        <h2 class="text-lg font-semibold text-neutral-900">Shëndeti i platformës</h2>
-                        <p class="mt-1 text-sm text-neutral-500">Konfigurimi i tenant-ëve.</p>
+                        <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy143') }}</h2>
+                        <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy138') }}</p>
                     </div>
                     <div class="flex items-center gap-5 px-5 py-5">
                         <div class="relative grid h-24 w-24 shrink-0 place-items-center rounded-full" :style="{ background: `conic-gradient(#17745c 0 ${stats.health_score}%, #edf1ef ${stats.health_score}% 100%)` }">
@@ -251,9 +253,9 @@ function refresh() {
                         </div>
                     </div>
                     <div class="divide-y divide-neutral-100 border-t border-neutral-200 px-5">
-                        <div class="flex items-center justify-between py-3 text-sm"><span class="text-neutral-600">Abonimet</span><span class="font-semibold" :class="stats.subscriptions_attention ? 'text-amber-700' : 'text-emerald-700'">{{ stats.subscriptions_attention ? `${stats.subscriptions_attention} kërkojnë vëmendje` : 'Në rregull' }}</span></div>
-                        <div class="flex items-center justify-between py-3 text-sm"><span class="text-neutral-600">Domain primar</span><span class="font-semibold" :class="stats.domains_configured === stats.hotels_total ? 'text-emerald-700' : 'text-amber-700'">{{ stats.hotels_total - stats.domains_configured ? `${stats.hotels_total - stats.domains_configured} mungojnë` : 'Të plotë' }}</span></div>
-                        <div class="flex items-center justify-between py-3 text-sm"><span class="text-neutral-600">Channex / POK</span><span class="font-semibold" :class="stats.integrations_ready === stats.integrations_total ? 'text-emerald-700' : 'text-amber-700'">{{ stats.integrations_ready === stats.integrations_total ? 'Të konfiguruara' : 'Kërkojnë konfigurim' }}</span></div>
+                        <div class="flex items-center justify-between py-3 text-sm"><span class="text-neutral-600">{{ $t('superAdmin.auto.copy132') }}</span><span class="font-semibold" :class="stats.subscriptions_attention ? 'text-amber-700' : 'text-emerald-700'">{{ stats.subscriptions_attention ? t('superAdmin.dynamic.needAttentionCount', { count: stats.subscriptions_attention }) : t('superAdmin.auto.copy063') }}</span></div>
+                        <div class="flex items-center justify-between py-3 text-sm"><span class="text-neutral-600">{{ $t('superAdmin.auto.copy012') }}</span><span class="font-semibold" :class="stats.domains_configured === stats.hotels_total ? 'text-emerald-700' : 'text-amber-700'">{{ stats.hotels_total - stats.domains_configured ? t('superAdmin.dynamic.missingCount', { count: stats.hotels_total - stats.domains_configured }) : t('superAdmin.dynamic.complete') }}</span></div>
+                        <div class="flex items-center justify-between py-3 text-sm"><span class="text-neutral-600">Channex / POK</span><span class="font-semibold" :class="stats.integrations_ready === stats.integrations_total ? 'text-emerald-700' : 'text-amber-700'">{{ stats.integrations_ready === stats.integrations_total ? t('superAdmin.dynamic.configuredPlural') : t('superAdmin.dynamic.needsConfiguration') }}</span></div>
                     </div>
                 </section>
             </div>
@@ -261,20 +263,20 @@ function refresh() {
             <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
                 <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
                     <div>
-                        <h2 class="text-lg font-semibold text-neutral-900">Hotelet e fundit</h2>
-                        <p class="mt-1 text-sm text-neutral-500">Portofoli i shtuar së fundmi.</p>
+                        <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy137') }}</h2>
+                        <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy140') }}</p>
                     </div>
-                    <Link href="/super-admin/tenants" class="text-sm font-semibold text-emerald-700 no-underline">Shiko të gjitha <ArrowRight class="ml-1 inline h-4 w-4" /></Link>
+                    <Link href="/super-admin/tenants" class="text-sm font-semibold text-emerald-700 no-underline">{{ $t('superAdmin.auto.copy142') }} <ArrowRight class="ml-1 inline h-4 w-4" /></Link>
                 </div>
 
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[720px] text-sm">
-                        <thead><tr class="border-b border-neutral-200 bg-neutral-50/70 text-left text-[11px] uppercase tracking-wide text-neutral-400"><th class="px-5 py-3 font-semibold">Hoteli</th><th class="px-4 py-3 font-semibold">Abonimi</th><th class="px-4 py-3 font-semibold">Përdorimi</th><th class="px-5 py-3 text-right font-semibold">Statusi</th></tr></thead>
+                        <thead><tr class="border-b border-neutral-200 bg-neutral-50/70 text-left text-[11px] uppercase tracking-wide text-neutral-400"><th class="px-5 py-3 font-semibold">{{ $t('superAdmin.auto.copy018') }}</th><th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy003') }}</th><th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy050') }}</th><th class="px-5 py-3 text-right font-semibold">{{ $t('superAdmin.auto.copy059') }}</th></tr></thead>
                         <tbody class="divide-y divide-neutral-100">
                             <tr v-for="tenant in recentTenants" :key="tenant.id" class="hover:bg-neutral-50/60">
                                 <td class="px-5 py-3.5"><div class="flex items-center gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-xs font-bold text-emerald-700">{{ tenant.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase() }}</span><div class="min-w-0"><Link :href="`/super-admin/tenants/${tenant.id}`" class="truncate font-semibold text-neutral-900 no-underline hover:text-emerald-700">{{ tenant.name }}</Link><p class="mt-0.5 truncate text-xs text-neutral-400">{{ tenant.domain || tenant.slug }} · {{ date(tenant.created_at) }}</p></div></div></td>
-                                <td class="px-4 py-3.5"><p class="font-semibold text-neutral-900">{{ money(tenant.mrr_cents) }} / muaj</p><p class="mt-0.5 text-xs text-neutral-400">{{ tenant.billing_cycle === 'annual' ? 'Faturim vjetor' : 'Faturim mujor' }}</p></td>
-                                <td class="px-4 py-3.5"><p class="text-neutral-700">{{ tenant.users_count }} përdorues</p><p class="mt-0.5 text-xs text-neutral-400">{{ tenant.modules.length }} module</p></td>
+                                <td class="px-4 py-3.5"><p class="font-semibold text-neutral-900">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(tenant.mrr_cents) }) }}</p><p class="mt-0.5 text-xs text-neutral-400">{{ t('superAdmin.dynamic.billingCycle', { cycle: tenant.billing_cycle === 'annual' ? t('superAdmin.dynamic.annualLower') : t('superAdmin.dynamic.monthlyLower') }) }}</p></td>
+                                <td class="px-4 py-3.5"><p class="text-neutral-700">{{ t('superAdmin.dynamic.usersCount', { count: tenant.users_count }) }}</p><p class="mt-0.5 text-xs text-neutral-400">{{ t('superAdmin.dynamic.modulesCount', { count: tenant.modules.length }) }}</p></td>
                                 <td class="px-5 py-3.5 text-right"><span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="statusClass(tenant.subscription_status)"><span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(tenant.subscription_status)" />{{ statusLabel(tenant.subscription_status) }}</span></td>
                             </tr>
                         </tbody>
@@ -284,7 +286,7 @@ function refresh() {
 
             <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
                 <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
-                    <div><h2 class="text-lg font-semibold text-neutral-900">Adoptimi i moduleve</h2><p class="mt-1 text-sm text-neutral-500">Mbulimi aktual në portofol.</p></div>
+                    <div><h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy134') }}</h2><p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy139') }}</p></div>
                     <Gauge class="h-5 w-5 text-neutral-400" />
                 </div>
                 <div class="flex flex-wrap gap-2 p-5">

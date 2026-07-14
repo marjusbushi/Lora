@@ -95,8 +95,8 @@ watch(() => props.filters, (value) => {
 
 <template>
     <component :is="embedded ? 'div' : AppLayout">
-        <PageHeader v-if="!embedded" title="Historia e veprimeve" :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Historia' }]" />
-        <p v-if="!embedded" class="mt-1 text-body-sm text-neutral-500">Kontrollo gjurmën e veprimeve dhe ndryshimeve në hotel.</p>
+        <PageHeader v-if="!embedded" :title="$t('accountCenter.auditHistory')" :breadcrumbs="[{ label: $t('admin.sidebar.dashboard'), href: '/dashboard' }, { label: $t('admin.audit.history') }]" />
+        <p v-if="!embedded" class="mt-1 text-body-sm text-neutral-500">{{ $t('admin.audit.subtitle') }}</p>
 
         <div :class="embedded ? '' : 'mt-6 flex flex-col gap-6 lg:flex-row'">
             <SettingsSidebar v-if="!embedded" active-item="history" />

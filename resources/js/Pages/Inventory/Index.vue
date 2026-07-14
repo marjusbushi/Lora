@@ -5,17 +5,15 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
 import { money } from '@/Pages/Finance/financeShared.js';
+import { getIntlLocale, translate } from '@/i18n';
 
 defineProps({ summary: Object, lowItems: Array, warehouses: Array, recentMovements: Array, can: Object });
 
-const movementLabels = {
-    purchase: 'Blerje', opening_balance: 'Gjendje fillestare', transfer_in: 'Transferim hyrës',
-    transfer_out: 'Transferim dalës', sale: 'Shitje', adjustment: 'Rregullim', room_charge: 'Konsum dhome',
-};
-const unitLabels = { piece: 'copë', kg: 'kg', liter: 'L', pack: 'paketë' };
+const movementLabels = Object.fromEntries(['purchase', 'opening_balance', 'transfer_in', 'transfer_out', 'sale', 'adjustment', 'room_charge'].map((key) => [key, translate(`inventory.movementTypes.${key}`)]));
+const unitLabels = { piece: translate('inventory.units.piece'), kg: translate('inventory.units.kg'), liter: translate('inventory.units.liter'), pack: translate('inventory.units.pack') };
 
 function formatDate(value) {
-    return value ? new Intl.DateTimeFormat('sq-AL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '—';
+    return value ? new Intl.DateTimeFormat(getIntlLocale(), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '—';
 }
 </script>
 
@@ -60,7 +58,7 @@ function formatDate(value) {
                     <div v-if="lowItems.length" class="divide-y divide-neutral-100">
                         <div v-for="item in lowItems" :key="item.id" class="flex items-center gap-4 px-5 py-3.5">
                             <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-warning-50 text-warning-700"><Package class="h-4 w-4" /></span>
-                            <div class="min-w-0 flex-1"><strong class="block truncate text-body-sm text-primary-900">{{ item.name }}</strong><span class="text-tiny text-neutral-400">{{ item.sku }} · minimumi {{ item.minimum_stock }} {{ unitLabels[item.unit] }}</span></div>
+                            <div class="min-w-0 flex-1"><strong class="block truncate text-body-sm text-primary-900">{{ item.name }}</strong><span class="text-tiny text-neutral-400">{{ item.sku }} · {{ $t('inventory.minimumStockLabel', { value: `${item.minimum_stock} ${unitLabels[item.unit]}` }) }}</span></div>
                             <div class="text-right"><strong class="block text-body-sm text-warning-700">{{ item.stock }} {{ unitLabels[item.unit] }}</strong><span class="text-tiny text-neutral-400">{{ money(item.stock_value) }}</span></div>
                         </div>
                     </div>
@@ -85,7 +83,7 @@ function formatDate(value) {
                 <div class="grid divide-y divide-neutral-100 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
                     <div v-for="warehouse in warehouses" :key="warehouse.id" class="p-5">
                         <div class="flex items-center justify-between"><span class="grid h-9 w-9 place-items-center rounded-lg bg-neutral-100 text-neutral-600"><Warehouse class="h-4 w-4" /></span><span v-if="warehouse.is_default" class="rounded-full bg-accent-50 px-2 py-1 text-tiny font-bold text-accent-700">{{ $t('inventory.warehouses.default') }}</span></div>
-                        <strong class="mt-3 block text-body-sm text-primary-900">{{ warehouse.name }}</strong><span class="mt-1 block text-tiny text-neutral-400">{{ warehouse.items_count }} artikuj · {{ money(warehouse.stock_value) }}</span>
+                        <strong class="mt-3 block text-body-sm text-primary-900">{{ warehouse.name }}</strong><span class="mt-1 block text-tiny text-neutral-400">{{ $t('inventory.itemsValue', { count: warehouse.items_count, value: money(warehouse.stock_value) }) }}</span>
                     </div>
                 </div>
             </Card>

@@ -1,4 +1,5 @@
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { computed, ref, watch } from 'vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
@@ -13,6 +14,7 @@ import {
     X,
 } from 'lucide-vue-next';
 
+const { t } = useI18n();
 defineProps({ title: { type: String, default: 'Lora Control Panel' } });
 
 const page = usePage();
@@ -29,9 +31,9 @@ watch(sidebarCollapsed, (collapsed) => {
 });
 
 const navigation = [
-    { label: 'Përmbledhje', href: '/super-admin', match: '/super-admin', exact: true, icon: LayoutDashboard },
-    { label: 'Hotelet & abonimet', href: '/super-admin/tenants', match: '/super-admin/tenants', icon: Building2 },
-    { label: 'Aktiviteti', href: '/super-admin/activity', match: '/super-admin/activity', icon: ListChecks },
+    { label: t('superAdmin.auto.copy120'), href: '/super-admin', match: '/super-admin', exact: true, icon: LayoutDashboard },
+    { label: t('superAdmin.auto.copy070'), href: '/super-admin/tenants', match: '/super-admin/tenants', icon: Building2 },
+    { label: t('superAdmin.auto.copy107'), href: '/super-admin/activity', match: '/super-admin/activity', icon: ListChecks },
 ];
 
 function isActive(item) {
@@ -87,19 +89,19 @@ function isActive(item) {
             </nav>
 
             <div class="space-y-1 border-t border-white/10 p-4" :class="sidebarCollapsed && 'lg:px-3'">
-                <a href="https://lorapms.com" target="_blank" rel="noopener" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white/60 no-underline hover:bg-white/10 hover:text-white" :class="sidebarCollapsed && 'lg:justify-center lg:px-0'" :title="sidebarCollapsed ? 'Faqja prezantuese' : undefined">
+                <a href="https://lorapms.com" target="_blank" rel="noopener" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white/60 no-underline hover:bg-white/10 hover:text-white" :class="sidebarCollapsed && 'lg:justify-center lg:px-0'" :title="sidebarCollapsed ? t('superAdmin.auto.copy147') : undefined">
                     <ExternalLink class="h-5 w-5" :stroke-width="1.8" />
-                    <span :class="sidebarCollapsed && 'lg:hidden'">Faqja prezantuese</span>
+                    <span :class="sidebarCollapsed && 'lg:hidden'">{{ $t('superAdmin.auto.copy147') }}</span>
                 </a>
                 <button
                     type="button"
                     class="hidden w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white/60 transition hover:bg-white/10 hover:text-white lg:flex"
                     :class="sidebarCollapsed ? 'justify-center px-0' : 'justify-between'"
-                    :aria-label="sidebarCollapsed ? 'Hap menunë' : 'Mbyll menunë'"
-                    :title="sidebarCollapsed ? 'Hap menunë' : 'Mbyll menunë'"
+                    :aria-label="sidebarCollapsed ? t('superAdmin.auto.copy151') : t('superAdmin.auto.copy148')"
+                    :title="sidebarCollapsed ? t('superAdmin.auto.copy151') : t('superAdmin.auto.copy148')"
                     @click="sidebarCollapsed = !sidebarCollapsed"
                 >
-                    <span v-if="!sidebarCollapsed">Mbyll</span>
+                    <span v-if="!sidebarCollapsed">{{ $t('superAdmin.auto.copy028') }}</span>
                     <PanelLeftClose class="h-5 w-5 shrink-0 transition-transform" :class="sidebarCollapsed && 'rotate-180'" :stroke-width="1.8" />
                 </button>
             </div>
@@ -112,8 +114,8 @@ function isActive(item) {
                 </button>
 
                 <div class="hidden lg:block">
-                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Administrimi i platformës</p>
-                    <p class="mt-1 text-sm text-neutral-500">Pa të dhëna operative të hotelit</p>
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">{{ $t('superAdmin.auto.copy146') }}</p>
+                    <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy149') }}</p>
                 </div>
 
                 <div class="ml-auto flex items-center gap-3">
@@ -124,7 +126,7 @@ function isActive(item) {
                     <div class="grid h-10 w-10 place-items-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800">
                         {{ user.name?.charAt(0)?.toUpperCase() || 'A' }}
                     </div>
-                    <Link href="/logout" method="post" as="button" class="rounded-xl p-2.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" title="Dil">
+                    <Link href="/logout" method="post" as="button" class="rounded-xl p-2.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" :title="$t('superAdmin.auto.copy150')">
                         <LogOut class="h-5 w-5" />
                     </Link>
                 </div>

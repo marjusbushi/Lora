@@ -96,7 +96,7 @@ function removeKey() {
             <!-- Hotel context for richer AI reasoning -->
             <form @submit.prevent="saveContext" class="space-y-3 border-t border-neutral-200 pt-5">
                 <FormGroup
-                    label="Konteksti i hotelit (opsional)"
+                    :label="$t('admin.ai.hotelContextOptional')"
                     :error="contextForm.errors.hotel_context"
                 >
                     <textarea
@@ -104,14 +104,13 @@ function removeKey() {
                         rows="3"
                         maxlength="1000"
                         class="w-full rounded-lg border-neutral-300 text-sm"
-                        placeholder="P.sh.: Hotel plazhi në Ksamil; mysafirët kryesisht shqiptarë, italianë, grekë e kosovarë; piku korrik–gusht, Ferragosto e mbush qytetin…"
+                        :placeholder="$t('admin.ai.hotelContextPlaceholder')"
                     />
                 </FormGroup>
                 <p class="text-body-xs text-neutral-500">
-                    Ky përshkrim i jepet AI-së bashkë me të dhënat — sa më konkret (tregu i mysafirëve,
-                    sezonaliteti, çfarë e mbush zonën), aq më të sakta arsyetimet e çmimeve.
+                    {{ $t('admin.ai.hotelContextHint') }}
                 </p>
-                <Button type="submit" variant="outline" size="sm" :loading="contextForm.processing">Ruaj kontekstin</Button>
+                <Button type="submit" variant="outline" size="sm" :loading="contextForm.processing">{{ $t('admin.ai.saveContext') }}</Button>
             </form>
         </div>
     </Card>

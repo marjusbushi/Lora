@@ -1,5 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { getIntlLocale, translate } from '@/i18n';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -7,6 +9,7 @@ const props = defineProps({
     threads: Array,
     selected: Object,
 });
+const { t } = useI18n();
 
 const replyForm = useForm({ body: '' });
 const filter = ref('all'); // all | unread | booking.com | airbnb
@@ -25,12 +28,16 @@ function initials(name) {
     return (name || 'M').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
-const QUICK_REPLIES = [
-    { label: 'Orari i check-in', text: 'Check-in-i standard është ora 14:00 dhe check-out-i ora 11:00. Nëse ju nevojitet ndryshe, na thoni dhe do të mundohemi t\'ju akomodojmë.' },
-    { label: 'Parking & aksesi', text: 'Kemi parking privat falas brenda oborrit. Adresa e saktë dhe udhëzimet do t\'jua dërgojmë një ditë para mbërritjes.' },
-    { label: 'Orari i mëngjesit', text: 'Mëngjesi shërbehet çdo ditë nga ora 08:00 deri në 10:30 në restorantin tonë me pamje nga deti.' },
-    { label: 'Faleminderit!', text: 'Faleminderit shumë! Presim t\'ju mirëpresim. Mirë se vini në Villa Mucho.' },
-];
+const QUICK_REPLIES = computed(() => ['checkIn', 'parking', 'breakfast', 'thanks'].map((key) => ({
+    label: t(`admin.messages.quickReplies.${key}.label`),
+    text: t(`admin.messages.quickReplies.${key}.text`),
+})));
+const FILTERS = computed(() => [
+    ['all', t('admin.messages.filters.all')],
+    ['unread', t('admin.messages.filters.unread')],
+    ['booking.com', 'Booking'],
+    ['airbnb', 'Airbnb'],
+]);
 
 const filteredThreads = computed(() => {
     if (filter.value === 'all') return props.threads;
@@ -53,8 +60,8 @@ function dayLabel(value) {
     if (!value) return '';
     const d = new Date(value);
     const y = new Date(); y.setDate(y.getDate() - 1);
-    if (d.toDateString() === new Date().toDateString()) return 'Sot';
-    if (d.toDateString() === y.toDateString()) return 'Dje';
+    if (d.toDateString() === new Date().toDateString()) return t('superAdmin.dynamic.today');
+    if (d.toDateString() === y.toDateString()) return t('superAdmin.dynamic.yesterday');
     return new Intl.DateTimeFormat(getIntlLocale(), { day: '2-digit', month: 'long', year: 'numeric' }).format(d);
 }
 function fdate(value) {
@@ -107,14 +114,14 @@ function statusLabel(s) {
                 <!-- Thread list -->
                 <div class="flex min-h-0 flex-col border-r border-neutral-200">
                     <div class="px-4 pt-4">
-                        <h2 class="text-lg font-bold tracking-tight text-neutral-900">Mesazhet</h2>
+                        <h2 class="text-lg font-bold tracking-tight text-neutral-900">{{ $t('admin.sidebar.messages') }}</h2>
                         <div class="relative mt-3">
                             <svg class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" /></svg>
-                            <input placeholder="Kërko mysafir…" class="w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 pl-9 pr-3 text-sm" />
+                            <input :placeholder="$t('admin.messages.searchGuest')" class="w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 pl-9 pr-3 text-sm" />
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-1.5 px-4 py-3">
-                        <button v-for="f in [['all','Të gjitha'],['unread','Të palexuara'],['booking.com','Booking'],['airbnb','Airbnb']]" :key="f[0]"
+                        <button v-for="f in FILTERS" :key="f[0]"
                             class="rounded-full border px-2.5 py-1 text-xs font-semibold transition"
                             :class="filter === f[0] ? 'border-[#0f3b30] bg-[#0f3b30] text-white' : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'"
                             @click="filter = f[0]">{{ f[1] }}</button>
@@ -179,19 +186,19 @@ function statusLabel(s) {
                                     @click="useQuick(q.text)">{{ q.label }}</button>
                             </div>
                             <form class="flex items-end gap-2.5 border-t border-neutral-200 bg-white p-3" @submit.prevent="sendReply">
-                                <textarea v-model="replyForm.body" rows="1" placeholder="Shkruaj përgjigjen…  (Enter për të dërguar)"
+                                <textarea v-model="replyForm.body" rows="1" :placeholder="$t('admin.messages.replyPlaceholder')"
                                     class="min-h-[46px] flex-1 resize-none rounded-xl border-neutral-200 px-3.5 py-3 text-sm focus:border-[#83dcb2] focus:ring-[#83dcb2]"
                                     @keydown.enter.exact.prevent="sendReply" />
                                 <button type="submit" :disabled="replyForm.processing || !replyForm.body.trim()"
                                     class="inline-flex h-[46px] items-center gap-2 rounded-xl bg-[#15855c] px-4 text-sm font-semibold text-white transition hover:bg-[#0c5a3e] disabled:opacity-50">
                                     <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.926A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.085l-1.414 4.926a.75.75 0 00.826.95 28.897 28.897 0 0015.293-7.155.75.75 0 000-1.114A28.897 28.897 0 003.105 2.289z" /></svg>
-                                    Dërgo
+                                    {{ t('admin.messages.send') }}
                                 </button>
                             </form>
                         </template>
                         <p v-else class="border-t border-neutral-200 bg-white px-5 py-3 text-xs text-neutral-400">{{ $t('admin.generated.k_865e02e384a1') }}</p>
                     </template>
-                    <div v-else class="flex flex-1 items-center justify-center text-sm text-neutral-400">Zgjidh një bisedë majtas.</div>
+                    <div v-else class="flex flex-1 items-center justify-center text-sm text-neutral-400">{{ $t('admin.generated.k_dd664b5768c4') }}</div>
                 </div>
 
                 <!-- Context panel -->
@@ -214,11 +221,11 @@ function statusLabel(s) {
                                 <span>{{ selected.reservation.ref || ('#' + selected.reservation.id) }}</span>
                                 <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-medium text-emerald-700">{{ statusLabel(selected.reservation.status) }}</span>
                             </div>
-                            <div v-if="selected.reservation.room" class="flex justify-between gap-3 border-b border-neutral-100 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">Dhoma</span><span class="text-right font-semibold">{{ selected.reservation.room }}</span></div>
+                            <div v-if="selected.reservation.room" class="flex justify-between gap-3 border-b border-neutral-100 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">{{ $t('maintenance.room') }}</span><span class="text-right font-semibold">{{ selected.reservation.room }}</span></div>
                             <div class="flex justify-between gap-3 border-b border-neutral-100 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">Check-in</span><span class="font-semibold tabular-nums">{{ fdate(selected.reservation.check_in) }}</span></div>
                             <div class="flex justify-between gap-3 border-b border-neutral-100 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">Check-out</span><span class="font-semibold tabular-nums">{{ fdate(selected.reservation.check_out) }}</span></div>
-                            <div class="flex justify-between gap-3 border-b border-neutral-100 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">Netë · persona</span><span class="font-semibold tabular-nums">{{ selected.reservation.nights }} · {{ selected.reservation.adults }}</span></div>
-                            <div class="flex justify-between gap-3 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">Total</span><span class="font-semibold tabular-nums">{{ money(selected.reservation.total) }}</span></div>
+                            <div class="flex justify-between gap-3 border-b border-neutral-100 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">{{ $t('admin.generated.k_91f5cd935945') }}</span><span class="font-semibold tabular-nums">{{ selected.reservation.nights }} · {{ selected.reservation.adults }}</span></div>
+                            <div class="flex justify-between gap-3 px-3.5 py-2.5 text-xs"><span class="text-neutral-400">{{ $t('admin.generated.k_4820c39dfd13') }}</span><span class="font-semibold tabular-nums">{{ money(selected.reservation.total) }}</span></div>
                         </div>
                         <Link :href="route('reservations.index')" class="mt-2.5 flex items-center justify-center gap-2 rounded-xl border border-neutral-200 py-2.5 text-xs font-semibold text-[#0c5a3e] no-underline transition hover:border-[#83dcb2] hover:bg-[#f2faf6]">
                             <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h4a.75.75 0 010 1.5h-4z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M6.194 12.753a.75.75 0 001.06.053L16.5 4.44v2.81a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.553l-9.056 8.194a.75.75 0 00-.053 1.06z" clip-rule="evenodd" /></svg>

@@ -73,7 +73,7 @@ const methodLabel = { cash: 'Kesh', card: 'Karte' };
 
 const lineTypeOptions = computed(() => [
     ...(!props.inventoryEnabled ? [{ value: 'minibar', label: 'Minibar' }] : []),
-    { value: 'extra', label: 'Shërbim hoteli' },
+    { value: 'extra', label: translate('reservationShow.hotelService') },
     { value: 'discount', label: 'Zbritje' },
 ]);
 const methodOptions = [
@@ -175,10 +175,10 @@ function submitMinibar() {
         onSuccess: () => {
             showMinibarModal.value = false;
             minibarForm.inventory_reference = newInventoryReference();
-            toasts.value?.success('Minibari u regjistrua dhe stoku u përditësua.');
+            toasts.value?.success(translate('reservationShow.minibarSuccess'));
         },
         onError: (errors) => {
-            toasts.value?.error(Object.values(errors)[0] || 'Minibari nuk u regjistrua. Kontrollo të dhënat.');
+            toasts.value?.error(Object.values(errors)[0] || translate('reservationShow.minibarError'));
         },
     });
 }
@@ -342,7 +342,7 @@ function settleAndCheckout(method) {
             <!-- Folio -->
             <Card class="lg:col-span-2" :padding="false">
                 <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
-                    <h3 class="text-label uppercase tracking-wider text-neutral-600">Folio — Llogaria e mysafirit</h3>
+                    <h3 class="text-label uppercase tracking-wider text-neutral-600">{{ $t('reservationShow.folioTitle') }}</h3>
                     <div v-if="canAddCharge" class="flex flex-wrap items-center justify-end gap-2">
                         <Button
                             v-if="isCheckedIn && inventoryEnabled && inventoryItems.length"
@@ -350,9 +350,9 @@ function settleAndCheckout(method) {
                             variant="primary"
                             @click="openMinibarModal"
                         >
-                            <PackageOpen class="h-4 w-4" />Shto minibar
+                            <PackageOpen class="h-4 w-4" />{{ $t('reservationShow.addMinibar') }}
                         </Button>
-                        <Button size="sm" variant="outline" @click="openLineModal"><Plus class="h-4 w-4" />Shto tarifë</Button>
+                        <Button size="sm" variant="outline" @click="openLineModal"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</Button>
                     </div>
                 </div>
 
@@ -527,7 +527,7 @@ function settleAndCheckout(method) {
                     <FormGroup :label="$t('admin.generated.k_db85f6c8ba94')" :error="lineForm.errors.type" required>
                         <Select v-model="lineForm.type" :options="lineTypeOptions" :error="lineForm.errors.type" />
                     </FormGroup>
-                    <FormGroup :label="lineForm.type === 'discount' ? 'Shuma e zbritjes' : 'Shuma'" :error="lineForm.errors.amount" required>
+                    <FormGroup :label="lineForm.type === 'discount' ? $t('reservationShow.discountAmount') : $t('reservationShow.amount')" :error="lineForm.errors.amount" required>
                         <TextInput type="number" step="0.01" min="0.01" v-model="lineForm.amount" placeholder="0.00" :error="lineForm.errors.amount" />
                     </FormGroup>
                 </div>

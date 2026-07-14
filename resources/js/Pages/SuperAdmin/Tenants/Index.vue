@@ -1,4 +1,5 @@
 <script setup>
+import { useI18n } from 'vue-i18n';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Button from '@/Components/UI/Button.vue';
@@ -18,6 +19,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 
+const { t } = useI18n();
 const props = defineProps({
     tenants: Array,
     currentTenantId: Number,
@@ -167,7 +169,7 @@ function monthlyMrr(tenant) {
 
 function tenantHealth(tenant) {
     const status = hotelStatus(tenant);
-    if (status.tone !== 'ok') return { ...status, detail: 'Kontrollo abonimin ose statusin' };
+    if (status.tone !== 'ok') return { ...status, detail: t('superAdmin.auto.copy066') };
 
     const missing = [];
     if (!tenant.primary_domain) missing.push('domain');
@@ -177,8 +179,8 @@ function tenantHealth(tenant) {
         && (!tenant.integrations?.pok?.enabled || !tenant.integrations?.pok?.has_key_id)) missing.push('POK');
 
     return missing.length
-        ? { label: 'Kërkon vëmendje', tone: 'attention', detail: `Mungon: ${missing.join(', ')}` }
-        : { label: 'Në rregull', tone: 'ok', detail: 'Konfigurimi është i plotë' };
+        ? { label: t('superAdmin.auto.copy064'), tone: 'attention', detail: `Mungon: ${missing.join(', ')}` }
+        : { label: t('superAdmin.auto.copy063'), tone: 'ok', detail: t('superAdmin.auto.copy065') };
 }
 
 const summary = computed(() => ({
@@ -190,10 +192,10 @@ const summary = computed(() => ({
 }));
 
 const statusChips = computed(() => [
-    { key: 'all', label: 'Të gjithë', count: props.tenants.length },
-    { key: 'healthy', label: 'Në rregull', count: props.tenants.filter((tenant) => tenantHealth(tenant).tone === 'ok').length },
-    { key: 'attention', label: 'Kërkojnë vëmendje', count: summary.value.attention },
-    { key: 'suspended', label: 'Të pezulluar', count: summary.value.suspended },
+    { key: 'all', label: t('superAdmin.auto.copy061'), count: props.tenants.length },
+    { key: 'healthy', label: t('superAdmin.auto.copy063'), count: props.tenants.filter((tenant) => tenantHealth(tenant).tone === 'ok').length },
+    { key: 'attention', label: t('superAdmin.auto.copy025'), count: summary.value.attention },
+    { key: 'suspended', label: t('superAdmin.auto.copy062'), count: summary.value.suspended },
 ]);
 
 const filteredTenants = computed(() => {
@@ -226,8 +228,8 @@ const filteredTenants = computed(() => {
 function toggleStatus(tenant) {
     const suspend = tenant.status === 'active';
     const msg = suspend
-        ? `Të pezulloj ${tenant.name}? Hoteli s'do të hapet dot (faqja, paneli, rezervimet) derisa ta riaktivizosh.`
-        : `Të riaktivizoj ${tenant.name}?`;
+        ? t('superAdmin.dynamic.confirmSuspendFull', { name: tenant.name })
+        : t('superAdmin.dynamic.confirmActivate', { name: tenant.name });
     if (!confirm(msg)) return;
     router.patch(route('super-admin.tenants.status', tenant.id), {
         status: suspend ? 'suspended' : 'active',
@@ -247,11 +249,11 @@ function initials(name) {
 }
 
 function exportTenants() {
-    const header = ['Hoteli', 'Domain', 'Abonimi', 'Përdorues', 'Module', 'MRR EUR', 'Shëndeti', 'Statusi'];
+    const header = [t('superAdmin.auto.copy018'), 'Domain', t('superAdmin.auto.copy003'), t('superAdmin.auto.copy051'), t('superAdmin.auto.copy034'), 'MRR EUR', t('superAdmin.auto.copy057'), t('superAdmin.auto.copy059')];
     const rows = filteredTenants.value.map((tenant) => [
         tenant.name,
         tenant.primary_domain || '',
-        tenant.billing?.billing_cycle === 'annual' ? 'Vjetore' : 'Mujore',
+        tenant.billing?.billing_cycle === 'annual' ? t('superAdmin.auto.copy068') : t('superAdmin.auto.copy037'),
         tenant.users_count,
         enabledCount(tenant),
         (monthlyMrr(tenant) / 100).toFixed(2),
@@ -273,19 +275,19 @@ function shortDate(value) {
 }
 
 // One status per hotel: suspension and billing trouble collapse into a single
-// clear pill instead of two separate 'Aktiv' badges.
+// clear pill instead of two separate t('superAdmin.auto.copy005') badges.
 function hotelStatus(tenant) {
-    if (tenant.status === 'suspended') return { label: 'Pezulluar', tone: 'bad' };
+    if (tenant.status === 'suspended') return { label: t('superAdmin.auto.copy044'), tone: 'bad' };
     const b = tenant.billing || {};
-    if (b.status === 'past_due') return { label: 'Pagesë e vonuar', tone: 'warn' };
+    if (b.status === 'past_due') return { label: t('superAdmin.auto.copy042'), tone: 'warn' };
     if (['suspended', 'canceled', 'inactive'].includes(b.status)) return { label: statusLabel(b.status), tone: 'warn' };
     if (b.current_period_ends_at) {
         const ends = new Date(b.current_period_ends_at);
         const soon = new Date();
         soon.setDate(soon.getDate() + 14);
-        if (ends <= soon) return { label: `Rinovim më ${shortDate(b.current_period_ends_at)}`, tone: 'warn' };
+        if (ends <= soon) return { label: t('superAdmin.dynamic.renewalOn', { date: shortDate(b.current_period_ends_at) }), tone: 'warn' };
     }
-    return { label: 'Aktiv', tone: 'ok' };
+    return { label: t('superAdmin.auto.copy005'), tone: 'ok' };
 }
 
 function statusPillClass(tone) {
@@ -341,11 +343,11 @@ function money(cents, currency = 'EUR') {
 
 function statusLabel(status) {
     return {
-        trialing: 'Provë',
-        active: 'Aktiv',
-        past_due: 'Pagesë e vonuar',
-        suspended: 'Pezulluar',
-        canceled: 'Anuluar',
+        trialing: t('superAdmin.auto.copy049'),
+        active: t('superAdmin.auto.copy005'),
+        past_due: t('superAdmin.auto.copy042'),
+        suspended: t('superAdmin.auto.copy044'),
+        canceled: t('superAdmin.auto.copy009'),
         inactive: 'Joaktiv',
     }[status] || status;
 }
@@ -354,26 +356,26 @@ function statusLabel(status) {
 <template>
     <Head :title="$t('admin.generated.k_0f144fdc6f3c')" />
 
-    <SuperAdminLayout title="Hotelet & abonimet — Lora Control Panel">
+    <SuperAdminLayout :title="$t('superAdmin.auto.copy071')">
         <div class="mx-auto max-w-[1480px] space-y-6">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <PageHeader
-                        title="Hotelet & abonimet"
-                        :breadcrumbs="[{ label: 'Control Panel', href: '/super-admin' }, { label: 'Hotelet & abonimet' }]"
+                        :title="$t('superAdmin.auto.copy070')"
+                        :breadcrumbs="[{ label: 'Control Panel', href: '/super-admin' }, { label: t('superAdmin.auto.copy070') }]"
                     />
-                    <p class="mt-1 text-sm text-neutral-500">Menaxho tenantët, të ardhurat dhe shëndetin e platformës.</p>
+                    <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy031') }}</p>
                 </div>
-                <Button variant="primary" @click="openCreate">+ Shto hotel</Button>
+                <Button variant="primary" @click="openCreate">+ {{ t('superAdmin.dynamic.addHotel') }}</Button>
             </div>
 
             <section class="grid gap-4 md:grid-cols-3">
                 <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-sm font-medium text-neutral-500">Hotele aktive</p>
+                            <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy017') }}</p>
                             <p class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900">{{ summary.active }}</p>
-                            <p class="mt-1 text-xs text-neutral-400">{{ summary.users }} përdorues në platformë</p>
+                            <p class="mt-1 text-xs text-neutral-400">{{ t('superAdmin.dynamic.platformUsersCount', { count: summary.users }) }}</p>
                         </div>
                         <span class="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><Building2 class="h-5 w-5" /></span>
                     </div>
@@ -381,9 +383,9 @@ function statusLabel(status) {
                 <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-sm font-medium text-neutral-500">MRR i vlerësuar</p>
+                            <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy027') }}</p>
                             <p class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900">{{ money(summary.mrr, 'EUR') }}</p>
-                            <p class="mt-1 text-xs text-neutral-400">Nga abonimet aktive</p>
+                            <p class="mt-1 text-xs text-neutral-400">{{ $t('superAdmin.auto.copy040') }}</p>
                         </div>
                         <span class="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-700"><CreditCard class="h-5 w-5" /></span>
                     </div>
@@ -391,9 +393,9 @@ function statusLabel(status) {
                 <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-sm font-medium text-neutral-500">Kërkojnë vëmendje</p>
+                            <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy025') }}</p>
                             <p class="mt-3 text-3xl font-semibold tracking-tight" :class="summary.attention ? 'text-amber-700' : 'text-neutral-900'">{{ summary.attention }}</p>
-                            <p class="mt-1 text-xs text-neutral-400">Abonime, domain-e ose integrime</p>
+                            <p class="mt-1 text-xs text-neutral-400">{{ $t('superAdmin.auto.copy002') }}</p>
                         </div>
                         <span class="grid h-11 w-11 place-items-center rounded-xl bg-amber-50 text-amber-700"><CircleAlert class="h-5 w-5" /></span>
                     </div>
@@ -403,11 +405,11 @@ function statusLabel(status) {
             <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
                 <div class="flex flex-col gap-4 border-b border-neutral-200 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h2 class="text-lg font-semibold text-neutral-900">Portofoli i hoteleve</h2>
-                        <p class="mt-1 text-sm text-neutral-500">Pamje e përmbledhur e përdorimit dhe konfigurimit.</p>
+                        <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy045') }}</h2>
+                        <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy043') }}</p>
                     </div>
                     <Button v-if="tenants.length" variant="outline" class="gap-2" @click="exportTenants">
-                        <Download class="h-4 w-4" /> Eksporto CSV
+                        <Download class="h-4 w-4" /> {{ t('superAdmin.dynamic.exportCsv') }}
                     </Button>
                 </div>
 
@@ -415,17 +417,17 @@ function statusLabel(status) {
                     <div class="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_190px_190px]">
                         <label class="relative block">
                             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                            <input v-model="search" type="search" placeholder="Kërko hotel, slug ose domain…" class="w-full rounded-xl border-neutral-300 py-2.5 pl-10 pr-3 text-sm" />
+                            <input v-model="search" type="search" :placeholder="$t('superAdmin.auto.copy073')" class="w-full rounded-xl border-neutral-300 py-2.5 pl-10 pr-3 text-sm" />
                         </label>
                         <select v-model="billingCycle" class="rounded-xl border-neutral-300 py-2.5 text-sm text-neutral-700">
-                            <option value="">Të gjitha pagesat</option>
-                            <option value="monthly">Mujore</option>
-                            <option value="annual">Vjetore</option>
+                            <option value="">{{ $t('superAdmin.auto.copy060') }}</option>
+                            <option value="monthly">{{ $t('superAdmin.auto.copy037') }}</option>
+                            <option value="annual">{{ $t('superAdmin.auto.copy068') }}</option>
                         </select>
                         <select v-model="sortOrder" class="rounded-xl border-neutral-300 py-2.5 text-sm text-neutral-700">
-                            <option value="mrr">Rendit: MRR</option>
-                            <option value="name">Rendit: Emri</option>
-                            <option value="attention">Rendit: Vëmendja</option>
+                            <option value="mrr">{{ $t('superAdmin.auto.copy053') }}</option>
+                            <option value="name">{{ $t('superAdmin.auto.copy052') }}</option>
+                            <option value="attention">{{ $t('superAdmin.auto.copy054') }}</option>
                         </select>
                     </div>
                     <div class="flex flex-wrap gap-2">
@@ -446,12 +448,12 @@ function statusLabel(status) {
                     <table class="w-full min-w-[920px] text-sm">
                         <thead>
                             <tr class="border-b border-neutral-200 bg-neutral-50/70 text-left text-[11px] uppercase tracking-[0.08em] text-neutral-400">
-                                <th class="px-5 py-3 font-semibold">Hoteli</th>
-                                <th class="px-4 py-3 font-semibold">Abonimi</th>
-                                <th class="px-4 py-3 font-semibold">Përdorimi</th>
-                                <th class="px-4 py-3 font-semibold">Shëndeti</th>
-                                <th class="px-4 py-3 font-semibold">Statusi</th>
-                                <th class="px-5 py-3 text-right font-semibold">Veprime</th>
+                                <th class="px-5 py-3 font-semibold">{{ $t('superAdmin.auto.copy018') }}</th>
+                                <th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy003') }}</th>
+                                <th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy050') }}</th>
+                                <th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy057') }}</th>
+                                <th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy059') }}</th>
+                                <th class="px-5 py-3 text-right font-semibold">{{ $t('superAdmin.auto.copy067') }}</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-neutral-100">
@@ -462,19 +464,19 @@ function statusLabel(status) {
                                         <div class="min-w-0">
                                             <div class="flex items-center gap-2">
                                                 <Link :href="route('super-admin.tenants.show', tenant.id)" class="truncate font-semibold text-neutral-900 no-underline hover:text-emerald-700" @click.stop>{{ tenant.name }}</Link>
-                                                <span v-if="tenant.id === currentTenantId" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">AKTUAL</span>
+                                                <span v-if="tenant.id === currentTenantId" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{{ $t('superAdmin.auto.copy001') }}</span>
                                             </div>
                                             <p class="mt-0.5 max-w-[280px] truncate text-xs text-neutral-400">{{ tenant.primary_domain || tenant.slug }} · {{ tenant.timezone }}</p>
                                         </div>
                                     </div>
                                 </td>
                                 <td class="px-4 py-4">
-                                    <p class="font-semibold tabular-nums text-neutral-900">{{ money(monthlyMrr(tenant), tenant.billing.currency) }} <span class="text-xs font-normal text-neutral-400">/ muaj</span></p>
+                                    <p class="font-semibold tabular-nums text-neutral-900">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(monthlyMrr(tenant), tenant.billing.currency) }) }}</p>
                                     <p class="mt-0.5 text-xs text-neutral-500">{{ tenant.billing.billing_cycle === 'annual' ? 'Faturim vjetor' : 'Faturim mujor' }}</p>
                                 </td>
                                 <td class="px-4 py-4">
-                                    <p class="font-medium text-neutral-800"><Users class="mr-1 inline h-3.5 w-3.5 text-neutral-400" />{{ tenant.users_count }} përdorues</p>
-                                    <p class="mt-0.5 text-xs text-neutral-500">{{ enabledCount(tenant) }} {{ enabledCount(tenant) === 1 ? 'modul aktiv' : 'module aktive' }}</p>
+                                    <p class="font-medium text-neutral-800"><Users class="mr-1 inline h-3.5 w-3.5 text-neutral-400" />{{ t('superAdmin.dynamic.usersCount', { count: tenant.users_count }) }}</p>
+                                    <p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.dynamic.activeModulesCount', { count: enabledCount(tenant) }) }}</p>
                                 </td>
                                 <td class="px-4 py-4">
                                     <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="statusPillClass(tenantHealth(tenant).tone)">
@@ -497,13 +499,13 @@ function statusLabel(status) {
                                             :disabled="tenant.id === currentTenantId || tenant.status !== 'active'"
                                             @click="switchTenant(tenant)"
                                         >
-                                            {{ tenant.id === currentTenantId ? 'Aktual' : 'Hap' }}
+                                            {{ tenant.id === currentTenantId ? t('superAdmin.auto.copy080') : 'Hap' }}
                                         </Button>
                                         <div class="relative">
-                                            <button type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-neutral-200 text-lg leading-none text-neutral-500 hover:bg-neutral-50" aria-label="Veprime të tjera" @click.stop="toggleMenu(tenant.id)">⋯</button>
+                                            <button type="button" class="grid h-8 w-8 place-items-center rounded-lg border border-neutral-200 text-lg leading-none text-neutral-500 hover:bg-neutral-50" :aria-label="$t('superAdmin.auto.copy076')" @click.stop="toggleMenu(tenant.id)">⋯</button>
                                             <div v-if="openMenuId === tenant.id" class="absolute right-0 z-50 mt-1 w-44 overflow-hidden rounded-xl border border-neutral-200 bg-white py-1 text-left shadow-lg">
-                                                <button type="button" class="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="closeMenu(); openBilling(tenant)">Abonimi</button>
-                                                <button type="button" class="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="closeMenu(); openConfig(tenant)">Konfigurimi</button>
+                                                <button type="button" class="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="closeMenu(); openBilling(tenant)">{{ $t('superAdmin.auto.copy003') }}</button>
+                                                <button type="button" class="block w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="closeMenu(); openConfig(tenant)">{{ $t('superAdmin.auto.copy019') }}</button>
                                                 <button type="button" class="block w-full px-4 py-2 text-left text-sm hover:bg-neutral-50" :class="tenant.status === 'active' ? 'text-red-600' : 'text-success-700'" @click="closeMenu(); toggleStatus(tenant)">{{ tenant.status === 'active' ? 'Pezullo' : 'Aktivizo' }}</button>
                                             </div>
                                         </div>
@@ -515,17 +517,17 @@ function statusLabel(status) {
                 </div>
 
                 <div v-else-if="tenants.length" class="px-5 py-14 text-center">
-                    <p class="text-sm font-medium text-neutral-700">Nuk u gjet asnjë hotel</p>
-                    <p class="mt-1 text-xs text-neutral-500">Ndrysho kërkimin ose filtrat e zgjedhur.</p>
+                    <p class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.auto.copy041') }}</p>
+                    <p class="mt-1 text-xs text-neutral-500">{{ $t('superAdmin.auto.copy039') }}</p>
                 </div>
                 <div v-else class="px-5 py-16 text-center">
-                    <p class="text-sm font-medium text-neutral-700">Ende asnjë hotel</p>
-                    <p class="mt-1 text-xs text-neutral-500">Krijo hotelin e parë të platformës.</p>
-                    <Button variant="primary" class="mt-4" @click="openCreate">+ Shto hotel</Button>
+                    <p class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.auto.copy013') }}</p>
+                    <p class="mt-1 text-xs text-neutral-500">{{ $t('superAdmin.auto.copy023') }}</p>
+                    <Button variant="primary" class="mt-4" @click="openCreate">+ {{ t('superAdmin.dynamic.addHotel') }}</Button>
                 </div>
 
                 <div v-if="tenants.length" class="border-t border-neutral-100 px-5 py-3 text-xs text-neutral-400">
-                    Po shfaqen {{ filteredTenants.length }} nga {{ tenants.length }} hotele
+                    {{ t('superAdmin.dynamic.showingHotels', { shown: filteredTenants.length, total: tenants.length }) }}
                 </div>
             </section>
 
@@ -543,7 +545,7 @@ function statusLabel(status) {
                                 <p class="truncate text-sm text-neutral-500">{{ selectedTenant.primary_domain || selectedTenant.slug }}</p>
                             </div>
                         </div>
-                        <button type="button" class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" aria-label="Mbyll" @click="selectedTenant = null"><X class="h-5 w-5" /></button>
+                        <button type="button" class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" :aria-label="$t('superAdmin.auto.copy028')" @click="selectedTenant = null"><X class="h-5 w-5" /></button>
                     </div>
 
                     <div class="flex-1 space-y-6 overflow-y-auto p-6">
@@ -553,39 +555,39 @@ function statusLabel(status) {
                                 <p class="mt-1 font-semibold text-neutral-900">{{ money(monthlyMrr(selectedTenant), selectedTenant.billing.currency) }}</p>
                             </div>
                             <div class="rounded-xl bg-neutral-50 p-3">
-                                <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Përdorues</p>
+                                <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-400">{{ $t('superAdmin.auto.copy051') }}</p>
                                 <p class="mt-1 font-semibold text-neutral-900">{{ selectedTenant.users_count }}</p>
                             </div>
                             <div class="rounded-xl bg-neutral-50 p-3">
-                                <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Module</p>
+                                <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-400">{{ $t('superAdmin.auto.copy034') }}</p>
                                 <p class="mt-1 font-semibold text-neutral-900">{{ enabledCount(selectedTenant) }}</p>
                             </div>
                         </div>
 
                         <section>
-                            <h3 class="text-sm font-semibold text-neutral-900">Kontrolli i shëndetit</h3>
+                            <h3 class="text-sm font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy021') }}</h3>
                             <div class="mt-3 divide-y divide-neutral-100 rounded-xl border border-neutral-200">
                                 <div class="flex items-center justify-between gap-3 px-4 py-3">
-                                    <span class="text-sm text-neutral-600">Abonimi</span>
+                                    <span class="text-sm text-neutral-600">{{ $t('superAdmin.auto.copy003') }}</span>
                                     <span class="text-sm font-medium text-neutral-900">{{ statusLabel(selectedTenant.billing.status) }}</span>
                                 </div>
                                 <div class="flex items-center justify-between gap-3 px-4 py-3">
-                                    <span class="text-sm text-neutral-600">Domain primar</span>
+                                    <span class="text-sm text-neutral-600">{{ $t('superAdmin.auto.copy012') }}</span>
                                     <span class="max-w-[240px] truncate text-sm font-medium" :class="selectedTenant.primary_domain ? 'text-neutral-900' : 'text-amber-700'">{{ selectedTenant.primary_domain || 'Mungon' }}</span>
                                 </div>
                                 <div v-if="moduleEnabled(selectedTenant, 'channel_manager')" class="flex items-center justify-between gap-3 px-4 py-3">
                                     <span class="text-sm text-neutral-600">Channex</span>
-                                    <span class="text-sm font-medium" :class="selectedTenant.integrations.channex.enabled && selectedTenant.integrations.channex.has_api_key ? 'text-emerald-700' : 'text-amber-700'">{{ selectedTenant.integrations.channex.enabled && selectedTenant.integrations.channex.has_api_key ? 'Konfiguruar' : 'Kërkon konfigurim' }}</span>
+                                    <span class="text-sm font-medium" :class="selectedTenant.integrations.channex.enabled && selectedTenant.integrations.channex.has_api_key ? 'text-emerald-700' : 'text-amber-700'">{{ selectedTenant.integrations.channex.enabled && selectedTenant.integrations.channex.has_api_key ? t('superAdmin.dynamic.configured') : t('superAdmin.dynamic.needsConfiguration') }}</span>
                                 </div>
                                 <div v-if="moduleEnabled(selectedTenant, 'booking_engine')" class="flex items-center justify-between gap-3 px-4 py-3">
                                     <span class="text-sm text-neutral-600">POK</span>
-                                    <span class="text-sm font-medium" :class="selectedTenant.integrations.pok.enabled && selectedTenant.integrations.pok.has_key_id ? 'text-emerald-700' : 'text-amber-700'">{{ selectedTenant.integrations.pok.enabled && selectedTenant.integrations.pok.has_key_id ? 'Konfiguruar' : 'Kërkon konfigurim' }}</span>
+                                    <span class="text-sm font-medium" :class="selectedTenant.integrations.pok.enabled && selectedTenant.integrations.pok.has_key_id ? 'text-emerald-700' : 'text-amber-700'">{{ selectedTenant.integrations.pok.enabled && selectedTenant.integrations.pok.has_key_id ? t('superAdmin.dynamic.configured') : t('superAdmin.dynamic.needsConfiguration') }}</span>
                                 </div>
                             </div>
                         </section>
 
                         <section>
-                            <h3 class="text-sm font-semibold text-neutral-900">Modulet aktive</h3>
+                            <h3 class="text-sm font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy035') }}</h3>
                             <div class="mt-3 flex flex-wrap gap-2">
                                 <span v-for="module in Object.values(selectedTenant.billing.modules).filter((item) => item.enabled)" :key="module.code" class="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">{{ module.name }}</span>
                             </div>
@@ -593,10 +595,10 @@ function statusLabel(status) {
                     </div>
 
                     <div class="flex flex-wrap justify-end gap-2 border-t border-neutral-200 px-6 py-4">
-                        <Button variant="outline" @click="selectedTenant = null">Mbyll</Button>
-                        <Button variant="outline" @click="openConfig(selectedTenant); selectedTenant = null">Konfigurimi</Button>
+                        <Button variant="outline" @click="selectedTenant = null">{{ $t('superAdmin.auto.copy028') }}</Button>
+                        <Button variant="outline" @click="openConfig(selectedTenant); selectedTenant = null">{{ $t('superAdmin.auto.copy019') }}</Button>
                         <Link :href="route('super-admin.tenants.show', selectedTenant.id)" class="inline-flex items-center gap-2 rounded-lg bg-[#123d32] px-4 py-2 text-sm font-medium text-white no-underline hover:bg-[#0d3027]">
-                            Shiko profilin <ExternalLink class="h-4 w-4" />
+                            {{ t('superAdmin.dynamic.viewProfile') }} <ExternalLink class="h-4 w-4" />
                         </Link>
                     </div>
                 </aside>
@@ -608,8 +610,8 @@ function statusLabel(status) {
                 <section class="max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
                     <div class="sticky top-0 z-10 flex items-start justify-between border-b border-neutral-200 bg-white px-5 py-4 sm:px-6">
                         <div>
-                            <h2 class="text-lg font-semibold text-neutral-900">Krijo hotel të ri</h2>
-                            <p class="mt-1 text-sm text-neutral-500">Krijon tenantin dhe të lidh ty si owner.</p>
+                            <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy022') }}</h2>
+                            <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy024') }}</p>
                         </div>
                         <button class="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" type="button" @click="closeCreate">✕</button>
                     </div>
@@ -639,17 +641,17 @@ function statusLabel(status) {
                         </div>
 
                         <div class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
-                            <p class="text-sm font-semibold text-neutral-800">Pronari i parë (opsional)</p>
-                            <p class="mt-0.5 text-xs text-neutral-500">Merr rolin admin + owner; fjalëkalimin e vendos vetë me "Kam harruar fjalëkalimin".</p>
+                            <p class="text-sm font-semibold text-neutral-800">{{ $t('superAdmin.auto.copy048') }}</p>
+                            <p class="mt-0.5 text-xs text-neutral-500">{{ $t('superAdmin.auto.copy032') }}</p>
 
                             <label class="mt-3 block text-sm font-medium text-neutral-700">
-                                Emri i pronarit
+                                {{ t('superAdmin.dynamic.ownerName') }}
                                 <input v-model="form.owner_name" class="mt-1 w-full rounded-lg border-neutral-300 text-sm" placeholder="Ana Berisha" />
                                 <span v-if="form.errors.owner_name" class="mt-1 block text-xs text-danger-600">{{ form.errors.owner_name }}</span>
                             </label>
 
                             <label class="mt-3 block text-sm font-medium text-neutral-700">
-                                Email i pronarit
+                                {{ t('superAdmin.dynamic.ownerEmail') }}
                                 <input v-model="form.owner_email" type="email" class="mt-1 w-full rounded-lg border-neutral-300 text-sm" placeholder="ana@hotelriviera.com" />
                                 <span v-if="form.errors.owner_email" class="mt-1 block text-xs text-danger-600">{{ form.errors.owner_email }}</span>
                             </label>
@@ -670,11 +672,11 @@ function statusLabel(status) {
                         <div class="flex min-w-0 items-center gap-3">
                             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e8f3ef] text-xs font-bold text-[#24624f]">{{ initials(editingTenant.name) }}</span>
                             <div class="min-w-0">
-                                <h2 class="truncate text-lg font-semibold text-neutral-900">Menaxho abonimin</h2>
+                                <h2 class="truncate text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy029') }}</h2>
                                 <p class="truncate text-sm text-neutral-500">{{ editingTenant.name }} · {{ editingTenant.primary_domain || editingTenant.slug }}</p>
                             </div>
                         </div>
-                        <button class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" type="button" aria-label="Mbyll abonimin" @click="closeBilling"><X class="h-5 w-5" /></button>
+                        <button class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" type="button" :aria-label="$t('superAdmin.auto.copy074')" @click="closeBilling"><X class="h-5 w-5" /></button>
                     </div>
 
                     <form class="flex min-h-0 flex-1 flex-col" @submit.prevent="saveBilling">
@@ -682,34 +684,34 @@ function statusLabel(status) {
                             <div class="grid lg:grid-cols-[280px_minmax(0,1fr)]">
                                 <aside class="space-y-5 border-b border-neutral-200 bg-neutral-50/70 p-5 lg:border-b-0 lg:border-r sm:p-6">
                                     <div>
-                                        <p class="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-400">Detajet e planit</p>
+                                        <p class="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-400">{{ $t('superAdmin.auto.copy011') }}</p>
                                         <div class="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
-                                            <p class="text-xs text-neutral-500">MRR aktual</p>
+                                            <p class="text-xs text-neutral-500">{{ $t('superAdmin.auto.copy026') }}</p>
                                             <p class="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">{{ money(monthlyMrr(editingTenant), editingTenant.billing.currency) }}</p>
-                                            <p class="mt-1 text-xs text-neutral-400">{{ enabledCount(editingTenant) }} module aktive</p>
+                                            <p class="mt-1 text-xs text-neutral-400">{{ t('superAdmin.dynamic.activeModulesCount', { count: enabledCount(editingTenant) }) }}</p>
                                         </div>
                                     </div>
 
                                     <div class="space-y-4">
                                         <label class="block text-sm font-medium text-neutral-700">
-                                            Statusi i abonimit
+                                            {{ t('superAdmin.dynamic.subscriptionStatus') }}
                                             <select v-model="billingForm.status" class="mt-1.5 w-full rounded-xl border-neutral-300 py-2.5 text-sm">
-                                                <option value="trialing">Provë</option>
-                                                <option value="active">Aktiv</option>
-                                                <option value="past_due">Pagesë e vonuar</option>
-                                                <option value="suspended">Pezulluar</option>
-                                                <option value="canceled">Anuluar</option>
+                                                <option value="trialing">{{ $t('superAdmin.auto.copy049') }}</option>
+                                                <option value="active">{{ $t('superAdmin.auto.copy005') }}</option>
+                                                <option value="past_due">{{ $t('superAdmin.auto.copy042') }}</option>
+                                                <option value="suspended">{{ $t('superAdmin.auto.copy044') }}</option>
+                                                <option value="canceled">{{ $t('superAdmin.auto.copy009') }}</option>
                                             </select>
                                         </label>
                                         <label class="block text-sm font-medium text-neutral-700">
-                                            Cikli i faturimit
+                                            {{ t('superAdmin.dynamic.billingCycleLabel') }}
                                             <select v-model="billingForm.billing_cycle" class="mt-1.5 w-full rounded-xl border-neutral-300 py-2.5 text-sm">
-                                                <option value="monthly">Mujore</option>
-                                                <option value="annual">Vjetore · -20%</option>
+                                                <option value="monthly">{{ $t('superAdmin.auto.copy037') }}</option>
+                                                <option value="annual">{{ $t('superAdmin.auto.copy069') }}</option>
                                             </select>
                                         </label>
                                         <label class="block text-sm font-medium text-neutral-700">
-                                            Data e rinovimit
+                                            {{ t('superAdmin.dynamic.renewalDate') }}
                                             <input v-model="billingForm.current_period_ends_at" type="date" class="mt-1.5 w-full rounded-xl border-neutral-300 py-2.5 text-sm" />
                                         </label>
                                     </div>
@@ -717,8 +719,8 @@ function statusLabel(status) {
 
                                 <div class="space-y-5 p-5 sm:p-6">
                                     <div>
-                                        <h3 class="font-semibold text-neutral-900">Modulet e përfshira</h3>
-                                        <p class="mt-1 text-sm text-neutral-500">Aktivizo vetëm modulet e kontraktuara. Lora Core mbetet gjithmonë aktiv.</p>
+                                        <h3 class="font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy036') }}</h3>
+                                        <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy006') }}</p>
                                     </div>
 
                                     <div class="grid gap-3 sm:grid-cols-2">
@@ -738,7 +740,7 @@ function statusLabel(status) {
                                                 <span class="min-w-0">
                                                     <span class="block text-sm font-semibold text-neutral-900">{{ module.name }}</span>
                                                     <span class="mt-1 block text-xs leading-5 text-neutral-500">{{ module.description }}</span>
-                                                    <span v-if="module.billing_model === 'percentage'" class="mt-1 block text-xs font-medium text-emerald-700">{{ module.percentage_bps / 100 }}% për rezervim direkt</span>
+                                                    <span v-if="module.billing_model === 'percentage'" class="mt-1 block text-xs font-medium text-emerald-700">{{ t('superAdmin.dynamic.percentPerDirectBooking', { percent: module.percentage_bps / 100 }) }}</span>
                                                 </span>
                                             </label>
 
@@ -757,21 +759,21 @@ function statusLabel(status) {
                                     </div>
 
                                     <label class="block text-sm font-medium text-neutral-700">
-                                        Shënime të brendshme
-                                        <textarea v-model="billingForm.notes" rows="2" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" placeholder="Kontrata, marrëveshja ose shënime për pagesën…" />
+                                        {{ t('superAdmin.dynamic.internalNotes') }}
+                                        <textarea v-model="billingForm.notes" rows="2" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" :placeholder="$t('superAdmin.auto.copy072')" />
                                     </label>
 
                                     <p v-if="Object.keys(billingForm.errors).length" class="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-                                        Kontrollo fushat e abonimit dhe provo përsëri.
+                                        {{ t('superAdmin.dynamic.checkSubscriptionFields') }}
                                     </p>
                                 </div>
                             </div>
                         </div>
 
                         <div class="flex shrink-0 items-center justify-between gap-3 border-t border-neutral-200 bg-white px-5 py-4 sm:px-6">
-                            <p class="hidden text-xs text-neutral-400 sm:block">Ndryshimet aplikohen vetëm pasi të ruhen.</p>
+                            <p class="hidden text-xs text-neutral-400 sm:block">{{ $t('superAdmin.auto.copy038') }}</p>
                             <div class="flex items-center gap-3">
-                                <Button type="button" variant="outline" @click="closeBilling">Anulo</Button>
+                                <Button type="button" variant="outline" @click="closeBilling">{{ $t('superAdmin.auto.copy008') }}</Button>
                                 <Button type="submit" :disabled="billingForm.processing">
                                     {{ billingForm.processing ? 'Duke ruajtur…' : 'Ruaj abonimin' }}
                                 </Button>
@@ -789,16 +791,16 @@ function statusLabel(status) {
                         <div class="flex min-w-0 items-center gap-3">
                             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e8f3ef] text-xs font-bold text-[#24624f]">{{ initials(configTenant.name) }}</span>
                             <div class="min-w-0">
-                                <h2 class="truncate text-lg font-semibold text-neutral-900">Konfigurimi i hotelit</h2>
-                                <p class="truncate text-sm text-neutral-500">{{ configTenant.name }} · Domain-et dhe integrimet</p>
+                                <h2 class="truncate text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy020') }}</h2>
+                                <p class="truncate text-sm text-neutral-500">{{ configTenant.name }} · {{ t('superAdmin.dynamic.domainsAndIntegrations') }}</p>
                             </div>
                         </div>
-                        <button class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" type="button" aria-label="Mbyll konfigurimin" @click="closeConfig"><X class="h-5 w-5" /></button>
+                        <button class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" type="button" :aria-label="$t('superAdmin.auto.copy075')" @click="closeConfig"><X class="h-5 w-5" /></button>
                     </div>
 
                     <div class="grid grid-cols-3 border-b border-neutral-200 bg-neutral-50/70 px-3 pt-2 sm:px-6">
                         <button type="button" class="flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition" :class="configTab === 'domains' ? 'border-[#24624f] text-[#24624f]' : 'border-transparent text-neutral-500 hover:text-neutral-800'" @click="configTab = 'domains'">
-                            <Globe class="h-4 w-4" /> Domain-et
+                            <Globe class="h-4 w-4" /> {{ t('superAdmin.dynamic.domains') }}
                             <span class="rounded-full bg-neutral-200/70 px-1.5 py-0.5 text-[10px]">{{ configTenant.domains.length }}</span>
                         </button>
                         <button type="button" class="flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition" :class="configTab === 'channex' ? 'border-[#24624f] text-[#24624f]' : 'border-transparent text-neutral-500 hover:text-neutral-800'" @click="configTab = 'channex'">
@@ -814,8 +816,8 @@ function statusLabel(status) {
                     <div class="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
                         <section v-if="configTab === 'domains'" class="space-y-5">
                             <div>
-                                <h3 class="font-semibold text-neutral-900">Adresat e hotelit</h3>
-                                <p class="mt-1 text-sm text-neutral-500">Menaxho domain-et ku përdoruesit mund të hapin këtë hotel.</p>
+                                <h3 class="font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy004') }}</h3>
+                                <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy030') }}</p>
                             </div>
 
                             <ul class="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200">
@@ -824,25 +826,25 @@ function statusLabel(status) {
                                         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-neutral-50 text-neutral-400"><Globe class="h-4 w-4" /></span>
                                         <div class="min-w-0">
                                             <p class="truncate text-sm font-medium text-neutral-900">{{ domain.domain }}</p>
-                                            <p class="mt-0.5 text-xs text-neutral-400">{{ domain.is_primary ? 'Domain primar' : 'Domain alternativ' }}</p>
+                                            <p class="mt-0.5 text-xs text-neutral-400">{{ domain.is_primary ? t('superAdmin.auto.copy012') : 'Domain alternativ' }}</p>
                                         </div>
-                                        <span v-if="domain.is_primary" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Primar</span>
+                                        <span v-if="domain.is_primary" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">{{ $t('superAdmin.auto.copy046') }}</span>
                                     </div>
                                     <div v-if="!domain.is_primary" class="flex shrink-0 gap-2 pl-12 sm:pl-0">
-                                        <Button size="sm" variant="outline" @click="makePrimary(domain)">Bëje primar</Button>
-                                        <Button size="sm" variant="outline" class="text-red-600" @click="removeDomain(domain)">Hiq</Button>
+                                        <Button size="sm" variant="outline" @click="makePrimary(domain)">{{ $t('superAdmin.auto.copy010') }}</Button>
+                                        <Button size="sm" variant="outline" class="text-red-600" @click="removeDomain(domain)">{{ $t('superAdmin.auto.copy016') }}</Button>
                                     </div>
                                 </li>
                                 <li v-if="!configTenant.domains.length" class="px-5 py-10 text-center">
                                     <span class="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-neutral-50 text-neutral-400"><Globe class="h-5 w-5" /></span>
-                                    <p class="mt-3 text-sm font-medium text-neutral-700">Ende pa domain</p>
-                                    <p class="mt-1 text-xs text-neutral-500">Shto adresën e parë për këtë hotel.</p>
+                                    <p class="mt-3 text-sm font-medium text-neutral-700">{{ $t('superAdmin.auto.copy014') }}</p>
+                                    <p class="mt-1 text-xs text-neutral-500">{{ $t('superAdmin.auto.copy056') }}</p>
                                 </li>
                             </ul>
 
                             <form class="rounded-xl border border-neutral-200 bg-neutral-50/60 p-4" @submit.prevent="addDomain">
                                 <label class="block text-sm font-medium text-neutral-700">
-                                    Domain i ri
+                                    {{ t('superAdmin.dynamic.newDomain') }}
                                     <div class="mt-1.5 flex flex-col gap-2 sm:flex-row">
                                         <input v-model="domainForm.domain" required class="w-full rounded-xl border-neutral-300 text-sm" placeholder="riviera.lorapms.com" />
                                         <Button type="submit" class="shrink-0" :disabled="domainForm.processing">{{ domainForm.processing ? 'Duke shtuar…' : 'Shto domain' }}</Button>
@@ -862,10 +864,10 @@ function statusLabel(status) {
                                             <Check v-if="configTenant.integrations.channex.has_api_key" class="h-3 w-3" />{{ configTenant.integrations.channex.has_api_key ? 'Kredencialet e ruajtura' : 'Pa kredenciale' }}
                                         </span>
                                     </div>
-                                    <p class="mt-1 text-xs text-neutral-500">Sinkronizon inventarin dhe rezervimet me OTA-t.</p>
+                                    <p class="mt-1 text-xs text-neutral-500">{{ $t('superAdmin.auto.copy058') }}</p>
                                 </div>
                                 <label class="flex shrink-0 cursor-pointer items-center gap-3 text-sm font-medium text-neutral-700">
-                                    Aktiv
+                                    {{ $t('superAdmin.auto.copy005') }}
                                     <input v-model="channexForm.enabled" type="checkbox" class="peer sr-only" />
                                     <span class="relative h-6 w-11 rounded-full bg-neutral-300 transition peer-checked:bg-emerald-600 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:after:translate-x-5" />
                                 </label>
@@ -873,22 +875,22 @@ function statusLabel(status) {
 
                             <div class="grid gap-4 sm:grid-cols-2">
                                 <label class="text-sm font-medium text-neutral-700">API key
-                                    <input v-model="channexForm.api_key" type="password" autocomplete="new-password" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" :placeholder="configTenant.integrations.channex.has_api_key ? '•••• (lëre bosh për ta mbajtur)' : 'Ngjit çelësin Channex'" />
+                                    <input v-model="channexForm.api_key" type="password" autocomplete="new-password" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" :placeholder="configTenant.integrations.channex.has_api_key ? t('superAdmin.dynamic.leaveBlankToKeep') : t('superAdmin.dynamic.pasteChannexKey')" />
                                 </label>
                                 <label class="text-sm font-medium text-neutral-700">Webhook secret
-                                    <input v-model="channexForm.webhook_secret" type="password" autocomplete="new-password" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" :placeholder="configTenant.integrations.channex.has_webhook_secret ? '•••• (lëre bosh për ta mbajtur)' : 'Ngjit webhook secret'" />
+                                    <input v-model="channexForm.webhook_secret" type="password" autocomplete="new-password" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" :placeholder="configTenant.integrations.channex.has_webhook_secret ? t('superAdmin.dynamic.leaveBlankToKeep') : t('superAdmin.dynamic.pasteWebhookSecret')" />
                                 </label>
                                 <label class="text-sm font-medium text-neutral-700">Property ID
                                     <input v-model="channexForm.property_id" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" placeholder="p.sh. 5f2a…" />
                                     <span v-if="channexForm.errors.property_id" class="mt-1 block text-xs text-danger-600">{{ channexForm.errors.property_id }}</span>
                                 </label>
-                                <label class="text-sm font-medium text-neutral-700">Base URL <span class="font-normal text-neutral-400">(opsional)</span>
+                                <label class="text-sm font-medium text-neutral-700">Base URL <span class="font-normal text-neutral-400">({{ t('superAdmin.dynamic.optional') }})</span>
                                     <input v-model="channexForm.base_url" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" placeholder="https://app.channex.io/api/v1" />
                                     <span v-if="channexForm.errors.base_url" class="mt-1 block text-xs text-danger-600">{{ channexForm.errors.base_url }}</span>
                                 </label>
                             </div>
 
-                            <div class="rounded-xl bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">Fushat sekrete nuk rishfaqen. Lëri bosh nëse dëshiron të mbash vlerat aktuale.</div>
+                            <div class="rounded-xl bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">{{ $t('superAdmin.auto.copy015') }}</div>
                             <div class="flex justify-end border-t border-neutral-200 pt-4">
                                 <Button type="submit" :disabled="channexForm.processing">{{ channexForm.processing ? 'Duke ruajtur…' : 'Ruaj Channex' }}</Button>
                             </div>
@@ -904,10 +906,10 @@ function statusLabel(status) {
                                             <Check v-if="configTenant.integrations.pok.has_key_id" class="h-3 w-3" />{{ configTenant.integrations.pok.has_key_id ? 'Kredencialet e ruajtura' : 'Pa kredenciale' }}
                                         </span>
                                     </div>
-                                    <p class="mt-1 text-xs text-neutral-500">Proceson pagesat me kartë në booking-un online.</p>
+                                    <p class="mt-1 text-xs text-neutral-500">{{ $t('superAdmin.auto.copy047') }}</p>
                                 </div>
                                 <label class="flex shrink-0 cursor-pointer items-center gap-3 text-sm font-medium text-neutral-700">
-                                    Aktiv
+                                    {{ $t('superAdmin.auto.copy005') }}
                                     <input v-model="pokForm.enabled" type="checkbox" class="peer sr-only" />
                                     <span class="relative h-6 w-11 rounded-full bg-neutral-300 transition peer-checked:bg-emerald-600 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:after:translate-x-5" />
                                 </label>
@@ -915,10 +917,10 @@ function statusLabel(status) {
 
                             <div class="grid gap-4 sm:grid-cols-2">
                                 <label class="text-sm font-medium text-neutral-700">Key ID
-                                    <input v-model="pokForm.key_id" type="password" autocomplete="new-password" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" :placeholder="configTenant.integrations.pok.has_key_id ? '•••• (lëre bosh për ta mbajtur)' : 'Ngjit Key ID'" />
+                                    <input v-model="pokForm.key_id" type="password" autocomplete="new-password" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" :placeholder="configTenant.integrations.pok.has_key_id ? t('superAdmin.dynamic.leaveBlankToKeep') : t('superAdmin.dynamic.pasteKeyId')" />
                                 </label>
                                 <label class="text-sm font-medium text-neutral-700">Key secret
-                                    <input v-model="pokForm.key_secret" type="password" autocomplete="new-password" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" :placeholder="configTenant.integrations.pok.has_key_secret ? '•••• (lëre bosh për ta mbajtur)' : 'Ngjit Key secret'" />
+                                    <input v-model="pokForm.key_secret" type="password" autocomplete="new-password" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" :placeholder="configTenant.integrations.pok.has_key_secret ? t('superAdmin.dynamic.leaveBlankToKeep') : t('superAdmin.dynamic.pasteKeySecret')" />
                                 </label>
                                 <label class="text-sm font-medium text-neutral-700">Merchant ID
                                     <input v-model="pokForm.merchant_id" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" placeholder="Merchant ID" />
@@ -926,11 +928,11 @@ function statusLabel(status) {
                                 </label>
                                 <label class="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium text-neutral-700 sm:mt-6">
                                     <input v-model="pokForm.production" type="checkbox" class="rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500" />
-                                    <span><span class="block">Mjedisi Production</span><span class="mt-0.5 block text-xs font-normal text-neutral-400">Aktivizo vetëm për pagesa reale.</span></span>
+                                    <span><span class="block">{{ $t('superAdmin.auto.copy033') }}</span><span class="mt-0.5 block text-xs font-normal text-neutral-400">{{ $t('superAdmin.auto.copy007') }}</span></span>
                                 </label>
                             </div>
 
-                            <div class="rounded-xl bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">Fushat sekrete nuk rishfaqen. Lëri bosh nëse dëshiron të mbash vlerat aktuale.</div>
+                            <div class="rounded-xl bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">{{ $t('superAdmin.auto.copy015') }}</div>
                             <div class="flex justify-end border-t border-neutral-200 pt-4">
                                 <Button type="submit" :disabled="pokForm.processing">{{ pokForm.processing ? 'Duke ruajtur…' : 'Ruaj POK' }}</Button>
                             </div>
@@ -938,8 +940,8 @@ function statusLabel(status) {
                     </div>
 
                     <div class="flex shrink-0 items-center justify-between border-t border-neutral-200 bg-neutral-50/60 px-5 py-3 sm:px-6">
-                        <p class="text-xs text-neutral-400">Sekretet ruhen të enkriptuara.</p>
-                        <Button type="button" variant="outline" @click="closeConfig">Mbyll</Button>
+                        <p class="text-xs text-neutral-400">{{ $t('superAdmin.auto.copy055') }}</p>
+                        <Button type="button" variant="outline" @click="closeConfig">{{ $t('superAdmin.auto.copy028') }}</Button>
                     </div>
                 </section>
             </div>

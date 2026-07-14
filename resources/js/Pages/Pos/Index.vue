@@ -389,7 +389,7 @@ function formatTime(d) {
                                 <div class="mt-1 flex items-center justify-between gap-2">
                                     <p class="text-label text-accent-700">{{ money(item.price) }}</p>
                                     <span v-if="item.inventory_tracked" class="text-tiny font-semibold" :class="item.available_portions === null ? 'text-warning-600' : item.available_portions > 0 ? 'text-neutral-400' : 'text-error-600'">{{ item.available_portions === null ? $t('inventory.pos.stockUnknown') : item.available_portions > 0 ? item.available_portions + ' ' + $t('inventory.pos.available') : $t('inventory.pos.outOfStock') }}</span>
-                                    <span v-else-if="item.sales_count" class="text-tiny text-neutral-400">{{ item.sales_count }} shitje</span>
+                                    <span v-else-if="item.sales_count" class="text-tiny text-neutral-400">{{ $t('admin.pos.salesCount', { count: item.sales_count }) }}</span>
                                 </div>
                             </div>
                             <!-- Hover add indicator -->

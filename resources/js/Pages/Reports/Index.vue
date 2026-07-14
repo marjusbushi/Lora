@@ -38,11 +38,11 @@ const activeModules = computed(() => page.props.modules || {});
 const hasModule = (module) => !module || activeModules.value[module] === true;
 
 const allCategories = [
-    { key: 'all', label: 'Të gjitha' },
-    { key: 'finance', label: 'Financë' },
-    { key: 'reservations', label: 'Rezervime' },
-    { key: 'operations', label: 'Operacione' },
-    { key: 'guests', label: 'Mysafirë' },
+    { key: 'all', label: translate('admin.reports.catalog.all') },
+    { key: 'finance', label: translate('admin.reports.catalog.finance') },
+    { key: 'reservations', label: translate('admin.reports.catalog.reservations') },
+    { key: 'operations', label: translate('admin.reports.catalog.operations') },
+    { key: 'guests', label: translate('admin.reports.catalog.guests') },
     { key: 'pos', label: 'POS' },
 ];
 const categories = computed(() => allCategories.filter((category) => category.key !== 'pos' || hasModule('pos')));
@@ -54,9 +54,9 @@ const groups = [
         category: 'finance',
         icon: ChartNoAxesCombined,
         reports: [
-            { name: 'Pasqyra ekzekutive', desc: translate('admin.generated.k_ae504df14db4'), to: 'reports.executive', icon: BarChart3 },
-            { name: 'ADR / RevPAR / Mbushja', desc: translate('admin.generated.k_ad4fb73d0b26'), to: 'reports.performance', icon: TrendingUp },
-            { name: 'Tempo & Pickup', desc: translate('admin.generated.k_cce552012b85'), to: 'reports.pace', icon: Clock3 },
+            { name: translate('admin.reports.catalog.executive'), desc: translate('admin.generated.k_ae504df14db4'), to: 'reports.executive', icon: BarChart3 },
+            { name: translate('admin.reports.catalog.performance'), desc: translate('admin.generated.k_ad4fb73d0b26'), to: 'reports.performance', icon: TrendingUp },
+            { name: translate('admin.reports.catalog.pace'), desc: translate('admin.generated.k_cce552012b85'), to: 'reports.pace', icon: Clock3 },
         ],
     },
     {
@@ -65,22 +65,22 @@ const groups = [
         category: 'reservations',
         icon: CalendarCheck,
         reports: [
-            { name: 'Prodhimi sipas kanaleve', desc: translate('admin.generated.k_6d6dfc8c5f41'), to: 'reports.channels', icon: ChartNoAxesCombined },
-            { name: 'Anulime & No-Show', desc: translate('admin.generated.k_c895712ad4ee'), to: 'reports.cancellations', icon: CalendarX },
-            { name: 'Sjellja e rezervimit', desc: translate('admin.generated.k_2d1fcb13fa71'), to: 'reports.bookingBehavior', icon: ClipboardList },
+            { name: translate('admin.reports.catalog.channels'), desc: translate('admin.generated.k_6d6dfc8c5f41'), to: 'reports.channels', icon: ChartNoAxesCombined },
+            { name: translate('admin.reports.catalog.cancellations'), desc: translate('admin.generated.k_c895712ad4ee'), to: 'reports.cancellations', icon: CalendarX },
+            { name: translate('admin.reports.catalog.bookingBehavior'), desc: translate('admin.generated.k_2d1fcb13fa71'), to: 'reports.bookingBehavior', icon: ClipboardList },
         ],
     },
     {
         key: 'operations',
-        name: 'Operacione',
+        name: translate('admin.reports.catalog.operations'),
         category: 'operations',
         icon: BedDouble,
         reports: [
-            { name: 'Manifesti i mbërritjeve', desc: 'Mysafirët që priten të mbërrijnë.', to: 'reports.arrivalsManifest', icon: UserRoundCheck },
-            { name: 'Manifesti i nisjeve', desc: 'Nisjet dhe balancat që duhen mbyllur.', to: 'reports.departuresManifest', icon: CalendarCheck },
-            { name: 'Statusi i dhomave', desc: 'Gjendja aktuale e çdo dhome.', to: 'reports.roomStatus', icon: BedDouble },
-            { name: 'Raporti i pastrimit', desc: 'Ngarkesa dhe produktiviteti i housekeeping.', to: 'reports.housekeepingReport', icon: Sparkles, module: 'housekeeping' },
-            { name: 'Mysafirë në hotel', desc: 'Lista e mysafirëve aktualisht brenda.', to: 'reports.inHouse', icon: House },
+            { name: translate('admin.reports.catalog.arrivals'), desc: translate('admin.reports.catalog.arrivalsDesc'), to: 'reports.arrivalsManifest', icon: UserRoundCheck },
+            { name: translate('admin.reports.catalog.departures'), desc: translate('admin.reports.catalog.departuresDesc'), to: 'reports.departuresManifest', icon: CalendarCheck },
+            { name: translate('admin.reports.catalog.roomStatus'), desc: translate('admin.reports.catalog.roomStatusDesc'), to: 'reports.roomStatus', icon: BedDouble },
+            { name: translate('admin.reports.catalog.housekeeping'), desc: translate('admin.reports.catalog.housekeepingDesc'), to: 'reports.housekeepingReport', icon: Sparkles, module: 'housekeeping' },
+            { name: translate('admin.reports.catalog.inHouse'), desc: translate('admin.reports.catalog.inHouseDesc'), to: 'reports.inHouse', icon: House },
         ],
     },
     {
@@ -90,9 +90,9 @@ const groups = [
         icon: Banknote,
         reports: [
             { name: translate('admin.generated.k_9510fd30116d'), desc: translate('admin.generated.k_958f73cee249'), to: 'reports.outstanding', icon: ReceiptText },
-            { name: 'Z-Report / Mbyllje turni', desc: translate('admin.generated.k_bf9a4f411063'), to: 'reports.shifts', icon: WalletCards },
+            { name: translate('admin.reports.catalog.zReport'), desc: translate('admin.generated.k_bf9a4f411063'), to: 'reports.shifts', icon: WalletCards },
             { name: translate('admin.generated.k_176dd4832014'), desc: translate('admin.generated.k_d0dd07049135'), to: 'reports.payments', icon: HandCoins },
-            { name: 'Raport TVSH', desc: translate('admin.generated.k_a1af7e68c583'), to: 'reports.vat', icon: Percent },
+            { name: translate('admin.reports.catalog.vat'), desc: translate('admin.generated.k_a1af7e68c583'), to: 'reports.vat', icon: Percent },
             { name: translate('admin.generated.k_c1b454fb69dd'), desc: translate('admin.generated.k_c2bfd6b01875'), to: 'reports.discounts', icon: CircleDollarSign },
         ],
     },
@@ -109,15 +109,15 @@ const groups = [
     },
     {
         key: 'pos',
-        name: 'Bar & restorant',
+        name: translate('admin.reports.catalog.barRestaurant'),
         category: 'pos',
         module: 'pos',
         icon: Utensils,
         reports: [
             { name: translate('admin.generated.k_443dc45fa745'), desc: translate('admin.generated.k_f8476b1b0151'), to: 'reports.posSales', icon: ShoppingBasket },
             { name: translate('admin.generated.k_598ef37ef3c9'), desc: translate('admin.generated.k_5c43b8be2406'), to: 'reports.posHourly', icon: Clock3 },
-            { name: 'Mix i pagesave POS', desc: translate('admin.generated.k_fe6e775c6227'), to: 'reports.posPaymentMix', icon: CreditCard },
-            { name: 'Anulime & Voids POS', desc: translate('admin.generated.k_22c51f5e6a35'), to: 'reports.posVoids', icon: CalendarX },
+            { name: translate('admin.reports.catalog.posPaymentMix'), desc: translate('admin.generated.k_fe6e775c6227'), to: 'reports.posPaymentMix', icon: CreditCard },
+            { name: translate('admin.reports.catalog.posVoids'), desc: translate('admin.generated.k_22c51f5e6a35'), to: 'reports.posVoids', icon: CalendarX },
         ],
     },
 ];

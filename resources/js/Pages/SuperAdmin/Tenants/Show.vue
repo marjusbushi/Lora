@@ -1,4 +1,5 @@
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
@@ -17,6 +18,7 @@ import {
     UserRound,
 } from 'lucide-vue-next';
 
+const { t } = useI18n();
 const props = defineProps({
     tenant: Object,
     members: Array,
@@ -59,8 +61,8 @@ const enabledModules = computed(() =>
 
 const variableFee = computed(() => {
     const module = enabledModules.value.find((item) => item.billing_model === 'percentage');
-    if (!module?.percentage_bps) return 'Pa tarifë variabël';
-    return `${Number(module.percentage_bps) / 100}% e rezervimeve`;
+    if (!module?.percentage_bps) return t('superAdmin.dynamic.noVariableFee');
+    return t('superAdmin.dynamic.percentOfReservations', { percent: Number(module.percentage_bps) / 100 });
 });
 
 function money(cents) {
@@ -87,12 +89,12 @@ function when(value) {
 
 function statusLabel(status) {
     return {
-        trialing: 'Provë',
-        active: 'Aktiv',
-        past_due: 'Pagesë e vonuar',
-        suspended: 'Pezulluar',
-        canceled: 'Anuluar',
-        inactive: 'Joaktiv',
+        trialing: t('superAdmin.auto.copy049'),
+        active: t('superAdmin.auto.copy005'),
+        past_due: t('superAdmin.auto.copy042'),
+        suspended: t('superAdmin.auto.copy044'),
+        canceled: t('superAdmin.auto.copy009'),
+        inactive: t('superAdmin.dynamic.inactive'),
     }[status] || status;
 }
 
@@ -106,14 +108,14 @@ function quantityLabel(module) {
 }
 
 const ACTION_LABELS = {
-    'tenant.create': 'Hotel u krijua',
-    'tenant.switch': 'Hyrje në hotel',
-    'tenant.subscription.update': 'Abonimi u përditësua',
-    'tenant.integration.update': 'Integrim u ndryshua',
-    'tenant.domain.create': 'Domain u shtua',
-    'tenant.domain.delete': 'Domain u hoq',
-    'tenant.domain.primary': 'Domain primar u ndryshua',
-    'tenant.status': 'Statusi i hotelit u ndryshua',
+    'tenant.create': t('superAdmin.dynamic.actionHotelCreated'),
+    'tenant.switch': t('superAdmin.dynamic.actionHotelLogin'),
+    'tenant.subscription.update': t('superAdmin.dynamic.actionSubscriptionUpdated'),
+    'tenant.integration.update': t('superAdmin.dynamic.actionIntegrationUpdated'),
+    'tenant.domain.create': t('superAdmin.dynamic.actionDomainAdded'),
+    'tenant.domain.delete': t('superAdmin.dynamic.actionDomainRemoved'),
+    'tenant.domain.primary': t('superAdmin.dynamic.actionPrimaryDomainUpdated'),
+    'tenant.status': t('superAdmin.dynamic.actionHotelStatusUpdated'),
 };
 
 function managementUrl(section) {
@@ -132,8 +134,8 @@ function openHotel() {
 function toggleStatus() {
     const suspend = isActive.value;
     const message = suspend
-        ? `Të pezulloj ${props.tenant.name}? Hoteli s'do të hapet dot derisa ta riaktivizosh.`
-        : `Të riaktivizoj ${props.tenant.name}?`;
+        ? t('superAdmin.dynamic.confirmSuspendShort', { name: props.tenant.name })
+        : t('superAdmin.dynamic.confirmActivate', { name: props.tenant.name });
     if (!confirm(message)) return;
     router.patch(route('super-admin.tenants.status', props.tenant.id), {
         status: suspend ? 'suspended' : 'active',
@@ -150,22 +152,22 @@ function toggleStatus() {
                 <div class="text-xs text-neutral-400">
                     <Link href="/super-admin" class="text-neutral-400 no-underline hover:text-neutral-700">Control Panel</Link>
                     <span class="mx-2">/</span>
-                    <Link href="/super-admin/tenants" class="text-neutral-400 no-underline hover:text-neutral-700">Hotelet</Link>
+                    <Link href="/super-admin/tenants" class="text-neutral-400 no-underline hover:text-neutral-700">{{ $t('superAdmin.auto.copy087') }}</Link>
                     <span class="mx-2">/</span>
                     <span class="font-medium text-neutral-600">{{ tenant.name }}</span>
                 </div>
 
                 <div class="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h1 class="text-3xl font-semibold tracking-tight text-neutral-950">Profili i hotelit</h1>
-                        <p class="mt-2 text-sm text-neutral-500">Abonimi, konfigurimi dhe aktiviteti në një pamje.</p>
+                        <h1 class="text-3xl font-semibold tracking-tight text-neutral-950">{{ $t('superAdmin.auto.copy092') }}</h1>
+                        <p class="mt-2 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy077') }}</p>
                     </div>
                     <div class="flex flex-wrap gap-2">
                         <Button variant="outline" :class="isActive ? '!text-red-600' : '!text-emerald-700'" @click="toggleStatus">
-                            {{ isActive ? 'Pezullo' : 'Aktivizo' }}
+                            {{ isActive ? t('superAdmin.dynamic.suspend') : t('superAdmin.dynamic.activate') }}
                         </Button>
                         <Button variant="primary" :disabled="!isActive || isCurrent" @click="openHotel">
-                            {{ isCurrent ? 'Në përdorim' : 'Hap hotelin' }}
+                            {{ isCurrent ? t('superAdmin.dynamic.inUse') : t('superAdmin.dynamic.openHotel') }}
                             <ArrowUpRight class="h-4 w-4" />
                         </Button>
                     </div>
@@ -182,12 +184,12 @@ function toggleStatus() {
                             <h2 class="truncate text-lg font-semibold text-neutral-900">{{ tenant.name }}</h2>
                             <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'">
                                 <span class="h-1.5 w-1.5 rounded-full" :class="isActive ? 'bg-emerald-500' : 'bg-red-500'" />
-                                {{ isActive ? 'Aktiv' : 'Pezulluar' }}
+                                {{ isActive ? t('superAdmin.auto.copy005') : t('superAdmin.auto.copy044') }}
                             </span>
-                            <span v-if="isCurrent" class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">Aktual</span>
+                            <span v-if="isCurrent" class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{{ $t('superAdmin.auto.copy080') }}</span>
                         </div>
                         <p class="mt-1 truncate text-sm text-neutral-500">
-                            {{ tenant.slug }} · {{ tenant.timezone }} · {{ tenant.currency }} · Krijuar më {{ date(tenant.created_at) }}
+                            {{ tenant.slug }} · {{ tenant.timezone }} · {{ tenant.currency }} · {{ t('superAdmin.dynamic.createdOn', { date: date(tenant.created_at) }) }}
                         </p>
                     </div>
                 </div>
@@ -195,20 +197,20 @@ function toggleStatus() {
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
                     <div class="grid grid-cols-2 gap-4 sm:flex sm:gap-0">
                         <div class="sm:border-l sm:border-neutral-200 sm:px-5">
-                            <p class="text-xs text-neutral-400">Domain primar</p>
+                            <p class="text-xs text-neutral-400">{{ $t('superAdmin.auto.copy012') }}</p>
                             <p class="mt-1 max-w-52 truncate text-sm font-semibold" :class="tenant.primary_domain ? 'text-neutral-800' : 'text-amber-700'">
-                                {{ tenant.primary_domain || 'Mungon' }}
+                                {{ tenant.primary_domain || t('superAdmin.dynamic.missing') }}
                             </p>
                         </div>
                         <div class="sm:border-l sm:border-neutral-200 sm:px-5">
-                            <p class="text-xs text-neutral-400">Konfigurimi</p>
+                            <p class="text-xs text-neutral-400">{{ $t('superAdmin.auto.copy019') }}</p>
                             <p class="mt-1 text-sm font-semibold" :class="readinessScore === 100 ? 'text-emerald-700' : 'text-amber-700'">
-                                {{ readinessScore === 100 ? 'Në rregull' : 'Kërkon ndërhyrje' }}
+                                {{ readinessScore === 100 ? t('superAdmin.auto.copy063') : t('superAdmin.dynamic.needsAttention') }}
                             </p>
                         </div>
                     </div>
                     <Link :href="managementUrl('config')" class="inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-700 no-underline hover:bg-neutral-50">
-                        <Settings2 class="h-4 w-4" /> Menaxho konfigurimin
+                        <Settings2 class="h-4 w-4" /> {{ t('superAdmin.dynamic.manageConfiguration') }}
                     </Link>
                 </div>
             </section>
@@ -216,11 +218,11 @@ function toggleStatus() {
             <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
                     <div class="flex items-start justify-between">
-                        <p class="text-sm font-medium text-neutral-500">Abonimi</p>
+                        <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy003') }}</p>
                         <span class="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><CreditCard class="h-5 w-5" /></span>
                     </div>
                     <p class="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">{{ statusLabel(tenant.billing.status) }}</p>
-                    <p class="mt-1 text-xs text-neutral-400">Faturim {{ tenant.billing.billing_cycle === 'annual' ? 'vjetor' : 'mujor' }}</p>
+                    <p class="mt-1 text-xs text-neutral-400">{{ t('superAdmin.dynamic.billingCycle', { cycle: tenant.billing.billing_cycle === 'annual' ? t('superAdmin.dynamic.annualLower') : t('superAdmin.dynamic.monthlyLower') }) }}</p>
                 </article>
                 <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
                     <div class="flex items-start justify-between">
@@ -228,24 +230,24 @@ function toggleStatus() {
                         <span class="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 font-semibold text-blue-700">€</span>
                     </div>
                     <p class="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">{{ money(tenant.mrr_cents) }}</p>
-                    <p class="mt-1 text-xs text-neutral-400">Pa tarifat variabël</p>
+                    <p class="mt-1 text-xs text-neutral-400">{{ $t('superAdmin.auto.copy090') }}</p>
                 </article>
                 <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
                     <div class="flex items-start justify-between">
-                        <p class="text-sm font-medium text-neutral-500">Përdorues</p>
+                        <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy051') }}</p>
                         <span class="grid h-10 w-10 place-items-center rounded-xl bg-violet-50 text-violet-700"><UserRound class="h-5 w-5" /></span>
                     </div>
                     <p class="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">{{ members.length }}</p>
-                    <p class="mt-1 text-xs text-neutral-400">{{ activeMembers.length }} aktivë</p>
+                    <p class="mt-1 text-xs text-neutral-400">{{ t('superAdmin.dynamic.activeCount', { count: activeMembers.length }) }}</p>
                 </article>
                 <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
                     <div class="flex items-start justify-between">
-                        <p class="text-sm font-medium text-neutral-500">Gatishmëria</p>
+                        <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy085') }}</p>
                         <span class="grid h-10 w-10 place-items-center rounded-xl" :class="readinessScore === 100 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><CircleGauge class="h-5 w-5" /></span>
                     </div>
                     <p class="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">{{ readinessScore }}%</p>
                     <p class="mt-1 text-xs" :class="attentionCount ? 'text-amber-700' : 'text-emerald-700'">
-                        {{ attentionCount ? `${attentionCount} pika për t'u plotësuar` : 'Konfigurimi është i plotë' }}
+                        {{ attentionCount ? t('superAdmin.dynamic.itemsToComplete', { count: attentionCount }) : t('superAdmin.auto.copy065') }}
                     </p>
                 </article>
             </section>
@@ -255,10 +257,10 @@ function toggleStatus() {
                     <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
                         <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
                             <div>
-                                <h3 class="text-lg font-semibold text-neutral-900">Gatishmëria e hotelit</h3>
-                                <p class="mt-1 text-sm text-neutral-500">Çfarë duhet plotësuar para përdorimit të plotë.</p>
+                                <h3 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy086') }}</h3>
+                                <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy104') }}</p>
                             </div>
-                            <span class="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-600">{{ attentionCount }} veprime</span>
+                            <span class="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-600">{{ t('superAdmin.dynamic.actionsCount', { count: attentionCount }) }}</span>
                         </div>
                         <div class="grid gap-5 p-5 md:grid-cols-[92px_minmax(0,1fr)] md:items-center">
                             <div class="relative grid h-[88px] w-[88px] place-items-center rounded-full" :style="readinessRing">
@@ -267,15 +269,15 @@ function toggleStatus() {
                             </div>
                             <div class="grid gap-3 sm:grid-cols-3">
                                 <div class="rounded-xl border border-neutral-200 p-3">
-                                    <div class="flex items-center justify-between gap-2 text-xs"><span class="text-neutral-500">Abonimi</span><strong :class="billingIsHealthy ? 'text-emerald-700' : 'text-amber-700'">{{ billingIsHealthy ? 'Në rregull' : 'Kontrollo' }}</strong></div>
+                                    <div class="flex items-center justify-between gap-2 text-xs"><span class="text-neutral-500">{{ $t('superAdmin.auto.copy003') }}</span><strong :class="billingIsHealthy ? 'text-emerald-700' : 'text-amber-700'">{{ billingIsHealthy ? t('superAdmin.auto.copy063') : t('superAdmin.dynamic.check') }}</strong></div>
                                     <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-100"><div class="h-full rounded-full" :class="billingIsHealthy ? 'w-full bg-emerald-600' : 'w-1/12 bg-amber-500'" /></div>
                                 </div>
                                 <div class="rounded-xl border border-neutral-200 p-3">
-                                    <div class="flex items-center justify-between gap-2 text-xs"><span class="text-neutral-500">Domain primar</span><strong :class="tenant.primary_domain ? 'text-emerald-700' : 'text-amber-700'">{{ tenant.primary_domain ? 'Në rregull' : 'Mungon' }}</strong></div>
+                                    <div class="flex items-center justify-between gap-2 text-xs"><span class="text-neutral-500">{{ $t('superAdmin.auto.copy012') }}</span><strong :class="tenant.primary_domain ? 'text-emerald-700' : 'text-amber-700'">{{ tenant.primary_domain ? t('superAdmin.auto.copy063') : t('superAdmin.dynamic.missing') }}</strong></div>
                                     <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-100"><div class="h-full rounded-full" :class="tenant.primary_domain ? 'w-full bg-emerald-600' : 'w-1/12 bg-amber-500'" /></div>
                                 </div>
                                 <div class="rounded-xl border border-neutral-200 p-3">
-                                    <div class="flex items-center justify-between gap-2 text-xs"><span class="text-neutral-500">Integrimet</span><strong :class="configuredIntegrations === 2 ? 'text-emerald-700' : 'text-amber-700'">{{ configuredIntegrations }}/2</strong></div>
+                                    <div class="flex items-center justify-between gap-2 text-xs"><span class="text-neutral-500">{{ $t('superAdmin.auto.copy088') }}</span><strong :class="configuredIntegrations === 2 ? 'text-emerald-700' : 'text-amber-700'">{{ configuredIntegrations }}/2</strong></div>
                                     <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-100"><div class="h-full rounded-full" :class="configuredIntegrations === 2 ? 'w-full bg-emerald-600' : configuredIntegrations === 1 ? 'w-1/2 bg-amber-500' : 'w-1/12 bg-amber-500'" /></div>
                                 </div>
                             </div>
@@ -283,47 +285,47 @@ function toggleStatus() {
                         <div v-if="attentionCount" class="mx-5 mb-5 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex items-start gap-3">
                                 <CircleAlert class="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
-                                <p class="text-sm text-amber-900"><strong>Rekomandim:</strong> plotëso domain-in dhe integrimet që hoteli të jetë gati.</p>
+                                <p class="text-sm text-amber-900"><strong>{{ $t('superAdmin.auto.copy095') }}</strong> {{ $t('superAdmin.auto.copy103') }}</p>
                             </div>
-                            <Link :href="managementUrl('config')" class="shrink-0 text-sm font-semibold text-amber-800 no-underline hover:text-amber-950">Plotëso tani →</Link>
+                            <Link :href="managementUrl('config')" class="shrink-0 text-sm font-semibold text-amber-800 no-underline hover:text-amber-950">{{ $t('superAdmin.auto.copy091') }}</Link>
                         </div>
                         <div v-else class="mx-5 mb-5 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm font-medium text-emerald-800">
-                            <CheckCircle2 class="h-5 w-5" /> Hoteli është gati për përdorim të plotë.
+                            <CheckCircle2 class="h-5 w-5" /> {{ t('superAdmin.dynamic.hotelReady') }}
                         </div>
                     </section>
 
                     <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
                         <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
-                            <div><h3 class="text-lg font-semibold text-neutral-900">Modulet aktive</h3><p class="mt-1 text-sm text-neutral-500">{{ enabledModules.length }} module të përfshira në abonim.</p></div>
-                            <Link :href="managementUrl('billing')" class="rounded-xl border border-neutral-200 px-3.5 py-2 text-sm font-semibold text-neutral-700 no-underline hover:bg-neutral-50">Ndrysho</Link>
+                            <div><h3 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy035') }}</h3><p class="mt-1 text-sm text-neutral-500">{{ t('superAdmin.dynamic.includedModulesCount', { count: enabledModules.length }) }}</p></div>
+                            <Link :href="managementUrl('billing')" class="rounded-xl border border-neutral-200 px-3.5 py-2 text-sm font-semibold text-neutral-700 no-underline hover:bg-neutral-50">{{ $t('superAdmin.auto.copy089') }}</Link>
                         </div>
                         <div v-if="enabledModules.length" class="flex flex-wrap gap-2 p-5">
                             <span v-for="module in enabledModules" :key="module.code" class="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-medium text-neutral-700">
                                 {{ module.name }}{{ quantityLabel(module) }}
                             </span>
                         </div>
-                        <p v-else class="p-5 text-sm text-neutral-500">Asnjë modul aktiv.</p>
+                        <p v-else class="p-5 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy081') }}</p>
                     </section>
                 </div>
 
                 <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
                     <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
-                        <div><h3 class="text-lg font-semibold text-neutral-900">Abonimi</h3><p class="mt-1 text-sm text-neutral-500">Përmbledhje financiare.</p></div>
+                        <div><h3 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy003') }}</h3><p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy094') }}</p></div>
                         <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="billingIsHealthy ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">
                             <span class="h-1.5 w-1.5 rounded-full" :class="billingIsHealthy ? 'bg-emerald-500' : 'bg-amber-500'" />
                             {{ statusLabel(tenant.billing.status) }}
                         </span>
                     </div>
                     <div class="divide-y divide-neutral-100 px-5">
-                        <div class="flex justify-between gap-4 py-3.5 text-sm"><span class="text-neutral-500">Cikli</span><strong class="text-neutral-800">{{ tenant.billing.billing_cycle === 'annual' ? 'Vjetor' : 'Mujor' }}</strong></div>
-                        <div class="flex justify-between gap-4 py-3.5 text-sm"><span class="text-neutral-500">Vlera bazë</span><strong class="text-neutral-800">{{ money(tenant.mrr_cents) }} / muaj</strong></div>
-                        <div class="flex justify-between gap-4 py-3.5 text-sm"><span class="text-neutral-500">Tarifa variabël</span><strong class="text-right text-neutral-800">{{ variableFee }}</strong></div>
-                        <div class="flex justify-between gap-4 py-3.5 text-sm"><span class="text-neutral-500">Rinovimi</span><strong class="text-neutral-800">{{ date(tenant.billing.current_period_ends_at) }}</strong></div>
-                        <div class="flex justify-between gap-4 py-3.5 text-sm"><span class="text-neutral-500">Statusi i pagesës</span><strong :class="billingIsHealthy ? 'text-emerald-700' : 'text-amber-700'">{{ billingIsHealthy ? 'Në rregull' : statusLabel(tenant.billing.status) }}</strong></div>
+                        <div class="flex justify-between gap-4 py-3.5 text-sm"><span class="text-neutral-500">{{ $t('superAdmin.auto.copy082') }}</span><strong class="text-neutral-800">{{ tenant.billing.billing_cycle === 'annual' ? t('superAdmin.dynamic.annual') : t('superAdmin.dynamic.monthly') }}</strong></div>
+                        <div class="flex justify-between gap-4 py-3.5 text-sm"><span class="text-neutral-500">{{ $t('superAdmin.auto.copy101') }}</span><strong class="text-neutral-800">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(tenant.mrr_cents) }) }}</strong></div>
+                        <div class="flex justify-between gap-4 py-3.5 text-sm"><span class="text-neutral-500">{{ $t('superAdmin.auto.copy099') }}</span><strong class="text-right text-neutral-800">{{ variableFee }}</strong></div>
+                        <div class="flex justify-between gap-4 py-3.5 text-sm"><span class="text-neutral-500">{{ $t('superAdmin.auto.copy096') }}</span><strong class="text-neutral-800">{{ date(tenant.billing.current_period_ends_at) }}</strong></div>
+                        <div class="flex justify-between gap-4 py-3.5 text-sm"><span class="text-neutral-500">{{ $t('superAdmin.auto.copy098') }}</span><strong :class="billingIsHealthy ? 'text-emerald-700' : 'text-amber-700'">{{ billingIsHealthy ? t('superAdmin.auto.copy063') : statusLabel(tenant.billing.status) }}</strong></div>
                     </div>
                     <div class="p-5 pt-2">
                         <Link :href="managementUrl('billing')" class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 px-4 py-2.5 text-sm font-semibold text-neutral-700 no-underline hover:bg-neutral-50">
-                            <CreditCard class="h-4 w-4" /> Menaxho abonimin
+                            <CreditCard class="h-4 w-4" /> {{ $t('superAdmin.auto.copy029') }}
                         </Link>
                     </div>
                 </section>
@@ -332,8 +334,8 @@ function toggleStatus() {
             <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
                 <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
                     <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
-                        <div><h3 class="text-lg font-semibold text-neutral-900">Përdoruesit</h3><p class="mt-1 text-sm text-neutral-500">Akseset e këtij hoteli.</p></div>
-                        <span class="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-600">{{ activeMembers.length }} aktivë</span>
+                        <div><h3 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy093') }}</h3><p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy078') }}</p></div>
+                        <span class="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-600">{{ t('superAdmin.dynamic.activeCount', { count: activeMembers.length }) }}</span>
                     </div>
                     <ul v-if="members.length" class="divide-y divide-neutral-100 px-5">
                         <li v-for="member in members" :key="member.id" class="flex items-center justify-between gap-3 py-3.5">
@@ -341,16 +343,16 @@ function toggleStatus() {
                                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700">{{ initials(member.name) }}</span>
                                 <div class="min-w-0"><p class="flex items-center gap-1.5 truncate text-sm font-semibold text-neutral-900">{{ member.name }} <Crown v-if="member.is_owner" class="h-3.5 w-3.5 shrink-0 text-amber-500" /></p><p class="truncate text-xs text-neutral-500">{{ member.email }}</p></div>
                             </div>
-                            <div class="flex shrink-0 items-center gap-2"><span v-if="member.role" class="rounded-full bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-600">{{ member.role }}</span><span v-if="!member.is_active" class="rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-600">joaktiv</span></div>
+                            <div class="flex shrink-0 items-center gap-2"><span v-if="member.role" class="rounded-full bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-600">{{ member.role }}</span><span v-if="!member.is_active" class="rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-600">{{ $t('superAdmin.auto.copy102') }}</span></div>
                         </li>
                     </ul>
-                    <p v-else class="p-8 text-center text-sm text-neutral-500">Ende asnjë përdorues.</p>
+                    <p v-else class="p-8 text-center text-sm text-neutral-500">{{ $t('superAdmin.auto.copy083') }}</p>
                 </section>
 
                 <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
                     <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
-                        <div><h3 class="text-lg font-semibold text-neutral-900">Aktiviteti i fundit</h3><p class="mt-1 text-sm text-neutral-500">Veprimet më të fundit për këtë hotel.</p></div>
-                        <Link :href="activityUrl()" class="shrink-0 rounded-xl border border-neutral-200 px-3.5 py-2 text-sm font-semibold text-neutral-700 no-underline hover:bg-neutral-50">Shiko të gjitha →</Link>
+                        <div><h3 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy079') }}</h3><p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy100') }}</p></div>
+                        <Link :href="activityUrl()" class="shrink-0 rounded-xl border border-neutral-200 px-3.5 py-2 text-sm font-semibold text-neutral-700 no-underline hover:bg-neutral-50">{{ $t('superAdmin.auto.copy097') }}</Link>
                     </div>
                     <ul v-if="activity.length" class="divide-y divide-neutral-100 px-5">
                         <li v-for="log in activity.slice(0, 5)" :key="log.id" class="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 py-3">
@@ -359,7 +361,7 @@ function toggleStatus() {
                             <time class="text-xs text-neutral-400">{{ when(log.created_at) }}</time>
                         </li>
                     </ul>
-                    <p v-else class="p-8 text-center text-sm text-neutral-500">Ende asnjë veprim.</p>
+                    <p v-else class="p-8 text-center text-sm text-neutral-500">{{ $t('superAdmin.auto.copy084') }}</p>
                 </section>
             </div>
         </div>

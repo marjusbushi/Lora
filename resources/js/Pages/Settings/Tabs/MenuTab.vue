@@ -206,7 +206,7 @@ function deleteItem(item) {
             <div class="grid gap-4 sm:grid-cols-2">
                 <FormGroup :label="$t('inventory.pos.outlet')">
                     <select v-model="catForm.outlet" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
-                        <option value="">—</option><option value="bar">Bar</option><option value="restaurant">Restorant</option>
+                        <option value="">—</option><option value="bar">Bar</option><option value="restaurant">{{ $t('inventory.warehouseTypes.restaurant') }}</option>
                     </select>
                 </FormGroup>
                 <FormGroup v-if="inventoryEnabled" :label="$t('inventory.pos.sourceWarehouse')" :error="catForm.errors.warehouse_id">

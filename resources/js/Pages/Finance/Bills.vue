@@ -244,14 +244,14 @@ function submitPay() {
                     :href="route('finance.suppliers')"
                     class="inline-flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-3.5 py-2 text-body-sm font-semibold text-neutral-700 no-underline shadow-sm hover:border-neutral-300 hover:bg-neutral-50"
                 >
-                    <Users class="h-4 w-4" /> Furnitorët
+                    <Users class="h-4 w-4" /> {{ $t('admin.sidebar.suppliers') }}
                 </Link>
                 <Link
                     v-if="can.manageBills"
                     :href="route('finance.bills.create')"
                     class="inline-flex items-center gap-2 rounded-md bg-accent-600 px-4 py-2 text-body-sm font-medium text-white no-underline shadow-sm transition-colors hover:bg-accent-700"
                 >
-                    <Plus class="h-4 w-4" /> Faturë e re
+                    <Plus class="h-4 w-4" /> {{ $t('admin.finance.billCreate.breadcrumbNew') }}
                 </Link>
             </template>
         </PageHeader>

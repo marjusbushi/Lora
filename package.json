@@ -4,7 +4,8 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "check:i18n": "node scripts/check-i18n.mjs"
     },
     "devDependencies": {
         "@inertiajs/vue3": "^2.0.0",

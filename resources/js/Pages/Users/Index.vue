@@ -49,11 +49,11 @@ const roleFilter = ref(props.filters.role || '');
 const statusFilter = ref(props.filters.status || '');
 
 const roleLabels = {
-    admin: 'Admin',
-    manager: 'Menaxher',
-    receptionist: 'Recepsion',
-    housekeeping: 'Housekeeping',
-    maintenance: 'Mirëmbajtje',
+    admin: translate('admin.users.roles.admin'),
+    manager: translate('admin.users.roles.manager'),
+    receptionist: translate('admin.users.roles.receptionist'),
+    housekeeping: translate('admin.users.roles.housekeeping'),
+    maintenance: translate('admin.users.roles.maintenance'),
     pos_staff: 'POS',
 };
 const roleBadge = {
@@ -266,8 +266,8 @@ function submitRole() {
     <component :is="embedded ? 'div' : AppLayout">
         <PageHeader
             v-if="!embedded"
-            title="Përdoruesit & rolet"
-            :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Përdoruesit' }]"
+            :title="$t('admin.users.title')"
+            :breadcrumbs="[{ label: $t('admin.sidebar.dashboard'), href: '/dashboard' }, { label: $t('admin.sidebar.users') }]"
         >
             <template #actions>
                 <Button v-if="activeTab === 'users'" variant="primary" @click="showCreateModal = true">
@@ -278,7 +278,7 @@ function submitRole() {
 {{ $t('admin.generated.k_99ca548187bb') }} </Button>
             </template>
         </PageHeader>
-        <p v-if="!embedded" class="mt-1 text-body-sm text-neutral-500">Menaxho aksesin e stafit në hotel.</p>
+        <p v-if="!embedded" class="mt-1 text-body-sm text-neutral-500">{{ $t('admin.generated.k_ec8630017d31') }}</p>
 
         <div :class="embedded ? '' : 'mt-6 flex flex-col gap-6 lg:flex-row'">
             <SettingsSidebar v-if="!embedded" active-item="users" />

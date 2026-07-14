@@ -9,7 +9,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['select']);
-const { locale } = useI18n();
+const { locale, t } = useI18n();
 const modules = computed(() => usePage().props.modules || {});
 
 const allTabs = [
@@ -39,8 +39,8 @@ const groups = computed(() => [
 ].map((group) => ({ ...group, tabs: tabs.value.filter((tab) => tab.group === group.id) })));
 
 const administrationLinks = computed(() => [
-    { id: 'users', label: locale.value === 'sq' ? 'Përdoruesit & rolet' : 'Users & roles', href: route('users.index') },
-    { id: 'history', label: locale.value === 'sq' ? 'Historia e veprimeve' : 'Activity history', href: route('audit-logs.index') },
+    { id: 'users', label: t('admin.users.title'), href: route('users.index') },
+    { id: 'history', label: t('accountCenter.auditHistory'), href: route('audit-logs.index') },
 ]);
 
 const itemClass = (id) => [
@@ -53,7 +53,7 @@ const itemClass = (id) => [
 
 <template>
     <aside class="shrink-0 lg:w-64">
-        <nav class="rounded-xl border border-neutral-200 bg-white p-2 shadow-card" aria-label="Settings">
+        <nav class="rounded-xl border border-neutral-200 bg-white p-2 shadow-card" :aria-label="$t('accountCenter.settingsTitle')">
             <div v-for="group in groups" :key="group.id" :class="group.id !== 'hotel' && 'mt-3'">
                 <p class="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-400">{{ group.label }}</p>
 
