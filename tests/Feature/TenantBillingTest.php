@@ -10,6 +10,7 @@ use App\Services\TenantBillingService;
 use App\Services\TenantRoleService;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class TenantBillingTest extends TestCase
@@ -29,6 +30,22 @@ class TenantBillingTest extends TestCase
             array_keys(config('lora_modules.modules')),
             array_keys(array_filter($billing['modules'], fn (array $module) => $module['enabled'])),
         );
+    }
+
+    public function test_existing_hotel_roles_receive_finance_permissions(): void
+    {
+        $tenant = Tenant::query()->sole();
+
+        app(TenantContext::class)->run($tenant, function () use ($tenant) {
+            $admin = Role::query()->where('team_id', $tenant->id)->where('name', 'admin')->firstOrFail();
+            $manager = Role::query()->where('team_id', $tenant->id)->where('name', 'manager')->firstOrFail();
+            $receptionist = Role::query()->where('team_id', $tenant->id)->where('name', 'receptionist')->firstOrFail();
+
+            $this->assertTrue($admin->hasPermissionTo('manage_finance_settings'));
+            $this->assertTrue($manager->hasPermissionTo('manage_bills'));
+            $this->assertTrue($receptionist->hasPermissionTo('view_finance'));
+            $this->assertFalse($receptionist->hasPermissionTo('view_bank_accounts'));
+        });
     }
 
     public function test_new_hotel_starts_with_core_only_and_disabled_module_is_forbidden(): void
