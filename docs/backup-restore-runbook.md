@@ -7,8 +7,12 @@
   `lora-pms-prod-eu-backup-7c14a9`.
 - Endpoint-i S3 është `s3.eu-central-003.backblazeb2.com`.
 - Restic enkripton çdo backup në client para upload-it; bucket-i ka edhe SSE-B2.
-- Object Lock është aktiv, por retention-i final vendoset vetëm pasi backup/restore
-  të provohet, sepse një periudhë e gabuar nuk mund të shkurtohet për objektet e kyçura.
+- Object Lock është aktiv në bucket-in burim, por retention default mbahet i çaktivizuar.
+  Backblaze paralajmëron se retention-i default në një repository aktiv backup-i mund
+  të shkaktojë humbje të paparashikueshme të të dhënave gjatë mirëmbajtjes së tij.
+- Kopja immutable vendoset në një bucket të dytë B2 me retention `compliance` dhe
+  Cloud Replication nga bucket-i burim. Kështu Restic punon normalisht në burim,
+  ndërsa replica nuk mund të fshihet para skadimit të retention-it.
 
 ## Secrets në server
 
@@ -33,13 +37,13 @@ parikuperueshëm.
 
 ## Instalimi në production
 
-Këto komanda ekzekutohen vetëm pasi branch-i të kalojë review/testet:
+Instalimi production u krye më 2026-07-14. Komandat e riprodhueshme janë:
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y restic
 sudo install -d -m 0700 -o root -g root /etc/lora-backup /var/lib/lora-backup /var/cache/restic
-sudo chmod 0700 /var/www/villamucho/ops/backup/run-offsite-backup.sh
+sudo install -m 0700 -o root -g root /var/www/villamucho/ops/backup/run-offsite-backup.sh /usr/local/sbin/lora-offsite-backup
 sudo cp /var/www/villamucho/ops/backup/lora-backup.service /etc/systemd/system/
 sudo cp /var/www/villamucho/ops/backup/lora-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -77,8 +81,30 @@ Restore-i nuk bëhet mbi production. Përdoret një host ose container i izoluar
 5. Konfiguro një checkout të të njëjtit commit kundrejt DB-së së restauruar.
 6. Ekzekuto `php artisan tenants:verify-integrity --snapshot=/tmp/before.json`.
 7. Ekzekuto migrimet kandidate me `php artisan migrate --force`.
-8. Ekzekuto `php artisan tenants:verify-integrity --compare=/tmp/before.json`.
+8. Ekzekuto `php artisan tenants:verify-integrity --compare=/tmp/before.json --allow-additive-schema`.
+   Kjo lejon vetëm tabela të reja dhe rritje të permissions; çdo numër ekzistues
+   rekordesh ose total financiar duhet të mbetet identik.
 9. Kontrollo manualisht rezervime, pagesa, financë, POS dhe skedarë.
 10. Fshi ambientin testues dhe regjistro datën/rezultatin e drill-it.
 
-Hapi 9 i planit mbyllet vetëm kur ky restore real kalon pa gabime.
+Restore drill-i është porta kryesore e sigurisë. Hapi 9 mbyllet pasi, përveç këtij
+testi, të aktivizohen replica immutable dhe alarmi i jashtëm për dështimet.
+
+## Restore drill — 2026-07-14
+
+- Snapshot-i Restic `182c2066` u lexua plotësisht me `restic check --read-data`.
+- SHA-256 i dump-it dhe metadata-s kaloi pa gabime.
+- Dump-i production u importua në MySQL 8.4 të izoluar.
+- Kontrolli i integritetit kaloi para migrimeve.
+- Të gjitha migrimet e branch-it u aplikuan mbi kopjen production.
+- Krahasimi me `--allow-additive-schema` konfirmoi se numrat dhe totalet financiare
+  ekzistuese nuk ndryshuan; u lejuan vetëm tabelat dhe permissions e reja.
+- Container-i, kopja me PII dhe secrets e përkohshme u fshinë pas testit.
+
+Timer-i production është aktiv dhe ekzekutohet çdo natë rreth orës 02:38
+`Europe/Tirane`. Gjendja kontrollohet me:
+
+```bash
+sudo systemctl status lora-backup.timer
+sudo cat /var/lib/lora-backup/last-success
+```

@@ -12,7 +12,8 @@ class VerifyTenantIntegrity extends Command
 {
     protected $signature = 'tenants:verify-integrity
                             {--snapshot= : Write a PII-free counts/totals baseline to this JSON file}
-                            {--compare= : Compare current counts/totals with this JSON baseline}';
+                            {--compare= : Compare current counts/totals with this JSON baseline}
+                            {--allow-additive-schema : Allow new tables and permission growth while preserving every existing count/total}';
 
     protected $description = 'Fail if tenant ownership or same-tenant relations are invalid';
 
@@ -20,6 +21,12 @@ class VerifyTenantIntegrity extends Command
     {
         if ($this->option('snapshot') && $this->option('compare')) {
             $this->error('Use either --snapshot or --compare, not both.');
+
+            return self::INVALID;
+        }
+
+        if ($this->option('allow-additive-schema') && ! $this->option('compare')) {
+            $this->error('--allow-additive-schema requires --compare.');
 
             return self::INVALID;
         }
@@ -45,6 +52,21 @@ class VerifyTenantIntegrity extends Command
 
             if ($path = $this->option('compare')) {
                 $baseline = $this->readSnapshot((string) $path);
+                if ($this->option('allow-additive-schema')) {
+                    $changes = $this->baselineChanges($baseline, $snapshot);
+                    if ($changes !== []) {
+                        foreach ($changes as $change) {
+                            $this->error("Baseline value changed: {$change}");
+                        }
+
+                        return self::FAILURE;
+                    }
+
+                    $this->info('Tenant integrity passed; existing counts and financial totals are unchanged (additive schema allowed).');
+
+                    return self::SUCCESS;
+                }
+
                 if ($baseline !== $snapshot) {
                     $this->error('Tenant counts or financial totals changed from the baseline.');
 
@@ -98,5 +120,66 @@ class VerifyTenantIntegrity extends Command
         }
 
         return $snapshot;
+    }
+
+    /**
+     * Compare every baseline leaf while allowing new keys in the current
+     * snapshot. Permission rows may grow because additive migrations seed new
+     * permissions, but they may never shrink.
+     *
+     * @param  array<string, mixed>  $baseline
+     * @param  array<string, mixed>  $current
+     * @return list<string>
+     */
+    private function baselineChanges(array $baseline, array $current, string $prefix = ''): array
+    {
+        $changes = [];
+
+        foreach ($baseline as $key => $expected) {
+            $path = $prefix === '' ? (string) $key : "{$prefix}.{$key}";
+
+            if (! array_key_exists($key, $current)) {
+                $changes[] = $path;
+
+                continue;
+            }
+
+            $actual = $current[$key];
+
+            if ($path === 'central_counts.permissions') {
+                if (! is_int($expected) || ! is_int($actual) || $actual < $expected) {
+                    $changes[] = $path;
+                }
+
+                continue;
+            }
+
+            if (is_array($expected)) {
+                if (! is_array($actual)) {
+                    $changes[] = $path;
+
+                    continue;
+                }
+
+                array_push($changes, ...$this->baselineChanges($expected, $actual, $path));
+
+                // Only these two maps may gain new top-level metrics/tables
+                // during an additive migration. New tenant IDs or dimensions
+                // inside an existing table/metric remain data changes.
+                if (! in_array($path, ['tenant_counts', 'financial_totals'], true)) {
+                    foreach (array_keys(array_diff_key($actual, $expected)) as $addedKey) {
+                        $changes[] = "{$path}.{$addedKey}";
+                    }
+                }
+
+                continue;
+            }
+
+            if ($actual !== $expected) {
+                $changes[] = $path;
+            }
+        }
+
+        return $changes;
     }
 }

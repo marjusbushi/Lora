@@ -31,17 +31,18 @@ Lora PMS do të përdorë një aplikacion dhe një databazë të përbashkët. �
 - [x] 8. CI para deploy-it dhe branch protection.
 - [ ] 9. Backup off-server dhe provë restore — **në punë**.
   - [x] 9.1. Ofruesi: Backblaze B2 EU me Restic dhe Object Lock.
-  - [ ] 9.2. Bucket privat i dedikuar, Object Lock dhe retention të konfiguruar — bucket-i EU u krijua; retention-i pret restore drill-in.
-  - [ ] 9.3. Kredenciale të kufizuara vetëm te bucket-i, të ruajtura jashtë kodit.
-  - [ ] 9.4. Backup automatik i DB + storage, kontroll integriteti dhe alarm në dështim — automatizimi është në review/testim.
-  - [ ] 9.5. Restore real në ambient të izoluar dhe krahasim para/pas.
+  - [ ] 9.2. Bucket aktiv privat me Object Lock pa retention default + bucket i dytë immutable për replica — burimi është gati; replica pret aprovim për koston shtesë të storage-it.
+  - [x] 9.3. Application Key i kufizuar vetëm te bucket-i dhe secrets `root:root 0600`, jashtë kodit.
+  - [ ] 9.4. Backup automatik i DB + storage, kontroll integriteti dhe alarm në dështim — timer-i production është aktiv; alarmi i jashtëm mbetet për t'u lidhur.
+  - [x] 9.5. Restore real në MySQL të izoluar, migrime mbi kopjen production dhe krahasim para/pas — kaloi më 2026-07-14.
 - [ ] 10. Integrim me translations, staging pilot dhe aprovim për `main`.
 
 ### Arkitektura e backup-it off-server
 
 - Aplikacioni dhe databaza aktive mbeten në Hetzner; në Backblaze ruhet vetëm kopja rezervë e enkriptuar.
 - Bucket-i duhet të jetë privat, në rajonin EU dhe i dedikuar vetëm për Lora PMS.
-- Object Lock aktivizohet që në krijimin e bucket-it; retention-i final vendoset vetëm pasi të provohet cikli backup/restore.
+- Bucket-i aktiv i Restic ka Object Lock të aktivizuar, por nuk ka retention default: Backblaze paralajmëron se retention-i default në repository-n aktiv mund të ndërhyjë në mirëmbajtjen e Restic.
+- Për immutability përdoret një bucket i dytë me retention `compliance`, ku të dhënat kopjohen me Cloud Replication; kjo ruan repository-n aktiv funksional dhe replica-n të pafshirshme.
 - Application Key kufizohet vetëm te ky bucket. Kredencialet dhe fjalëkalimi i Restic nuk ruhen në git, chat ose `.env.example`.
 - Backup-i konsiderohet i vlefshëm vetëm pasi një restore real të kalojë kontrollin `tenants:verify-integrity`.
 

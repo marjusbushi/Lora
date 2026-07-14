@@ -9,7 +9,7 @@ User=root
 Group=root
 WorkingDirectory=/var/www/villamucho
 Environment=LORA_APP_PATH=/var/www/villamucho
-ExecStart=/var/www/villamucho/ops/backup/run-offsite-backup.sh
+ExecStart=/usr/local/sbin/lora-offsite-backup
 UMask=0077
 Nice=10
 IOSchedulingClass=best-effort
@@ -19,7 +19,6 @@ ProtectHome=true
 ProtectSystem=full
 NoNewPrivileges=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
 ReadWritePaths=/var/lib/lora-backup /var/cache/restic /var/www/villamucho/storage /var/www/villamucho/bootstrap/cache
 
 [Install]
