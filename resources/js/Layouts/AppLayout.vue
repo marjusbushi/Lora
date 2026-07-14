@@ -49,6 +49,7 @@ const icons = {
     history: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-12.25a.75.75 0 00-1.5 0V10c0 .25.125.484.334.623l2.5 1.667a.75.75 0 10.832-1.248l-2.166-1.444V5.75z" clip-rule="evenodd" /></svg>',
     pricing: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.94 6.94a.75.75 0 00-1.06-1.06A5.733 5.733 0 006.2 9.25H5.5a.75.75 0 000 1.5h.531a5.78 5.78 0 000 .5H5.5a.75.75 0 000 1.5h.7a5.733 5.733 0 001.68 3.37.75.75 0 101.06-1.06A4.235 4.235 0 017.733 13H10.5a.75.75 0 000-1.5H7.531a4.282 4.282 0 010-.5H10.5a.75.75 0 000-1.5H7.733a4.235 4.235 0 011.207-2.06z" clip-rule="evenodd" /></svg>',
     tenants: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zM5 7.5A1.5 1.5 0 016.5 6h1A1.5 1.5 0 019 7.5v1A1.5 1.5 0 017.5 10h-1A1.5 1.5 0 015 8.5v-1zm6.25-.75a.75.75 0 000 1.5h3.5a.75.75 0 000-1.5h-3.5zm0 3a.75.75 0 000 1.5h3.5a.75.75 0 000-1.5h-3.5zM5.75 13a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5z" clip-rule="evenodd" /></svg>',
+    inventory: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path d="M2.25 5.5 10 1.625 17.75 5.5 10 9.375 2.25 5.5Z"/><path d="m2 7.25 7.25 3.625v7.25L2 14.5V7.25Zm8.75 3.625L18 7.25v7.25l-7.25 3.625v-7.25Z"/></svg>',
 };
 
 // All possible nav items with permission requirements
@@ -72,6 +73,17 @@ const allNavItems = [
             { label: 'Pagesat', href: '/pms/finance/payments' },
             { label: 'Blerjet (Bills)', href: '/pms/finance/bills' },
             { label: 'Furnitorët', href: '/pms/finance/suppliers' },
+        ],
+    },
+    {
+        label: t('admin.sidebar.inventory'),
+        icon: icons.inventory,
+        permission: 'view_inventory',
+        module: 'finance',
+        children: [
+            { label: t('admin.sidebar.inventoryOverview'), href: '/pms/inventory' },
+            { label: t('admin.sidebar.inventoryItems'), href: '/pms/inventory/items' },
+            { label: t('admin.sidebar.inventoryWarehouses'), href: '/pms/inventory/warehouses' },
         ],
     },
     { label: 'Raporte', href: '/pms/reports', icon: icons.reports, permission: 'view_reports' },

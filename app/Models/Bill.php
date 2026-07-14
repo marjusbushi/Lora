@@ -59,6 +59,11 @@ class Bill extends TenantModel
         return $this->hasMany(FinancePayment::class);
     }
 
+    public function items()
+    {
+        return $this->hasMany(BillItem::class);
+    }
+
     public function paidBase(): float
     {
         return round((float) $this->payments()->sum('amount_base'), 2);

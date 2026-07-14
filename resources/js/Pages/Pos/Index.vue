@@ -1,4 +1,5 @@
 <script setup>
+import { translate } from '@/i18n';
 import { ref, computed } from 'vue';
 import { useForm, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -161,6 +162,11 @@ function getItemEmoji(item) {
 function addToCart(menuItem) {
     if (!hasOpenShift.value) { toasts.value?.error('Hap një turn së pari.'); return; }
     const existing = cart.value.find((c) => c.id === menuItem.id);
+    if (menuItem.inventory_tracked && menuItem.available_portions !== null
+        && Number(existing?.qty || 0) >= Math.max(0, Number(menuItem.available_portions))) {
+        toasts.value?.error(translate('inventory.pos.insufficient'));
+        return;
+    }
     if (existing) {
         existing.qty++;
     } else {
@@ -170,6 +176,8 @@ function addToCart(menuItem) {
             price: parseFloat(menuItem.price),
             qty: 1,
             emoji: getItemEmoji(menuItem),
+            inventory_tracked: menuItem.inventory_tracked,
+            available_portions: menuItem.available_portions,
         });
     }
 }
@@ -179,6 +187,11 @@ function removeFromCart(index) {
 }
 
 function updateQty(index, delta) {
+    if (delta > 0 && cart.value[index].inventory_tracked && cart.value[index].available_portions !== null
+        && cart.value[index].qty >= Math.max(0, Number(cart.value[index].available_portions))) {
+        toasts.value?.error(translate('inventory.pos.insufficient'));
+        return;
+    }
     cart.value[index].qty += delta;
     if (cart.value[index].qty <= 0) cart.value.splice(index, 1);
 }
@@ -223,6 +236,9 @@ function submitPay() {
         onSuccess: () => {
             showPayModal.value = false;
             toasts.value?.success('Pagesa u regjistrua.');
+        },
+        onError: (errors) => {
+            if (errors.inventory) toasts.value?.error(errors.inventory);
         },
     });
 }
@@ -353,8 +369,8 @@ function formatTime(d) {
                         <button
                             v-for="item in activeMenuItems"
                             :key="item.id"
-                            class="group relative bg-white rounded-lg border border-neutral-200 hover:border-accent-300 hover:shadow-md transition-all duration-150 text-left overflow-hidden"
-                            :class="!item.is_available && 'opacity-50 pointer-events-none'"
+                            class="group relative overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-accent-300 hover:shadow-lg"
+                            :class="(!item.is_available || (item.inventory_tracked && item.available_portions !== null && item.available_portions <= 0)) && 'opacity-60'"
                             @click="addToCart(item)"
                         >
                             <!-- Image/Emoji area -->
@@ -369,8 +385,12 @@ function formatTime(d) {
                             </div>
                             <!-- Info -->
                             <div class="p-3">
-                                <p class="text-body-sm text-primary-900 font-medium leading-tight">{{ item.name }}</p>
-                                <p class="text-label text-accent-600 mt-1">€{{ item.price }}</p>
+                                <p class="min-h-8 text-body-sm font-semibold leading-tight text-primary-900">{{ item.name }}</p>
+                                <div class="mt-1 flex items-center justify-between gap-2">
+                                    <p class="text-label text-accent-700">{{ money(item.price) }}</p>
+                                    <span v-if="item.inventory_tracked" class="text-tiny font-semibold" :class="item.available_portions === null ? 'text-warning-600' : item.available_portions > 0 ? 'text-neutral-400' : 'text-error-600'">{{ item.available_portions === null ? $t('inventory.pos.stockUnknown') : item.available_portions > 0 ? item.available_portions + ' ' + $t('inventory.pos.available') : $t('inventory.pos.outOfStock') }}</span>
+                                    <span v-else-if="item.sales_count" class="text-tiny text-neutral-400">{{ item.sales_count }} shitje</span>
+                                </div>
                             </div>
                             <!-- Hover add indicator -->
                             <div class="absolute top-2 right-2 h-7 w-7 rounded-full bg-accent-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-small font-bold shadow-md">

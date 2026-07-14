@@ -7,13 +7,14 @@ use App\Http\Controllers\CleaningTaskController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\GuestController;
+use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosShiftController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
-use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\SeasonCopyController;
@@ -154,6 +155,8 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/reservations/{reservation}/cancel', [ReservationController::class, 'cancel'])->middleware('permission:update_reservations')->name('reservations.cancel');
         Route::post('/reservations/{reservation}/move-room', [ReservationController::class, 'moveRoom'])->middleware('permission:update_reservations')->name('reservations.move-room');
         Route::post('/reservations/{reservation}/folio', [ReservationController::class, 'addFolioLine'])->middleware('permission:update_reservations')->name('reservations.folio.add');
+        Route::post('/reservations/{reservation}/folio/inventory', [ReservationController::class, 'addInventoryFolioLine'])
+            ->middleware(['module:finance', 'permission:update_reservations'])->name('reservations.folio.inventory');
         Route::post('/reservations/{reservation}/payment', [ReservationController::class, 'recordPayment'])->middleware('permission:update_reservations')->name('reservations.payment');
     });
 
@@ -211,7 +214,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     // Finance (module #11): NOT admin-only — the view gate is view_finance and
     // every write carries its own permission (receptionist can record an
     // arkëtim; only pay_bills/manage_transfers roles can move money out).
-    Route::prefix('finance')->middleware('permission:view_finance')->group(function () {
+    Route::prefix('finance')->middleware(['module:finance', 'permission:view_finance'])->group(function () {
         Route::get('/', [FinanceController::class, 'index'])->name('finance.index');
         Route::get('/accounts', [FinanceController::class, 'accounts'])->name('finance.accounts');
         Route::post('/accounts', [FinanceController::class, 'storeAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.store');
@@ -224,11 +227,24 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         // Phase 2: Blerjet (Bills) + Furnitorët
         Route::get('/bills', [FinanceController::class, 'bills'])->name('finance.bills');
         Route::post('/bills', [FinanceController::class, 'storeBill'])->middleware('permission:manage_bills')->name('finance.bills.store');
+        Route::post('/bills/{bill}/receive', [FinanceController::class, 'receiveBill'])->middleware('permission:manage_inventory')->name('finance.bills.receive');
+        Route::post('/bills/categories', [FinanceController::class, 'storeBillCategory'])->middleware('permission:manage_bills')->name('finance.bill-categories.store');
         Route::post('/bills/{bill}/pay', [FinanceController::class, 'payBill'])->middleware('permission:pay_bills')->name('finance.bills.pay');
         Route::get('/suppliers', [FinanceController::class, 'suppliers'])->name('finance.suppliers');
         Route::post('/suppliers', [FinanceController::class, 'storeSupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.store');
         Route::put('/suppliers/{supplier}', [FinanceController::class, 'updateSupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.update');
         Route::delete('/suppliers/{supplier}', [FinanceController::class, 'destroySupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.destroy');
+    });
+
+    Route::prefix('inventory')->middleware(['module:finance', 'permission:view_inventory'])->group(function () {
+        Route::get('/', [InventoryController::class, 'index'])->name('inventory.index');
+        Route::get('/items', [InventoryController::class, 'items'])->name('inventory.items');
+        Route::post('/items', [InventoryController::class, 'storeItem'])->middleware('permission:manage_inventory')->name('inventory.items.store');
+        Route::put('/items/{item}', [InventoryController::class, 'updateItem'])->middleware('permission:manage_inventory')->name('inventory.items.update');
+        Route::get('/warehouses', [InventoryController::class, 'warehouses'])->name('inventory.warehouses');
+        Route::post('/warehouses', [InventoryController::class, 'storeWarehouse'])->middleware('permission:manage_inventory')->name('inventory.warehouses.store');
+        Route::put('/warehouses/{warehouse}', [InventoryController::class, 'updateWarehouse'])->middleware('permission:manage_inventory')->name('inventory.warehouses.update');
+        Route::post('/transfers', [InventoryController::class, 'transfer'])->middleware('permission:manage_inventory')->name('inventory.transfers.store');
     });
 
     // Admin-only: User Management + Settings

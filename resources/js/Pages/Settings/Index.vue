@@ -22,6 +22,8 @@ const props = defineProps({
     checklistDefaults: { type: Object, default: () => ({}) },
     roomTypes: Array,
     menuCategories: Array,
+    inventoryItems: { type: Array, default: () => [] },
+    inventoryWarehouses: { type: Array, default: () => [] },
     floors: Array,
     amenities: Array,
 });
@@ -82,7 +84,7 @@ const tabs = computed(() => allTabs.filter((tab) => !tab.module || modules.value
                 <RoomTypesTab v-else-if="activeTab === 'room-types'" :room-types="roomTypes" :amenities="amenities" :toasts="toasts" />
                 <AmenitiesTab v-else-if="activeTab === 'amenities'" :amenities="amenities" :toasts="toasts" />
                 <FloorsTab v-else-if="activeTab === 'floors'" :floors="floors" :toasts="toasts" />
-                <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :toasts="toasts" />
+                <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :toasts="toasts" />
                 <HousekeepingTab v-else-if="activeTab === 'housekeeping'" :settings="settings.housekeeping || {}" :checklist-defaults="checklistDefaults" :toasts="toasts" />
                 <FinancialTab v-else-if="activeTab === 'financial'" :settings="settings.financial || {}" :toasts="toasts" />
                 <PricingProgramsTab v-else-if="activeTab === 'pricing-programs'" :settings="settings.pricing_programs || {}" :financial="settings.financial || {}" :toasts="toasts" />

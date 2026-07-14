@@ -6,6 +6,7 @@ use App\Jobs\PushRoomTypeAri;
 use App\Models\Amenity;
 use App\Models\CleaningTask;
 use App\Models\Floor;
+use App\Models\InventoryItem;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Reservation;
@@ -13,6 +14,9 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\RoomTypeImage;
 use App\Models\Setting;
+use App\Models\Warehouse;
+use App\Services\CurrencyRates;
+use App\Services\MarketRates;
 use App\Services\PricingRulesVersion;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
@@ -38,24 +42,42 @@ class SettingsController extends Controller
             'gemini_from_env' => empty($aiKey) && ! empty(config('services.gemini.key')),
         ];
 
+        // Currencies (daily fx rates): same rule — never ship the raw key.
+        $curKey = trim((string) ($settings['currencies']['api_key'] ?? ''));
+        $settings['currencies'] = [
+            'enabled' => (bool) ($settings['currencies']['enabled'] ?? false),
+            'configured' => $curKey !== '',
+            'api_key_hint' => $curKey !== '' ? str_repeat('•', 6).substr($curKey, -4) : null,
+            'rates' => CurrencyRates::rates(),
+            'updated_at' => CurrencyRates::updatedAt(),
+            'tracked' => CurrencyRates::CURRENCIES,
+            'fallback_all' => (float) Setting::get('financial.fx_all_per_eur', 0) ?: null,
+        ];
+
         // Rate shopping (market_rates): same rule — never ship the raw key.
         $marketKey = trim((string) ($settings['market_rates']['api_key'] ?? ''));
         $settings['market_rates'] = [
             'enabled' => (bool) ($settings['market_rates']['enabled'] ?? false),
             'configured' => $marketKey !== '',
             'api_key_hint' => $marketKey !== '' ? str_repeat('•', 6).substr($marketKey, -4) : null,
-            'competitors' => \App\Services\MarketRates::competitors(),
-            'frequency' => \App\Services\MarketRates::frequency(),
-            'search_query' => \App\Services\MarketRates::searchQuery(),
+            'competitors' => MarketRates::competitors(),
+            'frequency' => MarketRates::frequency(),
+            'search_query' => MarketRates::searchQuery(),
         ];
 
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
             'checklistDefaults' => CleaningTask::DEFAULT_CHECKLISTS,
             'roomTypes' => RoomType::withCount('rooms')->with('images')->orderBy('name')->get(),
-            'menuCategories' => MenuCategory::with(['items' => fn ($q) => $q->orderBy('name')])
+            'menuCategories' => MenuCategory::with([
+                'items' => fn ($q) => $q->with('inventoryComponents')->orderBy('name'),
+            ])
                 ->orderBy('sort_order')
                 ->get(),
+            'inventoryItems' => InventoryItem::where('is_active', true)->where('type', '!=', 'service')
+                ->orderBy('name')->get(['id', 'name', 'sku', 'unit']),
+            'inventoryWarehouses' => Warehouse::where('is_active', true)
+                ->orderByDesc('is_default')->orderBy('name')->get(['id', 'name', 'type']),
             'floors' => Floor::orderBy('number')->get(),
             'amenities' => Amenity::orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
         ]);
@@ -355,6 +377,42 @@ class SettingsController extends Controller
         return back()->with('success', 'Çelësi AI u ruajt. Asistenti i çmimeve tani është aktiv.');
     }
 
+    // --- Currencies (daily fx rates for multi-currency finance) ---
+    public function updateCurrencies(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'api_key' => ['nullable', 'string', 'max:100'],
+            'clear_key' => ['nullable', 'boolean'],
+        ]);
+
+        Setting::set('currencies.enabled', $data['enabled'] ? '1' : '0', 'boolean');
+        if ($request->boolean('clear_key')) {
+            Setting::set('currencies.api_key', '', 'text');
+        } elseif (trim((string) ($data['api_key'] ?? '')) !== '') {
+            Setting::set('currencies.api_key', trim($data['api_key']), 'text');
+        }
+
+        return back()->with('success', 'Monedhat u ruajtën.');
+    }
+
+    /** "Rifresko tani" — inline fetch so the owner sees fresh rates instantly. */
+    public function refreshCurrencies(): RedirectResponse
+    {
+        if (! CurrencyRates::enabled()) {
+            return back()->with('error', 'Aktivizo modulin dhe vendos çelësin API më parë.');
+        }
+        try {
+            $count = app(CurrencyRates::class)->fetch();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Rifreskimi dështoi — kontrollo çelësin API.');
+        }
+
+        return back()->with('success', "U morën {$count} kurse të freskëta.");
+    }
+
     // --- Market rates (rate shopping — competitor prices, Phase 1) ---
     public function updateMarketRates(Request $request): RedirectResponse
     {
@@ -507,23 +565,27 @@ class SettingsController extends Controller
     // --- Menu Categories CRUD ---
     public function storeMenuCategory(Request $request): RedirectResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255', TenantRule::unique('menu_categories', 'name')],
+            'outlet' => ['nullable', 'in:bar,restaurant'],
+            'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
         ]);
 
         $maxOrder = MenuCategory::max('sort_order') ?? 0;
-        MenuCategory::create(['name' => $request->name, 'sort_order' => $maxOrder + 1]);
+        MenuCategory::create($data + ['sort_order' => $maxOrder + 1]);
 
         return back()->with('success', 'Kategoria u shtua.');
     }
 
     public function updateMenuCategory(Request $request, MenuCategory $menuCategory): RedirectResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255', TenantRule::unique('menu_categories', 'name')->ignore($menuCategory->id)],
+            'outlet' => ['nullable', 'in:bar,restaurant'],
+            'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
         ]);
 
-        $menuCategory->update(['name' => $request->name]);
+        $menuCategory->update($data);
 
         return back()->with('success', 'Kategoria u perditesua.');
     }
@@ -542,48 +604,65 @@ class SettingsController extends Controller
     // --- Menu Items CRUD ---
     public function storeMenuItem(Request $request): RedirectResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'menu_category_id' => ['required', TenantRule::exists('menu_categories')],
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0.01'],
             'image' => ['nullable', 'image', 'max:2048'],
+            'inventory_components' => ['nullable', 'array', 'max:20'],
+            'inventory_components.*.inventory_item_id' => [
+                'required', 'distinct', TenantRule::exists('inventory_items')->where('is_active', true)->whereNot('type', 'service'),
+            ],
+            'inventory_components.*.quantity' => ['required', 'numeric', 'min:0.0001', 'max:9999999'],
         ]);
 
-        $data = [
-            'menu_category_id' => $request->menu_category_id,
-            'name' => $request->name,
-            'price' => $request->price,
+        $itemData = [
+            'menu_category_id' => $data['menu_category_id'],
+            'name' => $data['name'],
+            'price' => $data['price'],
             'is_available' => true,
         ];
 
         if ($request->hasFile('image')) {
-            $data['image_path'] = $request->file('image')->store(TenantStorage::path('menu'), 'public');
+            $itemData['image_path'] = $request->file('image')->store(TenantStorage::path('menu'), 'public');
         }
 
-        MenuItem::create($data);
+        DB::transaction(function () use ($itemData, $data) {
+            $item = MenuItem::create($itemData);
+            $item->inventoryComponents()->createMany($data['inventory_components'] ?? []);
+        });
 
         return back()->with('success', 'Artikulli u shtua.');
     }
 
     public function updateMenuItem(Request $request, MenuItem $menuItem): RedirectResponse
     {
-        $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0.01'],
             'image' => ['nullable', 'image', 'max:2048'],
+            'inventory_components' => ['nullable', 'array', 'max:20'],
+            'inventory_components.*.inventory_item_id' => [
+                'required', 'distinct', TenantRule::exists('inventory_items')->where('is_active', true)->whereNot('type', 'service'),
+            ],
+            'inventory_components.*.quantity' => ['required', 'numeric', 'min:0.0001', 'max:9999999'],
         ]);
 
-        $data = $request->only('name', 'price');
+        $itemData = collect($data)->only('name', 'price')->all();
 
         if ($request->hasFile('image')) {
             // Delete old image
             if ($menuItem->image_path) {
                 Storage::disk('public')->delete($menuItem->image_path);
             }
-            $data['image_path'] = $request->file('image')->store(TenantStorage::path('menu'), 'public');
+            $itemData['image_path'] = $request->file('image')->store(TenantStorage::path('menu'), 'public');
         }
 
-        $menuItem->update($data);
+        DB::transaction(function () use ($menuItem, $itemData, $data) {
+            $menuItem->update($itemData);
+            $menuItem->inventoryComponents()->delete();
+            $menuItem->inventoryComponents()->createMany($data['inventory_components'] ?? []);
+        });
 
         return back()->with('success', 'Artikulli u perditesua.');
     }

@@ -14,7 +14,7 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import AuditTimeline from '@/Components/AuditTimeline.vue';
 import { channelMeta } from '@/channels';
-import { ArrowLeft } from 'lucide-vue-next';
+import { ArrowLeft, PackageOpen, Plus } from 'lucide-vue-next';
 
 const props = defineProps({
     reservation: Object,
@@ -22,12 +22,16 @@ const props = defineProps({
     payments: Array,
     openPosOrders: Array,
     history: { type: Array, default: () => [] },
+    inventoryEnabled: { type: Boolean, default: false },
+    inventoryItems: { type: Array, default: () => [] },
+    inventoryWarehouses: { type: Array, default: () => [] },
     currency: { type: String, default: '€' },
 });
 
 const toasts = ref(null);
 const checkingOut = ref(false);
 const showLineModal = ref(false);
+const showMinibarModal = ref(false);
 const showPayModal = ref(false);
 const showInvoice = ref(false);
 const checkoutMode = ref(false);
@@ -66,11 +70,11 @@ const typeLabel = {
 };
 const methodLabel = { cash: 'Kesh', card: 'Karte' };
 
-const lineTypeOptions = [
-    { value: 'minibar', label: 'Minibar' },
+const lineTypeOptions = computed(() => [
+    ...(!props.inventoryEnabled ? [{ value: 'minibar', label: 'Minibar' }] : []),
     { value: 'extra', label: 'Shërbim hoteli' },
     { value: 'discount', label: 'Zbritje' },
-];
+]);
 const methodOptions = [
     { value: 'cash', label: 'Kesh' },
     { value: 'card', label: 'Karte' },
@@ -79,6 +83,7 @@ const methodOptions = [
 const hasOpenOrders = computed(() => (props.openPosOrders?.length || 0) > 0);
 const unsettled = computed(() => Number(props.folio.outstanding) > 0.005);
 const canAddCharge = computed(() => canUpdate && ['pending', 'confirmed', 'checked_in'].includes(props.reservation.status));
+const isCheckedIn = computed(() => props.reservation.status === 'checked_in');
 const hotelName = usePage().props.settings?.hotel_name || 'Hotel';
 
 // Group folio charges by category for the invoice (room + bar + restaurant + ...).
@@ -95,8 +100,43 @@ function printInvoice() {
 }
 
 const lineForm = useForm({ type: 'extra', description: '', amount: '', charge_date: '' });
+const newInventoryReference = () => globalThis.crypto?.randomUUID?.()
+    || '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (digit) => (
+        Number(digit) ^ Math.floor(Math.random() * 16) >> Number(digit) / 4
+    ).toString(16));
+const minibarForm = useForm({
+    inventory_item_id: '',
+    warehouse_id: '',
+    quantity: 1,
+    inventory_reference: newInventoryReference(),
+});
 const payForm = useForm({ amount: '', method: 'cash' });
 
+const minibarItemOptions = computed(() => props.inventoryItems.map((item) => ({
+    value: item.id,
+    label: `${item.name} · ${item.sku}`,
+})));
+const minibarWarehouseOptions = computed(() => props.inventoryWarehouses.map((warehouse) => ({
+    value: warehouse.id,
+    label: warehouse.name,
+})));
+const selectedMinibarItem = computed(() => props.inventoryItems.find(
+    (item) => Number(item.id) === Number(minibarForm.inventory_item_id),
+));
+const minibarAvailable = computed(() => Number(
+    selectedMinibarItem.value?.warehouse_stock?.[String(minibarForm.warehouse_id)] ?? 0,
+));
+const minibarQuantity = computed(() => Number(minibarForm.quantity));
+const minibarTotal = computed(() => (
+    Number(selectedMinibarItem.value?.selling_price || 0) * Math.max(0, minibarQuantity.value || 0)
+));
+const minibarCanSubmit = computed(() => (
+    minibarForm.inventory_item_id
+    && minibarForm.warehouse_id
+    && Number.isFinite(minibarQuantity.value)
+    && minibarQuantity.value > 0
+    && minibarQuantity.value <= minibarAvailable.value + 0.00005
+));
 function openLineModal() {
     lineForm.reset();
     lineForm.clearErrors();
@@ -108,6 +148,39 @@ function closeLineModal() {
     lineForm.clearErrors();
 }
 
+function openMinibarModal() {
+    minibarForm.clearErrors();
+    const warehouse = props.inventoryWarehouses[0];
+    minibarForm.warehouse_id = warehouse?.id || '';
+    const itemWithStock = props.inventoryItems.find(
+        (item) => Number(item.warehouse_stock?.[String(warehouse?.id)] || 0) > 0,
+    );
+    minibarForm.inventory_item_id = itemWithStock?.id || props.inventoryItems[0]?.id || '';
+    minibarForm.quantity = 1;
+    minibarForm.inventory_reference = newInventoryReference();
+    showMinibarModal.value = true;
+}
+
+function closeMinibarModal() {
+    if (minibarForm.processing) return;
+    showMinibarModal.value = false;
+    minibarForm.clearErrors();
+}
+
+function submitMinibar() {
+    if (!minibarCanSubmit.value || minibarForm.processing) return;
+    minibarForm.post(route('reservations.folio.inventory', props.reservation.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            showMinibarModal.value = false;
+            minibarForm.inventory_reference = newInventoryReference();
+            toasts.value?.success('Minibari u regjistrua dhe stoku u përditësua.');
+        },
+        onError: (errors) => {
+            toasts.value?.error(Object.values(errors)[0] || 'Minibari nuk u regjistrua. Kontrollo të dhënat.');
+        },
+    });
+}
 function money(v) {
     return `${props.currency}${Number(v ?? 0).toFixed(2)}`;
 }
@@ -270,8 +343,19 @@ function settleAndCheckout(method) {
 
             <!-- Folio -->
             <Card class="lg:col-span-2" :padding="false">
-                <div class="px-5 py-4 border-b border-neutral-200">
-                    <h3 class="text-label text-neutral-600 uppercase tracking-wider">Folio — Llogaria e mysafirit</h3>
+                <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
+                    <h3 class="text-label uppercase tracking-wider text-neutral-600">Folio — Llogaria e mysafirit</h3>
+                    <div v-if="canAddCharge" class="flex flex-wrap items-center justify-end gap-2">
+                        <Button
+                            v-if="isCheckedIn && inventoryEnabled && inventoryItems.length"
+                            size="sm"
+                            variant="primary"
+                            @click="openMinibarModal"
+                        >
+                            <PackageOpen class="h-4 w-4" />Shto minibar
+                        </Button>
+                        <Button size="sm" variant="outline" @click="openLineModal"><Plus class="h-4 w-4" />Shto tarifë</Button>
+                    </div>
                 </div>
 
                 <!-- Open POS warning -->
@@ -365,6 +449,70 @@ function settleAndCheckout(method) {
             </div>
             <AuditTimeline :entries="history" />
         </Card>
+
+        <!-- Inventory-backed minibar: folio charge and stock movement are one transaction. -->
+        <Modal
+            :show="showMinibarModal"
+            :title="$t('reservationShow.minibarTitle')"
+            max-width="md"
+            :closeable="!minibarForm.processing"
+            @close="closeMinibarModal"
+        >
+            <form class="space-y-4" @submit.prevent="submitMinibar">
+                <div class="rounded-lg border border-accent-100 bg-accent-50/60 px-3 py-2.5 text-small text-accent-900">
+                    {{ $t('reservationShow.minibarHint') }}
+                </div>
+                <FormGroup :label="$t('reservationShow.inventoryItem')" :error="minibarForm.errors.inventory_item_id" required>
+                    <Select
+                        v-model="minibarForm.inventory_item_id"
+                        :options="minibarItemOptions"
+                        :error="minibarForm.errors.inventory_item_id"
+                    />
+                </FormGroup>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <FormGroup :label="$t('reservationShow.warehouse')" :error="minibarForm.errors.warehouse_id" required>
+                        <Select
+                            v-model="minibarForm.warehouse_id"
+                            :options="minibarWarehouseOptions"
+                            :error="minibarForm.errors.warehouse_id"
+                        />
+                    </FormGroup>
+                    <FormGroup :label="$t('reservationShow.quantity')" :error="minibarForm.errors.quantity" required>
+                        <TextInput
+                            v-model="minibarForm.quantity"
+                            type="number"
+                            min="0.0001"
+                            :max="minibarAvailable"
+                            step="0.0001"
+                            :error="minibarForm.errors.quantity"
+                        />
+                    </FormGroup>
+                </div>
+                <div class="grid grid-cols-2 gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-body-sm">
+                    <div>
+                        <p class="text-neutral-500">{{ $t('reservationShow.availableStock') }}</p>
+                        <p class="mt-1 font-semibold" :class="minibarAvailable > 0 ? 'text-success-700' : 'text-error-600'">
+                            {{ minibarAvailable }} {{ selectedMinibarItem?.unit || '' }}
+                        </p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-neutral-500">{{ $t('reservationShow.folioTotal') }}</p>
+                        <p class="mt-1 font-semibold text-primary-900">{{ money(minibarTotal) }}</p>
+                    </div>
+                </div>
+                <p v-if="minibarQuantity > minibarAvailable" class="text-small font-medium text-error-600">
+                    {{ $t('reservationShow.insufficientStock') }}
+                </p>
+            </form>
+            <template #footer>
+                <Button variant="outline" :disabled="minibarForm.processing" @click="closeMinibarModal">
+                    {{ $t('admin.generated.k_1ae76507a0e9') }}
+                </Button>
+                <Button variant="primary" :loading="minibarForm.processing" :disabled="!minibarCanSubmit" @click="submitMinibar">
+                    {{ $t('reservationShow.postMinibar') }}
+                </Button>
+            </template>
+        </Modal>
 
         <!-- Add a hotel charge to the guest account. Food/drinks come from POS. -->
         <Modal

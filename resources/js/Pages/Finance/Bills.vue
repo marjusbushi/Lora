@@ -10,8 +10,10 @@ import {
     Clock3,
     Download,
     Plus,
+    PackagePlus,
     ReceiptText,
     Search,
+    Trash2,
     Users,
 } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -33,6 +35,9 @@ const props = defineProps({
     priorities: Array,
     fxRate: Number,
     can: Object,
+    inventoryItems: Array,
+    warehouses: Array,
+    openCreate: Boolean,
 });
 
 const chips = [
@@ -148,9 +153,14 @@ function exportVisibleBills() {
     URL.revokeObjectURL(url);
 }
 
+function receiveStock(bill) {
+    router.post(route('finance.bills.receive', bill.id), {}, { preserveScroll: true });
+}
+
 // -- new bill ---------------------------------------------------------------
-const showNew = ref(false);
+const showNew = ref(Boolean(props.openCreate));
 const todayString = new Date().toISOString().slice(0, 10);
+const defaultWarehouseId = computed(() => props.warehouses.find((warehouse) => warehouse.is_default)?.id || props.warehouses[0]?.id || null);
 const form = useForm({
     supplier_id: null,
     number: '',
@@ -161,6 +171,8 @@ const form = useForm({
     fx_rate: props.fxRate,
     total: null,
     notes: '',
+    receive_stock: true,
+    items: [],
 });
 
 const selectedSupplier = computed(() => props.suppliers.find((supplier) => supplier.id === Number(form.supplier_id)));
@@ -170,6 +182,31 @@ const billTotalBase = computed(() => {
     const rate = Number(form.fx_rate || 0);
     return rate > 0 ? total / rate : 0;
 });
+const inventoryTotal = computed(() => form.items.reduce((total, line) => total + Number(line.quantity || 0) * Number(line.unit_cost || 0), 0));
+
+watch(inventoryTotal, (total) => {
+    if (form.items.length) form.total = Number(total.toFixed(2));
+});
+
+function addInventoryLine() {
+    form.items.push({ inventory_item_id: null, warehouse_id: defaultWarehouseId.value, quantity: 1, unit_cost: null });
+}
+
+function removeInventoryLine(index) {
+    form.items.splice(index, 1);
+    if (!form.items.length) form.total = null;
+}
+
+function selectedInventoryItem(line) {
+    return props.inventoryItems.find((item) => item.id === Number(line.inventory_item_id));
+}
+
+function applyInventoryCost(line) {
+    const item = selectedInventoryItem(line);
+    if (item && (line.unit_cost === null || line.unit_cost === '')) line.unit_cost = Number(item.average_cost || 0);
+    if (item?.type === 'service') line.warehouse_id = null;
+    else if (!line.warehouse_id) line.warehouse_id = defaultWarehouseId.value;
+}
 
 function resetBillForm() {
     form.reset();
@@ -177,6 +214,8 @@ function resetBillForm() {
     form.issue_date = todayString;
     form.currency = 'ALL';
     form.fx_rate = props.fxRate;
+    form.receive_stock = true;
+    form.items = [];
     form.clearErrors();
 }
 
@@ -344,6 +383,7 @@ function submitPay() {
                                         <td class="px-5 py-3">
                                             <span class="block font-bold text-primary-900">{{ bill.supplier }}</span>
                                             <span class="mt-0.5 block text-tiny text-neutral-400">{{ bill.number || '#' + bill.id }} · {{ formatDate(bill.issue_date) }}</span>
+                                            <span v-if="bill.items_count" class="mt-1 inline-flex items-center gap-1 rounded-full bg-info-50 px-2 py-0.5 text-tiny font-semibold text-info-700"><PackagePlus class="h-3 w-3" /> {{ bill.received_items_count }}/{{ bill.items_count }} stok</span>
                                         </td>
                                         <td class="px-4 py-3"><span class="rounded-md bg-neutral-100 px-2 py-1 text-tiny font-bold text-neutral-500">{{ bill.category }}</span></td>
                                         <td class="px-4 py-3 whitespace-nowrap">
@@ -356,9 +396,10 @@ function submitPay() {
                                         </td>
                                         <td class="px-4 py-3 text-right whitespace-nowrap font-bold" :class="bill.remaining_base > 0 ? 'text-error-600' : 'text-accent-700'">{{ money(bill.remaining_base) }}</td>
                                         <td class="px-4 py-3"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-tiny font-bold" :class="statusPill[bill.status]?.cls"><i class="h-1.5 w-1.5 rounded-full bg-current" />{{ statusPill[bill.status]?.text }}</span></td>
-                                        <td class="px-5 py-3 text-right">
-                                            <Button v-if="can.payBills && bill.status !== 'paid'" size="sm" variant="outline" @click="openPay(bill)">Paguaj</Button>
-                                        </td>
+                                        <td class="px-5 py-3 text-right"><div class="flex justify-end gap-2">
+                                            <Button v-if="can.manageInventory && bill.items_count > bill.received_items_count" size="sm" variant="success" @click="receiveStock(bill)">{{ $t('inventory.bill.receiveNow') }}</Button>
+                                            <Button v-if="can.payBills && bill.status !== 'paid'" size="sm" variant="outline" @click="openPay(bill)">{{ $t('admin.generated.k_1be1a3546eed') }}</Button>
+                                        </div></td>
                                     </tr>
                                     <tr v-if="!bills.data.length">
                                         <td colspan="7" class="px-5 py-12 text-center">
@@ -472,11 +513,64 @@ function submitPay() {
                     </section>
 
                     <section class="border-t border-neutral-100 pt-5">
-                        <h4 class="mb-3 text-tiny font-bold uppercase tracking-wide text-neutral-400">2 · Shuma dhe kursi</h4>
+                        <div class="mb-3 flex items-start justify-between gap-3">
+                            <div>
+                                <h4 class="text-tiny font-bold uppercase tracking-wide text-neutral-400">{{ $t('inventory.bill.linesTitle') }}</h4>
+                                <p class="mt-1 text-tiny text-neutral-500">{{ $t('inventory.bill.linesSubtitle') }}</p>
+                            </div>
+                            <Button v-if="inventoryItems.length" variant="outline" size="sm" @click="addInventoryLine"><PackagePlus class="h-4 w-4" /> {{ $t('inventory.bill.addLine') }}</Button>
+                        </div>
+                        <div v-if="form.items.length" class="space-y-3">
+                            <div v-for="(line, index) in form.items" :key="index" class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                                <div class="grid gap-3 sm:grid-cols-2">
+                                    <div class="sm:col-span-2">
+                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('inventory.bill.item') }}</label>
+                                        <select v-model="line.inventory_item_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="applyInventoryCost(line)">
+                                            <option :value="null" disabled>—</option>
+                                            <option v-for="item in inventoryItems" :key="item.id" :value="item.id">{{ item.name }} · {{ item.sku }}</option>
+                                        </select>
+                                        <p v-if="form.errors[`items.${index}.inventory_item_id`]" class="mt-1 text-tiny text-error-600">{{ form.errors[`items.${index}.inventory_item_id`] }}</p>
+                                    </div>
+                                    <div>
+                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('inventory.bill.quantity') }} <span v-if="selectedInventoryItem(line)" class="font-normal text-neutral-400">({{ selectedInventoryItem(line).unit }})</span></label>
+                                        <TextInput v-model="line.quantity" type="number" min="0.0001" step="0.0001" class="w-full" />
+                                        <p v-if="form.errors[`items.${index}.quantity`]" class="mt-1 text-tiny text-error-600">{{ form.errors[`items.${index}.quantity`] }}</p>
+                                    </div>
+                                    <div>
+                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('inventory.bill.unitCost') }} ({{ form.currency }})</label>
+                                        <TextInput v-model="line.unit_cost" type="number" min="0" step="0.01" class="w-full" />
+                                        <p v-if="form.errors[`items.${index}.unit_cost`]" class="mt-1 text-tiny text-error-600">{{ form.errors[`items.${index}.unit_cost`] }}</p>
+                                    </div>
+                                    <div v-if="selectedInventoryItem(line)?.type !== 'service'">
+                                        <label class="mb-1 block text-tiny font-semibold text-primary-900">{{ $t('inventory.bill.warehouse') }}</label>
+                                        <select v-model="line.warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                                            <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
+                                        </select>
+                                        <p v-if="form.errors[`items.${index}.warehouse_id`]" class="mt-1 text-tiny text-error-600">{{ form.errors[`items.${index}.warehouse_id`] }}</p>
+                                    </div>
+                                    <div class="flex items-end justify-between gap-3" :class="selectedInventoryItem(line)?.type === 'service' && 'sm:col-span-2'">
+                                        <div><span class="block text-tiny text-neutral-400">{{ $t('inventory.bill.lineTotal') }}</span><strong class="text-body-sm text-primary-900">{{ money(Number(line.quantity || 0) * Number(line.unit_cost || 0), form.currency) }}</strong></div>
+                                        <button type="button" class="rounded-md p-2 text-neutral-400 hover:bg-error-50 hover:text-error-600" @click="removeInventoryLine(index)"><Trash2 class="h-4 w-4" /></button>
+                                    </div>
+                                </div>
+                            </div>
+                            <label class="flex items-start gap-3 rounded-lg border border-accent-200 bg-accent-50/60 p-3">
+                                <input v-model="form.receive_stock" type="checkbox" class="mt-0.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500" />
+                                <span><strong class="block text-body-sm text-accent-900">{{ $t('inventory.bill.receiveStock') }}</strong><small class="mt-0.5 block text-tiny text-accent-700">{{ $t('inventory.bill.receiveHint') }}</small></span>
+                            </label>
+                        </div>
+                        <div v-else class="rounded-lg border border-dashed border-neutral-200 px-4 py-6 text-center text-body-sm text-neutral-400">
+                            {{ $t('inventory.bill.empty') }}
+                        </div>
+                    </section>
+
+                    <section class="border-t border-neutral-100 pt-5">
+                        <h4 class="mb-3 text-tiny font-bold uppercase tracking-wide text-neutral-400">{{ $t('admin.generated.k_5c2ce112243e') }}</h4>
                         <div class="grid gap-3 sm:grid-cols-2">
                             <div>
-                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">Shuma ({{ form.currency }})</label>
-                                <TextInput v-model="form.total" type="number" min="0.01" step="0.01" class="w-full" placeholder="0.00" />
+                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_fe7e86c8fe2c') }}{{ form.currency }})</label>
+                                <TextInput v-model="form.total" type="number" min="0.01" step="0.01" class="w-full" placeholder="0.00" :disabled="form.items.length > 0" />
+                                <p v-if="form.items.length" class="mt-1 text-tiny text-neutral-400">{{ $t('inventory.bill.calculated') }}</p>
                                 <p v-if="form.errors.total" class="mt-1 text-tiny text-error-600">{{ form.errors.total }}</p>
                             </div>
                             <div :class="form.currency === 'EUR' && 'opacity-45'">
@@ -497,10 +591,11 @@ function submitPay() {
                 <aside class="border-t border-neutral-200 bg-neutral-50 p-5 lg:border-l lg:border-t-0">
                     <h4 class="text-body-sm font-bold text-primary-900">Përmbledhja</h4>
                     <div class="mt-3 divide-y divide-neutral-100 rounded-lg border border-neutral-200 bg-white px-3">
-                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">Furnitori</span><b class="text-right text-primary-900">{{ selectedSupplier?.name || '—' }}</b></div>
-                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">Nr. faturës</span><b class="text-right text-primary-900">{{ form.number || 'Pa numër' }}</b></div>
-                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">Afati</span><b class="text-right text-primary-900">{{ formatDate(form.due_date) }}</b></div>
-                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">Kursi i ngrirë</span><b class="text-right text-primary-900">{{ form.currency === 'ALL' ? (form.fx_rate || '—') : 'Nuk aplikohet' }}</b></div>
+                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">{{ $t('admin.generated.k_3265a32a5fd6') }}</span><b class="text-right text-primary-900">{{ selectedSupplier?.name || '—' }}</b></div>
+                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">{{ $t('admin.generated.k_7af9506ad5a9') }}</span><b class="text-right text-primary-900">{{ form.number || $t('admin.generated.k_96b10100b8c8') }}</b></div>
+                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">{{ $t('admin.generated.k_3150b7f0ee0d') }}</span><b class="text-right text-primary-900">{{ formatDate(form.due_date) }}</b></div>
+                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">{{ $t('admin.generated.k_e63b3779056d') }}</span><b class="text-right text-primary-900">{{ form.currency === 'ALL' ? (form.fx_rate || '—') : $t('admin.generated.k_bef58060168d') }}</b></div>
+                        <div class="flex items-center justify-between gap-3 py-2.5 text-tiny"><span class="text-neutral-400">{{ $t('inventory.bill.itemsCount') }}</span><b class="text-right text-primary-900">{{ form.items.length }}</b></div>
                     </div>
                     <div class="mt-3 rounded-lg bg-accent-50 p-3">
                         <span class="text-tiny text-accent-800">Detyrimi në EUR</span>
