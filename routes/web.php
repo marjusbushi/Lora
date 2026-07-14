@@ -100,6 +100,11 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // Maintenance workspace preview — mock data only, used to validate the workflow before persistence.
+    Route::get('/maintenance-design', function () {
+        return Inertia::render('Maintenance/Design');
+    })->name('maintenance.design');
+
     // Notifications (new-reservation bell) — any authenticated staff
     Route::get('/notifications/reservations', [NotificationController::class, 'reservations'])->name('notifications.reservations');
 
