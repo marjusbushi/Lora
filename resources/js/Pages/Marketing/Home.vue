@@ -98,13 +98,13 @@ const featureGroups = [
 ];
 
 const pricingCards = [
-    { title: 'Lora Core', price: '€29', unit: '/ muaj', note: 'Baza e PMS-it', icon: ShieldCheck },
-    { title: 'Channel Manager', price: '€7', unit: '/ dhomë', note: '50 të parat · pastaj €5', icon: Zap },
-    { title: 'Booking Online', price: '1%', unit: '', note: 'Vetëm rezervimet direkte', icon: Globe2 },
-    { title: 'Housekeeping', price: '€9', unit: '/ muaj', note: 'Tarifë fikse për modulin', icon: UsersRound },
-    { title: 'POS', price: '€19', unit: '/ pikë shitjeje', note: 'Bar ose restorant', icon: Store },
-    { title: 'Çmimet Inteligjente', price: '€19', unit: '/ muaj', note: 'Sugjerime & autopilot', icon: Sparkles },
-    { title: 'Financa', price: '€19', unit: '/ muaj', note: 'Arka, pagesa, fatura & shpenzime', icon: WalletCards },
+    { title: 'Lora Core', monthlyPrice: 29, unit: '/ muaj', note: 'Baza e PMS-it', icon: ShieldCheck },
+    { title: 'Channel Manager', monthlyPrice: 7, unit: '/ dhomë', note: '50 të parat · pastaj €5', annualNote: '50 të parat · pastaj €4', icon: Zap },
+    { title: 'Booking Online', displayPrice: '1%', unit: '', note: 'Vetëm rezervimet direkte', icon: Globe2 },
+    { title: 'Housekeeping', monthlyPrice: 9, unit: '/ muaj', note: 'Tarifë fikse për modulin', icon: UsersRound },
+    { title: 'POS', monthlyPrice: 19, unit: '/ pikë shitjeje', note: 'Bar ose restorant', icon: Store },
+    { title: 'Çmimet Inteligjente', monthlyPrice: 19, unit: '/ muaj', note: 'Sugjerime & autopilot', icon: Sparkles },
+    { title: 'Financa', monthlyPrice: 19, unit: '/ muaj', note: 'Arka, pagesa, fatura & shpenzime', icon: WalletCards },
 ];
 
 const productTabs = ['Rezervimet', 'Housekeeping', 'POS', 'Çmimet'];
@@ -181,6 +181,13 @@ const money = (value) => new Intl.NumberFormat('en-IE', {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
 }).format(value);
+
+const cardPrice = (card) => card.displayPrice
+    ?? money(card.monthlyPrice * (annualBilling.value ? 0.8 : 1));
+
+const cardNote = (card) => annualBilling.value && card.annualNote
+    ? card.annualNote
+    : card.note;
 
 const adjust = (target, amount) => {
     if (target === 'rooms') rooms.value = Math.min(300, Math.max(1, normalizedRooms.value + amount));
@@ -503,10 +510,14 @@ const adjust = (target, amount) => {
 
                     <div class="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
                         <article v-for="card in pricingCards" :key="card.title" class="flex min-h-[13.5rem] flex-col rounded-2xl border border-[#123d32]/10 bg-white p-5 shadow-[0_15px_40px_-38px_rgba(18,61,50,.5)]">
-                            <span class="grid h-10 w-10 place-items-center rounded-xl bg-[#edf7f1] text-[#16875d]"><component :is="card.icon" class="h-5 w-5" /></span>
+                            <div class="flex items-start justify-between gap-2">
+                                <span class="grid h-10 w-10 place-items-center rounded-xl bg-[#edf7f1] text-[#16875d]"><component :is="card.icon" class="h-5 w-5" /></span>
+                                <span v-if="annualBilling && card.monthlyPrice" class="rounded-full bg-[#dff4e8] px-2 py-1 text-[10px] font-bold text-[#16875d]">−20%</span>
+                            </div>
                             <h3 class="mt-5 min-h-[2.5rem] text-sm font-semibold leading-5 text-[#33403b]">{{ card.title }}</h3>
-                            <div class="mt-3 flex items-baseline gap-1"><strong class="text-3xl font-semibold tracking-[-0.04em] text-[#14221c]">{{ card.price }}</strong><span class="text-[10px] font-medium text-[#77827d]">{{ card.unit }}</span></div>
-                            <p class="mt-auto pt-4 text-[10px] leading-4 text-[#7b8581]">{{ card.note }}</p>
+                            <div class="mt-3 flex items-baseline gap-1"><strong class="text-3xl font-semibold tracking-[-0.04em] text-[#14221c]">{{ cardPrice(card) }}</strong><span class="text-[10px] font-medium text-[#77827d]">{{ card.unit }}</span></div>
+                            <p v-if="annualBilling && card.monthlyPrice" class="mt-1 text-[10px] text-[#8a948f]"><span class="line-through">{{ money(card.monthlyPrice) }}</span> me pagesë mujore</p>
+                            <p class="mt-auto pt-4 text-[10px] leading-4 text-[#7b8581]">{{ cardNote(card) }}</p>
                         </article>
                     </div>
 
