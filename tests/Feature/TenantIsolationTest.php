@@ -164,7 +164,8 @@ class TenantIsolationTest extends TestCase
         ]);
 
         app(TenantContext::class)->set($tenant);
-        $this->assertSame(5, Role::query()->where('team_id', $tenant->id)->count());
+        $this->assertSame(6, Role::query()->where('team_id', $tenant->id)->count());
+        $this->assertTrue(Role::query()->where('team_id', $tenant->id)->where('name', 'maintenance')->exists());
         $this->assertTrue($superAdmin->unsetRelation('roles')->hasRole('admin'));
         app(TenantContext::class)->clear();
 

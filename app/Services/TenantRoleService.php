@@ -23,6 +23,7 @@ class TenantRoleService
                 'view_reservations', 'create_reservations', 'update_reservations', 'delete_reservations',
                 'view_guests', 'create_guests', 'update_guests', 'delete_guests',
                 'view_housekeeping', 'create_housekeeping', 'update_housekeeping', 'delete_housekeeping',
+                'view_maintenance', 'create_maintenance', 'update_maintenance', 'delete_maintenance',
                 'view_pos_orders', 'create_pos_orders', 'update_pos_orders', 'delete_pos_orders',
                 'open_pos_shift', 'close_pos_shift', 'close_any_pos_shift',
                 'view_reports',
@@ -31,6 +32,7 @@ class TenantRoleService
                 'view_rooms', 'update_rooms',
                 'view_reservations', 'create_reservations', 'update_reservations', 'delete_reservations',
                 'view_guests', 'create_guests', 'update_guests',
+                'view_maintenance', 'create_maintenance', 'update_maintenance',
                 'view_pos_orders', 'create_pos_orders', 'update_pos_orders',
                 'open_pos_shift', 'close_pos_shift',
                 'view_reports',
@@ -38,6 +40,11 @@ class TenantRoleService
             'housekeeping' => [
                 'view_rooms', 'update_rooms',
                 'view_housekeeping', 'create_housekeeping', 'update_housekeeping',
+                'view_maintenance', 'create_maintenance',
+            ],
+            'maintenance' => [
+                'view_rooms', 'update_rooms',
+                'view_maintenance', 'create_maintenance', 'update_maintenance',
             ],
             'pos_staff' => [
                 'view_pos_orders', 'create_pos_orders', 'update_pos_orders',
@@ -55,6 +62,7 @@ class TenantRoleService
             'reservations' => ['view', 'create', 'update', 'delete'],
             'guests' => ['view', 'create', 'update', 'delete'],
             'housekeeping' => ['view', 'create', 'update', 'delete'],
+            'maintenance' => ['view', 'create', 'update', 'delete'],
             'pos_orders' => ['view', 'create', 'update', 'delete'],
             'pos_shift' => ['open', 'close', 'close_any'],
             'reports' => ['view'],

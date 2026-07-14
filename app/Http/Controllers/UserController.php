@@ -112,6 +112,7 @@ class UserController extends Controller
             ['key' => 'reservations', 'label' => 'Rezervimet', 'actions' => ['view', 'create', 'update', 'delete']],
             ['key' => 'guests', 'label' => 'Mysafiret', 'actions' => ['view', 'create', 'update', 'delete']],
             ['key' => 'housekeeping', 'label' => 'Housekeeping', 'actions' => ['view', 'create', 'update', 'delete']],
+            ['key' => 'maintenance', 'label' => 'Mirëmbajtja', 'actions' => ['view', 'create', 'update', 'delete']],
             ['key' => 'pos_orders', 'label' => 'POS', 'actions' => ['view', 'create', 'update', 'delete']],
             ['key' => 'pos_shift', 'label' => 'Turnet POS', 'actions' => ['open', 'close', 'close_any']],
             ['key' => 'reports', 'label' => 'Raporte', 'actions' => ['view']],

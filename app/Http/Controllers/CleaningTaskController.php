@@ -5,15 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\CleaningTask;
 use App\Models\Room;
 use App\Models\User;
+use App\Services\MaintenanceIssueService;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class CleaningTaskController extends Controller
 {
+    public function __construct(private readonly MaintenanceIssueService $maintenanceIssues) {}
+
     public function index(Request $request): Response
     {
         $query = CleaningTask::select(
@@ -221,12 +225,20 @@ class CleaningTaskController extends Controller
             'issue_reported' => $request->issue_reported,
         ]);
 
-        // Set room to maintenance if serious (room may be gone — guard the null).
-        if ($request->boolean('set_maintenance')) {
-            $cleaningTask->room?->update(['status' => 'maintenance']);
-        }
+        $roomNumber = $cleaningTask->room?->room_number;
+        $this->maintenanceIssues->report([
+            'room_id' => $cleaningTask->room_id,
+            'cleaning_task_id' => $cleaningTask->id,
+            'title' => ($roomNumber ? "Dhoma {$roomNumber}: " : '').Str::limit($request->issue_reported, 120),
+            'description' => $request->issue_reported,
+            'category' => 'other',
+            'kind' => 'corrective',
+            'priority' => $request->boolean('set_maintenance') ? 'high' : 'medium',
+            'source' => 'housekeeping',
+            'block_room' => $request->boolean('set_maintenance'),
+        ], $request->user());
 
-        return back()->with('success', 'Problemi u raportua.');
+        return back()->with('success', 'Problemi u raportua dhe u dërgua te Mirëmbajtja.');
     }
 
     /**

@@ -50,6 +50,7 @@ const roleLabels = {
     manager: 'Menaxher',
     receptionist: 'Recepsion',
     housekeeping: 'Housekeeping',
+    maintenance: 'Mirëmbajtje',
     pos_staff: 'POS',
 };
 const roleBadge = {
@@ -57,6 +58,7 @@ const roleBadge = {
     manager: 'accent',
     receptionist: 'info',
     housekeeping: 'warning',
+    maintenance: 'success',
     pos_staff: 'neutral',
 };
 const avatarTones = [

@@ -59,7 +59,7 @@ const allNavItems = [
     { label: 'Mesazhet', href: '/pms/messages', match: '/pms/messages', icon: icons.messages, permission: 'view_reservations', module: 'channel_manager' },
     { label: 'Mysafiret', href: '/pms/guests', icon: icons.guests, permission: 'view_guests' },
     { label: 'Housekeeping', href: '/pms/housekeeping', icon: icons.housekeeping, permission: 'view_housekeeping', module: 'housekeeping' },
-    { label: 'Mirëmbajtja', translationKey: 'maintenance.title', href: '/pms/maintenance-design', icon: icons.maintenance, permission: null },
+    { label: 'Mirëmbajtja', translationKey: 'maintenance.title', href: '/pms/maintenance', icon: icons.maintenance, permission: 'view_maintenance' },
     { label: 'POS Bar/Restaurant', href: '/pms/pos', icon: icons.pos, permission: 'view_pos_orders', module: 'pos' },
     { label: 'Raporte', href: '/pms/reports', icon: icons.reports, permission: 'view_reports' },
     { label: 'Perdoruesit', href: '/pms/users', icon: icons.users, permission: 'view_users' },
