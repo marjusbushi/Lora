@@ -3,18 +3,19 @@ import { computed, ref } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 import {
-    AlertTriangle, ArrowRight, CalendarClock, Check, ChevronRight, CircleAlert,
-    Clock3, Hammer, Image, MapPin, MoreHorizontal, Plus, Search,
-    ShieldCheck, SlidersHorizontal, Sparkles, UserRound, Wrench, X,
+    AlertTriangle, CalendarClock, Check, ChevronRight, CircleAlert,
+    Clock3, Hammer, Image, MapPin, Plus, Search,
+    SlidersHorizontal, UserRound, Wrench, X,
 } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
 const { t } = useI18n();
-const activeTab = ref('issues');
+const designVariant = ref('list');
 const activeStatus = ref('all');
 const query = ref('');
 const selectedId = ref(1042);
 const reportOpen = ref(false);
+const drawerOpen = ref(false);
 
 const issues = [
     {
@@ -64,6 +65,10 @@ const filteredIssues = computed(() => issues.filter((issue) => {
     return statusMatches && searchMatches;
 }));
 const selected = computed(() => issues.find((issue) => issue.id === selectedId.value) || issues[0]);
+const kanbanColumns = computed(() => statusTabs.slice(1).map((status) => ({
+    ...status,
+    issues: issues.filter((issue) => issue.status === status.value),
+})));
 
 const priorityClass = (priority) => ({
     critical: 'bg-red-50 text-red-700 ring-red-600/20', high: 'bg-orange-50 text-orange-700 ring-orange-600/20',
@@ -76,106 +81,95 @@ const issueLocation = (issue) => issue.locationKey ? t(`maintenance.mock.${issue
 const issueAssignee = (issue) => issue.assigneeKey ? t(`maintenance.${issue.assigneeKey}`) : issue.assignee;
 const issueReportedAt = (issue) => issue.reportedAtKey ? t(`maintenance.mock.${issue.reportedAtKey}`) : issue.reportedAt;
 const issueAsset = (issue) => issue.assetKey ? t(`maintenance.mock.${issue.assetKey}`) : issue.asset;
+function openIssue(issue) {
+    selectedId.value = issue.id;
+    drawerOpen.value = true;
+}
 </script>
 
 <template>
     <Head :title="t('maintenance.title')" />
     <AppLayout>
         <div class="mx-auto max-w-[1600px]">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                    <div class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
-                        <Sparkles class="h-4 w-4" /> {{ t('maintenance.demo') }}
+            <div class="rounded-2xl border border-neutral-200 bg-white px-5 py-5 shadow-sm sm:px-7">
+                <div class="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                    <div class="flex items-start gap-4">
+                        <div class="hidden h-12 w-12 items-center justify-center rounded-xl bg-emerald-950 text-white sm:flex"><Wrench class="h-6 w-6" /></div>
+                        <div><div class="flex items-center gap-2"><h1 class="text-2xl font-bold tracking-tight text-neutral-950">{{ t('maintenance.title') }}</h1><span class="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700">{{ t('maintenance.demoShort') }}</span></div><p class="mt-1 text-sm text-neutral-500">{{ t('maintenance.subtitle') }}</p></div>
                     </div>
-                    <h1 class="text-2xl font-bold tracking-tight text-neutral-950 sm:text-3xl">{{ t('maintenance.title') }}</h1>
-                    <p class="mt-1.5 text-sm text-neutral-500">{{ t('maintenance.subtitle') }}</p>
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <div class="grid grid-cols-2 rounded-xl border border-neutral-200 bg-neutral-50 p-1">
+                            <button class="rounded-lg px-4 py-2 text-left transition" :class="designVariant === 'list' ? 'bg-white shadow-sm ring-1 ring-neutral-200' : 'text-neutral-500'" @click="designVariant = 'list'"><span class="block text-xs font-bold" :class="designVariant === 'list' ? 'text-emerald-900' : ''">{{ t('maintenance.variantOne') }}</span><span class="mt-0.5 block text-[11px]">{{ t('maintenance.operationalList') }}</span></button>
+                            <button class="rounded-lg px-4 py-2 text-left transition" :class="designVariant === 'kanban' ? 'bg-white shadow-sm ring-1 ring-neutral-200' : 'text-neutral-500'" @click="designVariant = 'kanban'"><span class="block text-xs font-bold" :class="designVariant === 'kanban' ? 'text-emerald-900' : ''">{{ t('maintenance.variantTwo') }}</span><span class="mt-0.5 block text-[11px]">{{ t('maintenance.kanbanBoard') }}</span></button>
+                        </div>
+                        <button class="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-900 px-4 text-sm font-semibold text-white hover:bg-emerald-950" @click="reportOpen = true"><Plus class="h-4 w-4" />{{ t('maintenance.reportIssue') }}</button>
+                    </div>
                 </div>
-                <button class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-900" @click="reportOpen = true">
-                    <Plus class="h-4 w-4" /> {{ t('maintenance.reportIssue') }}
-                </button>
+                <div class="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-neutral-100 pt-4 text-sm"><span class="font-semibold text-neutral-900">3 {{ t('maintenance.openIssues').toLowerCase() }}</span><span class="h-1 w-1 rounded-full bg-neutral-300"></span><span class="inline-flex items-center gap-1.5 font-semibold text-red-700"><CircleAlert class="h-4 w-4" />1 {{ t('maintenance.urgent').toLowerCase() }}</span><span class="h-1 w-1 rounded-full bg-neutral-300"></span><span class="text-neutral-500">1 {{ t('maintenance.blockedRooms').toLowerCase() }}</span><span class="h-1 w-1 rounded-full bg-neutral-300"></span><span class="text-neutral-500">3 {{ t('maintenance.preventiveDue').toLowerCase() }}</span></div>
             </div>
 
-            <div class="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <div class="flex items-center justify-between"><span class="text-sm text-neutral-500">{{ t('maintenance.openIssues') }}</span><Wrench class="h-4 w-4 text-neutral-400" /></div>
-                    <div class="mt-2 flex items-end gap-2"><strong class="text-2xl text-neutral-950">3</strong><span class="mb-1 text-xs font-medium text-red-600">+1 {{ t('maintenance.today') }}</span></div>
-                </div>
-                <div class="rounded-xl border border-red-200 bg-red-50/50 p-4 shadow-sm">
-                    <div class="flex items-center justify-between"><span class="text-sm text-red-700">{{ t('maintenance.urgent') }}</span><CircleAlert class="h-4 w-4 text-red-600" /></div>
-                    <div class="mt-2 flex items-end gap-2"><strong class="text-2xl text-red-950">1</strong><span class="mb-1 text-xs text-red-600">{{ t('maintenance.slaRisk') }}</span></div>
-                </div>
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <div class="flex items-center justify-between"><span class="text-sm text-neutral-500">{{ t('maintenance.blockedRooms') }}</span><ShieldCheck class="h-4 w-4 text-neutral-400" /></div>
-                    <div class="mt-2 flex items-end gap-2"><strong class="text-2xl text-neutral-950">1</strong><span class="mb-1 text-xs text-neutral-500">{{ t('maintenance.room') }} 305</span></div>
-                </div>
-                <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <div class="flex items-center justify-between"><span class="text-sm text-neutral-500">{{ t('maintenance.preventiveDue') }}</span><CalendarClock class="h-4 w-4 text-neutral-400" /></div>
-                    <div class="mt-2 flex items-end gap-2"><strong class="text-2xl text-neutral-950">3</strong><span class="mb-1 text-xs font-medium text-amber-600">1 {{ t('maintenance.overdue') }}</span></div>
-                </div>
+            <div class="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div class="overflow-x-auto"><div class="flex min-w-max gap-2"><button v-for="tab in statusTabs" :key="tab.value" class="rounded-full border px-3.5 py-2 text-xs font-semibold transition" :class="activeStatus === tab.value ? 'border-emerald-900 bg-emerald-900 text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300'" @click="activeStatus = tab.value">{{ t(`maintenance.${tab.labelKey}`) }} <span class="ml-1 opacity-70">{{ tab.count }}</span></button></div></div>
+                <div class="flex gap-2"><label class="relative min-w-0 flex-1 sm:w-72"><Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-neutral-400" /><input v-model="query" class="h-10 w-full rounded-xl border-neutral-200 bg-white pl-9 text-sm focus:border-emerald-800 focus:ring-emerald-800" :placeholder="t('maintenance.search')" /></label><button class="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-600"><SlidersHorizontal class="h-4 w-4" />{{ t('maintenance.filters') }}</button></div>
             </div>
 
-            <div class="mt-6 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
-                <div class="flex flex-col gap-3 border-b border-neutral-200 p-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div class="flex gap-1 rounded-lg bg-neutral-100 p-1">
-                        <button v-for="tab in [{ value: 'issues', label: t('maintenance.issues') }, { value: 'preventive', label: t('maintenance.preventive') }]" :key="tab.value" class="rounded-md px-3 py-1.5 text-sm font-semibold transition" :class="activeTab === tab.value ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'" @click="activeTab = tab.value">{{ tab.label }}</button>
-                    </div>
-                    <div class="flex flex-col gap-2 sm:flex-row">
-                        <label class="relative block sm:w-64"><Search class="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-neutral-400" /><input v-model="query" class="h-9 w-full rounded-lg border-neutral-200 pl-9 text-sm focus:border-emerald-700 focus:ring-emerald-700" :placeholder="t('maintenance.search')" /></label>
-                        <button class="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-neutral-200 px-3 text-sm font-medium text-neutral-600 hover:bg-neutral-50"><SlidersHorizontal class="h-4 w-4" />{{ t('maintenance.filters') }}</button>
-                    </div>
+            <!-- VARIANT 1: dense operational table -->
+            <section v-if="designVariant === 'list'" class="mt-4 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+                <div class="flex items-center justify-between border-b border-neutral-200 px-5 py-4"><div><h2 class="font-bold text-neutral-950">{{ t('maintenance.operationalList') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('maintenance.listDescription') }}</p></div><span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{{ t('maintenance.recommended') }}</span></div>
+                <div class="overflow-x-auto">
+                    <table class="w-full min-w-[980px] text-left">
+                        <thead class="bg-neutral-50 text-[11px] font-bold uppercase tracking-wider text-neutral-400"><tr><th class="px-5 py-3">{{ t('maintenance.problem') }}</th><th class="px-4 py-3">{{ t('maintenance.roomLocation') }}</th><th class="px-4 py-3">{{ t('maintenance.priority') }}</th><th class="px-4 py-3">{{ t('maintenance.status') }}</th><th class="px-4 py-3">{{ t('maintenance.assignee') }}</th><th class="px-4 py-3">SLA</th><th class="w-12 px-4 py-3"></th></tr></thead>
+                        <tbody class="divide-y divide-neutral-100">
+                            <tr v-for="issue in filteredIssues" :key="issue.id" class="cursor-pointer transition hover:bg-emerald-50/40" @click="openIssue(issue)">
+                                <td class="px-5 py-4"><div class="flex items-center gap-3"><span class="h-9 w-1 rounded-full" :class="issue.priority === 'critical' ? 'bg-red-500' : issue.priority === 'high' ? 'bg-orange-400' : issue.priority === 'medium' ? 'bg-amber-400' : 'bg-neutral-300'"></span><div><div class="flex items-center gap-2"><span class="font-semibold text-neutral-950">{{ t(`maintenance.mock.${issue.titleKey}`) }}</span><span v-if="issue.source === 'housekeeping'" class="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">HK</span></div><p class="mt-1 text-xs text-neutral-400">#MNT-{{ issue.id }} · {{ issue.reporter }} · {{ issueReportedAt(issue) }}</p></div></div></td>
+                                <td class="px-4 py-4 text-sm font-medium text-neutral-700">{{ issueLocation(issue) }}<span class="mt-0.5 block text-xs font-normal text-neutral-400">{{ t(`maintenance.mock.${issue.categoryKey}`) }}</span></td>
+                                <td class="px-4 py-4"><span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset" :class="priorityClass(issue.priority)">{{ t(`maintenance.${issue.priority}`) }}</span></td>
+                                <td class="px-4 py-4"><span class="inline-flex items-center gap-2 text-sm font-medium text-neutral-700"><span class="h-2 w-2 rounded-full" :class="statusClass(issue.status)"></span>{{ t(`maintenance.${issue.status === 'progress' ? 'inProgress' : issue.status}`) }}</span></td>
+                                <td class="px-4 py-4 text-sm text-neutral-600">{{ issueAssignee(issue) }}</td><td class="px-4 py-4 text-sm font-semibold" :class="issue.priority === 'critical' ? 'text-red-700' : 'text-neutral-600'">{{ issue.sla }}</td><td class="px-4 py-4"><ChevronRight class="h-4 w-4 text-neutral-300" /></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="filteredIssues.length === 0" class="p-12 text-center text-sm text-neutral-500">{{ t('maintenance.noResults') }}</div>
                 </div>
+                <div class="grid border-t border-neutral-200 bg-stone-50/70 md:grid-cols-3"><div v-for="task in preventive" :key="task.id" class="flex items-center gap-3 border-b border-neutral-200 px-5 py-3 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"><CalendarClock class="h-4 w-4 shrink-0 text-emerald-700" /><div class="min-w-0 flex-1"><p class="truncate text-xs font-semibold text-neutral-800">{{ t(`maintenance.mock.${task.titleKey}`) }}</p><p class="text-[11px] text-neutral-400">{{ t(`maintenance.mock.${task.locationKey}`) }}</p></div><span class="text-[11px] font-semibold" :class="task.tone === 'red' ? 'text-red-600' : 'text-amber-600'">{{ t(`maintenance.mock.${task.dueKey}`) }}</span></div></div>
+            </section>
 
-                <template v-if="activeTab === 'issues'">
-                    <div class="overflow-x-auto border-b border-neutral-200 px-4">
-                        <div class="flex min-w-max gap-5">
-                            <button v-for="tab in statusTabs" :key="tab.value" class="flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium" :class="activeStatus === tab.value ? 'border-emerald-700 text-emerald-800' : 'border-transparent text-neutral-500'" @click="activeStatus = tab.value">
-                                {{ t(`maintenance.${tab.labelKey}`) }} <span class="rounded-full bg-neutral-100 px-2 py-0.5 text-xs">{{ tab.count }}</span>
+            <!-- VARIANT 2: workflow kanban -->
+            <section v-else class="mt-4">
+                <div class="mb-4 flex items-center justify-between"><div><h2 class="font-bold text-neutral-950">{{ t('maintenance.kanbanBoard') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('maintenance.kanbanDescription') }}</p></div><span class="text-xs font-medium text-neutral-400">{{ issues.length }} {{ t('maintenance.issues').toLowerCase() }}</span></div>
+                <div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-4">
+                    <div v-for="column in kanbanColumns" :key="column.value" class="min-h-[520px] rounded-2xl border border-neutral-200 bg-neutral-100/70 p-3">
+                        <div class="mb-3 flex items-center px-1"><span class="h-2.5 w-2.5 rounded-full" :class="statusClass(column.value)"></span><h3 class="ml-2 text-sm font-bold text-neutral-800">{{ t(`maintenance.${column.labelKey}`) }}</h3><span class="ml-auto rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-neutral-500">{{ column.issues.length }}</span></div>
+                        <div class="space-y-3">
+                            <button v-for="issue in column.issues" :key="issue.id" class="w-full rounded-xl border border-neutral-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md" @click="openIssue(issue)">
+                                <div class="flex items-start justify-between gap-2"><span class="text-[11px] font-bold text-neutral-400">#MNT-{{ issue.id }}</span><span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset" :class="priorityClass(issue.priority)">{{ t(`maintenance.${issue.priority}`) }}</span></div>
+                                <h4 class="mt-3 text-sm font-bold leading-5 text-neutral-950">{{ t(`maintenance.mock.${issue.titleKey}`) }}</h4><p class="mt-1.5 flex items-center gap-1 text-xs text-neutral-500"><MapPin class="h-3.5 w-3.5" />{{ issueLocation(issue) }}</p>
+                                <div v-if="issue.guestImpact" class="mt-3 flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-2 text-[11px] font-semibold text-red-700"><AlertTriangle class="h-3.5 w-3.5" />{{ t('maintenance.guestImpact') }}</div>
+                                <div class="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3"><span class="flex items-center gap-1.5 text-xs text-neutral-500"><UserRound class="h-3.5 w-3.5" />{{ issueAssignee(issue) }}</span><span class="text-[11px] text-neutral-400">{{ t(`maintenance.mock.${issue.elapsedKey}`) }}</span></div>
                             </button>
+                            <div v-if="column.issues.length === 0" class="rounded-xl border border-dashed border-neutral-300 p-8 text-center text-xs text-neutral-400">{{ t('maintenance.emptyColumn') }}</div>
                         </div>
                     </div>
-
-                    <div class="grid min-h-[580px] xl:grid-cols-[minmax(0,1fr)_430px]">
-                        <div class="divide-y divide-neutral-100 xl:border-r xl:border-neutral-200">
-                            <button v-for="issue in filteredIssues" :key="issue.id" class="grid w-full gap-3 p-4 text-left transition hover:bg-neutral-50 sm:grid-cols-[auto_minmax(0,1fr)_auto]" :class="selectedId === issue.id ? 'bg-emerald-50/60' : ''" @click="selectedId = issue.id">
-                                <div class="flex h-10 w-10 items-center justify-center rounded-lg" :class="issue.priority === 'critical' ? 'bg-red-100 text-red-700' : 'bg-neutral-100 text-neutral-600'"><AlertTriangle v-if="issue.priority === 'critical'" class="h-5 w-5" /><Wrench v-else class="h-5 w-5" /></div>
-                                <div class="min-w-0">
-                                    <div class="flex flex-wrap items-center gap-2"><span class="text-xs font-semibold text-neutral-400">#MNT-{{ issue.id }}</span><span class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset" :class="priorityClass(issue.priority)">{{ t(`maintenance.${issue.priority}`) }}</span><span v-if="issue.source === 'housekeeping'" class="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700"><Sparkles class="h-3 w-3" />{{ t('maintenance.fromHousekeeping') }}</span></div>
-                                    <h3 class="mt-1.5 truncate text-sm font-semibold text-neutral-950">{{ t(`maintenance.mock.${issue.titleKey}`) }}</h3>
-                                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500"><span class="inline-flex items-center gap-1"><MapPin class="h-3.5 w-3.5" />{{ issueLocation(issue) }}</span><span>{{ t(`maintenance.mock.${issue.categoryKey}`) }}</span><span>{{ issue.reporter }} · {{ issueReportedAt(issue) }}</span></div>
-                                </div>
-                                <div class="flex items-center justify-between gap-3 sm:flex-col sm:items-end"><div class="flex items-center gap-2 text-xs font-medium text-neutral-600"><span class="h-2 w-2 rounded-full" :class="statusClass(issue.status)"></span>{{ t(`maintenance.${issue.status === 'progress' ? 'inProgress' : issue.status}`) }}</div><span class="text-xs text-neutral-400">{{ t(`maintenance.mock.${issue.elapsedKey}`) }}</span></div>
-                            </button>
-                            <div v-if="filteredIssues.length === 0" class="p-12 text-center text-sm text-neutral-500">{{ t('maintenance.noResults') }}</div>
-                        </div>
-
-                        <aside class="bg-neutral-50/60 p-5" v-if="selected">
-                            <div class="flex items-start justify-between gap-4"><div><div class="flex items-center gap-2"><span class="text-xs font-semibold text-neutral-400">#MNT-{{ selected.id }}</span><span class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset" :class="priorityClass(selected.priority)">{{ t(`maintenance.${selected.priority}`) }}</span></div><h2 class="mt-2 text-xl font-bold text-neutral-950">{{ t(`maintenance.mock.${selected.titleKey}`) }}</h2><p class="mt-1 text-sm text-neutral-500">{{ issueLocation(selected) }} · {{ t(`maintenance.mock.${selected.categoryKey}`) }}</p></div><button class="rounded-lg p-2 text-neutral-400 hover:bg-white"><MoreHorizontal class="h-5 w-5" /></button></div>
-
-                            <div v-if="selected.guestImpact" class="mt-4 flex gap-3 rounded-lg border border-red-200 bg-red-50 p-3"><AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" /><div><p class="text-sm font-semibold text-red-900">{{ t('maintenance.guestImpact') }}</p><p class="mt-0.5 text-xs text-red-700">{{ t('maintenance.guestImpactHint') }}</p></div></div>
-
-                            <div class="mt-5 grid grid-cols-2 gap-3">
-                                <div class="rounded-lg border border-neutral-200 bg-white p-3"><span class="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{{ t('maintenance.assignee') }}</span><p class="mt-1 flex items-center gap-1.5 text-sm font-semibold text-neutral-800"><UserRound class="h-4 w-4 text-neutral-400" />{{ issueAssignee(selected) }}</p></div>
-                                <div class="rounded-lg border border-neutral-200 bg-white p-3"><span class="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">SLA</span><p class="mt-1 flex items-center gap-1.5 text-sm font-semibold" :class="selected.priority === 'critical' ? 'text-red-700' : 'text-neutral-800'"><Clock3 class="h-4 w-4" />{{ selected.sla }}</p></div>
-                            </div>
-
-                            <div class="mt-5"><h3 class="text-xs font-bold uppercase tracking-wide text-neutral-400">{{ t('maintenance.report') }}</h3><p class="mt-2 text-sm leading-6 text-neutral-700">{{ t(`maintenance.mock.${selected.descriptionKey}`) }}</p><div class="mt-3 flex h-20 items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white text-xs text-neutral-400"><Image class="mr-2 h-4 w-4" />{{ t('maintenance.photoFromReport') }}</div></div>
-                            <div class="mt-5 rounded-lg border border-neutral-200 bg-white p-3"><div class="flex items-center justify-between"><div><span class="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{{ t('maintenance.asset') }}</span><p class="mt-1 text-sm font-semibold text-neutral-900">{{ issueAsset(selected) }}</p><p class="text-xs text-neutral-500">{{ selected.assetCode }}</p></div><ChevronRight class="h-5 w-5 text-neutral-400" /></div></div>
-
-                            <div class="mt-5"><h3 class="text-xs font-bold uppercase tracking-wide text-neutral-400">{{ t('maintenance.timeline') }}</h3><div class="mt-3 space-y-4 border-l border-neutral-200 pl-4"><div><p class="text-sm font-semibold text-neutral-800">{{ t('maintenance.issueReported') }}</p><p class="text-xs text-neutral-500">{{ selected.reporter }} · {{ issueReportedAt(selected) }} · {{ t(`maintenance.${selected.source === 'housekeeping' ? 'housekeeping' : 'reception'}`) }}</p></div><div v-if="selected.status !== 'new'"><p class="text-sm font-semibold text-neutral-800">{{ t('maintenance.technicianAssigned') }}</p><p class="text-xs text-neutral-500">{{ issueAssignee(selected) }}</p></div></div></div>
-
-                            <div class="mt-6 grid grid-cols-2 gap-2"><button class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white text-sm font-semibold text-neutral-700 hover:bg-neutral-50"><UserRound class="h-4 w-4" />{{ t('maintenance.assign') }}</button><button class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-800 text-sm font-semibold text-white hover:bg-emerald-900"><Hammer class="h-4 w-4" />{{ t('maintenance.startWork') }}</button></div>
-                        </aside>
-                    </div>
-                </template>
-
-                <div v-else class="grid gap-4 p-4 lg:grid-cols-3">
-                    <div v-for="task in preventive" :key="task.id" class="rounded-xl border border-neutral-200 p-4">
-                        <div class="flex items-start justify-between"><div class="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><CalendarClock class="h-5 w-5" /></div><span class="rounded-full px-2 py-1 text-xs font-semibold" :class="task.tone === 'red' ? 'bg-red-50 text-red-700' : task.tone === 'amber' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'">{{ t(`maintenance.mock.${task.dueKey}`) }}</span></div>
-                        <h3 class="mt-4 font-bold text-neutral-900">{{ t(`maintenance.mock.${task.titleKey}`) }}</h3><p class="mt-1 text-sm text-neutral-500">{{ t(`maintenance.mock.${task.locationKey}`) }}</p><div class="mt-5 h-1.5 overflow-hidden rounded-full bg-neutral-100"><div class="h-full rounded-full bg-emerald-700" :style="{ width: `${task.progress}%` }"></div></div><button class="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-emerald-800">{{ t('maintenance.openPlan') }}<ArrowRight class="h-4 w-4" /></button>
-                    </div>
                 </div>
-            </div>
+            </section>
         </div>
+
+        <!-- Shared reservation-style detail drawer for both variants -->
+        <Teleport to="body">
+            <div v-if="drawerOpen" class="fixed inset-0 z-50 bg-neutral-950/30" @click.self="drawerOpen = false">
+                <aside class="absolute inset-y-0 right-0 w-full max-w-[520px] overflow-y-auto bg-white shadow-2xl">
+                    <div class="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white/95 px-5 py-4 backdrop-blur"><div class="flex items-center gap-2"><span class="text-xs font-bold text-neutral-400">#MNT-{{ selected.id }}</span><span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset" :class="priorityClass(selected.priority)">{{ t(`maintenance.${selected.priority}`) }}</span></div><button class="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100" @click="drawerOpen = false"><X class="h-5 w-5" /></button></div>
+                    <div class="p-5 sm:p-6"><h2 class="text-2xl font-bold text-neutral-950">{{ t(`maintenance.mock.${selected.titleKey}`) }}</h2><p class="mt-1 text-sm text-neutral-500">{{ issueLocation(selected) }} · {{ t(`maintenance.mock.${selected.categoryKey}`) }}</p>
+                        <div v-if="selected.guestImpact" class="mt-5 flex gap-3 rounded-xl border border-red-200 bg-red-50 p-3"><AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" /><div><p class="text-sm font-semibold text-red-900">{{ t('maintenance.guestImpact') }}</p><p class="mt-0.5 text-xs text-red-700">{{ t('maintenance.guestImpactHint') }}</p></div></div>
+                        <div class="mt-5 grid grid-cols-2 gap-3"><div class="rounded-xl border border-neutral-200 p-3"><span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.assignee') }}</span><p class="mt-1.5 flex items-center gap-1.5 text-sm font-semibold"><UserRound class="h-4 w-4 text-neutral-400" />{{ issueAssignee(selected) }}</p></div><div class="rounded-xl border border-neutral-200 p-3"><span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">SLA</span><p class="mt-1.5 flex items-center gap-1.5 text-sm font-semibold"><Clock3 class="h-4 w-4 text-neutral-400" />{{ selected.sla }}</p></div></div>
+                        <div class="mt-6"><h3 class="text-xs font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.report') }}</h3><p class="mt-2 text-sm leading-6 text-neutral-700">{{ t(`maintenance.mock.${selected.descriptionKey}`) }}</p><div class="mt-3 flex h-24 items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50 text-xs text-neutral-400"><Image class="mr-2 h-4 w-4" />{{ t('maintenance.photoFromReport') }}</div></div>
+                        <div class="mt-6 rounded-xl border border-neutral-200 p-4"><span class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.asset') }}</span><p class="mt-1 text-sm font-semibold text-neutral-900">{{ issueAsset(selected) }}</p><p class="text-xs text-neutral-500">{{ selected.assetCode }}</p></div>
+                        <div class="mt-6"><h3 class="text-xs font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.timeline') }}</h3><div class="mt-3 border-l-2 border-emerald-100 pl-4"><p class="text-sm font-semibold text-neutral-800">{{ t('maintenance.issueReported') }}</p><p class="mt-0.5 text-xs text-neutral-500">{{ selected.reporter }} · {{ issueReportedAt(selected) }}</p></div></div>
+                        <div class="mt-8 grid grid-cols-2 gap-2"><button class="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-neutral-300 text-sm font-semibold text-neutral-700"><UserRound class="h-4 w-4" />{{ t('maintenance.assign') }}</button><button class="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-900 text-sm font-semibold text-white"><Hammer class="h-4 w-4" />{{ t('maintenance.startWork') }}</button></div>
+                    </div>
+                </aside>
+            </div>
+        </Teleport>
 
         <Teleport to="body">
             <div v-if="reportOpen" class="fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-4" @click.self="reportOpen = false">
