@@ -1,10 +1,11 @@
 <script setup>
 import LanguageSwitcher from '@/Components/LanguageSwitcher.vue';
+import Button from '@/Components/UI/Button.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { Head, usePage } from '@inertiajs/vue3';
-import { Mail, ShieldCheck, SlidersHorizontal } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { Building2, CheckCircle2, Clock3, Languages, Mail, ShieldCheck, SlidersHorizontal } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import DeleteUserForm from './Partials/DeleteUserForm.vue';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
@@ -19,6 +20,8 @@ const page = usePage();
 const { locale } = useI18n();
 const user = page.props.auth.user;
 const tenant = page.props.tenant;
+const profileInformation = ref(null);
+const profileFormState = computed(() => profileInformation.value?.form);
 
 const initials = computed(() => user.name
     .split(/\s+/)
@@ -30,8 +33,8 @@ const initials = computed(() => user.name
 
 const roleLabel = computed(() => {
     const labels = locale.value === 'sq'
-        ? { admin: 'Administrator', manager: 'Menaxher', receptionist: 'Recepsionist', housekeeping: 'Housekeeping' }
-        : { admin: 'Administrator', manager: 'Manager', receptionist: 'Receptionist', housekeeping: 'Housekeeping' };
+        ? { admin: 'Administrator', manager: 'Menaxher', receptionist: 'Recepsionist', housekeeping: 'Housekeeping', maintenance: 'Mirëmbajtje', pos_staff: 'Staf POS' }
+        : { admin: 'Administrator', manager: 'Manager', receptionist: 'Receptionist', housekeeping: 'Housekeeping', maintenance: 'Maintenance', pos_staff: 'POS staff' };
 
     return labels[user.role] || user.role || '—';
 });
@@ -47,10 +50,11 @@ const roleLabel = computed(() => {
         />
         <p class="mt-1 text-body-sm text-neutral-500">{{ $t('accountCenter.pageSubtitle') }}</p>
 
-        <div class="mt-5 max-w-5xl space-y-5 pb-10">
-            <section class="relative overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card">
-                <div class="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-primary-950 to-accent-600" />
-                <div class="flex flex-col gap-5 p-5 pl-7 sm:flex-row sm:items-center sm:justify-between sm:p-6 sm:pl-8">
+        <div class="mt-5 max-w-6xl pb-10">
+            <section class="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card">
+                <div class="h-1 bg-gradient-to-r from-primary-950 via-accent-800 to-accent-500" />
+
+                <div class="flex flex-col gap-5 border-b border-neutral-200 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                     <div class="flex min-w-0 items-center gap-4">
                         <div class="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-accent-100 text-h3 font-extrabold text-accent-800 ring-4 ring-accent-50">
                             {{ initials }}
@@ -63,52 +67,86 @@ const roleLabel = computed(() => {
                         </div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-                        <span v-if="tenant?.name" class="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-tiny font-semibold text-neutral-600">{{ tenant.name }}</span>
+                        <span class="inline-flex items-center gap-1.5 rounded-full border border-success-100 bg-success-50 px-3 py-1.5 text-tiny font-bold text-success-700">
+                            <CheckCircle2 class="h-3.5 w-3.5" /> {{ $t('accountCenter.accountActive') }}
+                        </span>
                         <span class="inline-flex items-center gap-1.5 rounded-full border border-success-100 bg-success-50 px-3 py-1.5 text-tiny font-bold text-success-700">
                             <ShieldCheck class="h-4 w-4" /> {{ roleLabel }}
                         </span>
                     </div>
                 </div>
-            </section>
 
-            <section class="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card">
-                <div class="p-5 sm:p-7">
-                    <UpdateProfileInformationForm :must-verify-email="mustVerifyEmail" :status="status" />
+                <div class="grid lg:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.8fr)]">
+                    <div class="min-w-0 p-5 sm:p-6">
+                        <UpdateProfileInformationForm ref="profileInformation" :must-verify-email="mustVerifyEmail" :status="status" />
+                    </div>
+
+                    <aside class="border-t border-neutral-200 bg-neutral-50/60 p-5 sm:p-6 lg:border-l lg:border-t-0">
+                        <div class="flex items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-accent-50 text-accent-700">
+                                <SlidersHorizontal class="h-5 w-5" />
+                            </span>
+                            <div>
+                                <h2 class="text-body font-bold text-primary-900">{{ $t('accountCenter.accessPreferences') }}</h2>
+                                <p class="mt-0.5 text-body-sm text-neutral-500">{{ $t('accountCenter.accessPreferencesDescription') }}</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-5 divide-y divide-neutral-200">
+                            <div class="flex gap-3 py-4 first:pt-0">
+                                <Building2 class="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
+                                <div class="min-w-0">
+                                    <p class="text-body-sm font-semibold text-primary-900">{{ $t('accountCenter.hotel') }}</p>
+                                    <p class="mt-1 truncate text-small text-neutral-500">{{ tenant?.name || '—' }}</p>
+                                </div>
+                            </div>
+                            <div class="flex gap-3 py-4">
+                                <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
+                                <div>
+                                    <p class="text-body-sm font-semibold text-primary-900">{{ $t('accountCenter.role') }}</p>
+                                    <p class="mt-1 text-small text-neutral-500">{{ roleLabel }}</p>
+                                </div>
+                            </div>
+                            <div class="flex gap-3 py-4">
+                                <Clock3 class="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
+                                <div>
+                                    <p class="text-body-sm font-semibold text-primary-900">{{ $t('accountCenter.timezone') }}</p>
+                                    <p class="mt-1 text-small text-neutral-500">{{ tenant?.timezone || 'Europe/Tirane' }}</p>
+                                </div>
+                            </div>
+                            <div class="flex gap-3 py-4 last:pb-0">
+                                <Languages class="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
+                                <div>
+                                    <p class="text-body-sm font-semibold text-primary-900">{{ $t('accountCenter.language') }}</p>
+                                    <LanguageSwitcher class="mt-2 w-fit rounded-lg border border-neutral-200 bg-white px-3 py-2 text-neutral-600 shadow-sm" />
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
                 </div>
 
-                <div class="border-t border-neutral-200 bg-neutral-50/30 p-5 sm:p-7">
+                <div class="border-t border-neutral-200 px-5 py-5 sm:px-6">
                     <UpdatePasswordForm />
                 </div>
 
-                <div class="border-t border-neutral-200 p-5 sm:p-7">
-                    <div class="flex items-start gap-3 border-b border-neutral-100 pb-5">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-accent-50 text-accent-700">
-                            <SlidersHorizontal class="h-5 w-5" />
-                        </span>
-                        <div>
-                            <h2 class="text-body font-bold text-primary-900">{{ $t('accountCenter.preferencesTitle') }}</h2>
-                            <p class="mt-0.5 text-body-sm text-neutral-500">{{ $t('accountCenter.preferencesDescription') }}</p>
-                        </div>
+                <footer class="flex flex-col-reverse gap-3 border-t border-neutral-200 bg-neutral-50/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                    <DeleteUserForm compact />
+                    <div class="flex items-center justify-end gap-3">
+                        <Transition enter-active-class="transition" enter-from-class="opacity-0" leave-active-class="transition" leave-to-class="opacity-0">
+                            <span v-if="profileFormState?.recentlySuccessful" class="inline-flex items-center gap-1.5 text-body-sm font-semibold text-success-700">
+                                <CheckCircle2 class="h-4 w-4" /> {{ $t('accountCenter.saved') }}
+                            </span>
+                        </Transition>
+                        <Button
+                            type="submit"
+                            form="profile-information-form"
+                            :loading="profileFormState?.processing"
+                            :disabled="!profileFormState?.isDirty"
+                        >
+                            {{ $t('accountCenter.saveChanges') }}
+                        </Button>
                     </div>
-                    <div class="mt-5 grid gap-4 sm:grid-cols-2">
-                        <div class="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-neutral-50/60 p-4">
-                            <div>
-                                <p class="text-body-sm font-semibold text-primary-900">{{ $t('accountCenter.language') }}</p>
-                                <p class="mt-1 text-tiny text-neutral-400">SQ / EN</p>
-                            </div>
-                            <LanguageSwitcher class="w-fit rounded-lg border border-neutral-200 bg-white px-3 py-2 text-neutral-600 shadow-sm" />
-                        </div>
-                        <div class="rounded-xl border border-neutral-200 bg-neutral-50/60 p-4">
-                            <p class="text-body-sm font-semibold text-primary-900">{{ $t('accountCenter.timezone') }}</p>
-                            <p class="mt-2 text-body-sm font-bold text-primary-900">{{ tenant?.timezone || 'Europe/Tirane' }}</p>
-                            <p class="mt-1 text-tiny text-neutral-400">{{ $t('accountCenter.timezoneHint') }}</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section class="rounded-xl border border-error-200 bg-error-50/40 p-5 sm:p-6">
-                <DeleteUserForm />
+                </footer>
             </section>
         </div>
     </AppLayout>

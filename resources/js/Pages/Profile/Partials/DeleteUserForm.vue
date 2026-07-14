@@ -6,6 +6,10 @@ import { useForm } from '@inertiajs/vue3';
 import { AlertTriangle, Trash2 } from 'lucide-vue-next';
 import { nextTick, ref } from 'vue';
 
+defineProps({
+    compact: { type: Boolean, default: false },
+});
+
 const confirmingUserDeletion = ref(false);
 const passwordInput = ref(null);
 const form = useForm({ password: '' });
@@ -33,7 +37,12 @@ function deleteUser() {
 </script>
 
 <template>
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <Button v-if="compact" variant="ghost" class="text-error-700 hover:bg-error-50 hover:text-error-800" @click="confirmUserDeletion">
+        <template #icon-left><Trash2 class="h-4 w-4" /></template>
+        {{ $t('accountCenter.deleteAccount') }}
+    </Button>
+
+    <div v-else class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex items-start gap-3">
             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-error-100 text-error-700">
                 <Trash2 class="h-5 w-5" />
