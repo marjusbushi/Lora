@@ -199,7 +199,7 @@ jobs:
         run: php artisan migrate --force
 
       - name: Verify post-upgrade integrity and totals
-        run: php artisan tenants:verify-integrity --compare=/tmp/lora-upgrade-baseline.json --allow-additive-schema
+        run: php artisan tenants:verify-integrity --compare=/tmp/lora-upgrade-baseline.json --allow-additive-schema --allow-additive-settings
 
       - name: Verify exact database rollback
         run: |

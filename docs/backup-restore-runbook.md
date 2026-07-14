@@ -95,9 +95,9 @@ Restore-i nuk bëhet mbi production. Përdoret një host ose container i izoluar
 5. Konfiguro një checkout të të njëjtit commit kundrejt DB-së së restauruar.
 6. Ekzekuto `php artisan tenants:verify-integrity --snapshot=/tmp/before.json`.
 7. Ekzekuto migrimet kandidate me `php artisan migrate --force`.
-8. Ekzekuto `php artisan tenants:verify-integrity --compare=/tmp/before.json --allow-additive-schema`.
-   Kjo lejon vetëm tabela të reja dhe rritje të permissions; çdo numër ekzistues
-   rekordesh ose total financiar duhet të mbetet identik.
+8. Ekzekuto `php artisan tenants:verify-integrity --compare=/tmp/before.json --allow-additive-schema --allow-additive-settings`.
+   Kjo lejon vetëm tabela të reja, rritje të permissions dhe settings të reja
+   për tenantët ekzistues; fshirjet dhe totalet financiare duhet të mbeten identike.
 9. Kontrollo manualisht rezervime, pagesa, financë, POS dhe skedarë.
 10. Fshi ambientin testues dhe regjistro datën/rezultatin e drill-it.
 

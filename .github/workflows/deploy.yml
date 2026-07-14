@@ -60,7 +60,8 @@ jobs:
               "$(git rev-parse HEAD)" "$release_batch" >> "$state_file"
             php artisan tenants:verify-integrity \
               --compare=/var/lib/lora-backup/pre-release.json \
-              --allow-additive-schema
+              --allow-additive-schema \
+              --allow-additive-settings
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache

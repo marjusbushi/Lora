@@ -35,7 +35,8 @@ php artisan migrate --force
 export RELEASE_BATCH="$(php artisan tinker --execute='echo DB::table("migrations")->max("batch");')"
 php artisan tenants:verify-integrity \
   --compare=/var/lib/lora-backup/pre-release.json \
-  --allow-additive-schema
+  --allow-additive-schema \
+  --allow-additive-settings
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache

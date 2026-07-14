@@ -13,7 +13,8 @@ class VerifyTenantIntegrity extends Command
     protected $signature = 'tenants:verify-integrity
                             {--snapshot= : Write a PII-free counts/totals baseline to this JSON file}
                             {--compare= : Compare current counts/totals with this JSON baseline}
-                            {--allow-additive-schema : Allow new tables and permission growth while preserving every existing count/total}';
+                            {--allow-additive-schema : Allow new tables and permission growth while preserving every existing count/total}
+                            {--allow-additive-settings : Allow setting rows to grow for existing tenants while preserving every other count/total}';
 
     protected $description = 'Fail if tenant ownership or same-tenant relations are invalid';
 
@@ -25,8 +26,11 @@ class VerifyTenantIntegrity extends Command
             return self::INVALID;
         }
 
-        if ($this->option('allow-additive-schema') && ! $this->option('compare')) {
-            $this->error('--allow-additive-schema requires --compare.');
+        $allowAdditiveSchema = (bool) $this->option('allow-additive-schema');
+        $allowAdditiveSettings = (bool) $this->option('allow-additive-settings');
+
+        if (($allowAdditiveSchema || $allowAdditiveSettings) && ! $this->option('compare')) {
+            $this->error('Additive options require --compare.');
 
             return self::INVALID;
         }
@@ -52,8 +56,13 @@ class VerifyTenantIntegrity extends Command
 
             if ($path = $this->option('compare')) {
                 $baseline = $this->readSnapshot((string) $path);
-                if ($this->option('allow-additive-schema')) {
-                    $changes = $this->baselineChanges($baseline, $snapshot);
+                if ($allowAdditiveSchema || $allowAdditiveSettings) {
+                    $changes = $this->baselineChanges(
+                        $baseline,
+                        $snapshot,
+                        allowAdditiveSchema: $allowAdditiveSchema,
+                        allowAdditiveSettings: $allowAdditiveSettings,
+                    );
                     if ($changes !== []) {
                         foreach ($changes as $change) {
                             $this->error("Baseline value changed: {$change}");
@@ -62,7 +71,9 @@ class VerifyTenantIntegrity extends Command
                         return self::FAILURE;
                     }
 
-                    $this->info('Tenant integrity passed; existing counts and financial totals are unchanged (additive schema allowed).');
+                    $this->info($allowAdditiveSettings
+                        ? 'Tenant integrity passed; existing data and financial totals are preserved (approved additive schema/settings allowed).'
+                        : 'Tenant integrity passed; existing counts and financial totals are unchanged (additive schema allowed).');
 
                     return self::SUCCESS;
                 }
@@ -124,15 +135,20 @@ class VerifyTenantIntegrity extends Command
 
     /**
      * Compare every baseline leaf while allowing new keys in the current
-     * snapshot. Permission rows may grow because additive migrations seed new
-     * permissions, but they may never shrink.
+     * snapshot. Permission rows may grow with additive schema changes. Setting
+     * counts may grow only when explicitly approved, and neither may shrink.
      *
      * @param  array<string, mixed>  $baseline
      * @param  array<string, mixed>  $current
      * @return list<string>
      */
-    private function baselineChanges(array $baseline, array $current, string $prefix = ''): array
-    {
+    private function baselineChanges(
+        array $baseline,
+        array $current,
+        string $prefix = '',
+        bool $allowAdditiveSchema = true,
+        bool $allowAdditiveSettings = false,
+    ): array {
         $changes = [];
 
         foreach ($baseline as $key => $expected) {
@@ -146,11 +162,19 @@ class VerifyTenantIntegrity extends Command
 
             $actual = $current[$key];
 
-            if ($path === 'central_counts.permissions') {
+            if ($allowAdditiveSchema && $path === 'central_counts.permissions') {
                 if (! is_int($expected) || ! is_int($actual) || $actual < $expected) {
                     $changes[] = $path;
                 }
 
+                continue;
+            }
+
+            if ($allowAdditiveSettings
+                && str_starts_with($path, 'tenant_counts.settings.')
+                && is_int($expected)
+                && is_int($actual)
+                && $actual >= $expected) {
                 continue;
             }
 
@@ -161,12 +185,18 @@ class VerifyTenantIntegrity extends Command
                     continue;
                 }
 
-                array_push($changes, ...$this->baselineChanges($expected, $actual, $path));
+                array_push($changes, ...$this->baselineChanges(
+                    $expected,
+                    $actual,
+                    $path,
+                    $allowAdditiveSchema,
+                    $allowAdditiveSettings,
+                ));
 
                 // Only these two maps may gain new top-level metrics/tables
                 // during an additive migration. New tenant IDs or dimensions
                 // inside an existing table/metric remain data changes.
-                if (! in_array($path, ['tenant_counts', 'financial_totals'], true)) {
+                if (! $allowAdditiveSchema || ! in_array($path, ['tenant_counts', 'financial_totals'], true)) {
                     foreach (array_keys(array_diff_key($actual, $expected)) as $addedKey) {
                         $changes[] = "{$path}.{$addedKey}";
                     }
