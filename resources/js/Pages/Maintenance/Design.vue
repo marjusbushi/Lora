@@ -106,7 +106,7 @@ const issueAsset = (issue) => issue.assetKey ? t(`maintenance.mock.${issue.asset
                 </div>
                 <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
                     <div class="flex items-center justify-between"><span class="text-sm text-neutral-500">{{ t('maintenance.blockedRooms') }}</span><ShieldCheck class="h-4 w-4 text-neutral-400" /></div>
-                    <div class="mt-2 flex items-end gap-2"><strong class="text-2xl text-neutral-950">1</strong><span class="mb-1 text-xs text-neutral-500">Dhoma 305</span></div>
+                    <div class="mt-2 flex items-end gap-2"><strong class="text-2xl text-neutral-950">1</strong><span class="mb-1 text-xs text-neutral-500">{{ t('maintenance.room') }} 305</span></div>
                 </div>
                 <div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
                     <div class="flex items-center justify-between"><span class="text-sm text-neutral-500">{{ t('maintenance.preventiveDue') }}</span><CalendarClock class="h-4 w-4 text-neutral-400" /></div>
