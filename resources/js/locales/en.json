@@ -307,6 +307,10 @@
     "attachments": "Photos and documents",
     "noAttachments": "No attachments.",
     "upload": "Upload",
+    "preview": "Preview",
+    "privatePreview": "Private preview",
+    "closePreview": "Close preview",
+    "previewUnavailable": "This file format cannot be previewed.",
     "overdueBy": "Overdue {time}",
     "statuses": {
       "reported": "Reported",

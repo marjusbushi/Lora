@@ -307,6 +307,10 @@
     "attachments": "Foto dhe dokumente",
     "noAttachments": "Nuk ka dokumente të bashkëngjitura.",
     "upload": "Ngarko",
+    "preview": "Shiko",
+    "privatePreview": "Preview privat",
+    "closePreview": "Mbyll preview-n",
+    "previewUnavailable": "Ky format nuk mund të shfaqet në preview.",
     "overdueBy": "Me vonesë {time}",
     "statuses": {
       "reported": "Raportuar",

@@ -157,11 +157,19 @@ class MaintenanceController extends Controller
         return back()->with('success', 'Dokumenti u shtua.');
     }
 
-    public function downloadAttachment(MaintenanceAttachment $attachment): StreamedResponse
+    public function previewAttachment(MaintenanceAttachment $attachment): StreamedResponse
     {
         abort_unless(Storage::disk($attachment->disk)->exists($attachment->path), 404);
 
-        return Storage::disk($attachment->disk)->download($attachment->path, $attachment->original_name);
+        $filename = str_replace(["\r", "\n", '"'], '', basename($attachment->original_name));
+
+        return Storage::disk($attachment->disk)->response($attachment->path, $filename, [
+            'Content-Type' => $attachment->mime_type ?: 'application/octet-stream',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
+            'Cache-Control' => 'private, no-store, max-age=0',
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'",
+        ]);
     }
 
     public function destroyAttachment(MaintenanceAttachment $attachment): RedirectResponse

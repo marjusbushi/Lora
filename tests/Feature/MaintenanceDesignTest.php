@@ -9,6 +9,7 @@ use App\Models\RoomType;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -112,5 +113,35 @@ class MaintenanceDesignTest extends TestCase
         $this->assertSame('housekeeping', $issue->source);
         $this->assertTrue($issue->room_blocked);
         $this->assertSame('maintenance', $room->fresh()->status);
+    }
+
+    public function test_attachment_is_displayed_inline_for_private_preview(): void
+    {
+        Storage::fake('local');
+        $admin = $this->admin();
+        $issue = MaintenanceIssue::create([
+            'reported_by' => $admin->id,
+            'title' => 'Foto e problemit',
+            'category' => 'other',
+            'kind' => 'corrective',
+            'priority' => 'medium',
+            'status' => 'reported',
+            'source' => 'manual',
+        ]);
+        Storage::disk('local')->put('maintenance/test/photo.jpg', 'image-bytes');
+        $attachment = $issue->attachments()->create([
+            'uploaded_by' => $admin->id,
+            'disk' => 'local',
+            'path' => 'maintenance/test/photo.jpg',
+            'original_name' => 'photo.jpg',
+            'mime_type' => 'image/jpeg',
+            'size' => 11,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('maintenance.attachments.show', $attachment))
+            ->assertOk()
+            ->assertHeader('content-type', 'image/jpeg')
+            ->assertHeader('content-disposition', 'inline; filename="photo.jpg"');
     }
 }

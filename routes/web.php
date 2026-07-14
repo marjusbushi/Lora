@@ -105,7 +105,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
 
     Route::middleware('permission:view_maintenance')->group(function () {
         Route::get('/maintenance', [MaintenanceController::class, 'index'])->name('maintenance.index');
-        Route::get('/maintenance/attachments/{attachment}', [MaintenanceController::class, 'downloadAttachment'])->name('maintenance.attachments.show');
+        Route::get('/maintenance/attachments/{attachment}', [MaintenanceController::class, 'previewAttachment'])->name('maintenance.attachments.show');
         Route::post('/maintenance', [MaintenanceController::class, 'store'])->middleware('permission:create_maintenance')->name('maintenance.store');
         Route::patch('/maintenance/{maintenanceIssue}', [MaintenanceController::class, 'update'])->middleware('permission:update_maintenance')->name('maintenance.update');
         Route::patch('/maintenance/{maintenanceIssue}/assign', [MaintenanceController::class, 'assign'])->middleware('permission:update_maintenance')->name('maintenance.assign');

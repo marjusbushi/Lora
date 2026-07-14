@@ -27,6 +27,7 @@ const drawerOpen = ref(false);
 const assignedTo = ref('');
 const statusNote = ref('');
 const uploadFile = ref(null);
+const previewFile = ref(null);
 
 const rows = computed(() => props.issues?.data || []);
 const filteredIssues = computed(() => {
@@ -76,6 +77,7 @@ const sla = (issue) => {
 };
 const nextStatus = (status) => ({ assigned: 'in_progress', in_progress: 'resolved', resolved: 'verified', verified: 'closed' }[status]);
 const nextAction = (status) => ({ assigned: 'startWork', in_progress: 'markResolved', resolved: 'verifyWork', verified: 'closeIssue' }[status]);
+const previewKind = (file) => file?.mime_type?.startsWith('image/') ? 'image' : file?.mime_type?.startsWith('video/') ? 'video' : file?.mime_type === 'application/pdf' ? 'pdf' : 'unknown';
 
 function openIssue(issue) {
     selectedId.value = issue.id;
@@ -160,14 +162,14 @@ function uploadAttachment() {
             <div v-if="drawerOpen && selected" class="fixed inset-0 z-50 bg-neutral-950/40 backdrop-blur-[1px]" @click.self="drawerOpen = false">
                 <aside class="absolute inset-y-0 right-0 flex w-full max-w-[500px] flex-col overflow-hidden bg-neutral-50 shadow-2xl">
                     <div class="flex shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 py-3"><div class="flex items-center gap-2"><span class="rounded-md bg-neutral-100 px-2 py-1 text-[10px] font-bold text-neutral-500">#MNT-{{ selected.id }}</span><span class="inline-flex rounded-full px-2 py-1 text-[10px] font-bold ring-1 ring-inset" :class="priorityClass(selected.priority)">{{ t(`maintenance.${selected.priority}`) }}</span><span class="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2 py-1 text-[10px] font-semibold text-neutral-700"><span class="h-1.5 w-1.5 rounded-full" :class="statusClass(selected.status)"></span>{{ statusLabel(selected.status) }}</span></div><button class="rounded-lg p-2 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700" @click="drawerOpen = false"><X class="h-4 w-4" /></button></div>
-                    <div class="flex-1 overflow-y-auto p-4"><div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm"><div class="flex items-start justify-between gap-3"><div><p class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">{{ location(selected) }} · {{ categoryLabel(selected.category) }}</p><h2 class="mt-1.5 text-xl font-bold leading-tight text-neutral-950">{{ selected.title }}</h2><p class="mt-1.5 text-[11px] text-neutral-400">{{ t('maintenance.reportedBy') }} {{ selected.reporter?.name || '—' }} · {{ formatDate(selected.created_at) }}</p></div><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-950 text-white"><Wrench class="h-4 w-4" /></span></div></div>
+                    <div class="scrollbar-hidden flex-1 overflow-y-auto p-4"><div class="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm"><div class="flex items-start justify-between gap-3"><div><p class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">{{ location(selected) }} · {{ categoryLabel(selected.category) }}</p><h2 class="mt-1.5 text-xl font-bold leading-tight text-neutral-950">{{ selected.title }}</h2><p class="mt-1.5 text-[11px] text-neutral-400">{{ t('maintenance.reportedBy') }} {{ selected.reporter?.name || '—' }} · {{ formatDate(selected.created_at) }}</p></div><span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-950 text-white"><Wrench class="h-4 w-4" /></span></div></div>
                         <div v-if="selected.room_blocked" class="mt-5 flex gap-3 rounded-xl border border-red-200 bg-red-50 p-3"><AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" /><div><p class="text-sm font-semibold text-red-900">{{ t('maintenance.roomIsBlocked') }}</p><p class="mt-0.5 text-xs text-red-700">{{ t('maintenance.blockRoomHint') }}</p></div></div>
                         <div class="mt-3 grid grid-cols-2 gap-2.5"><div class="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm"><span class="text-[9px] font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.assignee') }}</span><p class="mt-1.5 flex items-center gap-2 text-sm font-semibold"><span class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-[10px] text-emerald-800">{{ (selected.assignee?.name || '?').charAt(0) }}</span>{{ selected.assignee?.name || t('maintenance.unassigned') }}</p></div><div class="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm"><span class="text-[9px] font-bold uppercase tracking-wider text-neutral-400">SLA</span><p class="mt-1.5 flex items-center gap-2 text-sm font-semibold"><span class="flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-blue-700"><Clock3 class="h-3 w-3" /></span>{{ sla(selected) }}</p></div></div>
                         <div class="mt-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm"><h3 class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.report') }}</h3><p class="mt-2 whitespace-pre-line text-sm leading-5 text-neutral-700">{{ selected.description || '—' }}</p><div v-if="selected.asset_name || selected.asset_code" class="mt-3 flex items-center justify-between gap-3 border-t border-neutral-100 pt-3"><div><span class="text-[9px] font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.asset') }}</span><p class="mt-1 text-sm font-semibold text-neutral-900">{{ selected.asset_name || '—' }}</p></div><span v-if="selected.asset_code" class="rounded-md bg-neutral-100 px-2 py-1 font-mono text-[10px] text-neutral-500">{{ selected.asset_code }}</span></div></div>
 
                         <div v-if="permissions.update && !['verified', 'closed'].includes(selected.status)" class="mt-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm"><label class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.assignee') }}</label><div class="mt-2 flex gap-2"><select v-model="assignedTo" class="min-w-0 flex-1 rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm"><option value="">{{ t('maintenance.chooseTechnician') }}</option><option v-for="person in staff" :key="person.id" :value="person.id">{{ person.name }}</option></select><button class="rounded-lg bg-neutral-900 px-3 text-xs font-semibold text-white disabled:opacity-40" :disabled="!assignedTo" @click="assignIssue">{{ t('maintenance.assign') }}</button></div></div>
 
-                        <div class="mt-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm"><h3 class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.attachments') }}</h3><div class="mt-2 space-y-2"><a v-for="file in selected.attachments" :key="file.id" :href="file.url" class="flex items-center gap-2 rounded-lg border border-neutral-200 p-2.5 text-xs font-medium text-emerald-800 transition hover:bg-emerald-50"><Image class="h-3.5 w-3.5" />{{ file.name }}</a><p v-if="!selected.attachments.length" class="rounded-lg bg-neutral-50 px-3 py-3 text-center text-xs text-neutral-400">{{ t('maintenance.noAttachments') }}</p></div><div v-if="permissions.update && selected.status !== 'closed'" class="mt-2 flex gap-2"><input type="file" class="min-w-0 flex-1 text-xs" @change="uploadFile = $event.target.files[0]" /><button class="rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold disabled:opacity-40" :disabled="!uploadFile" @click="uploadAttachment"><FileUp class="inline h-3.5 w-3.5" /> {{ t('maintenance.upload') }}</button></div></div>
+                        <div class="mt-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm"><h3 class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.attachments') }}</h3><div class="mt-2 space-y-2"><button v-for="file in selected.attachments" :key="file.id" type="button" class="flex w-full items-center justify-between gap-2 rounded-lg border border-neutral-200 p-2.5 text-left text-xs font-medium text-emerald-800 transition hover:border-emerald-200 hover:bg-emerald-50" @click="previewFile = file"><span class="flex min-w-0 items-center gap-2"><Image class="h-3.5 w-3.5 shrink-0" /><span class="truncate">{{ file.name }}</span></span><span class="text-[10px] font-semibold text-neutral-400">{{ t('maintenance.preview') }}</span></button><p v-if="!selected.attachments.length" class="rounded-lg bg-neutral-50 px-3 py-3 text-center text-xs text-neutral-400">{{ t('maintenance.noAttachments') }}</p></div><div v-if="permissions.update && selected.status !== 'closed'" class="mt-2 flex gap-2"><input type="file" class="min-w-0 flex-1 text-xs" @change="uploadFile = $event.target.files[0]" /><button class="rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold disabled:opacity-40" :disabled="!uploadFile" @click="uploadAttachment"><FileUp class="inline h-3.5 w-3.5" /> {{ t('maintenance.upload') }}</button></div></div>
 
                         <div class="mt-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm"><h3 class="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{{ t('maintenance.timeline') }}</h3><div class="relative mt-3 space-y-3 before:absolute before:bottom-2 before:left-[4px] before:top-2 before:w-px before:bg-neutral-200"><div v-for="event in selected.events" :key="event.id" class="relative pl-5"><span class="absolute left-0 top-1.5 h-[9px] w-[9px] rounded-full border-2 border-white bg-emerald-500 ring-1 ring-emerald-200"></span><p class="text-xs font-semibold text-neutral-800">{{ event.to_status ? statusLabel(event.to_status) : event.type }}</p><p class="mt-0.5 text-[11px] leading-4 text-neutral-500">{{ event.user?.name || '—' }} · {{ formatDate(event.created_at) }}<span v-if="event.note" class="mt-1 block text-neutral-700">{{ event.note }}</span></p></div></div></div>
                     </div>
@@ -178,7 +180,7 @@ function uploadAttachment() {
 
         <Teleport to="body">
             <div v-if="reportOpen" class="fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 sm:items-center sm:p-4" @click.self="reportOpen = false">
-                <form class="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl" @submit.prevent="submitReport">
+                <form class="scrollbar-hidden max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl" @submit.prevent="submitReport">
                     <div class="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3"><div class="flex items-center gap-3"><span class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-950 text-white"><Wrench class="h-3.5 w-3.5" /></span><div><h2 class="text-base font-bold text-neutral-950">{{ t('maintenance.reportIssue') }}</h2><p class="mt-0.5 text-[11px] text-neutral-500">{{ t('maintenance.reportHint') }}</p></div></div><button type="button" class="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100" @click="reportOpen = false"><X class="h-4 w-4" /></button></div>
                     <div class="grid gap-3 p-4 sm:grid-cols-2">
                         <label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.roomLocation') }}<select v-model="reportForm.room_id" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white"><option value="">{{ t('maintenance.commonArea') }}</option><option v-for="room in rooms" :key="room.id" :value="room.id">{{ t('maintenance.room') }} {{ room.room_number }}</option></select></label>
@@ -196,5 +198,30 @@ function uploadAttachment() {
                 </form>
             </div>
         </Teleport>
+
+        <Teleport to="body">
+            <div v-if="previewFile" class="fixed inset-0 z-[70] flex items-center justify-center bg-neutral-950/85 p-4 backdrop-blur-sm" @click.self="previewFile = null">
+                <div class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-neutral-900 shadow-2xl">
+                    <div class="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3"><div class="min-w-0"><p class="truncate text-sm font-semibold text-white">{{ previewFile.name }}</p><p class="mt-0.5 text-[10px] uppercase tracking-wider text-neutral-400">{{ t('maintenance.privatePreview') }}</p></div><button type="button" class="rounded-lg p-2 text-neutral-300 hover:bg-white/10 hover:text-white" :aria-label="t('maintenance.closePreview')" @click="previewFile = null"><X class="h-5 w-5" /></button></div>
+                    <div class="flex min-h-0 flex-1 items-center justify-center bg-neutral-950 p-3">
+                        <img v-if="previewKind(previewFile) === 'image'" :src="previewFile.url" :alt="previewFile.name" class="max-h-[80vh] max-w-full rounded-lg object-contain" />
+                        <video v-else-if="previewKind(previewFile) === 'video'" :src="previewFile.url" controls controlsList="nodownload" class="max-h-[80vh] max-w-full rounded-lg"></video>
+                        <iframe v-else-if="previewKind(previewFile) === 'pdf'" :src="previewFile.url" class="h-[80vh] w-full rounded-lg bg-white" :title="previewFile.name"></iframe>
+                        <p v-else class="p-10 text-sm text-neutral-300">{{ t('maintenance.previewUnavailable') }}</p>
+                    </div>
+                </div>
+            </div>
+        </Teleport>
     </AppLayout>
 </template>
+
+<style scoped>
+.scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+}
+</style>
