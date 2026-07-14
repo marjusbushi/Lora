@@ -14,9 +14,11 @@ use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
 use App\Services\ChannexConfiguration;
+use App\Services\PokConfiguration;
 use App\Tenancy\TenantContext;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use RuntimeException;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -254,17 +256,88 @@ class TenantIsolationTest extends TestCase
 
         $this->assertSame($second->id, $context->id());
     }
+
     public function test_console_writes_without_context_fail_closed_outside_testing(): void
     {
         app(TenantContext::class)->clear();
         $this->app['env'] = 'production';
 
         try {
-            $this->expectException(\RuntimeException::class);
+            $this->expectException(RuntimeException::class);
             RoomType::create(['name' => 'Phantom', 'base_price' => 50, 'max_occupancy' => 2, 'amenities' => []]);
         } finally {
             $this->app['env'] = 'testing';
         }
+    }
+
+    public function test_reads_without_context_fail_closed_outside_testing(): void
+    {
+        $context = app(TenantContext::class);
+        $tenant = Tenant::query()->sole();
+
+        $context->set($tenant);
+        $type = RoomType::create([
+            'name' => 'Private type',
+            'base_price' => 80,
+            'max_occupancy' => 2,
+            'amenities' => [],
+        ]);
+        $context->clear();
+        $this->app['env'] = 'production';
+
+        try {
+            $this->assertSame(0, RoomType::query()->count());
+            $this->assertNull(RoomType::query()->find($type->id));
+            $this->assertSame(1, RoomType::withoutGlobalScopes()->whereKey($type->id)->count());
+        } finally {
+            $this->app['env'] = 'testing';
+        }
+    }
+
+    public function test_tenant_id_cannot_be_assigned_or_changed_across_tenants(): void
+    {
+        $context = app(TenantContext::class);
+        $first = Tenant::query()->sole();
+        $second = Tenant::factory()->create();
+
+        $context->set($first);
+        $type = RoomType::create([
+            'name' => 'Stable tenant type',
+            'base_price' => 80,
+            'max_occupancy' => 2,
+            'amenities' => [],
+        ]);
+
+        $forged = new RoomType([
+            'name' => 'Forged tenant type',
+            'base_price' => 90,
+            'max_occupancy' => 2,
+            'amenities' => [],
+        ]);
+        $forged->tenant_id = $second->id;
+
+        try {
+            $forged->save();
+            $this->fail('Creating a tenant model for another tenant should fail.');
+        } catch (RuntimeException) {
+            $this->assertFalse($forged->exists);
+        }
+
+        $type->tenant_id = $second->id;
+        try {
+            $type->save();
+            $this->fail('Moving a model to another tenant should fail.');
+        } catch (RuntimeException) {
+            $this->assertSame($first->id, $type->getOriginal('tenant_id'));
+        }
+
+        $type->tenant_id = $first->id;
+        $type->syncOriginalAttribute('tenant_id');
+        $context->set($second);
+        $type->name = 'Cross-tenant update';
+
+        $this->expectException(RuntimeException::class);
+        $type->save();
     }
 
     public function test_integration_credentials_are_not_used_without_context_outside_testing(): void
@@ -282,7 +355,7 @@ class TenantIsolationTest extends TestCase
         try {
             $this->assertFalse(app(ChannexConfiguration::class)->configured());
             $this->assertSame('', app(ChannexConfiguration::class)->get('api_key'));
-            $this->assertFalse(app(\App\Services\PokConfiguration::class)->configured());
+            $this->assertFalse(app(PokConfiguration::class)->configured());
         } finally {
             $this->app['env'] = 'testing';
         }
@@ -302,6 +375,7 @@ class TenantIsolationTest extends TestCase
             $this->app['env'] = 'testing';
         }
     }
+
     public function test_pok_order_ids_are_unique_per_tenant_not_globally(): void
     {
         $context = app(TenantContext::class);

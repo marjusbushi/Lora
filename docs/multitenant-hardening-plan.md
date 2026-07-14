@@ -19,6 +19,19 @@ Lora PMS do të përdorë një aplikacion dhe një databazë të përbashkët. �
 7. CI para deploy-it, branch protection, secure cookies, backup dhe provë restore.
 8. Integrim me punën e përkthimeve, testim në staging dhe kalim në `main` vetëm pas aprovimit.
 
+## Todo aktive
+
+- [x] 1. Izolim `fail-closed` për leximet dhe `tenant_id` i pandryshueshëm.
+- [ ] 2. Commands manuale tenant-aware dhe `fail-closed` — **në punë**.
+- [ ] 3. Jobs, cache, locks dhe storage tenant-aware.
+- [ ] 4. DB: `tenant_id NOT NULL` dhe kontrolle same-tenant.
+- [ ] 5. Handoff i sigurt Control Panel → custom domain.
+- [ ] 6. Teste Hotel A/B për modulet kryesore.
+- [ ] 7. MySQL fresh/upgrade dhe kontroll integriteti.
+- [ ] 8. CI para deploy-it dhe branch protection.
+- [ ] 9. Backup off-server dhe provë restore.
+- [ ] 10. Integrim me translations, staging pilot dhe aprovim për `main`.
+
 ## Porta e sigurisë për Villa Mucho
 
 Asnjë migrim multitenant nuk ekzekutohet në production pa kaluar të gjitha pikat:

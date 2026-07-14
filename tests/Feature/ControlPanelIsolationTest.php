@@ -223,11 +223,13 @@ class ControlPanelIsolationTest extends TestCase
         $context->clear();
 
         // A Channex integration with a secret that must NEVER reach the page.
-        TenantIntegration::withoutGlobalScopes()->create([
-            'tenant_id' => $tenant->id, 'provider' => 'channex', 'enabled' => true,
-            'credentials' => ['api_key' => 'super-secret-key'],
-            'configuration' => ['property_id' => 'PROP-DETAIL'],
-        ]);
+        $context->run($tenant, function () {
+            TenantIntegration::query()->create([
+                'provider' => 'channex', 'enabled' => true,
+                'credentials' => ['api_key' => 'super-secret-key'],
+                'configuration' => ['property_id' => 'PROP-DETAIL'],
+            ]);
+        });
 
         // Super admin belongs to the DEFAULT hotel, not this one — so members = the one real member.
         $superAdmin = User::factory()->create(['is_super_admin' => true]);

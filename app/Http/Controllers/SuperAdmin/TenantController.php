@@ -350,8 +350,10 @@ class TenantController extends Controller
                 'production' => ['required', 'boolean'],
             ]);
 
-        $integration = TenantIntegration::withoutGlobalScopes()
-            ->firstOrNew(['tenant_id' => $tenant->id, 'provider' => $provider]);
+        $integration = $context->run(
+            $tenant,
+            fn () => TenantIntegration::query()->firstOrNew(['provider' => $provider]),
+        );
 
         $credentials = $integration->credentials ?? [];
         $configuration = $integration->configuration ?? [];
@@ -380,11 +382,13 @@ class TenantController extends Controller
             $configuration['production'] = (bool) $data['production'];
         }
 
-        $integration->fill([
-            'enabled' => (bool) $data['enabled'],
-            'credentials' => $credentials,
-            'configuration' => $configuration,
-        ])->save();
+        $context->run($tenant, function () use ($integration, $data, $credentials, $configuration) {
+            $integration->fill([
+                'enabled' => (bool) $data['enabled'],
+                'credentials' => $credentials,
+                'configuration' => $configuration,
+            ])->save();
+        });
 
         $context->run($tenant, fn () => AuditLog::record('tenant.integration.update', $tenant, [
             'provider' => $provider,
@@ -393,7 +397,7 @@ class TenantController extends Controller
             'updated_fields' => array_keys(array_filter($data, fn ($value) => filled($value))),
         ]));
 
-        return back()->with('success', "Integrimi ".ucfirst($provider)." u ruajt për {$tenant->name}.");
+        return back()->with('success', 'Integrimi '.ucfirst($provider)." u ruajt për {$tenant->name}.");
     }
 
     public function storeDomain(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
