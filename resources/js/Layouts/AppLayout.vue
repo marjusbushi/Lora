@@ -154,7 +154,7 @@ const navItems = computed(() =>
                 <!-- User dropdown -->
                 <div class="flex items-center gap-4">
                     <NotificationBell v-if="can('view_reservations')" />
-                    <LanguageSwitcher variant="select" />
+                    <LanguageSwitcher variant="icon" />
                     <Dropdown align="right" width="72" content-classes="overflow-hidden rounded-xl bg-white p-2">
                         <template #trigger>
                             <button class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-sm text-neutral-600 transition-colors duration-150 hover:bg-neutral-50 hover:text-neutral-900">

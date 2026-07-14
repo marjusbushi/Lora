@@ -1,10 +1,9 @@
 <script setup>
-import LanguageSwitcher from '@/Components/LanguageSwitcher.vue';
 import Button from '@/Components/UI/Button.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { Head, usePage } from '@inertiajs/vue3';
-import { Building2, CheckCircle2, Clock3, Languages, Mail, ShieldCheck, SlidersHorizontal } from 'lucide-vue-next';
+import { Building2, CheckCircle2, Clock3, Mail, ShieldCheck, SlidersHorizontal } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import DeleteUserForm from './Partials/DeleteUserForm.vue';
@@ -112,13 +111,6 @@ const roleLabel = computed(() => {
                                 <div>
                                     <p class="text-body-sm font-semibold text-primary-900">{{ $t('accountCenter.timezone') }}</p>
                                     <p class="mt-1 text-small text-neutral-500">{{ tenant?.timezone || 'Europe/Tirane' }}</p>
-                                </div>
-                            </div>
-                            <div class="flex gap-3 py-4 last:pb-0">
-                                <Languages class="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
-                                <div>
-                                    <p class="text-body-sm font-semibold text-primary-900">{{ $t('accountCenter.language') }}</p>
-                                    <LanguageSwitcher class="mt-2 w-fit rounded-lg border border-neutral-200 bg-white px-3 py-2 text-neutral-600 shadow-sm" />
                                 </div>
                             </div>
                         </div>
