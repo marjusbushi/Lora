@@ -4,13 +4,12 @@ import { Head } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 import {
     AlertTriangle, CalendarClock, Check, ChevronRight, CircleAlert,
-    Clock3, Hammer, Image, MapPin, Plus, Search,
+    Clock3, Hammer, Image, Plus, Search,
     SlidersHorizontal, UserRound, Wrench, X,
 } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
 const { t } = useI18n();
-const designVariant = ref('list');
 const activeStatus = ref('all');
 const query = ref('');
 const selectedId = ref(1042);
@@ -65,11 +64,6 @@ const filteredIssues = computed(() => issues.filter((issue) => {
     return statusMatches && searchMatches;
 }));
 const selected = computed(() => issues.find((issue) => issue.id === selectedId.value) || issues[0]);
-const kanbanColumns = computed(() => statusTabs.slice(1).map((status) => ({
-    ...status,
-    issues: issues.filter((issue) => issue.status === status.value),
-})));
-
 const priorityClass = (priority) => ({
     critical: 'bg-red-50 text-red-700 ring-red-600/20', high: 'bg-orange-50 text-orange-700 ring-orange-600/20',
     medium: 'bg-amber-50 text-amber-700 ring-amber-600/20', low: 'bg-neutral-100 text-neutral-600 ring-neutral-500/20',
@@ -98,10 +92,6 @@ function openIssue(issue) {
                         <div><div class="flex items-center gap-2"><h1 class="text-2xl font-bold tracking-tight text-neutral-950">{{ t('maintenance.title') }}</h1><span class="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700">{{ t('maintenance.demoShort') }}</span></div><p class="mt-1 text-sm text-neutral-500">{{ t('maintenance.subtitle') }}</p></div>
                     </div>
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                        <div class="grid grid-cols-2 rounded-xl border border-neutral-200 bg-neutral-50 p-1">
-                            <button class="rounded-lg px-4 py-2 text-left transition" :class="designVariant === 'list' ? 'bg-white shadow-sm ring-1 ring-neutral-200' : 'text-neutral-500'" @click="designVariant = 'list'"><span class="block text-xs font-bold" :class="designVariant === 'list' ? 'text-emerald-900' : ''">{{ t('maintenance.variantOne') }}</span><span class="mt-0.5 block text-[11px]">{{ t('maintenance.operationalList') }}</span></button>
-                            <button class="rounded-lg px-4 py-2 text-left transition" :class="designVariant === 'kanban' ? 'bg-white shadow-sm ring-1 ring-neutral-200' : 'text-neutral-500'" @click="designVariant = 'kanban'"><span class="block text-xs font-bold" :class="designVariant === 'kanban' ? 'text-emerald-900' : ''">{{ t('maintenance.variantTwo') }}</span><span class="mt-0.5 block text-[11px]">{{ t('maintenance.kanbanBoard') }}</span></button>
-                        </div>
                         <button class="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-900 px-4 text-sm font-semibold text-white hover:bg-emerald-950" @click="reportOpen = true"><Plus class="h-4 w-4" />{{ t('maintenance.reportIssue') }}</button>
                     </div>
                 </div>
@@ -113,8 +103,7 @@ function openIssue(issue) {
                 <div class="flex gap-2"><label class="relative min-w-0 flex-1 sm:w-72"><Search class="pointer-events-none absolute left-3 top-3 h-4 w-4 text-neutral-400" /><input v-model="query" class="h-10 w-full rounded-xl border-neutral-200 bg-white pl-9 text-sm focus:border-emerald-800 focus:ring-emerald-800" :placeholder="t('maintenance.search')" /></label><button class="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-600"><SlidersHorizontal class="h-4 w-4" />{{ t('maintenance.filters') }}</button></div>
             </div>
 
-            <!-- VARIANT 1: dense operational table -->
-            <section v-if="designVariant === 'list'" class="mt-4 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+            <section class="mt-4 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
                 <div class="flex items-center justify-between border-b border-neutral-200 px-5 py-4"><div><h2 class="font-bold text-neutral-950">{{ t('maintenance.operationalList') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('maintenance.listDescription') }}</p></div><span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{{ t('maintenance.recommended') }}</span></div>
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[980px] text-left">
@@ -134,27 +123,9 @@ function openIssue(issue) {
                 <div class="grid border-t border-neutral-200 bg-stone-50/70 md:grid-cols-3"><div v-for="task in preventive" :key="task.id" class="flex items-center gap-3 border-b border-neutral-200 px-5 py-3 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"><CalendarClock class="h-4 w-4 shrink-0 text-emerald-700" /><div class="min-w-0 flex-1"><p class="truncate text-xs font-semibold text-neutral-800">{{ t(`maintenance.mock.${task.titleKey}`) }}</p><p class="text-[11px] text-neutral-400">{{ t(`maintenance.mock.${task.locationKey}`) }}</p></div><span class="text-[11px] font-semibold" :class="task.tone === 'red' ? 'text-red-600' : 'text-amber-600'">{{ t(`maintenance.mock.${task.dueKey}`) }}</span></div></div>
             </section>
 
-            <!-- VARIANT 2: workflow kanban -->
-            <section v-else class="mt-4">
-                <div class="mb-4 flex items-center justify-between"><div><h2 class="font-bold text-neutral-950">{{ t('maintenance.kanbanBoard') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('maintenance.kanbanDescription') }}</p></div><span class="text-xs font-medium text-neutral-400">{{ issues.length }} {{ t('maintenance.issues').toLowerCase() }}</span></div>
-                <div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-4">
-                    <div v-for="column in kanbanColumns" :key="column.value" class="min-h-[520px] rounded-2xl border border-neutral-200 bg-neutral-100/70 p-3">
-                        <div class="mb-3 flex items-center px-1"><span class="h-2.5 w-2.5 rounded-full" :class="statusClass(column.value)"></span><h3 class="ml-2 text-sm font-bold text-neutral-800">{{ t(`maintenance.${column.labelKey}`) }}</h3><span class="ml-auto rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-neutral-500">{{ column.issues.length }}</span></div>
-                        <div class="space-y-3">
-                            <button v-for="issue in column.issues" :key="issue.id" class="w-full rounded-xl border border-neutral-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md" @click="openIssue(issue)">
-                                <div class="flex items-start justify-between gap-2"><span class="text-[11px] font-bold text-neutral-400">#MNT-{{ issue.id }}</span><span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset" :class="priorityClass(issue.priority)">{{ t(`maintenance.${issue.priority}`) }}</span></div>
-                                <h4 class="mt-3 text-sm font-bold leading-5 text-neutral-950">{{ t(`maintenance.mock.${issue.titleKey}`) }}</h4><p class="mt-1.5 flex items-center gap-1 text-xs text-neutral-500"><MapPin class="h-3.5 w-3.5" />{{ issueLocation(issue) }}</p>
-                                <div v-if="issue.guestImpact" class="mt-3 flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-2 text-[11px] font-semibold text-red-700"><AlertTriangle class="h-3.5 w-3.5" />{{ t('maintenance.guestImpact') }}</div>
-                                <div class="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3"><span class="flex items-center gap-1.5 text-xs text-neutral-500"><UserRound class="h-3.5 w-3.5" />{{ issueAssignee(issue) }}</span><span class="text-[11px] text-neutral-400">{{ t(`maintenance.mock.${issue.elapsedKey}`) }}</span></div>
-                            </button>
-                            <div v-if="column.issues.length === 0" class="rounded-xl border border-dashed border-neutral-300 p-8 text-center text-xs text-neutral-400">{{ t('maintenance.emptyColumn') }}</div>
-                        </div>
-                    </div>
-                </div>
-            </section>
         </div>
 
-        <!-- Shared reservation-style detail drawer for both variants -->
+        <!-- Reservation-style issue detail drawer -->
         <Teleport to="body">
             <div v-if="drawerOpen" class="fixed inset-0 z-50 bg-neutral-950/30" @click.self="drawerOpen = false">
                 <aside class="absolute inset-y-0 right-0 w-full max-w-[520px] overflow-y-auto bg-white shadow-2xl">
