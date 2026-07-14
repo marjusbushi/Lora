@@ -31,7 +31,7 @@ Lora PMS do të përdorë një aplikacion dhe një databazë të përbashkët. �
 - [x] 8. CI para deploy-it dhe branch protection.
 - [ ] 9. Backup off-server dhe provë restore — **në punë**.
   - [x] 9.1. Ofruesi: Backblaze B2 EU me Restic dhe Object Lock.
-  - [ ] 9.2. Bucket aktiv privat me Object Lock pa retention default + bucket i dytë immutable për replica — burimi është gati; replica pret aprovim për koston shtesë të storage-it.
+  - [ ] 9.2. Bucket aktiv privat me Object Lock pa retention default + bucket i dytë immutable — destinacioni me 30 ditë `compliance` është gati; Cloud Replication pret pagesën njëherëshe `$1 + tax` që Backblaze kërkon për payment history.
   - [x] 9.3. Application Key i kufizuar vetëm te bucket-i, secrets `root:root 0600` jashtë kodit dhe fjalëkalimi i rikuperimit i ruajtur privatisht në Zoho Vault.
   - [ ] 9.4. Backup automatik i DB + storage, kontroll integriteti dhe alarm në dështim — timer-i production është aktiv; alarmi i jashtëm mbetet për t'u lidhur.
   - [x] 9.5. Restore real në MySQL të izoluar, migrime mbi kopjen production dhe krahasim para/pas — kaloi më 2026-07-14.

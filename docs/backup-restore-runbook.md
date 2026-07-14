@@ -13,6 +13,10 @@
 - Kopja immutable vendoset në një bucket të dytë B2 me retention `compliance` dhe
   Cloud Replication nga bucket-i burim. Kështu Restic punon normalisht në burim,
   ndërsa replica nuk mund të fshihet para skadimit të retention-it.
+- Bucket-i destinacion `lora-pms-prod-eu-immutable-7c14a9` u krijua privat më
+  2026-07-14 me SSE-B2, Object Lock dhe retention default 30 ditë `compliance`.
+  Aktivizimi i Cloud Replication mbetet në pritje të pagesës njëherëshe `$1 + tax`
+  që Backblaze kërkon për të krijuar payment history; pagesa kreditohet në llogari.
 
 ## Secrets në server
 
