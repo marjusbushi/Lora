@@ -20,6 +20,9 @@
   skedarët ekzistues. Rregulli u aktivizua më 2026-07-14.
 - Snapshot-i test `a2473916` u krijua pas aktivizimit dhe skedarët e tij të rinj
   u shfaqën në bucket-in immutable, duke verifikuar rrjedhën fund-më-fund.
+- Backblaze replikon skedarët ekzistues në ciklin ditor pas mesnatës UTC. Numri
+  i objekteve burim/destinacion kontrollohet pas këtij cikli para se 9.2 të
+  shënohet i përfunduar.
 
 ## Secrets në server
 
