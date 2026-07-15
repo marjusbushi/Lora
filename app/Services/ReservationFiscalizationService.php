@@ -215,11 +215,12 @@ class ReservationFiscalizationService
             'supply_start_date' => $reservation->check_in_date?->toDateString(),
             'supply_end_date' => $reservation->check_out_date?->toDateString(),
             'notes' => 'Lora PMS · Rezervimi #'.$reservation->id,
-            'client' => [
-                'name' => trim((string) $reservation->guest?->full_name) ?: 'Klient hotelerie',
-            ],
             'lines' => $lines,
         ];
+
+        if ($client = $this->identifiedClient($reservation)) {
+            $payload['client'] = $client;
+        }
 
         if ($currency !== 'ALL') {
             $exchangeRate = CurrencyRates::rate('ALL');
@@ -238,6 +239,30 @@ class ReservationFiscalizationService
         }
 
         return $payload;
+    }
+
+    /** @return array<string, mixed>|null */
+    private function identifiedClient(Reservation $reservation): ?array
+    {
+        $guest = $reservation->guest;
+        $documentNumber = trim((string) $guest?->document_number);
+        $documentType = match ($guest?->document_type) {
+            'passport' => 'PASS',
+            'id_card' => 'ID',
+            default => null,
+        };
+
+        if ($documentNumber === '' || $documentType === null) {
+            return null;
+        }
+
+        return [
+            'name' => trim((string) $guest->full_name) ?: 'Klient hotelerie',
+            'id' => [
+                'type' => $documentType,
+                'id' => $documentNumber,
+            ],
+        ];
     }
 
     /** @param array<string, mixed> $payload */

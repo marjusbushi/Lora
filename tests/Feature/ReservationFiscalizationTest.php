@@ -92,6 +92,7 @@ class ReservationFiscalizationTest extends TestCase
                 && $request->hasHeader('Authorization', 'Bearer sandbox-fiscal-token')
                 && $payload['internalId'] === 'LORA-T'.$this->tenant->id.'-RES-'.$reservation->id
                 && $payload['payment_method'] === 'BANKNOTE'
+                && ! array_key_exists('client', $payload)
                 && (float) $payload['exchange_rate'] === 93.7837
                 && $payload['invoice_discount_type'] === 'amount'
                 && (float) $payload['invoice_discount_value'] === 5.0
@@ -113,6 +114,52 @@ class ReservationFiscalizationTest extends TestCase
             'subject_type' => Reservation::class,
             'subject_id' => $reservation->id,
         ]);
+    }
+
+    public function test_identified_guest_is_sent_as_a_fature_al_client(): void
+    {
+        $reservation = $this->checkedOutStay('cash');
+        $reservation->guest()->update([
+            'document_type' => 'passport',
+            'document_number' => 'BA1234567',
+        ]);
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://demo.fature.al/api/v1/invoice/cash' => Http::response($this->successResponse()),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('reservations.fiscalize', $reservation))
+            ->assertSessionHasNoErrors();
+
+        Http::assertSent(fn (Request $request) => $request->data()['client'] === [
+            'name' => 'Test Guest',
+            'id' => [
+                'type' => 'PASS',
+                'id' => 'BA1234567',
+            ],
+        ]);
+    }
+
+    public function test_unsupported_guest_document_is_not_guessed_as_a_fiscal_identity(): void
+    {
+        $reservation = $this->checkedOutStay('cash');
+        $reservation->guest()->update([
+            'document_type' => 'drivers_license',
+            'document_number' => 'DL-12345',
+        ]);
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://demo.fature.al/api/v1/invoice/cash' => Http::response($this->successResponse()),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('reservations.fiscalize', $reservation))
+            ->assertSessionHasNoErrors();
+
+        Http::assertSent(fn (Request $request) => ! array_key_exists('client', $request->data()));
     }
 
     public function test_repeated_click_does_not_send_a_second_invoice(): void
