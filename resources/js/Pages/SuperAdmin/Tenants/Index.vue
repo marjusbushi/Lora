@@ -336,6 +336,8 @@ function openBilling(tenant) {
 
 onMounted(() => {
     const params = new URLSearchParams(window.location.search);
+    if (params.get('create') === '1') showCreate.value = true;
+
     const tenantId = Number(params.get('manage'));
     const tenant = props.tenants.find((item) => item.id === tenantId);
     if (!tenant) return;
