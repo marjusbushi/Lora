@@ -3875,6 +3875,19 @@
       "other": "Të tjera"
     }
   },
+  "integrationCenter": {
+    "title": "Qendra e integrimeve",
+    "fiscalization": "Fiskalizimi",
+    "tenantSecureConfig": "Konfigurim i veçantë për çdo hotel. Token-i ruhet i enkriptuar.",
+    "active": "Aktiv",
+    "apiToken": "API token",
+    "environment": "Mjedisi",
+    "sandboxOption": "Sandbox / Test · demo.fature.al",
+    "productionOption": "Production / Live · fature.al",
+    "sandboxHint": "Sandbox nuk krijon dokumente me vlerë fiskale. Ky është konfigurimi i duhur për staging.",
+    "productionWarning": "Kujdes: Production krijon veprime reale fiskale. Përdore vetëm pas aprovimit dhe testimit të plotë.",
+    "testConnection": "Testo lidhjen"
+  },
   "superAdmin": {
     "dynamic": {
       "activePortfolio": "e portofolit aktiv",

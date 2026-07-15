@@ -8,6 +8,7 @@ use App\Models\Tenant;
 use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
+use App\Services\FatureAlClient;
 use App\Services\TenantBillingService;
 use App\Services\TenantHandoff;
 use App\Services\TenantRoleService;
@@ -17,8 +18,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
+use Throwable;
 
 class TenantController extends Controller
 {
@@ -338,24 +342,30 @@ class TenantController extends Controller
         string $provider,
         TenantContext $context,
     ): RedirectResponse {
-        abort_unless(in_array($provider, ['channex', 'pok'], true), 404);
+        abort_unless(in_array($provider, ['channex', 'pok', 'fature_al'], true), 404);
 
-        $data = $request->validate($provider === 'channex'
-            ? [
+        $data = $request->validate(match ($provider) {
+            'channex' => [
                 'enabled' => ['required', 'boolean'],
                 'api_key' => ['nullable', 'string', 'max:255'],
                 'webhook_secret' => ['nullable', 'string', 'max:255'],
                 // Pa property id feed-i bëhet account-wide (rrezik cross-tenant).
                 'property_id' => ['required_if:enabled,true', 'nullable', 'string', 'max:255'],
                 'base_url' => ['nullable', 'url', 'max:255'],
-            ]
-            : [
+            ],
+            'pok' => [
                 'enabled' => ['required', 'boolean'],
                 'key_id' => ['nullable', 'string', 'max:255'],
                 'key_secret' => ['nullable', 'string', 'max:255'],
                 'merchant_id' => ['nullable', 'string', 'max:255'],
                 'production' => ['required', 'boolean'],
-            ]);
+            ],
+            'fature_al' => [
+                'enabled' => ['required', 'boolean'],
+                'api_token' => ['nullable', 'string', 'max:2048'],
+                'environment' => ['required', Rule::in(['sandbox', 'production'])],
+            ],
+        });
 
         $integration = $context->run(
             $tenant,
@@ -367,15 +377,27 @@ class TenantController extends Controller
 
         // A blank secret field means "keep the stored one" — stored values are
         // never sent back to the browser, so blanks are the normal case.
-        foreach ($provider === 'channex' ? ['api_key', 'webhook_secret'] : ['key_id', 'key_secret'] as $key) {
+        $secretKeys = match ($provider) {
+            'channex' => ['api_key', 'webhook_secret'],
+            'pok' => ['key_id', 'key_secret'],
+            'fature_al' => ['api_token'],
+        };
+
+        foreach ($secretKeys as $key) {
             if (filled($data[$key] ?? null)) {
-                $credentials[$key] = $data[$key];
+                $credentials[$key] = trim($data[$key]);
             }
         }
 
         // Non-secret config is pre-filled in the form, so a blank submit is a
         // deliberate CLEAR (secrets stay blank-keeps — they are never pre-filled).
-        foreach ($provider === 'channex' ? ['property_id', 'base_url'] : ['merchant_id'] as $key) {
+        $configurationKeys = match ($provider) {
+            'channex' => ['property_id', 'base_url'],
+            'pok' => ['merchant_id'],
+            'fature_al' => ['environment'],
+        };
+
+        foreach ($configurationKeys as $key) {
             if (array_key_exists($key, $data)) {
                 if (filled($data[$key])) {
                     $configuration[$key] = $data[$key];
@@ -387,6 +409,12 @@ class TenantController extends Controller
 
         if ($provider === 'pok') {
             $configuration['production'] = (bool) $data['production'];
+        }
+
+        if ($provider === 'fature_al' && (bool) $data['enabled'] && blank($credentials['api_token'] ?? null)) {
+            throw ValidationException::withMessages([
+                'api_token' => 'Vendos token-in API para se të aktivizosh fiskalizimin.',
+            ]);
         }
 
         $context->run($tenant, function () use ($integration, $data, $credentials, $configuration) {
@@ -405,6 +433,42 @@ class TenantController extends Controller
         ]));
 
         return back()->with('success', 'Integrimi '.ucfirst($provider)." u ruajt për {$tenant->name}.");
+    }
+
+    public function testIntegration(
+        Tenant $tenant,
+        string $provider,
+        TenantContext $context,
+    ): RedirectResponse {
+        abort_unless($provider === 'fature_al', 404);
+
+        try {
+            $context->run($tenant, function () {
+                app(FatureAlClient::class)->testConnection();
+                $this->recordIntegrationTest('success');
+            });
+
+            $context->run($tenant, fn () => AuditLog::record('tenant.integration.test', $tenant, [
+                'provider' => 'fature_al',
+                'status' => 'success',
+            ]));
+
+            return back()->with('success', 'Lidhja test me fature.al funksionon.');
+        } catch (Throwable $exception) {
+            $message = $exception instanceof RuntimeException
+                ? $exception->getMessage()
+                : 'Nuk u lidhëm dot me fature.al. Provo përsëri.';
+
+            $context->run($tenant, function () use ($tenant) {
+                $this->recordIntegrationTest('failed');
+                AuditLog::record('tenant.integration.test', $tenant, [
+                    'provider' => 'fature_al',
+                    'status' => 'failed',
+                ]);
+            });
+
+            return back()->with('error', $message);
+        }
     }
 
     public function storeDomain(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
@@ -467,6 +531,7 @@ class TenantController extends Controller
 
         $channex = $rows->get('channex');
         $pok = $rows->get('pok');
+        $fature = $rows->get('fature_al');
 
         return [
             'channex' => [
@@ -483,7 +548,31 @@ class TenantController extends Controller
                 'merchant_id' => $pok?->configuration['merchant_id'] ?? null,
                 'production' => (bool) ($pok?->configuration['production'] ?? false),
             ],
+            'fature_al' => [
+                'enabled' => (bool) ($fature?->enabled),
+                'has_api_token' => filled($fature?->credentials['api_token'] ?? null),
+                'environment' => ($fature?->configuration['environment'] ?? 'sandbox') === 'production'
+                    ? 'production'
+                    : 'sandbox',
+                'last_tested_at' => $fature?->configuration['last_tested_at'] ?? null,
+                'last_test_status' => $fature?->configuration['last_test_status'] ?? null,
+            ],
         ];
+    }
+
+    private function recordIntegrationTest(string $status): void
+    {
+        $integration = TenantIntegration::query()->where('provider', 'fature_al')->first();
+
+        if (! $integration) {
+            return;
+        }
+
+        $configuration = $integration->configuration ?? [];
+        $configuration['last_tested_at'] = now()->toIso8601String();
+        $configuration['last_test_status'] = $status;
+
+        $integration->forceFill(['configuration' => $configuration])->save();
     }
 
     private function normalizeDomain(?string $domain): ?string

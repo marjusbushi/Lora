@@ -28,6 +28,7 @@ use App\Http\Controllers\TenantHandoffController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebsiteController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -79,7 +80,7 @@ Route::get('/tenant-handoff', TenantHandoffController::class)
 // (same cached branding the <title> uses). display:standalone is what removes
 // the browser URL bar when the site is added to a phone's home screen.
 Route::get('/manifest.webmanifest', function () {
-    $brand = \Illuminate\Support\Facades\Cache::get('app.settings', []);
+    $brand = Cache::get('app.settings', []);
     $name = $brand['hotel_name'] ?? 'Villa Mucho';
 
     return response()->json([
@@ -113,7 +114,9 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
         Route::post('/tenants/{tenant}/switch', [SuperAdminTenantController::class, 'switch'])->name('tenants.switch');
         Route::patch('/tenants/{tenant}/status', [SuperAdminTenantController::class, 'updateStatus'])->name('tenants.status');
         Route::put('/tenants/{tenant}/integrations/{provider}', [SuperAdminTenantController::class, 'updateIntegration'])
-            ->whereIn('provider', ['channex', 'pok'])->name('tenants.integrations.update');
+            ->whereIn('provider', ['channex', 'pok', 'fature_al'])->name('tenants.integrations.update');
+        Route::post('/tenants/{tenant}/integrations/{provider}/test', [SuperAdminTenantController::class, 'testIntegration'])
+            ->whereIn('provider', ['fature_al'])->middleware('throttle:10,1')->name('tenants.integrations.test');
         Route::post('/tenants/{tenant}/domains', [SuperAdminTenantController::class, 'storeDomain'])->name('tenants.domains.store');
         Route::delete('/tenants/{tenant}/domains/{domain}', [SuperAdminTenantController::class, 'destroyDomain'])
             ->scopeBindings()->name('tenants.domains.destroy');
@@ -363,6 +366,8 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/settings/pricing-programs', [SettingsController::class, 'updatePricingPrograms'])->name('settings.pricing-programs');
         Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->middleware('module:housekeeping')->name('settings.housekeeping');
         Route::put('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai');
+        Route::post('/settings/integrations/{provider}/test', [SettingsController::class, 'testIntegration'])
+            ->whereIn('provider', ['fature_al'])->middleware('throttle:10,1')->name('settings.integrations.test');
 
         // Settings: Room Types
         // Settings: Floors (Katet)

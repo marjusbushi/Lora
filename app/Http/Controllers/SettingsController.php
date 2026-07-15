@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\PushRoomTypeAri;
 use App\Models\Amenity;
+use App\Models\AuditLog;
 use App\Models\CleaningTask;
 use App\Models\Floor;
 use App\Models\InventoryItem;
@@ -14,9 +15,12 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\RoomTypeImage;
 use App\Models\Setting;
+use App\Models\TenantIntegration;
 use App\Models\Warehouse;
 use App\Services\AuditTimeline;
 use App\Services\CurrencyRates;
+use App\Services\FatureAlClient;
+use App\Services\IntegrationCatalog;
 use App\Services\MarketRates;
 use App\Services\PricingRulesVersion;
 use App\Support\TenantStorage;
@@ -28,6 +32,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
+use Throwable;
 
 class SettingsController extends Controller
 {
@@ -36,6 +42,7 @@ class SettingsController extends Controller
         UserController $userController,
         AuditLogController $auditLogController,
         AuditTimeline $timeline,
+        IntegrationCatalog $integrationCatalog,
     ): Response {
         $settings = Setting::allGrouped();
 
@@ -88,7 +95,49 @@ class SettingsController extends Controller
             'amenities' => Amenity::orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
             'userManagement' => $userController->pageData($request, 'user_'),
             'auditHistory' => $auditLogController->pageData($request, $timeline, 'audit_'),
+            'integrations' => $integrationCatalog->forSettings($settings),
         ]);
+    }
+
+    public function testIntegration(string $provider, FatureAlClient $client): RedirectResponse
+    {
+        abort_unless($provider === 'fature_al', 404);
+
+        try {
+            $client->testConnection();
+            $this->recordIntegrationTest('success');
+            AuditLog::record('tenant.integration.test', null, [
+                'provider' => 'fature_al',
+                'status' => 'success',
+            ]);
+
+            return back()->with('success', 'Lidhja test me fature.al funksionon.');
+        } catch (Throwable $exception) {
+            $this->recordIntegrationTest('failed');
+            AuditLog::record('tenant.integration.test', null, [
+                'provider' => 'fature_al',
+                'status' => 'failed',
+            ]);
+
+            return back()->with('error', $exception instanceof RuntimeException
+                ? $exception->getMessage()
+                : 'Nuk u lidhëm dot me fature.al. Provo përsëri.');
+        }
+    }
+
+    private function recordIntegrationTest(string $status): void
+    {
+        $integration = TenantIntegration::query()->where('provider', 'fature_al')->first();
+
+        if (! $integration) {
+            return;
+        }
+
+        $configuration = $integration->configuration ?? [];
+        $configuration['last_tested_at'] = now()->toIso8601String();
+        $configuration['last_test_status'] = $status;
+
+        $integration->forceFill(['configuration' => $configuration])->save();
     }
 
     // --- Floors (Katet) ---
@@ -414,7 +463,7 @@ class SettingsController extends Controller
         }
         try {
             $count = app(CurrencyRates::class)->fetch();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             report($e);
 
             return back()->with('error', 'Rifreskimi dështoi — kontrollo çelësin API.');

@@ -3875,6 +3875,19 @@
       "other": "Other"
     }
   },
+  "integrationCenter": {
+    "title": "Integration Center",
+    "fiscalization": "Fiscalization",
+    "tenantSecureConfig": "Separate configuration for each hotel. The token is stored encrypted.",
+    "active": "Active",
+    "apiToken": "API token",
+    "environment": "Environment",
+    "sandboxOption": "Sandbox / Test · demo.fature.al",
+    "productionOption": "Production / Live · fature.al",
+    "sandboxHint": "Sandbox does not create fiscally valid documents. This is the correct configuration for staging.",
+    "productionWarning": "Warning: Production creates real fiscal operations. Use it only after approval and complete testing.",
+    "testConnection": "Test connection"
+  },
   "superAdmin": {
     "dynamic": {
       "activePortfolio": "of the active portfolio",

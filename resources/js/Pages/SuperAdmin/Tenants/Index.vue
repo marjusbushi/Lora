@@ -11,6 +11,7 @@ import {
     CreditCard,
     Download,
     ExternalLink,
+    FileCheck2,
     Globe,
     Plug,
     Search,
@@ -20,6 +21,7 @@ import {
 import { computed, onMounted, ref } from 'vue';
 
 const { t } = useI18n();
+const fatureName = 'fature.al';
 const props = defineProps({
     tenants: Array,
     currentTenantId: Number,
@@ -73,6 +75,7 @@ const configTenant = ref(null);
 const domainForm = useForm({ domain: '' });
 const channexForm = useForm({ enabled: false, api_key: '', webhook_secret: '', property_id: '', base_url: '' });
 const pokForm = useForm({ enabled: false, key_id: '', key_secret: '', merchant_id: '', production: false });
+const fatureForm = useForm({ enabled: false, api_token: '', environment: 'sandbox' });
 
 function openConfig(tenant, resetTab = true) {
     if (resetTab) configTab.value = 'domains';
@@ -95,10 +98,15 @@ function openConfig(tenant, resetTab = true) {
     pokForm.merchant_id = tenant.integrations.pok.merchant_id || '';
     pokForm.production = tenant.integrations.pok.production;
     pokForm.clearErrors();
+
+    fatureForm.enabled = tenant.integrations.fature_al.enabled;
+    fatureForm.api_token = '';
+    fatureForm.environment = tenant.integrations.fature_al.environment || 'sandbox';
+    fatureForm.clearErrors();
 }
 
 function closeConfig() {
-    if (!domainForm.processing && !channexForm.processing && !pokForm.processing) configTenant.value = null;
+    if (!domainForm.processing && !channexForm.processing && !pokForm.processing && !fatureForm.processing) configTenant.value = null;
 }
 
 function refreshConfig() {
@@ -141,6 +149,20 @@ function saveChannex() {
 
 function savePok() {
     pokForm.put(route('super-admin.tenants.integrations.update', [configTenant.value.id, 'pok']), {
+        preserveScroll: true,
+        onSuccess: refreshConfig,
+    });
+}
+
+function saveFature() {
+    fatureForm.put(route('super-admin.tenants.integrations.update', [configTenant.value.id, 'fature_al']), {
+        preserveScroll: true,
+        onSuccess: refreshConfig,
+    });
+}
+
+function testFature() {
+    router.post(route('super-admin.tenants.integrations.test', [configTenant.value.id, 'fature_al']), {}, {
         preserveScroll: true,
         onSuccess: refreshConfig,
     });
@@ -583,6 +605,12 @@ function statusLabel(status) {
                                     <span class="text-sm text-neutral-600">POK</span>
                                     <span class="text-sm font-medium" :class="selectedTenant.integrations.pok.enabled && selectedTenant.integrations.pok.has_key_id ? 'text-emerald-700' : 'text-amber-700'">{{ selectedTenant.integrations.pok.enabled && selectedTenant.integrations.pok.has_key_id ? t('superAdmin.dynamic.configured') : t('superAdmin.dynamic.needsConfiguration') }}</span>
                                 </div>
+                                <div class="flex items-center justify-between gap-3 px-4 py-3">
+                                    <span class="text-sm text-neutral-600">{{ fatureName }}</span>
+                                    <span class="text-sm font-medium" :class="selectedTenant.integrations.fature_al.enabled && selectedTenant.integrations.fature_al.has_api_token ? 'text-emerald-700' : 'text-neutral-500'">
+                                        {{ selectedTenant.integrations.fature_al.enabled && selectedTenant.integrations.fature_al.has_api_token ? t('superAdmin.dynamic.configured') : 'Jo aktiv' }}
+                                    </span>
+                                </div>
                             </div>
                         </section>
 
@@ -798,7 +826,7 @@ function statusLabel(status) {
                         <button class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" type="button" :aria-label="$t('superAdmin.auto.copy075')" @click="closeConfig"><X class="h-5 w-5" /></button>
                     </div>
 
-                    <div class="grid grid-cols-3 border-b border-neutral-200 bg-neutral-50/70 px-3 pt-2 sm:px-6">
+                    <div class="grid grid-cols-2 border-b border-neutral-200 bg-neutral-50/70 px-3 pt-2 sm:grid-cols-4 sm:px-6">
                         <button type="button" class="flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition" :class="configTab === 'domains' ? 'border-[#24624f] text-[#24624f]' : 'border-transparent text-neutral-500 hover:text-neutral-800'" @click="configTab = 'domains'">
                             <Globe class="h-4 w-4" /> {{ t('superAdmin.dynamic.domains') }}
                             <span class="rounded-full bg-neutral-200/70 px-1.5 py-0.5 text-[10px]">{{ configTenant.domains.length }}</span>
@@ -810,6 +838,10 @@ function statusLabel(status) {
                         <button type="button" class="flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition" :class="configTab === 'pok' ? 'border-[#24624f] text-[#24624f]' : 'border-transparent text-neutral-500 hover:text-neutral-800'" @click="configTab = 'pok'">
                             <CreditCard class="h-4 w-4" /> POK
                             <span class="h-2 w-2 rounded-full" :class="configTenant.integrations.pok.enabled && configTenant.integrations.pok.has_key_id ? 'bg-emerald-500' : 'bg-neutral-300'" />
+                        </button>
+                        <button type="button" class="flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition" :class="configTab === 'fature_al' ? 'border-[#24624f] text-[#24624f]' : 'border-transparent text-neutral-500 hover:text-neutral-800'" @click="configTab = 'fature_al'">
+                            <FileCheck2 class="h-4 w-4" /> {{ fatureName }}
+                            <span class="h-2 w-2 rounded-full" :class="configTenant.integrations.fature_al.enabled && configTenant.integrations.fature_al.has_api_token ? 'bg-emerald-500' : 'bg-neutral-300'" />
                         </button>
                     </div>
 
@@ -896,7 +928,7 @@ function statusLabel(status) {
                             </div>
                         </form>
 
-                        <form v-else class="space-y-5" @submit.prevent="savePok">
+                        <form v-else-if="configTab === 'pok'" class="space-y-5" @submit.prevent="savePok">
                             <div class="flex flex-col gap-4 rounded-xl border border-neutral-200 bg-neutral-50/60 p-4 sm:flex-row sm:items-center">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-neutral-500 shadow-sm"><CreditCard class="h-5 w-5" /></span>
                                 <div class="mr-auto">
@@ -935,6 +967,65 @@ function statusLabel(status) {
                             <div class="rounded-xl bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">{{ $t('superAdmin.auto.copy015') }}</div>
                             <div class="flex justify-end border-t border-neutral-200 pt-4">
                                 <Button type="submit" :disabled="pokForm.processing">{{ pokForm.processing ? 'Duke ruajtur…' : 'Ruaj POK' }}</Button>
+                            </div>
+                        </form>
+
+                        <form v-else class="space-y-5" @submit.prevent="saveFature">
+                            <div class="flex flex-col gap-4 rounded-xl border border-neutral-200 bg-neutral-50/60 p-4 sm:flex-row sm:items-center">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-[#24624f] shadow-sm"><FileCheck2 class="h-5 w-5" /></span>
+                                <div class="mr-auto">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h3 class="font-semibold text-neutral-900">{{ fatureName }} · {{ $t('integrationCenter.fiscalization') }}</h3>
+                                        <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="configTenant.integrations.fature_al.has_api_token ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-200/70 text-neutral-500'">
+                                            <Check v-if="configTenant.integrations.fature_al.has_api_token" class="h-3 w-3" />{{ configTenant.integrations.fature_al.has_api_token ? 'Token-i është ruajtur' : 'Pa token API' }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 text-xs text-neutral-500">{{ $t('integrationCenter.tenantSecureConfig') }}</p>
+                                </div>
+                                <label class="flex shrink-0 cursor-pointer items-center gap-3 text-sm font-medium text-neutral-700">
+                                    {{ $t('integrationCenter.active') }}
+                                    <input v-model="fatureForm.enabled" type="checkbox" class="peer sr-only" />
+                                    <span class="relative h-6 w-11 rounded-full bg-neutral-300 transition peer-checked:bg-emerald-600 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:after:translate-x-5" />
+                                </label>
+                            </div>
+
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <label class="text-sm font-medium text-neutral-700">{{ $t('integrationCenter.apiToken') }}
+                                    <input
+                                        v-model="fatureForm.api_token"
+                                        type="password"
+                                        autocomplete="new-password"
+                                        class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"
+                                        :placeholder="configTenant.integrations.fature_al.has_api_token ? 'Lëre bosh për të mbajtur token-in aktual' : 'Vendos token-in nga fature.al'"
+                                    />
+                                    <span v-if="fatureForm.errors.api_token" class="mt-1 block text-xs text-danger-600">{{ fatureForm.errors.api_token }}</span>
+                                </label>
+                                <label class="text-sm font-medium text-neutral-700">{{ $t('integrationCenter.environment') }}
+                                    <select v-model="fatureForm.environment" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm">
+                                        <option value="sandbox">{{ $t('integrationCenter.sandboxOption') }}</option>
+                                        <option value="production">{{ $t('integrationCenter.productionOption') }}</option>
+                                    </select>
+                                    <span v-if="fatureForm.errors.environment" class="mt-1 block text-xs text-danger-600">{{ fatureForm.errors.environment }}</span>
+                                </label>
+                            </div>
+
+                            <div v-if="fatureForm.environment === 'sandbox'" class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
+                                {{ $t('integrationCenter.sandboxHint') }}
+                            </div>
+                            <div v-else class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+                                {{ $t('integrationCenter.productionWarning') }}
+                            </div>
+
+                            <div class="flex flex-col-reverse justify-end gap-2 border-t border-neutral-200 pt-4 sm:flex-row">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    :disabled="!configTenant.integrations.fature_al.enabled || !configTenant.integrations.fature_al.has_api_token"
+                                    @click="testFature"
+                                >
+                                    {{ $t('integrationCenter.testConnection') }}
+                                </Button>
+                                <Button type="submit" :disabled="fatureForm.processing">{{ fatureForm.processing ? 'Duke ruajtur…' : 'Ruaj fature.al' }}</Button>
                             </div>
                         </form>
                     </div>
