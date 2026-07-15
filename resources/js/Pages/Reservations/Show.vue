@@ -1,6 +1,6 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { router, usePage, useForm, Link } from '@inertiajs/vue3';
 import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -14,6 +14,7 @@ import Select from '@/Components/UI/Select.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import AuditTimeline from '@/Components/AuditTimeline.vue';
+import HotelInvoice from '@/Components/Invoices/HotelInvoice.vue';
 import { channelMeta } from '@/channels';
 import {
     ArrowLeft,
@@ -26,6 +27,7 @@ import {
     CreditCard,
     DoorOpen,
     FileText,
+    PackageOpen,
     Plus,
     RefreshCcw,
     ShieldCheck,
@@ -38,16 +40,23 @@ const props = defineProps({
     payments: Array,
     openPosOrders: Array,
     history: { type: Array, default: () => [] },
+    inventoryEnabled: { type: Boolean, default: false },
+    inventoryItems: { type: Array, default: () => [] },
+    inventoryWarehouses: { type: Array, default: () => [] },
     currency: { type: String, default: '€' },
+    invoicePrint: { type: Object, default: () => ({}) },
+    fiscalization: { type: Object, default: () => ({ configured: false, verified: false, environment: 'sandbox', document: null }) },
 });
 
 const toasts = ref(null);
 const checkingOut = ref(false);
 const showLineModal = ref(false);
+const showMinibarModal = ref(false);
 const showPayModal = ref(false);
 const showInvoice = ref(false);
 const checkoutMode = ref(false);
 const paymentSubmitting = ref(false);
+const fiscalizing = ref(false);
 
 const perms = usePage().props.auth.user?.permissions || [];
 const canUpdate = perms.includes('update_reservations');
@@ -81,11 +90,11 @@ const typeLabel = {
 };
 const methodLabel = { cash: 'Kesh', card: 'Karte' };
 
-const lineTypeOptions = [
-    { value: 'minibar', label: translate('admin.generated.k_c88066bb10cd') },
+const lineTypeOptions = computed(() => [
+    ...(!props.inventoryEnabled ? [{ value: 'minibar', label: translate('admin.generated.k_c88066bb10cd') }] : []),
     { value: 'extra', label: translate('admin.generated.k_74f0c49d9770') },
     { value: 'discount', label: translate('admin.generated.k_0f4209c81496') },
-];
+]);
 const methodOptions = [
     { value: 'cash', label: translate('admin.generated.k_da508864861c') },
     { value: 'card', label: translate('admin.generated.k_6d64b27daef1') },
@@ -94,7 +103,6 @@ const methodOptions = [
 const hasOpenOrders = computed(() => (props.openPosOrders?.length || 0) > 0);
 const unsettled = computed(() => Number(props.folio.outstanding) > 0.005);
 const canAddCharge = computed(() => canUpdate && ['pending', 'confirmed', 'checked_in'].includes(props.reservation.status));
-const hotelName = usePage().props.settings?.hotel_name || 'Hotel';
 const isCheckedIn = computed(() => props.reservation.status === 'checked_in');
 const guestInitials = computed(() => (props.reservation.guest?.name || '?')
     .split(/\s+/)
@@ -125,21 +133,80 @@ const checkoutState = computed(() => {
     };
 });
 
-// Group folio charges by category for the invoice (room + bar + restaurant + ...).
-const invoiceGroups = computed(() => {
-    const g = { room: Number(props.folio.roomCharge) || 0, bar: 0, restaurant: 0, minibar: 0, extra: 0, discount: 0 };
-    for (const it of (props.folio.items || [])) g[it.type] = (g[it.type] || 0) + Number(it.amount);
-    return ['room', 'bar', 'restaurant', 'minibar', 'extra', 'discount']
-        .filter((k) => g[k] > 0)
-        .map((k) => ({ key: k, label: typeLabel[k], amount: g[k] }));
-});
-
 function printInvoice() {
+    document.body.classList.add('printing-hotel-invoice');
     window.print();
+    window.setTimeout(() => document.body.classList.remove('printing-hotel-invoice'), 500);
+}
+
+const fiscalDocument = computed(() => props.fiscalization?.document || null);
+const fiscalized = computed(() => fiscalDocument.value?.status === 'fiscalized');
+const vatSummaryLabel = computed(() => {
+    if (props.folio.vatStatus === 'not_registered') return translate('invoicePrint.withoutVat');
+    if (props.folio.vatStatus === 'registered') {
+        return `${translate('reservationShow.vat')} (${props.folio.accommodationVatRate}% / ${props.folio.productVatRate}%)`;
+    }
+
+    return `${translate('reservationShow.vat')} (${translate('admin.vatSettings.notConfigured')})`;
+});
+const fiscalPaymentLabel = computed(() => (
+    props.fiscalization?.payment_method === 'cash'
+        ? translate('reservationShow.fiscalCash')
+        : props.fiscalization?.payment_method === 'card'
+            ? translate('reservationShow.fiscalCard')
+            : translate('reservationShow.fiscalMixed')
+));
+
+function fiscalizeInvoice() {
+    if (!props.fiscalization?.can_issue || fiscalizing.value) return;
+    fiscalizing.value = true;
+    router.post(route('reservations.fiscalize', props.reservation.id), {}, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => toasts.value?.success(translate('reservationShow.fiscalSuccess')),
+        onError: (errors) => toasts.value?.error(errors.fiscalization || translate('reservationShow.fiscalFailed')),
+        onFinish: () => { fiscalizing.value = false; },
+    });
 }
 
 const lineForm = useForm({ type: 'extra', description: '', amount: '', charge_date: '' });
+const newInventoryReference = () => globalThis.crypto?.randomUUID?.()
+    || '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (digit) => (
+        Number(digit) ^ Math.floor(Math.random() * 16) >> Number(digit) / 4
+    ).toString(16));
+const minibarForm = useForm({
+    inventory_item_id: '',
+    warehouse_id: '',
+    quantity: 1,
+    inventory_reference: newInventoryReference(),
+});
 const payForm = useForm({ amount: '', method: 'cash' });
+
+const minibarItemOptions = computed(() => props.inventoryItems.map((item) => ({
+    value: item.id,
+    label: `${item.name} · ${item.sku}`,
+})));
+const selectedMinibarItem = computed(() => props.inventoryItems.find(
+    (item) => Number(item.id) === Number(minibarForm.inventory_item_id),
+));
+const selectedMinibarWarehouse = computed(() => props.inventoryWarehouses.find(
+    (warehouse) => Number(warehouse.id) === Number(minibarForm.warehouse_id),
+));
+watch(() => minibarForm.inventory_item_id, () => {
+    if (selectedMinibarItem.value?.room_warehouse_id) minibarForm.warehouse_id = selectedMinibarItem.value.room_warehouse_id;
+});
+const minibarAvailable = computed(() => Number(
+    selectedMinibarItem.value?.warehouse_stock?.[String(minibarForm.warehouse_id)] ?? 0,
+));
+const minibarQuantity = computed(() => Number(minibarForm.quantity));
+const minibarTotal = computed(() => Number(selectedMinibarItem.value?.selling_price || 0) * Math.max(0, minibarQuantity.value || 0));
+const minibarCanSubmit = computed(() => (
+    minibarForm.inventory_item_id
+    && minibarForm.warehouse_id
+    && Number.isFinite(minibarQuantity.value)
+    && minibarQuantity.value > 0
+    && minibarQuantity.value <= minibarAvailable.value + 0.00005
+));
 
 const paymentAmount = computed(() => Number(payForm.amount));
 const paymentIsValid = computed(() => (
@@ -157,6 +224,39 @@ function closeLineModal() {
     showLineModal.value = false;
     lineForm.reset();
     lineForm.clearErrors();
+}
+
+function openMinibarModal() {
+    minibarForm.clearErrors();
+    const itemWithStock = props.inventoryItems.find(
+        (item) => Number(item.warehouse_stock?.[String(item.room_warehouse_id)] || 0) > 0,
+    ) || props.inventoryItems.find(
+        (item) => Object.values(item.warehouse_stock || {}).some((quantity) => Number(quantity) > 0),
+    );
+    minibarForm.inventory_item_id = itemWithStock?.id || props.inventoryItems[0]?.id || '';
+    minibarForm.warehouse_id = itemWithStock?.room_warehouse_id || props.inventoryItems[0]?.room_warehouse_id || '';
+    minibarForm.quantity = 1;
+    minibarForm.inventory_reference = newInventoryReference();
+    showMinibarModal.value = true;
+}
+
+function closeMinibarModal() {
+    if (minibarForm.processing) return;
+    showMinibarModal.value = false;
+    minibarForm.clearErrors();
+}
+
+function submitMinibar() {
+    if (!minibarCanSubmit.value || minibarForm.processing) return;
+    minibarForm.post(route('reservations.folio.inventory', props.reservation.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            showMinibarModal.value = false;
+            minibarForm.inventory_reference = newInventoryReference();
+            toasts.value?.success('Minibari u regjistrua dhe stoku u përditësua.');
+        },
+        onError: (errors) => toasts.value?.error(Object.values(errors)[0] || 'Minibari nuk u regjistrua.'),
+    });
 }
 
 function openPaymentModal() {
@@ -297,6 +397,7 @@ function settleAndCheckout(method) {
                         {{ $t('reservationShow.more') }} <ChevronDown class="h-4 w-4 transition group-open:rotate-180" />
                     </summary>
                     <div class="absolute right-0 z-30 mt-2 w-52 overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
+                        <button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="openMinibarModal"><PackageOpen class="h-4 w-4" />Shto minibar</button>
                         <button v-if="canAddCharge" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="openLineModal"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</button>
                         <button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="openPaymentModal"><CreditCard class="h-4 w-4" />{{ $t('reservationShow.recordPayment') }}</button>
                         <button v-if="canUpdate && isCheckedIn" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" :disabled="requestingCleaning" @click="requestCleaning"><RefreshCcw class="h-4 w-4" />{{ $t('reservationShow.requestCleaning') }}</button>
@@ -411,7 +512,10 @@ function settleAndCheckout(method) {
             <Card class="lg:order-1 lg:col-span-2" :padding="false">
                 <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
                     <div><h3 class="text-lg font-semibold text-neutral-900">{{ $t('reservationShow.folioTitle') }}</h3><p class="mt-1 text-xs text-neutral-500">{{ $t('reservationShow.folioSubtitle') }}</p></div>
-                    <Button v-if="canAddCharge" size="sm" variant="outline" @click="openLineModal"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</Button>
+                    <div class="flex items-center gap-2">
+                        <Button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" size="sm" variant="primary" @click="openMinibarModal"><PackageOpen class="h-4 w-4" />Shto minibar</Button>
+                        <Button v-if="canAddCharge" size="sm" variant="outline" @click="openLineModal"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</Button>
+                    </div>
                 </div>
 
                 <!-- Open POS warning -->
@@ -472,7 +576,7 @@ function settleAndCheckout(method) {
                         <span>{{ money(folio.net) }}</span>
                     </div>
                     <div class="flex justify-between text-body-sm text-neutral-500">
-                        <span>{{ $t('reservationShow.vat') }} ({{ folio.taxRate }}%)</span>
+                        <span>{{ vatSummaryLabel }}</span>
                         <span>{{ money(folio.taxAmount) }}</span>
                     </div>
                     <div v-if="folio.discounts > 0" class="flex justify-between text-body-sm text-success-600">
@@ -517,6 +621,39 @@ function settleAndCheckout(method) {
                 <AuditTimeline :entries="history" />
             </Card>
         </div>
+
+        <!-- Inventory-backed minibar: folio charge and stock movement are one transaction. -->
+        <Modal :show="showMinibarModal" :title="$t('reservationShow.minibarTitle')" max-width="md" :closeable="!minibarForm.processing" @close="closeMinibarModal">
+            <form class="space-y-4" @submit.prevent="submitMinibar">
+                <div class="rounded-lg border border-accent-100 bg-accent-50/60 px-3 py-2.5 text-small text-accent-900">{{ $t('reservationShow.minibarHint') }}</div>
+                <div class="grid gap-3 sm:grid-cols-[72px_1fr]">
+                    <div class="grid h-[72px] w-[72px] place-items-center overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50">
+                        <img v-if="selectedMinibarItem?.image_path" :src="`/storage/${selectedMinibarItem.image_path}`" :alt="selectedMinibarItem.name" class="h-full w-full object-cover" />
+                        <PackageOpen v-else class="h-6 w-6 text-neutral-300" />
+                    </div>
+                    <FormGroup :label="$t('reservationShow.inventoryItem')" :error="minibarForm.errors.inventory_item_id" required>
+                        <Select v-model="minibarForm.inventory_item_id" :options="minibarItemOptions" :error="minibarForm.errors.inventory_item_id" />
+                    </FormGroup>
+                </div>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <FormGroup :label="$t('reservationShow.warehouse')" :error="minibarForm.errors.warehouse_id" required>
+                        <div class="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-body-sm font-medium text-neutral-700">{{ selectedMinibarWarehouse?.name || '—' }}</div>
+                    </FormGroup>
+                    <FormGroup :label="$t('reservationShow.quantity')" :error="minibarForm.errors.quantity" required>
+                        <TextInput v-model="minibarForm.quantity" type="number" min="0.0001" :max="minibarAvailable" step="0.0001" :error="minibarForm.errors.quantity" />
+                    </FormGroup>
+                </div>
+                <div class="grid grid-cols-2 gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-body-sm">
+                    <div><p class="text-neutral-500">{{ $t('reservationShow.availableStock') }}</p><p class="mt-1 font-semibold" :class="minibarAvailable > 0 ? 'text-success-700' : 'text-error-600'">{{ minibarAvailable }} {{ selectedMinibarItem?.unit || '' }}</p></div>
+                    <div class="text-right"><p class="text-neutral-500">{{ $t('reservationShow.folioTotal') }}</p><p class="mt-1 font-semibold text-primary-900">{{ money(minibarTotal) }}</p></div>
+                </div>
+                <p v-if="minibarQuantity > minibarAvailable" class="text-small font-medium text-error-600">{{ $t('reservationShow.insufficientStock') }}</p>
+            </form>
+            <template #footer>
+                <Button variant="outline" :disabled="minibarForm.processing" @click="closeMinibarModal">{{ $t('admin.generated.k_1ae76507a0e9') }}</Button>
+                <Button variant="primary" :loading="minibarForm.processing" :disabled="!minibarCanSubmit" @click="submitMinibar">{{ $t('reservationShow.postMinibar') }}</Button>
+            </template>
+        </Modal>
 
         <!-- Add a hotel charge to the guest account. Food/drinks come from POS. -->
         <Modal
@@ -632,45 +769,59 @@ function settleAndCheckout(method) {
         </Modal>
 
         <!-- Invoice (Fature) modal — also the settle-then-checkout flow -->
-        <Modal :show="showInvoice" :title="checkoutMode ? $t('admin.generated.k_d0677fc34bd1') : $t('admin.generated.k_9b8aa645dbf0')" max-width="lg" @close="showInvoice = false">
-            <div id="invoice" class="space-y-4 text-primary-900">
-                <div class="text-center border-b border-neutral-200 pb-3">
-                    <p class="text-h3">{{ hotelName }}</p>
-                    <p class="text-body-sm text-neutral-500">{{ $t('admin.generated.k_8f10080f8f3f') }}{{ reservation.id }}</p>
-                </div>
+        <Modal :show="showInvoice" :title="checkoutMode ? $t('admin.generated.k_d0677fc34bd1') : $t('admin.generated.k_9b8aa645dbf0')" max-width="4xl" @close="showInvoice = false">
+            <div class="overflow-x-auto rounded-xl bg-neutral-100 py-4">
+                <HotelInvoice
+                    :reservation="reservation"
+                    :folio="folio"
+                    :payments="payments"
+                    :meta="invoicePrint"
+                    :fiscal-document="fiscalDocument"
+                    class="shadow-xl"
+                />
+            </div>
 
-                <div class="flex justify-between text-body-sm">
-                    <div>
-                        <p class="text-neutral-500">{{ $t('admin.generated.k_93eeb8e2c428') }}</p>
-                        <p class="font-medium">{{ reservation.guest?.name }}</p>
+            <div v-if="!checkoutMode" class="mt-4 rounded-xl border p-4 print:hidden"
+                 :class="fiscalized ? 'border-success-200 bg-success-50/70' : fiscalDocument?.status === 'failed' ? 'border-error-200 bg-error-50/70' : 'border-info-200 bg-info-50/70'">
+                <div class="flex items-start gap-3">
+                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+                          :class="fiscalized ? 'bg-success-100 text-success-700' : fiscalDocument?.status === 'failed' ? 'bg-error-100 text-error-700' : 'bg-info-100 text-info-700'">
+                        <ShieldCheck class="h-5 w-5" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <p class="font-semibold text-neutral-900">{{ $t('reservationShow.fiscalTitle') }}</p>
+                                <p class="mt-0.5 text-xs text-neutral-600">{{ $t('reservationShow.fiscalSandbox') }}</p>
+                            </div>
+                            <Badge v-if="fiscalized" variant="success">{{ $t('reservationShow.fiscalized') }}</Badge>
+                            <Badge v-else-if="fiscalDocument?.status === 'failed'" variant="error">{{ $t('reservationShow.fiscalRetry') }}</Badge>
+                            <Badge v-else variant="info">{{ $t('reservationShow.fiscalEnvironmentSandbox') }}</Badge>
+                        </div>
+
+                        <div v-if="fiscalized" class="mt-3 grid gap-2 rounded-lg border border-success-200 bg-white/70 p-3 text-xs sm:grid-cols-2">
+                            <div><span class="text-neutral-500">{{ $t('reservationShow.fiscalNumber') }}</span><p class="mt-0.5 font-semibold text-neutral-900">{{ fiscalDocument.fiscal_number || '—' }}</p></div>
+                            <div><span class="text-neutral-500">IIC</span><p class="mt-0.5 truncate font-mono text-neutral-900">{{ fiscalDocument.iic || '—' }}</p></div>
+                        </div>
+
+                        <p v-else-if="!fiscalization.configured" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalNotConfigured') }}</p>
+                        <p v-else-if="fiscalization.environment !== 'sandbox'" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalProductionBlocked') }}</p>
+                        <p v-else-if="!fiscalization.verified" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalNotVerified') }}</p>
+                        <p v-else-if="!fiscalization.vat_configured" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.vatNotConfigured') }}</p>
+                        <p v-else-if="!fiscalization.vat_matches_provider" class="mt-3 text-sm text-error-700">{{ $t('reservationShow.vatProviderMismatch') }}</p>
+                        <p v-else-if="reservation.status !== 'checked_out'" class="mt-3 text-sm text-neutral-700">{{ $t('reservationShow.fiscalAfterCheckout') }}</p>
+                        <p v-else-if="!['cash', 'card'].includes(fiscalization.payment_method)" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalSinglePayment') }}</p>
+                        <template v-else>
+                            <p v-if="fiscalDocument?.last_error" class="mt-3 text-sm text-error-700">{{ fiscalDocument.last_error }}</p>
+                            <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+                                <p class="text-xs text-neutral-600">{{ $t('reservationShow.fiscalPayment') }}: <span class="font-semibold text-neutral-900">{{ fiscalPaymentLabel }}</span> · {{ money(folio.gross) }}</p>
+                                <Button variant="success" size="sm" :loading="fiscalizing" :disabled="!fiscalization.can_issue" @click="fiscalizeInvoice">
+                                    <ShieldCheck class="h-4 w-4" /> {{ fiscalDocument?.status === 'failed' ? $t('reservationShow.fiscalRetryButton') : $t('reservationShow.fiscalizeButton') }}
+                                </Button>
+                            </div>
+                        </template>
                     </div>
-                    <div class="text-right">
-                        <p class="text-neutral-500">{{ $t('admin.generated.k_7765353fdc9c') }} {{ reservation.room?.room_number }} — {{ reservation.room?.room_type }}</p>
-                        <p>{{ formatDate(reservation.check_in_date) }} → {{ formatDate(reservation.check_out_date) }} · {{ reservation.nights }} {{ $t('admin.generated.k_24dc7df026eb') }}</p>
-                    </div>
                 </div>
-
-                <table class="w-full text-body-sm">
-                    <tbody>
-                        <tr v-for="g in invoiceGroups" :key="g.key" class="border-b border-neutral-100">
-                            <td class="py-2">{{ g.label }}</td>
-                            <td class="py-2 text-right" :class="g.key === 'discount' ? 'text-success-600' : ''">{{ g.key === 'discount' ? '−' : '' }}{{ money(g.amount) }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <div class="space-y-1.5 text-body-sm border-t border-neutral-200 pt-3">
-                    <div class="flex justify-between text-neutral-500"><span>{{ $t('admin.generated.k_8e7d78994587') }}</span><span>{{ money(folio.net) }}</span></div>
-                    <div class="flex justify-between text-neutral-500"><span>{{ $t('admin.generated.k_aca304907dc3') }}{{ folio.taxRate }}%)</span><span>{{ money(folio.taxAmount) }}</span></div>
-                    <div class="flex justify-between font-medium border-t border-neutral-100 pt-1.5"><span>{{ $t('admin.generated.k_eb3e69f5ad4a') }}</span><span>{{ money(folio.gross) }}</span></div>
-                    <div class="flex justify-between text-neutral-500"><span>{{ $t('admin.generated.k_ea1bc96b45a5') }}</span><span>− {{ money(folio.paid) }}</span></div>
-                    <div class="flex justify-between border-t border-neutral-200 pt-2">
-                        <span class="font-semibold">{{ $t('admin.generated.k_224908982d79') }}</span>
-                        <span class="text-h4" :class="unsettled ? 'text-error-600' : 'text-success-600'">{{ money(folio.outstanding) }}</span>
-                    </div>
-                </div>
-
-                <p class="text-tiny text-neutral-400 text-center pt-2">{{ $t('admin.generated.k_60a30ee15a06') }}</p>
             </div>
 
             <!-- Checkout call-to-action (not part of the printed invoice) -->
@@ -712,8 +863,9 @@ function settleAndCheckout(method) {
 
 <style>
 @media print {
-    body * { visibility: hidden !important; }
-    #invoice, #invoice * { visibility: visible !important; }
-    #invoice { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+    @page { size: A4; margin: 0; }
+    body.printing-hotel-invoice * { visibility: hidden !important; }
+    body.printing-hotel-invoice #hotel-invoice, body.printing-hotel-invoice #hotel-invoice * { visibility: visible !important; }
+    body.printing-hotel-invoice #hotel-invoice { position: absolute; left: 0; top: 0; margin: 0; box-shadow: none !important; }
 }
 </style>

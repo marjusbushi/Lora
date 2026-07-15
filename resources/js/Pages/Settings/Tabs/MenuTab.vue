@@ -178,6 +178,7 @@ function deleteItem(item) {
                         <div>
                             <span class="text-body-sm text-primary-900 font-medium">{{ item.name }}</span>
                             <span class="text-body-sm text-accent-600 font-medium ml-2">€{{ item.price }}</span>
+                            <span v-if="item.inventory_item_id" class="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Nga inventari</span>
                             <span v-if="item.inventory_components?.length" class="mt-0.5 block text-tiny text-neutral-400">{{ item.inventory_components.length }} {{ $t('inventory.pos.components') }}</span>
                         </div>
                         <Badge v-if="!item.is_available" variant="error" size="sm">{{ $t('admin.generated.k_0389a69f50e1') }}</Badge>
@@ -186,8 +187,8 @@ function deleteItem(item) {
                         <Button size="sm" variant="ghost" @click="toggleItem(item)">
                             {{ item.is_available ? $t('admin.generated.k_fe06b9e8b743') : $t('admin.generated.k_31730ad3e645') }}
                         </Button>
-                        <Button size="sm" variant="ghost" @click="openEditItem(item)">{{ $t('admin.generated.k_69b7a8e80aee') }}</Button>
-                        <Button size="sm" variant="ghost" class="text-error-600" @click="deleteItem(item)">{{ $t('admin.generated.k_94078f0402e2') }}</Button>
+                        <Button v-if="!item.inventory_item_id" size="sm" variant="ghost" @click="openEditItem(item)">{{ $t('admin.generated.k_69b7a8e80aee') }}</Button>
+                        <Button v-if="!item.inventory_item_id" size="sm" variant="ghost" class="text-error-600" @click="deleteItem(item)">{{ $t('admin.generated.k_94078f0402e2') }}</Button>
                     </div>
                 </div>
             </div>

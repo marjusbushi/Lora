@@ -6,7 +6,6 @@ use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
 use App\Models\Payment;
 use App\Models\PosShift;
-
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -28,7 +27,11 @@ class FinanceLedger
 
         $type = $method === 'cash' ? 'cash' : 'bank';
 
-        return FinanceAccount::where('type', $type)->where('is_active', true)->orderBy('id')->firstOrFail();
+        return FinanceAccount::where('type', $type)
+            ->where('currency', BaseCurrency::code())
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->firstOrFail();
     }
 
     /** Mirror one folio payment into the ledger (or remove it when voided). */
@@ -44,7 +47,8 @@ class FinanceLedger
             return null; // refunds/adjustments are out of Phase 1 scope
         }
 
-        $currency = strtoupper((string) ($payment->currency ?: 'EUR'));
+        $baseCurrency = BaseCurrency::code();
+        $currency = strtoupper((string) ($payment->currency ?: $baseCurrency));
         $method = in_array($payment->method, ['cash', 'card', 'bank', 'pok', 'ota'], true) ? $payment->method : 'card';
 
         return FinancePayment::updateOrCreate(
@@ -54,7 +58,7 @@ class FinanceLedger
                 'account_id' => self::accountFor($method)->id,
                 'amount' => $payment->amount,
                 'currency' => $currency,
-                'fx_rate' => $currency === 'EUR' ? null : $this->fxRate(),
+                'fx_rate' => $currency === $baseCurrency ? null : $this->fxRate($currency),
                 'method' => $method,
                 'source' => 'auto',
                 'description' => 'Pagesë folio — rezervimi #'.$payment->reservation_id,
@@ -90,7 +94,7 @@ class FinanceLedger
                 'direction' => $yield > 0 ? 'in' : 'out',
                 'account_id' => self::accountFor('cash')->id,
                 'amount' => abs($yield),
-                'currency' => 'EUR',
+                'currency' => BaseCurrency::code(),
                 'fx_rate' => null,
                 'method' => 'cash',
                 'source' => 'auto',
@@ -109,12 +113,12 @@ class FinanceLedger
             ->delete();
     }
 
-    /** ALL-per-EUR rate: the daily API rate first, manual Settings fallback. */
-    protected function fxRate(): float
+    /** Quote-currency units per one base-currency unit, frozen on the row. */
+    protected function fxRate(string $currency): float
     {
-        $fx = (float) (CurrencyRates::rate('ALL') ?? 0);
+        $fx = (float) (BaseCurrency::rate($currency) ?? 0);
         if ($fx <= 0) {
-            throw new \RuntimeException('Kursi ALL/EUR mungon — aktivizo Settings → Monedhat ose vendos financial.fx_all_per_eur.');
+            throw new \RuntimeException("Kursi {$currency}/".BaseCurrency::code().' mungon — aktivizo Settings → Monedhat ose vendos kursin manual.');
         }
 
         return $fx;

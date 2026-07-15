@@ -26,6 +26,11 @@ class AuditTimeline
         'housekeeping.stayover_requested' => 'U kërkua pastrim ditor',
         'pos.complete' => 'U mbyll porosia POS',
         'pos.cancel' => 'U anulua porosia POS',
+        'fiscalization.completed' => 'Fatura u fiskalizua',
+        'fiscalization.failed' => 'Fiskalizimi i faturës dështoi',
+        'fiscalization.retry_payload_updated' => 'U përgatit riprovimi i fiskalizimit',
+        'pos.fiscalization.completed' => 'Fatura POS u fiskalizua',
+        'pos.fiscalization.failed' => 'Fiskalizimi i POS-it dështoi',
         'user.create' => 'U krijua përdoruesi',
         'user.update' => 'U ndryshua përdoruesi',
         'user.delete' => 'U fshi përdoruesi',
@@ -103,15 +108,20 @@ class AuditTimeline
             ->values()
             ->all();
 
-        $details = collect($properties)
-            ->except(['changes', 'missing_room_id'])
-            ->filter(fn ($value) => is_scalar($value) && $value !== '')
-            ->map(fn ($value, $key) => [
-                'label' => self::DETAIL_LABELS[$key] ?? Str::headline($key),
-                'value' => $this->displayValue($value, $key),
-            ])
-            ->values()
-            ->all();
+        // The reservation timeline explains what happened. Fiscal invoice
+        // identifiers, payload hashes and provider metadata belong inside the
+        // invoice/integration record, not in the guest-facing stay history.
+        $details = str_contains($log->action, 'fiscalization')
+            ? []
+            : collect($properties)
+                ->except(['changes', 'missing_room_id'])
+                ->filter(fn ($value) => is_scalar($value) && $value !== '')
+                ->map(fn ($value, $key) => [
+                    'label' => self::DETAIL_LABELS[$key] ?? Str::headline($key),
+                    'value' => $this->displayValue($value, $key),
+                ])
+                ->values()
+                ->all();
 
         return [
             'id' => $log->id,

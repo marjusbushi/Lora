@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, watch } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import { ArrowRight, CalendarDays, CreditCard, DoorOpen, ExternalLink, Mail, Phone, UserRound, X } from 'lucide-vue-next';
 import Badge from '@/Components/UI/Badge.vue';
 import Button from '@/Components/UI/Button.vue';
@@ -11,6 +11,7 @@ const props = defineProps({
     canUpdate: { type: Boolean, default: false },
 });
 const emit = defineEmits(['close', 'edit', 'check-in', 'check-out']);
+const currencyCode = usePage().props.tenant?.currency || 'EUR';
 
 const statusMeta = {
     pending: { label: 'Në pritje', variant: 'warning' },
@@ -25,7 +26,7 @@ const guestName = computed(() => props.reservation?.guest?.name
     || '—');
 
 function money(value) {
-    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: 'EUR' }).format(Number(value || 0));
+    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currencyCode }).format(Number(value || 0));
 }
 function date(value) {
     if (!value) return '—';

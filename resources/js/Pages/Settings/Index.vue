@@ -15,6 +15,7 @@ import FinancialTab from './Tabs/FinancialTab.vue';
 import FloorsTab from './Tabs/FloorsTab.vue';
 import HotelTab from './Tabs/HotelTab.vue';
 import HousekeepingTab from './Tabs/HousekeepingTab.vue';
+import IntegrationsTab from './Tabs/IntegrationsTab.vue';
 import MarketRatesTab from './Tabs/MarketRatesTab.vue';
 import MenuTab from './Tabs/MenuTab.vue';
 import PricingProgramsTab from './Tabs/PricingProgramsTab.vue';
@@ -32,6 +33,7 @@ const props = defineProps({
     amenities: Array,
     userManagement: { type: Object, default: () => ({}) },
     auditHistory: { type: Object, default: () => ({}) },
+    integrations: { type: Array, default: () => [] },
 });
 
 const toasts = ref(null);
@@ -50,6 +52,7 @@ const allTabs = [
     { id: 'currencies', labelSq: 'Monedhat', labelEn: 'Currencies', group: 'operations', module: 'finance' },
     { id: 'pricing-programs', labelSq: 'Çmimet & OTA', labelEn: 'Pricing & OTA', group: 'operations' },
     { id: 'market-rates', labelSq: 'Çmimet e tregut', labelEn: 'Market rates', group: 'operations' },
+    { id: 'integrations', labelSq: 'Integrimet', labelEn: 'Integrations', group: 'system' },
     { id: 'ai', labelSq: 'Asistenti AI', labelEn: 'AI assistant', group: 'system' },
 ];
 
@@ -90,6 +93,7 @@ function selectTab(tab) {
                 <CurrenciesTab v-else-if="activeTab === 'currencies'" :settings="settings.currencies || {}" :toasts="toasts" />
                 <PricingProgramsTab v-else-if="activeTab === 'pricing-programs'" :settings="settings.pricing_programs || {}" :financial="settings.financial || {}" :toasts="toasts" />
                 <MarketRatesTab v-else-if="activeTab === 'market-rates'" :settings="settings.market_rates || {}" :toasts="toasts" />
+                <IntegrationsTab v-else-if="activeTab === 'integrations'" :integrations="integrations" :toasts="toasts" @select-tab="selectTab" />
                 <AiTab v-else-if="activeTab === 'ai'" :settings="settings.ai || {}" :toasts="toasts" />
                 <UsersPage v-else-if="activeTab === 'users'" v-bind="userManagement" embedded />
                 <AuditLogsPage v-else-if="activeTab === 'history'" v-bind="auditHistory" embedded />

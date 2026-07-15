@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\BaseCurrency;
+
 /**
  * Where the money sits: Arka (cash) or a bank account. The balance is NEVER
  * stored — it is always the sum of the ledger (finance_payments), so it can
@@ -21,14 +23,13 @@ class FinanceAccount extends TenantModel
     }
 
     /**
-     * Ledger balance in the ACCOUNT's own currency. A EUR account sums the
-     * frozen base value of every row (so paying a LEK bill from the EUR arka
-     * deducts its exact EUR equivalent); a non-EUR account only ever holds
+     * Ledger balance in the ACCOUNT's own currency. A base-currency account
+     * sums the frozen base value of every row; a foreign-currency account only holds
      * rows in its own currency (enforced at write time), so it sums amounts.
      */
     public function balance(): float
     {
-        $col = strtoupper((string) $this->currency) === 'EUR' ? 'amount_base' : 'amount';
+        $col = strtoupper((string) $this->currency) === BaseCurrency::code() ? 'amount_base' : 'amount';
 
         $in = (float) FinancePayment::where('account_id', $this->id)->where('direction', 'in')->sum($col);
         $out = (float) FinancePayment::where('account_id', $this->id)->where('direction', 'out')->sum($col);
@@ -41,7 +42,8 @@ class FinanceAccount extends TenantModel
     /** Default accounts, safe to call repeatedly (seeder + backfill + tests). */
     public static function ensureDefaults(): void
     {
-        static::firstOrCreate(['name' => 'Arka'], ['type' => 'cash', 'currency' => 'EUR']);
-        static::firstOrCreate(['name' => 'Banka'], ['type' => 'bank', 'currency' => 'EUR']);
+        $currency = BaseCurrency::code();
+        static::firstOrCreate(['name' => 'Arka'], ['type' => 'cash', 'currency' => $currency]);
+        static::firstOrCreate(['name' => 'Banka'], ['type' => 'bank', 'currency' => $currency]);
     }
 }

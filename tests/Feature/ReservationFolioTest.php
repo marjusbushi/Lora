@@ -110,7 +110,9 @@ class ReservationFolioTest extends TestCase
         ]);
         $item = InventoryItem::create([
             'name' => 'Ujë 0.5L', 'sku' => 'MIN-UJE', 'type' => 'product', 'unit' => 'piece',
-            'average_cost' => 0.35, 'selling_price' => 2.50, 'is_active' => true,
+            'average_cost' => 0.35, 'selling_price' => 2.50,
+            'sell_in_rooms' => true, 'room_selling_price' => 2.50,
+            'room_warehouse_id' => $warehouse->id, 'is_active' => true,
         ]);
         app(InventoryLedger::class)->openingBalance($item, $warehouse, 5, 0.35, null, $admin->id);
         $reference = '24e18df6-2409-4f37-a823-0d53540a0b7a';

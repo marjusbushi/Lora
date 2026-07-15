@@ -1,7 +1,6 @@
 <script setup>
 import { useI18n } from 'vue-i18n';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
-import PageHeader from '@/Components/UI/PageHeader.vue';
 import Button from '@/Components/UI/Button.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
@@ -11,6 +10,7 @@ import {
     CreditCard,
     Download,
     ExternalLink,
+    FileCheck2,
     Globe,
     Plug,
     Search,
@@ -19,10 +19,13 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+const fatureName = 'fature.al';
 const props = defineProps({
     tenants: Array,
     currentTenantId: Number,
+    currencyOptions: Array,
+    timezoneGroups: Object,
 });
 
 const form = useForm({
@@ -48,7 +51,7 @@ const showCreate = ref(false);
 const configTab = ref('domains');
 
 function openCreate() {
-    form.reset('name', 'slug', 'primary_domain', 'owner_name', 'owner_email');
+    form.reset();
     form.clearErrors();
     showCreate.value = true;
 }
@@ -61,10 +64,19 @@ function createTenant() {
     form.post(route('super-admin.tenants.store'), {
         preserveScroll: true,
         onSuccess: () => {
-            form.reset('name', 'slug', 'primary_domain', 'owner_name', 'owner_email');
+            form.reset();
             showCreate.value = false;
         },
     });
+}
+
+function currencyLabel(code) {
+    try {
+        const name = new Intl.DisplayNames([locale.value], { type: 'currency' }).of(code);
+        return `${code} — ${name}`;
+    } catch {
+        return code;
+    }
 }
 
 // ---- Konfigurimi (domains + integrimet) ----
@@ -73,6 +85,7 @@ const configTenant = ref(null);
 const domainForm = useForm({ domain: '' });
 const channexForm = useForm({ enabled: false, api_key: '', webhook_secret: '', property_id: '', base_url: '' });
 const pokForm = useForm({ enabled: false, key_id: '', key_secret: '', merchant_id: '', production: false });
+const fatureForm = useForm({ enabled: false, api_token: '', environment: 'sandbox' });
 
 function openConfig(tenant, resetTab = true) {
     if (resetTab) configTab.value = 'domains';
@@ -95,10 +108,15 @@ function openConfig(tenant, resetTab = true) {
     pokForm.merchant_id = tenant.integrations.pok.merchant_id || '';
     pokForm.production = tenant.integrations.pok.production;
     pokForm.clearErrors();
+
+    fatureForm.enabled = tenant.integrations.fature_al.enabled;
+    fatureForm.api_token = '';
+    fatureForm.environment = tenant.integrations.fature_al.environment || 'sandbox';
+    fatureForm.clearErrors();
 }
 
 function closeConfig() {
-    if (!domainForm.processing && !channexForm.processing && !pokForm.processing) configTenant.value = null;
+    if (!domainForm.processing && !channexForm.processing && !pokForm.processing && !fatureForm.processing) configTenant.value = null;
 }
 
 function refreshConfig() {
@@ -141,6 +159,20 @@ function saveChannex() {
 
 function savePok() {
     pokForm.put(route('super-admin.tenants.integrations.update', [configTenant.value.id, 'pok']), {
+        preserveScroll: true,
+        onSuccess: refreshConfig,
+    });
+}
+
+function saveFature() {
+    fatureForm.put(route('super-admin.tenants.integrations.update', [configTenant.value.id, 'fature_al']), {
+        preserveScroll: true,
+        onSuccess: refreshConfig,
+    });
+}
+
+function testFature() {
+    router.post(route('super-admin.tenants.integrations.test', [configTenant.value.id, 'fature_al']), {}, {
         preserveScroll: true,
         onSuccess: refreshConfig,
     });
@@ -314,6 +346,8 @@ function openBilling(tenant) {
 
 onMounted(() => {
     const params = new URLSearchParams(window.location.search);
+    if (params.get('create') === '1') showCreate.value = true;
+
     const tenantId = Number(params.get('manage'));
     const tenant = props.tenants.find((item) => item.id === tenantId);
     if (!tenant) return;
@@ -357,74 +391,70 @@ function statusLabel(status) {
     <Head :title="$t('admin.generated.k_0f144fdc6f3c')" />
 
     <SuperAdminLayout :title="$t('superAdmin.auto.copy071')">
-        <div class="mx-auto max-w-[1480px] space-y-6">
+        <div class="sa-page space-y-4">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <PageHeader
-                        :title="$t('superAdmin.auto.copy070')"
-                        :breadcrumbs="[{ label: 'Control Panel', href: '/super-admin' }, { label: t('superAdmin.auto.copy070') }]"
-                    />
-                    <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy031') }}</p>
+                    <div class="sa-breadcrumb"><Link href="/super-admin" class="text-inherit no-underline hover:text-neutral-700">Control Panel</Link><span class="mx-2">/</span><span>{{ t('superAdmin.auto.copy070') }}</span></div>
+                    <h1 class="sa-page-title">{{ t('superAdmin.auto.copy070') }}</h1>
+                    <p class="sa-page-subtitle">{{ t('superAdmin.auto.copy031') }}</p>
                 </div>
-                <Button variant="primary" @click="openCreate">+ {{ t('superAdmin.dynamic.addHotel') }}</Button>
+                <button type="button" class="sa-button sa-button-primary" @click="openCreate">+ {{ t('superAdmin.dynamic.addHotel') }}</button>
             </div>
 
-            <section class="grid gap-4 md:grid-cols-3">
-                <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
+            <section class="grid gap-3 md:grid-cols-3">
+                <article class="sa-card sa-kpi-card">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy017') }}</p>
-                            <p class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900">{{ summary.active }}</p>
-                            <p class="mt-1 text-xs text-neutral-400">{{ t('superAdmin.dynamic.platformUsersCount', { count: summary.users }) }}</p>
+                            <p class="sa-kpi-label">{{ t('superAdmin.auto.copy017') }}</p>
+                            <p class="sa-kpi-value">{{ summary.active }}</p>
+                            <p class="sa-kpi-meta">{{ t('superAdmin.dynamic.platformUsersCount', { count: summary.users }) }}</p>
                         </div>
-                        <span class="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><Building2 class="h-5 w-5" /></span>
+                        <span class="sa-icon-box-lg bg-emerald-50 text-emerald-700"><Building2 class="sa-icon-lg" /></span>
                     </div>
                 </article>
-                <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
+                <article class="sa-card sa-kpi-card">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy027') }}</p>
-                            <p class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900">{{ money(summary.mrr, 'EUR') }}</p>
-                            <p class="mt-1 text-xs text-neutral-400">{{ $t('superAdmin.auto.copy040') }}</p>
+                            <p class="sa-kpi-label">{{ t('superAdmin.auto.copy027') }}</p>
+                            <p class="sa-kpi-value">{{ money(summary.mrr, 'EUR') }}</p>
+                            <p class="sa-kpi-meta">{{ t('superAdmin.auto.copy040') }}</p>
                         </div>
-                        <span class="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-700"><CreditCard class="h-5 w-5" /></span>
+                        <span class="sa-icon-box-lg bg-blue-50 text-blue-700"><CreditCard class="sa-icon-lg" /></span>
                     </div>
                 </article>
-                <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
+                <article class="sa-card sa-kpi-card">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy025') }}</p>
-                            <p class="mt-3 text-3xl font-semibold tracking-tight" :class="summary.attention ? 'text-amber-700' : 'text-neutral-900'">{{ summary.attention }}</p>
-                            <p class="mt-1 text-xs text-neutral-400">{{ $t('superAdmin.auto.copy002') }}</p>
+                            <p class="sa-kpi-label">{{ t('superAdmin.auto.copy025') }}</p>
+                            <p class="sa-kpi-value" :class="summary.attention ? '!text-amber-700' : ''">{{ summary.attention }}</p>
+                            <p class="sa-kpi-meta">{{ t('superAdmin.auto.copy002') }}</p>
                         </div>
-                        <span class="grid h-11 w-11 place-items-center rounded-xl bg-amber-50 text-amber-700"><CircleAlert class="h-5 w-5" /></span>
+                        <span class="sa-icon-box-lg bg-amber-50 text-amber-700"><CircleAlert class="sa-icon-lg" /></span>
                     </div>
                 </article>
             </section>
 
-            <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                <div class="flex flex-col gap-4 border-b border-neutral-200 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+            <section class="sa-card">
+                <div class="sa-card-header flex-col items-stretch lg:flex-row lg:items-center">
                     <div>
-                        <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy045') }}</h2>
-                        <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy043') }}</p>
+                        <h2 class="sa-card-title">{{ t('superAdmin.auto.copy045') }}</h2>
+                        <p class="sa-card-subtitle">{{ t('superAdmin.auto.copy043') }}</p>
                     </div>
-                    <Button v-if="tenants.length" variant="outline" class="gap-2" @click="exportTenants">
-                        <Download class="h-4 w-4" /> {{ t('superAdmin.dynamic.exportCsv') }}
-                    </Button>
+                    <button v-if="tenants.length" type="button" class="sa-button" @click="exportTenants"><Download class="sa-icon" /> {{ t('superAdmin.dynamic.exportCsv') }}</button>
                 </div>
 
-                <div v-if="tenants.length" class="space-y-4 border-b border-neutral-100 px-5 py-4">
+                <div v-if="tenants.length" class="space-y-3 border-b border-neutral-100 p-4">
                     <div class="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_190px_190px]">
                         <label class="relative block">
-                            <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                            <input v-model="search" type="search" :placeholder="$t('superAdmin.auto.copy073')" class="w-full rounded-xl border-neutral-300 py-2.5 pl-10 pr-3 text-sm" />
+                            <Search class="sa-icon pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                            <input v-model="search" type="search" :placeholder="t('superAdmin.auto.copy073')" class="sa-control w-full py-0 pl-9 pr-3" />
                         </label>
-                        <select v-model="billingCycle" class="rounded-xl border-neutral-300 py-2.5 text-sm text-neutral-700">
+                        <select v-model="billingCycle" class="sa-control px-3 py-0">
                             <option value="">{{ $t('superAdmin.auto.copy060') }}</option>
                             <option value="monthly">{{ $t('superAdmin.auto.copy037') }}</option>
                             <option value="annual">{{ $t('superAdmin.auto.copy068') }}</option>
                         </select>
-                        <select v-model="sortOrder" class="rounded-xl border-neutral-300 py-2.5 text-sm text-neutral-700">
+                        <select v-model="sortOrder" class="sa-control px-3 py-0">
                             <option value="mrr">{{ $t('superAdmin.auto.copy053') }}</option>
                             <option value="name">{{ $t('superAdmin.auto.copy052') }}</option>
                             <option value="attention">{{ $t('superAdmin.auto.copy054') }}</option>
@@ -435,7 +465,7 @@ function statusLabel(status) {
                             v-for="chip in statusChips"
                             :key="chip.key"
                             type="button"
-                            class="rounded-full border px-3 py-1.5 text-xs font-medium transition"
+                            class="inline-flex h-7 items-center rounded-full border px-3 text-[10px] font-semibold transition"
                             :class="statusFilter === chip.key ? 'border-[#123d32] bg-[#123d32] text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50'"
                             @click="statusFilter = chip.key"
                         >
@@ -445,9 +475,9 @@ function statusLabel(status) {
                 </div>
 
                 <div v-if="filteredTenants.length" class="overflow-x-auto">
-                    <table class="w-full min-w-[920px] text-sm">
+                    <table class="w-full min-w-[920px]">
                         <thead>
-                            <tr class="border-b border-neutral-200 bg-neutral-50/70 text-left text-[11px] uppercase tracking-[0.08em] text-neutral-400">
+                            <tr class="sa-table-head text-left">
                                 <th class="px-5 py-3 font-semibold">{{ $t('superAdmin.auto.copy018') }}</th>
                                 <th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy003') }}</th>
                                 <th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy050') }}</th>
@@ -458,40 +488,40 @@ function statusLabel(status) {
                         </thead>
                         <tbody class="divide-y divide-neutral-100">
                             <tr v-for="tenant in filteredTenants" :key="tenant.id" class="cursor-pointer transition hover:bg-emerald-50/30" @click="selectedTenant = tenant">
-                                <td class="px-5 py-4">
+                                <td class="px-5 py-2.5">
                                     <div class="flex items-center gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e8f3ef] text-xs font-bold text-[#24624f]">{{ initials(tenant.name) }}</span>
+                                        <span class="sa-icon-box bg-[#e8f3ef] text-[11px] font-bold text-[#24624f]">{{ initials(tenant.name) }}</span>
                                         <div class="min-w-0">
                                             <div class="flex items-center gap-2">
-                                                <Link :href="route('super-admin.tenants.show', tenant.id)" class="truncate font-semibold text-neutral-900 no-underline hover:text-emerald-700" @click.stop>{{ tenant.name }}</Link>
+                                                <Link :href="route('super-admin.tenants.show', tenant.id)" class="sa-table-primary truncate no-underline hover:text-emerald-700" @click.stop>{{ tenant.name }}</Link>
                                                 <span v-if="tenant.id === currentTenantId" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{{ $t('superAdmin.auto.copy001') }}</span>
                                             </div>
-                                            <p class="mt-0.5 max-w-[280px] truncate text-xs text-neutral-400">{{ tenant.primary_domain || tenant.slug }} · {{ tenant.timezone }}</p>
+                                            <p class="sa-table-meta max-w-[280px] truncate">{{ tenant.primary_domain || tenant.slug }} · {{ tenant.timezone }}</p>
                                         </div>
                                     </div>
                                 </td>
-                                <td class="px-4 py-4">
-                                    <p class="font-semibold tabular-nums text-neutral-900">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(monthlyMrr(tenant), tenant.billing.currency) }) }}</p>
-                                    <p class="mt-0.5 text-xs text-neutral-500">{{ tenant.billing.billing_cycle === 'annual' ? 'Faturim vjetor' : 'Faturim mujor' }}</p>
+                                <td class="px-4 py-2.5">
+                                    <p class="sa-table-primary tabular-nums">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(monthlyMrr(tenant), tenant.billing.currency) }) }}</p>
+                                    <p class="sa-table-meta">{{ tenant.billing.billing_cycle === 'annual' ? 'Faturim vjetor' : 'Faturim mujor' }}</p>
                                 </td>
-                                <td class="px-4 py-4">
-                                    <p class="font-medium text-neutral-800"><Users class="mr-1 inline h-3.5 w-3.5 text-neutral-400" />{{ t('superAdmin.dynamic.usersCount', { count: tenant.users_count }) }}</p>
-                                    <p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.dynamic.activeModulesCount', { count: enabledCount(tenant) }) }}</p>
+                                <td class="px-4 py-2.5">
+                                    <p class="sa-table-primary"><Users class="mr-1 inline h-3.5 w-3.5 text-neutral-400" />{{ t('superAdmin.dynamic.usersCount', { count: tenant.users_count }) }}</p>
+                                    <p class="sa-table-meta">{{ t('superAdmin.dynamic.activeModulesCount', { count: enabledCount(tenant) }) }}</p>
                                 </td>
-                                <td class="px-4 py-4">
-                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="statusPillClass(tenantHealth(tenant).tone)">
+                                <td class="px-4 py-2.5">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold" :class="statusPillClass(tenantHealth(tenant).tone)">
                                         <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(tenantHealth(tenant).tone)" />
                                         {{ tenantHealth(tenant).label }}
                                     </span>
                                     <p class="mt-1 max-w-[210px] truncate text-[11px] text-neutral-400">{{ tenantHealth(tenant).detail }}</p>
                                 </td>
-                                <td class="px-4 py-4">
-                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="statusPillClass(hotelStatus(tenant).tone)">
+                                <td class="px-4 py-2.5">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold" :class="statusPillClass(hotelStatus(tenant).tone)">
                                         <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(hotelStatus(tenant).tone)" />
                                         {{ hotelStatus(tenant).label }}
                                     </span>
                                 </td>
-                                <td class="px-5 py-4" @click.stop>
+                                <td class="px-5 py-2.5" @click.stop>
                                     <div class="flex items-center justify-end gap-2">
                                         <Button
                                             size="sm"
@@ -535,7 +565,7 @@ function statusLabel(status) {
         </div>
 
         <Teleport to="body">
-            <div v-if="selectedTenant" class="fixed inset-0 z-50 bg-neutral-950/40" @click.self="selectedTenant = null">
+            <div v-if="selectedTenant" class="super-admin-shell fixed inset-0 z-50 bg-neutral-950/40" @click.self="selectedTenant = null">
                 <aside class="ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
                     <div class="flex items-start justify-between border-b border-neutral-200 px-6 py-5">
                         <div class="flex min-w-0 items-center gap-3">
@@ -583,6 +613,12 @@ function statusLabel(status) {
                                     <span class="text-sm text-neutral-600">POK</span>
                                     <span class="text-sm font-medium" :class="selectedTenant.integrations.pok.enabled && selectedTenant.integrations.pok.has_key_id ? 'text-emerald-700' : 'text-amber-700'">{{ selectedTenant.integrations.pok.enabled && selectedTenant.integrations.pok.has_key_id ? t('superAdmin.dynamic.configured') : t('superAdmin.dynamic.needsConfiguration') }}</span>
                                 </div>
+                                <div class="flex items-center justify-between gap-3 px-4 py-3">
+                                    <span class="text-sm text-neutral-600">{{ fatureName }}</span>
+                                    <span class="text-sm font-medium" :class="selectedTenant.integrations.fature_al.enabled && selectedTenant.integrations.fature_al.has_api_token ? 'text-emerald-700' : 'text-neutral-500'">
+                                        {{ selectedTenant.integrations.fature_al.enabled && selectedTenant.integrations.fature_al.has_api_token ? t('superAdmin.dynamic.configured') : 'Jo aktiv' }}
+                                    </span>
+                                </div>
                             </div>
                         </section>
 
@@ -606,67 +642,124 @@ function statusLabel(status) {
         </Teleport>
 
         <Teleport to="body">
-            <div v-if="showCreate" class="fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeCreate">
-                <section class="max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+            <div v-if="showCreate" class="super-admin-shell fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeCreate">
+                <section role="dialog" aria-modal="true" class="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
                     <div class="sticky top-0 z-10 flex items-start justify-between border-b border-neutral-200 bg-white px-5 py-4 sm:px-6">
-                        <div>
-                            <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy022') }}</h2>
-                            <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy024') }}</p>
+                        <div class="flex items-center gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e8f3ef] text-[#24624f]">
+                                <Building2 class="h-5 w-5" />
+                            </span>
+                            <div>
+                                <h2 class="text-lg font-semibold text-neutral-900">{{ t('superAdmin.dynamic.newHotelTitle') }}</h2>
+                                <p class="mt-0.5 text-sm text-neutral-500">{{ t('superAdmin.dynamic.newHotelSubtitle') }}</p>
+                            </div>
                         </div>
-                        <button class="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" type="button" @click="closeCreate">✕</button>
+                        <button class="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" type="button" :aria-label="t('superAdmin.dynamic.cancel')" @click="closeCreate">
+                            <X class="h-5 w-5" />
+                        </button>
                     </div>
-                    <form class="space-y-4 p-5 sm:p-6" @submit.prevent="createTenant">
-                        <label class="block text-sm font-medium text-neutral-700">
-{{ $t('admin.generated.k_576b58fc705e') }} <input v-model="form.name" required class="mt-1 w-full rounded-lg border-neutral-300 text-sm" :placeholder="$t('admin.generated.k_e47fcc86e582')" />
-                            <span v-if="form.errors.name" class="mt-1 block text-xs text-danger-600">{{ form.errors.name }}</span>
-                        </label>
+                    <form @submit.prevent="createTenant">
+                        <div class="space-y-5 p-5 sm:p-6">
+                            <section class="rounded-xl border border-neutral-200 p-4 sm:p-5">
+                                <div class="mb-4 flex items-start gap-3">
+                                    <Building2 class="mt-0.5 h-5 w-5 shrink-0 text-[#24624f]" />
+                                    <div>
+                                        <h3 class="text-sm font-semibold text-neutral-900">{{ t('superAdmin.dynamic.hotelDetails') }}</h3>
+                                        <p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.dynamic.hotelDetailsHelp') }}</p>
+                                    </div>
+                                </div>
 
-                        <label class="block text-sm font-medium text-neutral-700">
-{{ $t('admin.generated.k_e8913516cd11') }} <input v-model="form.slug" required class="mt-1 w-full rounded-lg border-neutral-300 text-sm" :placeholder="$t('admin.generated.k_05d2f8add0d6')" />
-                            <span v-if="form.errors.slug" class="mt-1 block text-xs text-danger-600">{{ form.errors.slug }}</span>
-                        </label>
+                                <div class="grid gap-4 sm:grid-cols-2">
+                                    <label class="block text-sm font-medium text-neutral-700 sm:col-span-2">
+                                        {{ t('superAdmin.dynamic.hotelName') }}
+                                        <input v-model="form.name" required class="sa-control mt-1 w-full" :placeholder="$t('admin.generated.k_e47fcc86e582')" />
+                                        <span v-if="form.errors.name" class="mt-1 block text-xs text-danger-600">{{ form.errors.name }}</span>
+                                    </label>
 
-                        <label class="block text-sm font-medium text-neutral-700">
-{{ $t('admin.generated.k_1c5756d1cdd0') }} <input v-model="form.primary_domain" class="mt-1 w-full rounded-lg border-neutral-300 text-sm" :placeholder="$t('admin.generated.k_20a434fbd3d4')" />
-                            <span v-if="form.errors.primary_domain" class="mt-1 block text-xs text-danger-600">{{ form.errors.primary_domain }}</span>
-                        </label>
+                                    <label class="block text-sm font-medium text-neutral-700">
+                                        {{ t('superAdmin.dynamic.slug') }}
+                                        <input v-model="form.slug" required class="sa-control mt-1 w-full" :placeholder="$t('admin.generated.k_05d2f8add0d6')" />
+                                        <span class="mt-1 block text-xs text-neutral-400">{{ t('superAdmin.dynamic.slugHelp') }}</span>
+                                        <span v-if="form.errors.slug" class="mt-1 block text-xs text-danger-600">{{ form.errors.slug }}</span>
+                                    </label>
 
-                        <div class="grid grid-cols-2 gap-3">
-                            <label class="block text-sm font-medium text-neutral-700">
-{{ $t('admin.generated.k_209467b9eba8') }} <input v-model="form.timezone" required class="mt-1 w-full rounded-lg border-neutral-300 text-sm" />
-                            </label>
-                            <label class="block text-sm font-medium text-neutral-700">
-{{ $t('admin.generated.k_265099595021') }} <input v-model="form.currency" required maxlength="3" class="mt-1 w-full rounded-lg border-neutral-300 text-sm uppercase" />
-                            </label>
+                                    <label class="block text-sm font-medium text-neutral-700">
+                                        {{ t('superAdmin.dynamic.primaryDomain') }}
+                                        <span class="font-normal text-neutral-400">({{ t('superAdmin.dynamic.optional') }})</span>
+                                        <input v-model="form.primary_domain" class="sa-control mt-1 w-full" :placeholder="$t('admin.generated.k_20a434fbd3d4')" />
+                                        <span v-if="form.errors.primary_domain" class="mt-1 block text-xs text-danger-600">{{ form.errors.primary_domain }}</span>
+                                    </label>
+                                </div>
+                            </section>
+
+                            <section class="rounded-xl border border-neutral-200 p-4 sm:p-5">
+                                <div class="mb-4 flex items-start gap-3">
+                                    <Globe class="mt-0.5 h-5 w-5 shrink-0 text-[#24624f]" />
+                                    <div>
+                                        <h3 class="text-sm font-semibold text-neutral-900">{{ t('superAdmin.dynamic.localization') }}</h3>
+                                        <p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.dynamic.localizationHelp') }}</p>
+                                    </div>
+                                </div>
+
+                                <div class="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(180px,1fr)]">
+                                    <label class="block text-sm font-medium text-neutral-700">
+                                        {{ t('superAdmin.dynamic.timezone') }}
+                                        <select v-model="form.timezone" required class="sa-control mt-1 w-full">
+                                            <optgroup v-for="(timezones, region) in props.timezoneGroups" :key="region" :label="region">
+                                                <option v-for="timezone in timezones" :key="timezone.value" :value="timezone.value">{{ timezone.label }}</option>
+                                            </optgroup>
+                                        </select>
+                                        <span v-if="form.errors.timezone" class="mt-1 block text-xs text-danger-600">{{ form.errors.timezone }}</span>
+                                    </label>
+
+                                    <label class="block text-sm font-medium text-neutral-700">
+                                        {{ t('superAdmin.dynamic.currency') }}
+                                        <select v-model="form.currency" required class="sa-control mt-1 w-full">
+                                            <option v-for="currency in props.currencyOptions" :key="currency" :value="currency">{{ currencyLabel(currency) }}</option>
+                                        </select>
+                                        <span v-if="form.errors.currency" class="mt-1 block text-xs text-danger-600">{{ form.errors.currency }}</span>
+                                    </label>
+                                </div>
+                            </section>
+
+                            <section class="rounded-xl border border-[#d8ebe4] bg-[#f6fbf9] p-4 sm:p-5">
+                                <div class="mb-4 flex items-start gap-3">
+                                    <Users class="mt-0.5 h-5 w-5 shrink-0 text-[#24624f]" />
+                                    <div>
+                                        <h3 class="text-sm font-semibold text-neutral-900">{{ t('superAdmin.dynamic.ownerAccess') }}</h3>
+                                        <p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.dynamic.ownerAccessHelp') }}</p>
+                                    </div>
+                                </div>
+
+                                <div class="grid gap-4 sm:grid-cols-2">
+                                    <label class="block text-sm font-medium text-neutral-700">
+                                        {{ t('superAdmin.dynamic.ownerName') }}
+                                        <input v-model="form.owner_name" class="sa-control mt-1 w-full bg-white" placeholder="Ana Berisha" />
+                                        <span v-if="form.errors.owner_name" class="mt-1 block text-xs text-danger-600">{{ form.errors.owner_name }}</span>
+                                    </label>
+
+                                    <label class="block text-sm font-medium text-neutral-700">
+                                        {{ t('superAdmin.dynamic.ownerEmail') }}
+                                        <input v-model="form.owner_email" type="email" class="sa-control mt-1 w-full bg-white" placeholder="ana@hotelriviera.com" />
+                                        <span v-if="form.errors.owner_email" class="mt-1 block text-xs text-danger-600">{{ form.errors.owner_email }}</span>
+                                    </label>
+                                </div>
+                            </section>
                         </div>
 
-                        <div class="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3">
-                            <p class="text-sm font-semibold text-neutral-800">{{ $t('superAdmin.auto.copy048') }}</p>
-                            <p class="mt-0.5 text-xs text-neutral-500">{{ $t('superAdmin.auto.copy032') }}</p>
-
-                            <label class="mt-3 block text-sm font-medium text-neutral-700">
-                                {{ t('superAdmin.dynamic.ownerName') }}
-                                <input v-model="form.owner_name" class="mt-1 w-full rounded-lg border-neutral-300 text-sm" placeholder="Ana Berisha" />
-                                <span v-if="form.errors.owner_name" class="mt-1 block text-xs text-danger-600">{{ form.errors.owner_name }}</span>
-                            </label>
-
-                            <label class="mt-3 block text-sm font-medium text-neutral-700">
-                                {{ t('superAdmin.dynamic.ownerEmail') }}
-                                <input v-model="form.owner_email" type="email" class="mt-1 w-full rounded-lg border-neutral-300 text-sm" placeholder="ana@hotelriviera.com" />
-                                <span v-if="form.errors.owner_email" class="mt-1 block text-xs text-danger-600">{{ form.errors.owner_email }}</span>
-                            </label>
+                        <div class="sticky bottom-0 flex justify-end gap-2 border-t border-neutral-200 bg-white px-5 py-4 sm:px-6">
+                            <Button type="button" variant="outline" :disabled="form.processing" @click="closeCreate">{{ t('superAdmin.dynamic.cancel') }}</Button>
+                            <Button type="submit" :disabled="form.processing">
+                                {{ form.processing ? t('superAdmin.dynamic.creatingHotel') : t('superAdmin.dynamic.createHotel') }}
+                            </Button>
                         </div>
-
-                        <Button type="submit" class="w-full justify-center" :disabled="form.processing">
-                            {{ form.processing ? $t('admin.generated.k_f0c3ff038037') : $t('admin.generated.k_da7ad2a15d4e') }}
-                        </Button>
                     </form>
                 </section>
             </div>
         </Teleport>
 
         <Teleport to="body">
-            <div v-if="editingTenant" class="fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeBilling">
+            <div v-if="editingTenant" class="super-admin-shell fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeBilling">
                 <section role="dialog" aria-modal="true" class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
                     <div class="flex items-start justify-between border-b border-neutral-200 bg-white px-5 py-4 sm:px-6">
                         <div class="flex min-w-0 items-center gap-3">
@@ -785,7 +878,7 @@ function statusLabel(status) {
         </Teleport>
 
         <Teleport to="body">
-            <div v-if="configTenant" class="fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeConfig">
+            <div v-if="configTenant" class="super-admin-shell fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeConfig">
                 <section role="dialog" aria-modal="true" class="flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
                     <div class="flex items-start justify-between border-b border-neutral-200 bg-white px-5 py-4 sm:px-6">
                         <div class="flex min-w-0 items-center gap-3">
@@ -798,7 +891,7 @@ function statusLabel(status) {
                         <button class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" type="button" :aria-label="$t('superAdmin.auto.copy075')" @click="closeConfig"><X class="h-5 w-5" /></button>
                     </div>
 
-                    <div class="grid grid-cols-3 border-b border-neutral-200 bg-neutral-50/70 px-3 pt-2 sm:px-6">
+                    <div class="grid grid-cols-2 border-b border-neutral-200 bg-neutral-50/70 px-3 pt-2 sm:grid-cols-4 sm:px-6">
                         <button type="button" class="flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition" :class="configTab === 'domains' ? 'border-[#24624f] text-[#24624f]' : 'border-transparent text-neutral-500 hover:text-neutral-800'" @click="configTab = 'domains'">
                             <Globe class="h-4 w-4" /> {{ t('superAdmin.dynamic.domains') }}
                             <span class="rounded-full bg-neutral-200/70 px-1.5 py-0.5 text-[10px]">{{ configTenant.domains.length }}</span>
@@ -810,6 +903,10 @@ function statusLabel(status) {
                         <button type="button" class="flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition" :class="configTab === 'pok' ? 'border-[#24624f] text-[#24624f]' : 'border-transparent text-neutral-500 hover:text-neutral-800'" @click="configTab = 'pok'">
                             <CreditCard class="h-4 w-4" /> POK
                             <span class="h-2 w-2 rounded-full" :class="configTenant.integrations.pok.enabled && configTenant.integrations.pok.has_key_id ? 'bg-emerald-500' : 'bg-neutral-300'" />
+                        </button>
+                        <button type="button" class="flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition" :class="configTab === 'fature_al' ? 'border-[#24624f] text-[#24624f]' : 'border-transparent text-neutral-500 hover:text-neutral-800'" @click="configTab = 'fature_al'">
+                            <FileCheck2 class="h-4 w-4" /> {{ fatureName }}
+                            <span class="h-2 w-2 rounded-full" :class="configTenant.integrations.fature_al.enabled && configTenant.integrations.fature_al.has_api_token ? 'bg-emerald-500' : 'bg-neutral-300'" />
                         </button>
                     </div>
 
@@ -896,7 +993,7 @@ function statusLabel(status) {
                             </div>
                         </form>
 
-                        <form v-else class="space-y-5" @submit.prevent="savePok">
+                        <form v-else-if="configTab === 'pok'" class="space-y-5" @submit.prevent="savePok">
                             <div class="flex flex-col gap-4 rounded-xl border border-neutral-200 bg-neutral-50/60 p-4 sm:flex-row sm:items-center">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-neutral-500 shadow-sm"><CreditCard class="h-5 w-5" /></span>
                                 <div class="mr-auto">
@@ -935,6 +1032,65 @@ function statusLabel(status) {
                             <div class="rounded-xl bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">{{ $t('superAdmin.auto.copy015') }}</div>
                             <div class="flex justify-end border-t border-neutral-200 pt-4">
                                 <Button type="submit" :disabled="pokForm.processing">{{ pokForm.processing ? 'Duke ruajtur…' : 'Ruaj POK' }}</Button>
+                            </div>
+                        </form>
+
+                        <form v-else class="space-y-5" @submit.prevent="saveFature">
+                            <div class="flex flex-col gap-4 rounded-xl border border-neutral-200 bg-neutral-50/60 p-4 sm:flex-row sm:items-center">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-[#24624f] shadow-sm"><FileCheck2 class="h-5 w-5" /></span>
+                                <div class="mr-auto">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h3 class="font-semibold text-neutral-900">{{ fatureName }} · {{ $t('integrationCenter.fiscalization') }}</h3>
+                                        <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="configTenant.integrations.fature_al.has_api_token ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-200/70 text-neutral-500'">
+                                            <Check v-if="configTenant.integrations.fature_al.has_api_token" class="h-3 w-3" />{{ configTenant.integrations.fature_al.has_api_token ? 'Token-i është ruajtur' : 'Pa token API' }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 text-xs text-neutral-500">{{ $t('integrationCenter.tenantSecureConfig') }}</p>
+                                </div>
+                                <label class="flex shrink-0 cursor-pointer items-center gap-3 text-sm font-medium text-neutral-700">
+                                    {{ $t('integrationCenter.active') }}
+                                    <input v-model="fatureForm.enabled" type="checkbox" class="peer sr-only" />
+                                    <span class="relative h-6 w-11 rounded-full bg-neutral-300 transition peer-checked:bg-emerald-600 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:after:translate-x-5" />
+                                </label>
+                            </div>
+
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <label class="text-sm font-medium text-neutral-700">{{ $t('integrationCenter.apiToken') }}
+                                    <input
+                                        v-model="fatureForm.api_token"
+                                        type="password"
+                                        autocomplete="new-password"
+                                        class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"
+                                        :placeholder="configTenant.integrations.fature_al.has_api_token ? 'Lëre bosh për të mbajtur token-in aktual' : 'Vendos token-in nga fature.al'"
+                                    />
+                                    <span v-if="fatureForm.errors.api_token" class="mt-1 block text-xs text-danger-600">{{ fatureForm.errors.api_token }}</span>
+                                </label>
+                                <label class="text-sm font-medium text-neutral-700">{{ $t('integrationCenter.environment') }}
+                                    <select v-model="fatureForm.environment" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm">
+                                        <option value="sandbox">{{ $t('integrationCenter.sandboxOption') }}</option>
+                                        <option value="production">{{ $t('integrationCenter.productionOption') }}</option>
+                                    </select>
+                                    <span v-if="fatureForm.errors.environment" class="mt-1 block text-xs text-danger-600">{{ fatureForm.errors.environment }}</span>
+                                </label>
+                            </div>
+
+                            <div v-if="fatureForm.environment === 'sandbox'" class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
+                                {{ $t('integrationCenter.sandboxHint') }}
+                            </div>
+                            <div v-else class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+                                {{ $t('integrationCenter.productionWarning') }}
+                            </div>
+
+                            <div class="flex flex-col-reverse justify-end gap-2 border-t border-neutral-200 pt-4 sm:flex-row">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    :disabled="!configTenant.integrations.fature_al.enabled || !configTenant.integrations.fature_al.has_api_token"
+                                    @click="testFature"
+                                >
+                                    {{ $t('integrationCenter.testConnection') }}
+                                </Button>
+                                <Button type="submit" :disabled="fatureForm.processing">{{ fatureForm.processing ? 'Duke ruajtur…' : 'Ruaj fature.al' }}</Button>
                             </div>
                         </form>
                     </div>

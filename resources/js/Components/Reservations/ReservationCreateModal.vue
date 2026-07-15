@@ -28,7 +28,9 @@ const props = defineProps({
 const emit = defineEmits(['close', 'created', 'guest-created']);
 
 const perms = usePage().props.auth.user?.permissions || [];
+const currencyCode = usePage().props.tenant?.currency || 'EUR';
 const canCreateGuest = perms.includes('create_guests');
+const money = (value) => new Intl.NumberFormat('sq-AL', { style: 'currency', currency: currencyCode }).format(Number(value || 0));
 
 const guestOptions = computed(() =>
     props.guests
@@ -41,7 +43,7 @@ const guestOptions = computed(() =>
 const roomOptions = computed(() =>
     props.rooms.map((r) => ({
         value: r.id,
-        label: `${r.room_number} — ${r.room_type?.name}${r.room_type?.base_price ? ' (€' + r.room_type.base_price + ')' : ''}`,
+        label: `${r.room_number} — ${r.room_type?.name}${r.room_type?.base_price ? ' (' + money(r.room_type.base_price) + ')' : ''}`,
     }))
 );
 
@@ -330,9 +332,9 @@ function submit() {
 
             <!-- Totals -->
             <div class="rounded-lg bg-neutral-50 border border-neutral-100 px-4 py-2.5 flex items-center gap-x-6 gap-y-1 flex-wrap text-body-sm">
-                <span class="text-neutral-500">{{ $t('admin.generated.k_1e69e5ea1627') }} <span class="text-neutral-900 font-medium">€{{ totalAmount.toFixed(2) }}</span></span>
-                <span class="text-neutral-500">{{ $t('admin.generated.k_f2167a394c1f') }} <span class="text-neutral-400">{{ feePct(form.channel) }}%</span>: <span class="text-neutral-900 font-medium">€{{ commission.toFixed(2) }}</span></span>
-                <span class="text-neutral-500">{{ $t('admin.generated.k_fc689ff2a9a7') }} <span class="text-accent-700 font-semibold">€{{ net.toFixed(2) }}</span></span>
+                <span class="text-neutral-500">{{ $t('admin.generated.k_1e69e5ea1627') }} <span class="text-neutral-900 font-medium">{{ money(totalAmount) }}</span></span>
+                <span class="text-neutral-500">{{ $t('admin.generated.k_f2167a394c1f') }} <span class="text-neutral-400">{{ feePct(form.channel) }}%</span>: <span class="text-neutral-900 font-medium">{{ money(commission) }}</span></span>
+                <span class="text-neutral-500">{{ $t('admin.generated.k_fc689ff2a9a7') }} <span class="text-accent-700 font-semibold">{{ money(net) }}</span></span>
             </div>
 
             <FormGroup :label="$t('admin.generated.k_2c38f71a5f9b')">
@@ -345,9 +347,9 @@ function submit() {
                     <div class="mt-4 space-y-3 text-body-sm">
                         <div class="flex justify-between gap-3"><span class="text-neutral-500">Qëndrimi</span><span class="text-right font-medium text-primary-900">{{ nights() || 0 }} net</span></div>
                         <div class="flex justify-between gap-3"><span class="text-neutral-500">Dhoma</span><span class="text-right font-medium text-primary-900">{{ form.rooms.length }}</span></div>
-                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Totali</span><span class="text-right font-semibold text-primary-900">€{{ totalAmount.toFixed(2) }}</span></div>
-                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Komisioni ({{ feePct(form.channel) }}%)</span><span class="text-right font-medium text-warning-700">− €{{ commission.toFixed(2) }}</span></div>
-                        <div class="flex justify-between gap-3 border-t border-neutral-200 pt-3"><span class="font-semibold text-primary-900">Neto</span><span class="text-h4 text-accent-700">€{{ net.toFixed(2) }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Totali</span><span class="text-right font-semibold text-primary-900">{{ money(totalAmount) }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Komisioni ({{ feePct(form.channel) }}%)</span><span class="text-right font-medium text-warning-700">− {{ money(commission) }}</span></div>
+                        <div class="flex justify-between gap-3 border-t border-neutral-200 pt-3"><span class="font-semibold text-primary-900">Neto</span><span class="text-h4 text-accent-700">{{ money(net) }}</span></div>
                     </div>
                     <div class="mt-4 rounded-lg border border-info-200 bg-info-50 px-3 py-2.5 text-small leading-relaxed text-info-800">
                         Disponueshmëria dhe çmimi sezonal kontrollohen përsëri gjatë ruajtjes.

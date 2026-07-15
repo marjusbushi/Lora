@@ -5,12 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
 use App\Models\InventoryTransfer;
+use App\Models\MenuCategory;
+use App\Models\MenuItem;
 use App\Models\Warehouse;
 use App\Services\InventoryLedger;
+use App\Support\TenantStorage;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -60,6 +64,7 @@ class InventoryController extends Controller
             : 'active';
 
         $items = InventoryItem::query()
+            ->with('posMenuItem:id,inventory_item_id,menu_category_id,warehouse_id')
             ->withSum('movements as stock_quantity', 'quantity')
             ->when($status === 'active', fn ($query) => $query->where('is_active', true))
             ->when($status === 'inactive', fn ($query) => $query->where('is_active', false))
@@ -97,6 +102,7 @@ class InventoryController extends Controller
                 return $row;
             })->values(),
             'warehouses' => Warehouse::where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get(['id', 'name']),
+            'posCategories' => MenuCategory::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'outlet']),
             'filters' => ['search' => $search, 'status' => $status],
             'can' => ['manageInventory' => $request->user()->can('manage_inventory')],
         ]);
@@ -105,6 +111,9 @@ class InventoryController extends Controller
     public function storeItem(Request $request): RedirectResponse
     {
         $data = $this->itemData($request);
+        $data['image_path'] = $request->hasFile('image')
+            ? $request->file('image')->store(TenantStorage::path('inventory'), 'public')
+            : null;
         $initialQuantity = (float) ($data['initial_quantity'] ?? 0);
         if ($initialQuantity > 0 && empty($data['initial_warehouse_id'])) {
             throw ValidationException::withMessages(['initial_warehouse_id' => 'Zgjidh magazinën e gjendjes fillestare.']);
@@ -121,8 +130,13 @@ class InventoryController extends Controller
                 'category' => ! empty($data['category']) ? trim($data['category']) : null,
                 'type' => $data['type'],
                 'unit' => $data['unit'],
+                'image_path' => $data['image_path'],
                 'average_cost' => $data['average_cost'] ?? 0,
                 'selling_price' => $data['selling_price'] ?? null,
+                'sell_in_pos' => $data['sell_in_pos'] ?? false,
+                'sell_in_rooms' => $data['sell_in_rooms'] ?? false,
+                'room_selling_price' => $data['room_selling_price'] ?? null,
+                'room_warehouse_id' => $data['room_warehouse_id'] ?? null,
                 'minimum_stock' => $data['minimum_stock'] ?? 0,
                 'is_active' => true,
             ]);
@@ -138,6 +152,8 @@ class InventoryController extends Controller
                     $request->user()->id,
                 );
             }
+
+            $this->syncPosMenuItem($item, $data);
         });
 
         return back()->with('success', 'Artikulli u krijua.');
@@ -149,17 +165,35 @@ class InventoryController extends Controller
         if ($data['type'] === 'service' && $item->stock() != 0.0) {
             throw ValidationException::withMessages(['type' => 'Artikulli me stok nuk mund të kthehet në shërbim.']);
         }
-        $item->update([
-            'name' => trim($data['name']),
-            'sku' => mb_strtoupper(trim($data['sku'])),
-            'barcode' => ! empty($data['barcode']) ? trim($data['barcode']) : null,
-            'category' => ! empty($data['category']) ? trim($data['category']) : null,
-            'type' => $data['type'],
-            'unit' => $data['unit'],
-            'selling_price' => $data['selling_price'] ?? null,
-            'minimum_stock' => $data['minimum_stock'] ?? 0,
-            'is_active' => $data['is_active'] ?? true,
-        ]);
+        $oldImage = $item->image_path;
+        $newImage = $request->hasFile('image')
+            ? $request->file('image')->store(TenantStorage::path('inventory'), 'public')
+            : null;
+
+        DB::transaction(function () use ($data, $item, $newImage) {
+            $item->update([
+                'name' => trim($data['name']),
+                'sku' => mb_strtoupper(trim($data['sku'])),
+                'barcode' => ! empty($data['barcode']) ? trim($data['barcode']) : null,
+                'category' => ! empty($data['category']) ? trim($data['category']) : null,
+                'type' => $data['type'],
+                'unit' => $data['unit'],
+                'image_path' => $newImage ?: (($data['remove_image'] ?? false) ? null : $item->image_path),
+                'selling_price' => $data['selling_price'] ?? null,
+                'sell_in_pos' => $data['sell_in_pos'] ?? false,
+                'sell_in_rooms' => $data['sell_in_rooms'] ?? false,
+                'room_selling_price' => $data['room_selling_price'] ?? null,
+                'room_warehouse_id' => $data['room_warehouse_id'] ?? null,
+                'minimum_stock' => $data['minimum_stock'] ?? 0,
+                'is_active' => $data['is_active'] ?? true,
+            ]);
+
+            $this->syncPosMenuItem($item->fresh(), $data);
+        });
+
+        if (($newImage || ($data['remove_image'] ?? false)) && $oldImage) {
+            Storage::disk('public')->delete($oldImage);
+        }
 
         return back()->with('success', 'Artikulli u përditësua.');
     }
@@ -265,6 +299,14 @@ class InventoryController extends Controller
             'type' => ['required', Rule::in(['product', 'ingredient', 'consumable', 'service'])],
             'unit' => ['required', Rule::in(['piece', 'kg', 'liter', 'pack'])],
             'selling_price' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'remove_image' => ['nullable', 'boolean'],
+            'sell_in_pos' => ['nullable', 'boolean'],
+            'pos_menu_category_id' => ['nullable', TenantRule::exists('menu_categories')],
+            'pos_warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
+            'sell_in_rooms' => ['nullable', 'boolean'],
+            'room_selling_price' => ['nullable', 'numeric', 'min:0.01', 'max:9999999'],
+            'room_warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
             'minimum_stock' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             'is_active' => ['nullable', 'boolean'],
         ];
@@ -276,7 +318,31 @@ class InventoryController extends Controller
             ];
         }
 
-        return $request->validate($rules);
+        $data = $request->validate($rules);
+
+        if (($data['sell_in_pos'] ?? false) && $data['type'] !== 'product') {
+            throw ValidationException::withMessages(['sell_in_pos' => 'Vetëm produktet mund të publikohen në POS.']);
+        }
+        if (($data['sell_in_pos'] ?? false) && empty($data['pos_menu_category_id'])) {
+            throw ValidationException::withMessages(['pos_menu_category_id' => 'Zgjidh kategorinë e POS-it.']);
+        }
+        if (($data['sell_in_pos'] ?? false) && empty($data['pos_warehouse_id'])) {
+            throw ValidationException::withMessages(['pos_warehouse_id' => 'Zgjidh magazinën e POS-it.']);
+        }
+        if (($data['sell_in_pos'] ?? false) && (float) ($data['selling_price'] ?? 0) <= 0) {
+            throw ValidationException::withMessages(['selling_price' => 'Vendos çmimin e shitjes në POS.']);
+        }
+        if (($data['sell_in_rooms'] ?? false) && $data['type'] !== 'product') {
+            throw ValidationException::withMessages(['sell_in_rooms' => 'Vetëm produktet mund të publikohen në dhoma.']);
+        }
+        if (($data['sell_in_rooms'] ?? false) && empty($data['room_warehouse_id'])) {
+            throw ValidationException::withMessages(['room_warehouse_id' => 'Zgjidh magazinën e dhomave.']);
+        }
+        if (($data['sell_in_rooms'] ?? false) && (float) ($data['room_selling_price'] ?? 0) <= 0) {
+            throw ValidationException::withMessages(['room_selling_price' => 'Vendos çmimin e shitjes në dhoma.']);
+        }
+
+        return $data;
     }
 
     private function warehouseData(Request $request, ?int $ignoreId = null): array
@@ -304,14 +370,51 @@ class InventoryController extends Controller
             'category' => $item->category,
             'type' => $item->type,
             'unit' => $item->unit,
+            'image_path' => $item->image_path,
             'average_cost' => (float) $item->average_cost,
             'selling_price' => $item->selling_price !== null ? (float) $item->selling_price : null,
+            'sell_in_pos' => $item->sell_in_pos,
+            'pos_menu_category_id' => $item->posMenuItem?->menu_category_id,
+            'pos_warehouse_id' => $item->posMenuItem?->warehouse_id,
+            'sell_in_rooms' => $item->sell_in_rooms,
+            'room_selling_price' => $item->room_selling_price !== null ? (float) $item->room_selling_price : null,
+            'room_warehouse_id' => $item->room_warehouse_id,
             'minimum_stock' => (float) $item->minimum_stock,
             'stock' => $stock,
             'stock_value' => round(max(0, $stock) * (float) $item->average_cost, 2),
             'is_low' => (float) $item->minimum_stock > 0 && $stock <= (float) $item->minimum_stock,
             'is_active' => $item->is_active,
         ];
+    }
+
+    private function syncPosMenuItem(InventoryItem $item, array $data): void
+    {
+        $menuItem = $item->posMenuItem()->first();
+
+        if (! ($data['sell_in_pos'] ?? false)) {
+            $menuItem?->update(['is_available' => false]);
+
+            return;
+        }
+
+        $menuItem = MenuItem::updateOrCreate(
+            ['inventory_item_id' => $item->id],
+            [
+                'menu_category_id' => $data['pos_menu_category_id'],
+                'warehouse_id' => $data['pos_warehouse_id'],
+                'name' => $item->name,
+                'price' => $item->selling_price,
+                'cost_price' => $item->average_cost,
+                'is_available' => $item->is_active,
+                'image_path' => $item->image_path,
+            ],
+        );
+
+        $menuItem->inventoryComponents()->delete();
+        $menuItem->inventoryComponents()->create([
+            'inventory_item_id' => $item->id,
+            'quantity' => 1,
+        ]);
     }
 
     private function warehouseRows()

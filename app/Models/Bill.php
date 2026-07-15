@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Services\BaseCurrency;
+
 /**
- * A supplier purchase invoice (payable). May be in LEK or EUR — the fx rate is
+ * A supplier purchase invoice (payable). It may be in the base or a foreign currency — the fx rate is
  * FROZEN on the document, so yesterday's bills never move when today's rate
  * changes. Partial payments accumulate via finance_payments.bill_id until the
  * base total is covered (open → partial → paid).
@@ -33,13 +35,13 @@ class Bill extends TenantModel
         'due_date' => 'date:Y-m-d',
         'total' => 'decimal:2',
         'total_base' => 'decimal:2',
-        'fx_rate' => 'decimal:4',
+        'fx_rate' => 'decimal:6',
     ];
 
     protected static function booted(): void
     {
         static::saving(function (Bill $b) {
-            if (strtoupper((string) $b->currency) === 'EUR') {
+            if (strtoupper((string) $b->currency) === BaseCurrency::code()) {
                 $b->total_base = $b->total;
             } elseif ($b->fx_rate && (float) $b->fx_rate > 0) {
                 $b->total_base = round((float) $b->total / (float) $b->fx_rate, 2);

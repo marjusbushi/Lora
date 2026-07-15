@@ -40,7 +40,7 @@ const selectedAccount = computed(() => props.accounts.find((a) => a.id === props
 
 function balanceInBase(a) {
     if (a.balance_base !== undefined && a.balance_base !== null) return Number(a.balance_base);
-    if (a.currency === props.baseCurrency || a.currency === 'EUR') return Number(a.balance || 0);
+    if (a.currency === props.baseCurrency) return Number(a.balance || 0);
     return props.fxRate ? Number(a.balance || 0) / Number(props.fxRate) : 0;
 }
 
@@ -144,7 +144,7 @@ function submitTransfer() {
 }
 
 const showNewAccount = ref(false);
-const account = useForm({ name: '', type: 'cash', currency: 'EUR', iban: '' });
+const account = useForm({ name: '', type: 'cash', currency: props.baseCurrency, iban: '' });
 const accountPreviewName = computed(() => account.name.trim() || (account.type === 'cash' ? 'Arka e re' : 'Banka e re'));
 
 watch(() => account.type, (type) => {
@@ -193,21 +193,21 @@ function toggleAccount(a) {
                     <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent-50 text-accent-700"><WalletCards class="h-5 w-5" /></span>
                     <div class="min-w-0">
                         <p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.generated.k_a68a1fa26769') }}</p>
-                        <p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums text-primary-900">{{ money(totalBalance) }}</p>
+                        <p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums text-primary-900">{{ money(totalBalance, baseCurrency) }}</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-card">
                     <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent-50 text-accent-700"><Banknote class="h-5 w-5" /></span>
                     <div class="min-w-0">
                         <p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.generated.k_d4a423674648') }}</p>
-                        <p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums text-primary-900">{{ money(cashBalance) }}</p>
+                        <p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums text-primary-900">{{ money(cashBalance, baseCurrency) }}</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-card">
                     <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent-50 text-accent-700"><Landmark class="h-5 w-5" /></span>
                     <div class="min-w-0">
                         <p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.generated.k_324a2e32b2c3') }}</p>
-                        <p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums text-primary-900">{{ money(bankBalance) }}</p>
+                        <p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums text-primary-900">{{ money(bankBalance, baseCurrency) }}</p>
                     </div>
                 </div>
             </div>
@@ -321,7 +321,7 @@ function toggleAccount(a) {
             </section>
         </div>
 
-        <TransactionDetailsDrawer :payment="selectedPayment" @close="selectedPayment = null" />
+        <TransactionDetailsDrawer :payment="selectedPayment" :base-currency="baseCurrency" @close="selectedPayment = null" />
 
         <!-- transfer modal -->
         <Modal :show="showTransfer" :title="$t('admin.generated.k_f11c14ed633a')" max-width="lg" @close="showTransfer = false">

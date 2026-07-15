@@ -4,21 +4,31 @@ namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\FinanceAccount;
+use App\Models\Setting;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
+use App\Services\BaseCurrency;
+use App\Services\FatureAlClient;
 use App\Services\TenantBillingService;
 use App\Services\TenantHandoff;
 use App\Services\TenantRoleService;
 use App\Tenancy\TenantContext;
+use DateTimeImmutable;
+use DateTimeZone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+use Throwable;
 
 class TenantController extends Controller
 {
@@ -54,6 +64,8 @@ class TenantController extends Controller
                     'integrations' => $this->integrationSummaries($tenant),
                 ]),
             'currentTenantId' => $request->user()->current_tenant_id,
+            'currencyOptions' => config('lora.tenant_currencies'),
+            'timezoneGroups' => $this->timezoneGroups(),
         ]);
     }
 
@@ -131,7 +143,164 @@ class TenantController extends Controller
             'members' => $members,
             'activity' => $activity,
             'currentTenantId' => request()->user()->current_tenant_id,
+            'currencyOptions' => config('lora.tenant_currencies'),
+            'timezoneGroups' => $this->timezoneGroups(),
+            'roleOptions' => array_keys(TenantRoleService::definitions()),
         ]);
+    }
+
+    public function update(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'slug' => [
+                'required', 'string', 'max:80', 'alpha_dash:ascii',
+                Rule::unique('tenants', 'slug')->ignore($tenant->id),
+            ],
+            'timezone' => ['required', 'timezone:all'],
+            'currency' => ['required', Rule::in(config('lora.tenant_currencies'))],
+        ]);
+
+        $before = $tenant->only(['name', 'slug', 'timezone', 'currency']);
+        $newCurrency = Str::upper($data['currency']);
+        BaseCurrency::assertCanChange($tenant, $newCurrency);
+
+        DB::transaction(function () use ($tenant, $data, $newCurrency) {
+            $tenant->forceFill([
+                'name' => trim($data['name']),
+                'slug' => Str::lower($data['slug']),
+                'timezone' => $data['timezone'],
+                'currency' => $newCurrency,
+            ])->save();
+
+            app(TenantContext::class)->run($tenant, function () use ($tenant) {
+                Setting::set('hotel.name', $tenant->name);
+                Setting::set('hotel.timezone', $tenant->timezone);
+                Setting::set('hotel.currency', $tenant->currency);
+                Setting::set('financial.default_currency_symbol', BaseCurrency::symbol());
+                FinanceAccount::whereIn('name', ['Arka', 'Banka'])->update(['currency' => $tenant->currency]);
+                FinanceAccount::ensureDefaults();
+            });
+
+            $tenant->subscription()->update(['currency' => $tenant->currency]);
+        });
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.update', $tenant, [
+            'before' => $before,
+            'after' => $tenant->only(['name', 'slug', 'timezone', 'currency']),
+        ]));
+
+        return back()->with('success', "Të dhënat e {$tenant->name} u përditësuan.");
+    }
+
+    public function storeMember(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
+    {
+        $data = $this->validateMember($request);
+        $email = Str::lower(trim($data['email']));
+        $member = User::withoutGlobalScopes()->withTrashed()->where('email', $email)->first();
+        $existing = (bool) $member;
+
+        DB::transaction(function () use (&$member, $existing, $tenant, $data, $email, $context) {
+            if (! $member) {
+                $member = User::create([
+                    'name' => trim($data['name']),
+                    'email' => $email,
+                    'password' => Str::random(40),
+                    'current_tenant_id' => $tenant->id,
+                ]);
+            } elseif ($member->trashed()) {
+                $member->restore();
+            }
+
+            $belongsToAnotherTenant = DB::table('tenant_user')
+                ->where('user_id', $member->id)
+                ->where('tenant_id', '!=', $tenant->id)
+                ->exists();
+
+            if (! $existing || ! $belongsToAnotherTenant) {
+                $member->forceFill(['name' => trim($data['name'])])->save();
+            }
+
+            $tenant->users()->syncWithoutDetaching([
+                $member->id => ['is_owner' => false, 'is_active' => (bool) $data['is_active']],
+            ]);
+
+            if (! $member->current_tenant_id) {
+                $member->forceFill(['current_tenant_id' => $tenant->id])->save();
+            }
+
+            $context->run($tenant, fn () => $member->unsetRelation('roles')->syncRoles([$data['role']]));
+        });
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.member.create', $member, [
+            'role' => $data['role'],
+            'linked_existing_account' => $existing,
+        ]));
+
+        return back()->with('success', $existing
+            ? 'Llogaria ekzistuese u lidh me hotelin.'
+            : 'Përdoruesi u shtua. Ai mund ta vendosë fjalëkalimin me “Harrove fjalëkalimin?”.');
+    }
+
+    public function updateMember(
+        Request $request,
+        Tenant $tenant,
+        int $member,
+        TenantContext $context,
+    ): RedirectResponse {
+        $pivot = DB::table('tenant_user')
+            ->where('tenant_id', $tenant->id)
+            ->where('user_id', $member)
+            ->first();
+        abort_unless($pivot, 404);
+
+        $user = User::withoutGlobalScopes()->withTrashed()->findOrFail($member);
+        $data = $this->validateMember($request, $user);
+
+        if ((bool) $pivot->is_owner && ($data['role'] !== 'admin' || ! $data['is_active'])) {
+            throw ValidationException::withMessages([
+                'role' => 'Pronari duhet të mbetet administrator aktiv.',
+            ]);
+        }
+
+        $sharedAccount = DB::table('tenant_user')
+            ->where('user_id', $user->id)
+            ->where('is_active', true)
+            ->count() > 1;
+
+        if ($sharedAccount && (
+            trim($data['name']) !== $user->name
+            || Str::lower(trim($data['email'])) !== Str::lower($user->email)
+        )) {
+            throw ValidationException::withMessages([
+                'email' => 'Kjo llogari përdoret në disa hotele. Këtu mund të ndryshosh vetëm rolin dhe statusin.',
+            ]);
+        }
+
+        DB::transaction(function () use ($tenant, $user, $data, $context) {
+            $user->forceFill([
+                'name' => trim($data['name']),
+                'email' => Str::lower(trim($data['email'])),
+            ])->save();
+
+            DB::table('tenant_user')
+                ->where('tenant_id', $tenant->id)
+                ->where('user_id', $user->id)
+                ->update(['is_active' => (bool) $data['is_active'], 'updated_at' => now()]);
+
+            if ($data['is_active'] && $user->trashed()) {
+                $user->restore();
+            }
+
+            $context->run($tenant, fn () => $user->unsetRelation('roles')->syncRoles([$data['role']]));
+        });
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.member.update', $user, [
+            'role' => $data['role'],
+            'is_active' => (bool) $data['is_active'],
+        ]));
+
+        return back()->with('success', 'Përdoruesi u përditësua.');
     }
 
     public function store(
@@ -145,7 +314,7 @@ class TenantController extends Controller
             'slug' => ['required', 'string', 'max:80', 'alpha_dash:ascii', Rule::unique('tenants', 'slug')],
             'primary_domain' => ['nullable', 'string', 'max:255'],
             'timezone' => ['required', 'timezone:all'],
-            'currency' => ['required', 'string', 'size:3'],
+            'currency' => ['required', Rule::in(config('lora.tenant_currencies'))],
             'owner_name' => ['nullable', 'string', 'max:120', 'required_with:owner_email'],
             'owner_email' => ['nullable', 'email', 'max:255', 'required_with:owner_name'],
         ]);
@@ -205,10 +374,20 @@ class TenantController extends Controller
                     'created_at' => now(),
                     'updated_at' => now(),
                 ],
+                [
+                    'tenant_id' => $tenant->id,
+                    'group' => 'financial',
+                    'key' => 'default_currency_symbol',
+                    'value' => BaseCurrency::symbol($tenant->currency),
+                    'type' => 'text',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
             ]);
 
             $tenantRoles->provision($tenant, $request->user());
             $billing->provision($tenant);
+            app(TenantContext::class)->run($tenant, fn () => FinanceAccount::ensureDefaults());
 
             // The hotel's first REAL owner: an existing account is linked
             // (password untouched), a new one is created with a random
@@ -256,6 +435,41 @@ class TenantController extends Controller
         return back()->with('success', 'Hoteli u krijua.'.$ownerNote.' Tani mund te kalosh ne tenantin e ri.');
     }
 
+    /**
+     * IANA timezones grouped for the tenant onboarding dropdown.
+     *
+     * @return array<string, array<int, array{value: string, label: string}>>
+     */
+    private function timezoneGroups(): array
+    {
+        $now = new DateTimeImmutable;
+        $groups = [];
+
+        foreach (DateTimeZone::listIdentifiers() as $identifier) {
+            if ($identifier === 'UTC') {
+                $groups['UTC'][] = ['value' => 'UTC', 'label' => 'UTC (UTC+00:00)'];
+
+                continue;
+            }
+
+            [$region] = explode('/', $identifier, 2);
+            $timezone = new DateTimeZone($identifier);
+            $offset = $timezone->getOffset($now);
+            $sign = $offset >= 0 ? '+' : '-';
+            $absoluteOffset = abs($offset);
+            $hours = intdiv($absoluteOffset, 3600);
+            $minutes = intdiv($absoluteOffset % 3600, 60);
+            $city = str_replace(['_', '/'], [' ', ' / '], substr($identifier, strlen($region) + 1));
+
+            $groups[$region][] = [
+                'value' => $identifier,
+                'label' => sprintf('%s (UTC%s%02d:%02d)', $city, $sign, $hours, $minutes),
+            ];
+        }
+
+        return $groups;
+    }
+
     public function updateSubscription(
         Request $request,
         Tenant $tenant,
@@ -290,7 +504,7 @@ class TenantController extends Controller
         return back()->with('success', "Abonimi i {$tenant->name} u përditësua.");
     }
 
-    public function switch(Request $request, Tenant $tenant, TenantHandoff $handoff): RedirectResponse
+    public function switch(Request $request, Tenant $tenant, TenantHandoff $handoff): RedirectResponse|SymfonyResponse
     {
         abort_unless($tenant->status === 'active', 422, 'Ky hotel nuk eshte aktiv.');
 
@@ -306,10 +520,17 @@ class TenantController extends Controller
 
         $token = $handoff->issue($request->user(), $tenant, $targetHost);
 
-        return redirect()->away($this->tenantHandoffUrl($dashboardUrl, $token))->withHeaders([
+        $handoffUrl = $this->tenantHandoffUrl($dashboardUrl, $token);
+        $headers = [
             'Cache-Control' => 'no-store, max-age=0',
             'Referrer-Policy' => 'no-referrer',
-        ]);
+        ];
+
+        if ($request->header('X-Inertia')) {
+            return Inertia::location($handoffUrl)->withHeaders($headers);
+        }
+
+        return redirect()->away($handoffUrl)->withHeaders($headers);
     }
 
     public function updateStatus(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
@@ -338,24 +559,30 @@ class TenantController extends Controller
         string $provider,
         TenantContext $context,
     ): RedirectResponse {
-        abort_unless(in_array($provider, ['channex', 'pok'], true), 404);
+        abort_unless(in_array($provider, ['channex', 'pok', 'fature_al'], true), 404);
 
-        $data = $request->validate($provider === 'channex'
-            ? [
+        $data = $request->validate(match ($provider) {
+            'channex' => [
                 'enabled' => ['required', 'boolean'],
                 'api_key' => ['nullable', 'string', 'max:255'],
                 'webhook_secret' => ['nullable', 'string', 'max:255'],
                 // Pa property id feed-i bëhet account-wide (rrezik cross-tenant).
                 'property_id' => ['required_if:enabled,true', 'nullable', 'string', 'max:255'],
                 'base_url' => ['nullable', 'url', 'max:255'],
-            ]
-            : [
+            ],
+            'pok' => [
                 'enabled' => ['required', 'boolean'],
                 'key_id' => ['nullable', 'string', 'max:255'],
                 'key_secret' => ['nullable', 'string', 'max:255'],
                 'merchant_id' => ['nullable', 'string', 'max:255'],
                 'production' => ['required', 'boolean'],
-            ]);
+            ],
+            'fature_al' => [
+                'enabled' => ['required', 'boolean'],
+                'api_token' => ['nullable', 'string', 'max:2048'],
+                'environment' => ['required', Rule::in(['sandbox', 'production'])],
+            ],
+        });
 
         $integration = $context->run(
             $tenant,
@@ -364,18 +591,33 @@ class TenantController extends Controller
 
         $credentials = $integration->credentials ?? [];
         $configuration = $integration->configuration ?? [];
+        $originalFatureEnvironment = $provider === 'fature_al'
+            ? ($configuration['environment'] ?? 'sandbox')
+            : null;
 
         // A blank secret field means "keep the stored one" — stored values are
         // never sent back to the browser, so blanks are the normal case.
-        foreach ($provider === 'channex' ? ['api_key', 'webhook_secret'] : ['key_id', 'key_secret'] as $key) {
+        $secretKeys = match ($provider) {
+            'channex' => ['api_key', 'webhook_secret'],
+            'pok' => ['key_id', 'key_secret'],
+            'fature_al' => ['api_token'],
+        };
+
+        foreach ($secretKeys as $key) {
             if (filled($data[$key] ?? null)) {
-                $credentials[$key] = $data[$key];
+                $credentials[$key] = trim($data[$key]);
             }
         }
 
         // Non-secret config is pre-filled in the form, so a blank submit is a
         // deliberate CLEAR (secrets stay blank-keeps — they are never pre-filled).
-        foreach ($provider === 'channex' ? ['property_id', 'base_url'] : ['merchant_id'] as $key) {
+        $configurationKeys = match ($provider) {
+            'channex' => ['property_id', 'base_url'],
+            'pok' => ['merchant_id'],
+            'fature_al' => ['environment'],
+        };
+
+        foreach ($configurationKeys as $key) {
             if (array_key_exists($key, $data)) {
                 if (filled($data[$key])) {
                     $configuration[$key] = $data[$key];
@@ -387,6 +629,19 @@ class TenantController extends Controller
 
         if ($provider === 'pok') {
             $configuration['production'] = (bool) $data['production'];
+        }
+
+        if ($provider === 'fature_al' && (
+            filled($data['api_token'] ?? null)
+            || ($configuration['environment'] ?? 'sandbox') !== $originalFatureEnvironment
+        )) {
+            unset($configuration['last_test_status'], $configuration['last_tested_at'], $configuration['account']);
+        }
+
+        if ($provider === 'fature_al' && (bool) $data['enabled'] && blank($credentials['api_token'] ?? null)) {
+            throw ValidationException::withMessages([
+                'api_token' => 'Vendos token-in API para se të aktivizosh fiskalizimin.',
+            ]);
         }
 
         $context->run($tenant, function () use ($integration, $data, $credentials, $configuration) {
@@ -405,6 +660,42 @@ class TenantController extends Controller
         ]));
 
         return back()->with('success', 'Integrimi '.ucfirst($provider)." u ruajt për {$tenant->name}.");
+    }
+
+    public function testIntegration(
+        Tenant $tenant,
+        string $provider,
+        TenantContext $context,
+    ): RedirectResponse {
+        abort_unless($provider === 'fature_al', 404);
+
+        try {
+            $context->run($tenant, function () {
+                $account = app(FatureAlClient::class)->testConnection();
+                $this->recordIntegrationTest('success', $account);
+            });
+
+            $context->run($tenant, fn () => AuditLog::record('tenant.integration.test', $tenant, [
+                'provider' => 'fature_al',
+                'status' => 'success',
+            ]));
+
+            return back()->with('success', 'Lidhja test me fature.al funksionon.');
+        } catch (Throwable $exception) {
+            $message = $exception instanceof RuntimeException
+                ? $exception->getMessage()
+                : 'Nuk u lidhëm dot me fature.al. Provo përsëri.';
+
+            $context->run($tenant, function () use ($tenant) {
+                $this->recordIntegrationTest('failed');
+                AuditLog::record('tenant.integration.test', $tenant, [
+                    'provider' => 'fature_al',
+                    'status' => 'failed',
+                ]);
+            });
+
+            return back()->with('error', $message);
+        }
     }
 
     public function storeDomain(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
@@ -467,6 +758,7 @@ class TenantController extends Controller
 
         $channex = $rows->get('channex');
         $pok = $rows->get('pok');
+        $fature = $rows->get('fature_al');
 
         return [
             'channex' => [
@@ -483,7 +775,51 @@ class TenantController extends Controller
                 'merchant_id' => $pok?->configuration['merchant_id'] ?? null,
                 'production' => (bool) ($pok?->configuration['production'] ?? false),
             ],
+            'fature_al' => [
+                'enabled' => (bool) ($fature?->enabled),
+                'has_api_token' => filled($fature?->credentials['api_token'] ?? null),
+                'environment' => ($fature?->configuration['environment'] ?? 'sandbox') === 'production'
+                    ? 'production'
+                    : 'sandbox',
+                'last_tested_at' => $fature?->configuration['last_tested_at'] ?? null,
+                'last_test_status' => $fature?->configuration['last_test_status'] ?? null,
+            ],
         ];
+    }
+
+    /** @param array{company:string,nipt:string,branch:string,issuer_in_vat:bool|null}|null $account */
+    private function recordIntegrationTest(string $status, ?array $account = null): void
+    {
+        $integration = TenantIntegration::query()->where('provider', 'fature_al')->first();
+
+        if (! $integration) {
+            return;
+        }
+
+        $configuration = $integration->configuration ?? [];
+        $configuration['last_tested_at'] = now()->toIso8601String();
+        $configuration['last_test_status'] = $status;
+        if ($account !== null) {
+            $configuration['account'] = $account;
+        }
+
+        $integration->forceFill(['configuration' => $configuration])->save();
+    }
+
+    /** @return array{name: string, email: string, role: string, is_active: bool} */
+    private function validateMember(Request $request, ?User $member = null): array
+    {
+        $emailRules = ['required', 'email', 'max:255'];
+        if ($member) {
+            $emailRules[] = Rule::unique('users', 'email')->ignore($member->id);
+        }
+
+        return $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'email' => $emailRules,
+            'role' => ['required', Rule::in(array_keys(TenantRoleService::definitions()))],
+            'is_active' => ['required', 'boolean'],
+        ]);
     }
 
     private function normalizeDomain(?string $domain): ?string

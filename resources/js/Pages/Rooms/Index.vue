@@ -70,6 +70,7 @@ watch(groupMode, (value) => {
 });
 
 const page = usePage();
+const currencyCode = page.props.tenant?.currency || 'EUR';
 const userPerms = computed(() => page.props.auth.user?.permissions || []);
 const canCreate = computed(() => userPerms.value.includes('create_rooms'));
 const canUpdate = computed(() => userPerms.value.includes('update_rooms'));
@@ -94,7 +95,7 @@ const roomList = computed(() => (
 
 const roomTypeOptions = computed(() => props.roomTypes.map((type) => ({
     value: type.id,
-    label: `${type.name} (€${type.base_price})`,
+    label: `${type.name} (${new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currencyCode }).format(Number(type.base_price || 0))})`,
 })));
 const roomTypeFilterOptions = computed(() => [
     { value: '', label: translate('admin.generated.k_04822094270a') },
@@ -172,7 +173,7 @@ function formatTime(value) {
 
 function money(value) {
     const amount = Number(value || 0);
-    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: 'EUR' }).format(Number.isFinite(amount) ? amount : 0);
+    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currencyCode }).format(Number.isFinite(amount) ? amount : 0);
 }
 
 function reservationIdOf(...candidates) {

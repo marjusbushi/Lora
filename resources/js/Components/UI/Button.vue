@@ -66,6 +66,8 @@ function handleClick(e) {
         :href="href"
         :type="href ? undefined : type"
         :disabled="disabled || loading"
+        data-ui="button"
+        :data-size="size"
         :class="[
             'inline-flex items-center justify-center font-medium rounded-md transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1',
             variantClasses[variant],

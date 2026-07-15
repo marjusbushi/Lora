@@ -183,15 +183,19 @@ class ControlPanelIsolationTest extends TestCase
                 ->where('logs.data.0.action', 'tenant.integration.update')
                 ->where('stats.actions_24h', 1)
                 ->where('stats.hotels_24h', 1)
+                ->where('stats.actions_range', 1)
+                ->where('stats.hotels_range', 1)
+                ->where('categoryCounts.integrations', 1)
                 ->has('hotels', 1));
 
         $this->actingAs($superAdmin)
-            ->get('https://admin.lorapms.test/super-admin/activity?q='.urlencode($tenant->name).'&tenant='.$tenant->id.'&range=30')
+            ->get('https://admin.lorapms.test/super-admin/activity?q='.urlencode($tenant->name).'&tenant='.$tenant->id.'&category=integrations&range=30')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('logs.data', 1)
                 ->where('filter.q', $tenant->name)
                 ->where('filter.tenant', $tenant->id)
+                ->where('filter.category', 'integrations')
                 ->where('filter.range', '30'));
 
         // Field NAMES may show; secret VALUES must never reach the page.
@@ -205,6 +209,35 @@ class ControlPanelIsolationTest extends TestCase
         $this->actingAs($user)
             ->get('https://admin.lorapms.test/super-admin/activity')
             ->assertForbidden();
+    }
+
+    public function test_super_admin_can_open_and_update_the_control_panel_profile(): void
+    {
+        $superAdmin = User::factory()->create([
+            'is_super_admin' => true,
+            'name' => 'Platform Admin',
+            'email' => 'platform-profile@example.test',
+        ]);
+
+        $this->actingAs($superAdmin)
+            ->get('https://admin.lorapms.test/super-admin/profile')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('SuperAdmin/Profile'));
+
+        $this->actingAs($superAdmin)
+            ->from('https://admin.lorapms.test/super-admin/profile')
+            ->patch('https://admin.lorapms.test/super-admin/profile', [
+                'name' => 'Updated Platform Admin',
+                'email' => 'updated-platform@example.test',
+            ])
+            ->assertRedirect('https://admin.lorapms.test/super-admin/profile')
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('users', [
+            'id' => $superAdmin->id,
+            'name' => 'Updated Platform Admin',
+            'email' => 'updated-platform@example.test',
+        ]);
     }
 
     public function test_tenant_detail_page_shows_members_domains_and_integrations_to_super_admin(): void

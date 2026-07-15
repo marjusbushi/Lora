@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Jobs\PushRoomTypeAri;
 use App\Models\Amenity;
+use App\Models\AuditLog;
 use App\Models\CleaningTask;
+use App\Models\FinanceAccount;
 use App\Models\Floor;
 use App\Models\InventoryItem;
 use App\Models\MenuCategory;
@@ -14,19 +16,31 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\RoomTypeImage;
 use App\Models\Setting;
+use App\Models\Tenant;
+use App\Models\TenantIntegration;
 use App\Models\Warehouse;
 use App\Services\AuditTimeline;
+use App\Services\BaseCurrency;
 use App\Services\CurrencyRates;
+use App\Services\FatureAlClient;
+use App\Services\FatureAlConfiguration;
+use App\Services\IntegrationCatalog;
 use App\Services\MarketRates;
 use App\Services\PricingRulesVersion;
+use App\Services\VatConfiguration;
+use App\Support\TenantStorage;
+use App\Tenancy\TenantContext;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Support\TenantStorage;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
+use Throwable;
 
 class SettingsController extends Controller
 {
@@ -35,8 +49,9 @@ class SettingsController extends Controller
         UserController $userController,
         AuditLogController $auditLogController,
         AuditTimeline $timeline,
-    ): Response
-    {
+        IntegrationCatalog $integrationCatalog,
+        FatureAlConfiguration $fatureAlConfiguration,
+    ): Response {
         $settings = Setting::allGrouped();
 
         // Never ship the raw AI key to the browser — expose only a masked hint + a configured flag.
@@ -71,6 +86,18 @@ class SettingsController extends Controller
             'search_query' => MarketRates::searchQuery(),
         ];
 
+        $fiscalAccount = (array) $fatureAlConfiguration->get('account', []);
+        $settings['financial'] = array_merge([
+            'vat_status' => null,
+            'accommodation_vat_rate' => VatConfiguration::ACCOMMODATION_RATE,
+            'product_vat_rate' => VatConfiguration::PRODUCT_RATE,
+        ], $settings['financial'] ?? [], [
+            'default_currency_symbol' => BaseCurrency::symbol(),
+            'provider_vat_registered' => is_bool($fiscalAccount['issuer_in_vat'] ?? null)
+                ? $fiscalAccount['issuer_in_vat']
+                : null,
+        ]);
+
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
             'checklistDefaults' => CleaningTask::DEFAULT_CHECKLISTS,
@@ -88,7 +115,53 @@ class SettingsController extends Controller
             'amenities' => Amenity::orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
             'userManagement' => $userController->pageData($request, 'user_'),
             'auditHistory' => $auditLogController->pageData($request, $timeline, 'audit_'),
+            'integrations' => $integrationCatalog->forSettings($settings),
         ]);
+    }
+
+    public function testIntegration(string $provider, FatureAlClient $client): RedirectResponse
+    {
+        abort_unless($provider === 'fature_al', 404);
+
+        try {
+            $account = $client->testConnection();
+            $this->recordIntegrationTest('success', $account);
+            AuditLog::record('tenant.integration.test', null, [
+                'provider' => 'fature_al',
+                'status' => 'success',
+            ]);
+
+            return back()->with('success', 'Lidhja test me fature.al funksionon.');
+        } catch (Throwable $exception) {
+            $this->recordIntegrationTest('failed');
+            AuditLog::record('tenant.integration.test', null, [
+                'provider' => 'fature_al',
+                'status' => 'failed',
+            ]);
+
+            return back()->with('error', $exception instanceof RuntimeException
+                ? $exception->getMessage()
+                : 'Nuk u lidhëm dot me fature.al. Provo përsëri.');
+        }
+    }
+
+    /** @param array{company:string,nipt:string,branch:string,issuer_in_vat:bool|null}|null $account */
+    private function recordIntegrationTest(string $status, ?array $account = null): void
+    {
+        $integration = TenantIntegration::query()->where('provider', 'fature_al')->first();
+
+        if (! $integration) {
+            return;
+        }
+
+        $configuration = $integration->configuration ?? [];
+        $configuration['last_tested_at'] = now()->toIso8601String();
+        $configuration['last_test_status'] = $status;
+        if ($account !== null) {
+            $configuration['account'] = $account;
+        }
+
+        $integration->forceFill(['configuration' => $configuration])->save();
     }
 
     // --- Floors (Katet) ---
@@ -137,7 +210,7 @@ class SettingsController extends Controller
             'phone' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
             'timezone' => ['required', 'string', 'max:50'],
-            'currency' => ['required', 'string', 'in:EUR,ALL,USD,GBP'],
+            'currency' => ['required', 'string', Rule::in(config('lora.tenant_currencies'))],
             'check_in_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
             'check_out_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
             'logo' => ['nullable', 'image', 'mimes:jpeg,png,webp', 'max:3072'],
@@ -150,14 +223,33 @@ class SettingsController extends Controller
             'hero_subtitle_en' => ['nullable', 'string', 'max:400'],
         ]);
 
-        foreach ([
-            'name', 'address', 'phone', 'email', 'timezone', 'currency', 'check_in_time', 'check_out_time',
-            'hero_eyebrow_sq', 'hero_eyebrow_en',
-            'hero_title_sq', 'hero_title_en',
-            'hero_subtitle_sq', 'hero_subtitle_en',
-        ] as $key) {
-            Setting::set("hotel.{$key}", $request->input($key));
-        }
+        /** @var Tenant $tenant */
+        $tenant = app(TenantContext::class)->tenant() ?? abort(404);
+        $currency = strtoupper((string) $request->input('currency'));
+        BaseCurrency::assertCanChange($tenant, $currency);
+
+        DB::transaction(function () use ($request, $tenant, $currency) {
+            foreach ([
+                'name', 'address', 'phone', 'email', 'timezone', 'check_in_time', 'check_out_time',
+                'hero_eyebrow_sq', 'hero_eyebrow_en',
+                'hero_title_sq', 'hero_title_en',
+                'hero_subtitle_sq', 'hero_subtitle_en',
+            ] as $key) {
+                Setting::set("hotel.{$key}", $request->input($key));
+            }
+
+            Setting::set('hotel.currency', $currency);
+            Setting::set('financial.default_currency_symbol', BaseCurrency::symbol($currency));
+
+            $tenant->forceFill([
+                'name' => trim((string) $request->input('name')),
+                'timezone' => $request->input('timezone'),
+                'currency' => $currency,
+            ])->save();
+
+            FinanceAccount::whereIn('name', ['Arka', 'Banka'])->update(['currency' => $currency]);
+            FinanceAccount::ensureDefaults();
+        });
 
         if ($request->hasFile('logo')) {
             $path = $request->file('logo')->store(TenantStorage::path('logos'), 'public');
@@ -263,8 +355,8 @@ class SettingsController extends Controller
     // --- Financial ---
     public function updateFinancial(Request $request): RedirectResponse
     {
-        $request->validate([
-            'tax_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+        $data = $request->validate([
+            'vat_status' => ['required', 'in:registered,not_registered'],
             'payment_methods' => ['required', 'array', 'min:1'],
             'payment_methods.*' => ['in:cash,card,room_charge'],
             'currency_symbol' => ['required', 'string', 'max:5'],
@@ -272,9 +364,15 @@ class SettingsController extends Controller
             'channel_fees.*' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
-        Setting::set('financial.tax_rate', $request->tax_rate, 'number');
+        Setting::set('financial.vat_status', $data['vat_status']);
+        Setting::set('financial.accommodation_vat_rate', VatConfiguration::ACCOMMODATION_RATE, 'number');
+        Setting::set('financial.product_vat_rate', VatConfiguration::PRODUCT_RATE, 'number');
+        // Kept as a compatibility alias for older screens that expect one product rate.
+        Setting::set('financial.tax_rate', $data['vat_status'] === VatConfiguration::REGISTERED
+            ? VatConfiguration::PRODUCT_RATE
+            : 0, 'number');
         Setting::set('financial.payment_methods', $request->payment_methods, 'json');
-        Setting::set('financial.default_currency_symbol', $request->currency_symbol);
+        Setting::set('financial.default_currency_symbol', BaseCurrency::symbol());
 
         // Per-channel commission % — Direct is first-party and always commission-free.
         $fees = [];
@@ -284,6 +382,16 @@ class SettingsController extends Controller
             }
         }
         Setting::set('financial.channel_fees', $fees, 'json');
+
+        AuditLog::record('settings.financial.update', null, [
+            'vat_status' => $data['vat_status'],
+            'accommodation_vat_rate' => $data['vat_status'] === VatConfiguration::REGISTERED
+                ? VatConfiguration::ACCOMMODATION_RATE
+                : 0,
+            'product_vat_rate' => $data['vat_status'] === VatConfiguration::REGISTERED
+                ? VatConfiguration::PRODUCT_RATE
+                : 0,
+        ]);
 
         return back()->with('success', 'Konfigurimet financiare u ruajten.');
     }
@@ -394,6 +502,7 @@ class SettingsController extends Controller
             'enabled' => ['required', 'boolean'],
             'api_key' => ['nullable', 'string', 'max:100'],
             'clear_key' => ['nullable', 'boolean'],
+            'manual_all_rate' => ['nullable', 'numeric', 'min:1', 'max:1000'],
         ]);
 
         Setting::set('currencies.enabled', $data['enabled'] ? '1' : '0', 'boolean');
@@ -401,6 +510,9 @@ class SettingsController extends Controller
             Setting::set('currencies.api_key', '', 'text');
         } elseif (trim((string) ($data['api_key'] ?? '')) !== '') {
             Setting::set('currencies.api_key', trim($data['api_key']), 'text');
+        }
+        if ($request->exists('manual_all_rate')) {
+            Setting::set('financial.fx_all_per_eur', $data['manual_all_rate'] ?? 0, 'number');
         }
 
         return back()->with('success', 'Monedhat u ruajtën.');
@@ -414,7 +526,7 @@ class SettingsController extends Controller
         }
         try {
             $count = app(CurrencyRates::class)->fetch();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             report($e);
 
             return back()->with('error', 'Rifreskimi dështoi — kontrollo çelësin API.');
@@ -647,6 +759,12 @@ class SettingsController extends Controller
 
     public function updateMenuItem(Request $request, MenuItem $menuItem): RedirectResponse
     {
+        if ($menuItem->inventory_item_id) {
+            throw ValidationException::withMessages([
+                'name' => 'Ky produkt menaxhohet nga Inventari.',
+            ]);
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0.01'],
@@ -688,6 +806,10 @@ class SettingsController extends Controller
 
     public function destroyMenuItem(MenuItem $menuItem): RedirectResponse
     {
+        if ($menuItem->inventory_item_id) {
+            return back()->with('error', 'Ky produkt menaxhohet nga Inventari dhe nuk mund të fshihet nga menuja POS.');
+        }
+
         $menuItem->delete();
 
         return back()->with('success', 'Artikulli u fshi.');

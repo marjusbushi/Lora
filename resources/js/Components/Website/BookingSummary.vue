@@ -1,4 +1,6 @@
 <script setup>
+import { computed } from 'vue';
+import { usePage } from '@inertiajs/vue3';
 import { Check } from 'lucide-vue-next';
 
 defineProps({
@@ -8,6 +10,7 @@ defineProps({
     dateLabel: Function,
     money: Function,
 });
+const currencySymbol = computed(() => usePage().props.settings?.currency_symbol || '€');
 </script>
 
 <template>
@@ -22,10 +25,10 @@ defineProps({
                 <p class="text-tiny font-semibold uppercase tracking-wider text-ink/40">{{ $t('book.direct.selectedRoom') }}</p>
                 <p class="mt-1 font-serif text-xl text-ink">{{ room.room_type }}</p>
                 <div class="mt-5 space-y-3 border-y border-driftwood/15 py-5 text-body-sm">
-                    <div class="flex justify-between gap-4 text-ink/60"><span>{{ $t('book.direct.smartSubtotal') }}</span><span>€{{ money(room.smart_total_price) }}</span></div>
-                    <div v-if="Number(room.direct_discount_amount) > 0" class="flex justify-between gap-4 font-medium text-success-700"><span>{{ $t('book.direct.discount', { pct: room.direct_discount_pct }) }}</span><span>-€{{ money(room.direct_discount_amount) }}</span></div>
+                    <div class="flex justify-between gap-4 text-ink/60"><span>{{ $t('book.direct.smartSubtotal') }}</span><span>{{ currencySymbol }}{{ money(room.smart_total_price) }}</span></div>
+                    <div v-if="Number(room.direct_discount_amount) > 0" class="flex justify-between gap-4 font-medium text-success-700"><span>{{ $t('book.direct.discount', { pct: room.direct_discount_pct }) }}</span><span>-{{ currencySymbol }}{{ money(room.direct_discount_amount) }}</span></div>
                 </div>
-                <div class="flex items-end justify-between gap-4 pt-5"><span class="font-serif text-xl text-ink">{{ $t('book.direct.total') }}</span><span class="font-serif text-3xl text-brass">€{{ money(room.total_price) }}</span></div>
+                <div class="flex items-end justify-between gap-4 pt-5"><span class="font-serif text-xl text-ink">{{ $t('book.direct.total') }}</span><span class="font-serif text-3xl text-brass">{{ currencySymbol }}{{ money(room.total_price) }}</span></div>
                 <p class="mt-1 text-right text-tiny text-ink/40">{{ $t('book.direct.taxesIncluded') }}</p>
             </template>
             <p v-else class="text-body-sm text-ink/50">{{ $t('book.direct.chooseRoomSummary') }}</p>

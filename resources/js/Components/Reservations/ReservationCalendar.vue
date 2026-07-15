@@ -61,6 +61,7 @@ const activeConflicts = computed(() => (props.conflicts || []).filter((conflict)
 const conflictingReservationIds = computed(() => new Set(activeConflicts.value.flatMap((conflict) => conflict.reservations.map((reservation) => reservation.id))));
 
 const perms = usePage().props.auth.user?.permissions || [];
+const currencyCode = usePage().props.tenant?.currency || 'EUR';
 const canCreate = props.demo || perms.includes('create_reservations');
 const canUpdate = props.demo || perms.includes('update_reservations');
 
@@ -276,7 +277,7 @@ function formatDateTime(value) {
     }).format(new Date(value));
 }
 function formatMoney(value) {
-    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: 'EUR' }).format(Number(value) || 0);
+    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currencyCode }).format(Number(value) || 0);
 }
 const selectedPaidAmount = computed(() => Number(selectedReservation.value?.paid_amount) || 0);
 const selectedBalance = computed(() => Math.max(0, (Number(selectedReservation.value?.total_amount) || 0) - selectedPaidAmount.value));
@@ -582,7 +583,7 @@ function doCheckOut(res) {
                                         @click="openDetail(reservation)"
                                     >
                                         <span class="flex items-center gap-1.5 truncate text-[11px] font-extrabold"><span class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ backgroundColor: channelMeta(reservation.channel).color }" />{{ reservation.guest?.first_name }} {{ reservation.guest?.last_name }}</span>
-                                        <span class="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-75"><span class="truncate">{{ channelMeta(reservation.channel).label }}</span><span class="shrink-0 font-bold" :class="Number(reservation.paid_amount) >= Number(reservation.total_amount) ? 'text-success-700' : 'text-warning-700'" aria-hidden="true">€</span></span>
+                                        <span class="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-75"><span class="truncate">{{ channelMeta(reservation.channel).label }}</span><span class="shrink-0 font-bold" :class="Number(reservation.paid_amount) >= Number(reservation.total_amount) ? 'text-success-700' : 'text-warning-700'" aria-hidden="true">{{ currencyCode }}</span></span>
                                     </button>
                                 </div>
                             </div>

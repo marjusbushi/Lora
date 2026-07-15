@@ -13,6 +13,7 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
+use App\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,7 +37,7 @@ class DashboardLoadsTest extends TestCase
 
     public function test_admin_dashboard_exposes_the_operational_cockpit_contract(): void
     {
-        Setting::set('financial.default_currency_symbol', 'ALL');
+        Tenant::query()->sole()->update(['currency' => 'ALL']);
 
         $admin = $this->user('admin');
         $type = $this->roomType();
@@ -53,7 +54,7 @@ class DashboardLoadsTest extends TestCase
             $this->assertArrayHasKey($key, $props, "Dashboard is missing the top-level [{$key}] prop.");
         }
 
-        $this->assertSame('ALL', $props['currency']);
+        $this->assertSame('L', $props['currency']);
         $this->assertIsArray($props['permissions']);
         $this->assertNotEmpty($props['permissions']);
         foreach ($props['permissions'] as $permission => $allowed) {

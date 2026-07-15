@@ -25,6 +25,7 @@ const allTabs = [
     { id: 'currencies', labelSq: 'Monedhat', labelEn: 'Currencies', group: 'operations', module: 'finance' },
     { id: 'pricing-programs', labelSq: 'Çmimet & OTA', labelEn: 'Pricing & OTA', group: 'operations' },
     { id: 'market-rates', labelSq: 'Çmimet e tregut', labelEn: 'Market rates', group: 'operations' },
+    { id: 'integrations', labelSq: 'Integrimet', labelEn: 'Integrations', group: 'system' },
     { id: 'ai', labelSq: 'Asistenti AI', labelEn: 'AI assistant', group: 'system' },
 ];
 

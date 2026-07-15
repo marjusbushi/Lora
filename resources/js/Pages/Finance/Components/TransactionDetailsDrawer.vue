@@ -19,6 +19,7 @@ import { translate } from '@/i18n';
 
 const props = defineProps({
     payment: { type: Object, default: null },
+    baseCurrency: { type: String, default: 'EUR' },
 });
 
 const emit = defineEmits(['close']);
@@ -89,7 +90,7 @@ onBeforeUnmount(() => {
                             <p class="mt-1 text-h2 font-extrabold tabular-nums">
                                 {{ payment.direction === 'in' ? '+' : payment.direction === 'out' ? '−' : '' }} {{ money(payment.amount, payment.currency) }}
                             </p>
-                            <p v-if="payment.currency !== 'EUR'" class="mt-1 text-tiny opacity-70">≈ {{ money(payment.amount_base) }}</p>
+                            <p v-if="payment.currency !== baseCurrency" class="mt-1 text-tiny opacity-70">≈ {{ money(payment.amount_base, baseCurrency) }}</p>
                         </div>
 
                         <dl class="mt-5 divide-y divide-neutral-100 text-body-sm">

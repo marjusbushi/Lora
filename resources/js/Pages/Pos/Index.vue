@@ -1,6 +1,6 @@
 <script setup>
 import { getIntlLocale, i18n, translate } from '@/i18n';
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -12,6 +12,7 @@ import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ShiftBanner from '@/Components/Pos/ShiftBanner.vue';
+import PosReceipt from '@/Components/Invoices/PosReceipt.vue';
 import { Minus, Plus, ReceiptText, Search, ShoppingCart, Star, Trash2, X } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -24,12 +25,16 @@ const props = defineProps({
     canOpenShift: { type: Boolean, default: false },
     canCloseShift: { type: Boolean, default: false },
     defaultOpeningFloat: { type: Number, default: 0 },
+    receiptSettings: { type: Object, default: () => ({}) },
 });
 
 const toasts = ref(null);
 const showPayModal = ref(false);
 const showOrdersPanel = ref(false);
 const selectedOrder = ref(null);
+const showReceipt = ref(false);
+const receiptOrder = ref(null);
+const fiscalizingOrder = ref(null);
 const activeCategory = ref(props.menu?.[0]?.id || null);
 const searchQuery = ref('');
 const serviceMode = ref('table');
@@ -61,7 +66,9 @@ const openShiftForm = useForm({ opening_float: props.defaultOpeningFloat ?? 0 })
 const closeShiftForm = useForm({ counted_cash: '', closing_note: '' });
 
 function money(v) {
-    return `€${Number(v ?? 0).toFixed(2)}`;
+    return new Intl.NumberFormat(getIntlLocale(), {
+        style: 'currency', currency: props.receiptSettings.currency || 'EUR',
+    }).format(Number(v ?? 0));
 }
 
 function submitOpenShift() {
@@ -114,7 +121,9 @@ function submitCloseShift() {
 }
 
 function printZReport() {
+    document.body.classList.add('printing-z-report');
     window.print();
+    window.setTimeout(() => document.body.classList.remove('printing-z-report'), 500);
 }
 
 const cartTotal = computed(() =>
@@ -237,7 +246,7 @@ function submitOrder() {
     form.post(route('pos.store'), {
         onSuccess: () => {
             clearCart();
-            toasts.value?.success(`Porosia u krijua — €${submittedTotal.toFixed(2)}`);
+            toasts.value?.success(`Porosia u krijua — ${money(submittedTotal)}`);
         },
     });
 }
@@ -251,18 +260,55 @@ function openPay(order) {
 }
 
 function submitPay() {
+    const orderId = selectedOrder.value.id;
     router.post(route('pos.complete', selectedOrder.value.id), {
         payment_method: paymentMethod.value,
         reservation_id: paymentMethod.value === 'room_charge' ? selectedPayReservation.value : null,
     }, {
         preserveScroll: true,
-        onSuccess: () => {
+        onSuccess: (page) => {
             showPayModal.value = false;
-            toasts.value?.success(translate('admin.generated.k_4d1af80f8706'));
+            const finalized = page.props.orders?.data?.find((order) => Number(order.id) === Number(orderId));
+            if (finalized) openReceipt(finalized);
+            const error = page.props.flash?.error;
+            if (error) toasts.value?.error(error);
+            else toasts.value?.success(translate('admin.generated.k_4d1af80f8706'));
         },
         onError: (errors) => {
             if (errors.inventory) toasts.value?.error(errors.inventory);
         },
+    });
+}
+
+function openReceipt(order) {
+    receiptOrder.value = order;
+    showReceipt.value = true;
+}
+
+function printReceipt() {
+    document.body.classList.add('printing-pos-receipt');
+    window.print();
+    window.setTimeout(() => document.body.classList.remove('printing-pos-receipt'), 500);
+}
+
+function canFiscalize(order) {
+    return order?.status === 'completed'
+        && ['cash', 'card'].includes(order?.payment_method)
+        && order?.fiscal_document?.status !== 'fiscalized';
+}
+
+function fiscalizeReceipt(order) {
+    fiscalizingOrder.value = order.id;
+    router.post(route('pos.fiscalize', order.id), {}, {
+        preserveScroll: true,
+        onSuccess: (page) => {
+            const updated = page.props.orders?.data?.find((item) => Number(item.id) === Number(order.id));
+            if (updated) openReceipt(updated);
+            toasts.value?.success(translate('invoicePrint.posFiscalSuccess'));
+            nextTick(() => printReceipt());
+        },
+        onError: (errors) => toasts.value?.error(errors.fiscalization || translate('invoicePrint.posFiscalFailed')),
+        onFinish: () => { fiscalizingOrder.value = null; },
     });
 }
 
@@ -361,13 +407,25 @@ function formatTime(d) {
                                                 {{ statusBadge[order.status]?.label }}
                                             </Badge>
                                         </td>
-                                        <td class="px-4 py-2.5 text-right text-body-sm font-medium">€{{ order.total_amount }}</td>
+                                        <td class="px-4 py-2.5 text-right text-body-sm font-medium">{{ money(order.total_amount) }}</td>
                                         <td class="px-4 py-2.5 text-right">
                                             <div v-if="order.status === 'open'" class="flex justify-end gap-1">
                                                 <Button size="sm" variant="primary" :disabled="!hasOpenShift" @click="openPay(order)">{{ $t('admin.generated.k_c0bc68ffb628') }}</Button>
                                                 <Button size="sm" variant="ghost" class="text-error-600" @click="cancelOrder(order)">{{ $t('admin.generated.k_28cc20e7fd5b') }}</Button>
                                             </div>
-                                            <Badge v-else-if="order.payment_method" variant="neutral" size="sm">{{ payLabel[order.payment_method] }}</Badge>
+                                            <div v-else-if="order.status === 'completed'" class="flex flex-wrap justify-end gap-1.5">
+                                                <Badge v-if="order.payment_method" variant="neutral" size="sm">{{ payLabel[order.payment_method] }}</Badge>
+                                                <Button
+                                                    v-if="canFiscalize(order)"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    :loading="fiscalizingOrder === order.id"
+                                                    @click="fiscalizeReceipt(order)"
+                                                >{{ $t('invoicePrint.fiscalize') }}</Button>
+                                                <Button size="sm" variant="outline" @click="openReceipt(order)">
+                                                    <ReceiptText class="h-3.5 w-3.5" /> {{ $t('reservationShow.invoice') }}
+                                                </Button>
+                                            </div>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -580,6 +638,35 @@ function formatTime(d) {
             </template>
         </Modal>
 
+        <!-- Thermal POS receipt preview -->
+        <Modal :show="showReceipt" :title="$t('invoicePrint.posInvoiceTitle')" max-width="md" @close="showReceipt = false">
+            <div class="overflow-x-auto rounded-lg bg-neutral-100 py-4">
+                <PosReceipt v-if="receiptOrder" :order="receiptOrder" :settings="receiptSettings" class="shadow-lg" />
+            </div>
+            <div v-if="receiptOrder?.fiscal_document?.status === 'failed'" class="mt-3 rounded-lg border border-error-200 bg-error-50 px-3 py-2 text-small text-error-700">
+                {{ $t('invoicePrint.posFiscalPrintWarning') }}
+            </div>
+            <div v-else-if="receiptOrder?.payment_method === 'room_charge'" class="mt-3 rounded-lg border border-info-200 bg-info-50 px-3 py-2 text-small text-info-800">
+                {{ $t('invoicePrint.roomChargeFiscalHint') }}
+            </div>
+            <div v-else-if="receiptOrder?.fiscal_document?.status !== 'fiscalized'" class="mt-3 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-small text-warning-800">
+                {{ $t('invoicePrint.nonFiscalPrintHint') }}
+            </div>
+            <div v-else class="mt-3 rounded-lg border border-success-200 bg-success-50 px-3 py-2 text-small text-success-800">
+                {{ $t('invoicePrint.fiscalReady') }}
+            </div>
+            <template #footer>
+                <Button variant="outline" @click="showReceipt = false">{{ $t('invoicePrint.cancel') }}</Button>
+                <Button
+                    variant="primary"
+                    :loading="fiscalizingOrder === receiptOrder.id"
+                    :disabled="!canFiscalize(receiptOrder)"
+                    @click="fiscalizeReceipt(receiptOrder)"
+                >{{ receiptOrder?.fiscal_document?.status === 'fiscalized' ? $t('invoicePrint.fiscalizedButton') : $t('invoicePrint.fiscalize') }}</Button>
+                <Button variant="outline" @click="printReceipt">{{ $t('invoicePrint.print80') }}</Button>
+            </template>
+        </Modal>
+
         <!-- Open shift modal -->
         <Modal :show="showOpenShift" :title="$t('admin.generated.k_b8387a4701eb')" max-width="sm" @close="showOpenShift = false">
             <div class="space-y-4">
@@ -656,8 +743,13 @@ function formatTime(d) {
 
 <style>
 @media print {
-    body * { visibility: hidden !important; }
-    #zreport, #zreport * { visibility: visible !important; }
-    #zreport { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+    @page { size: 80mm auto; margin: 0; }
+    body.printing-z-report * { visibility: hidden !important; }
+    body.printing-z-report #zreport, body.printing-z-report #zreport * { visibility: visible !important; }
+    body.printing-z-report #zreport { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+
+    body.printing-pos-receipt * { visibility: hidden !important; }
+    body.printing-pos-receipt #pos-receipt, body.printing-pos-receipt #pos-receipt * { visibility: visible !important; }
+    body.printing-pos-receipt #pos-receipt { position: absolute; left: 0; top: 0; margin: 0; box-shadow: none !important; }
 }
 </style>

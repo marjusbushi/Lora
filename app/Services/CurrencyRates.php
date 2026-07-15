@@ -59,6 +59,27 @@ class CurrencyRates
         return $rate !== null ? (float) $rate : null;
     }
 
+    /**
+     * Units of quote currency per one unit of base currency. Rates are crossed
+     * through EUR because the provider stores a single EUR-based rate table.
+     */
+    public static function between(string $baseCurrency, string $quoteCurrency): ?float
+    {
+        $baseCurrency = strtoupper($baseCurrency);
+        $quoteCurrency = strtoupper($quoteCurrency);
+        if ($baseCurrency === $quoteCurrency) {
+            return 1.0;
+        }
+
+        $baseRate = self::rate($baseCurrency);
+        $quoteRate = self::rate($quoteCurrency);
+        if (! $baseRate || ! $quoteRate) {
+            return null;
+        }
+
+        return round($quoteRate / $baseRate, 6);
+    }
+
     /** Fetch today's rates and store them. Returns how many were stored. */
     public function fetch(): int
     {

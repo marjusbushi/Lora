@@ -6,6 +6,7 @@ use App\Http\Requests\ReservationStoreRequest;
 use App\Http\Requests\ReservationUpdateRequest;
 use App\Models\AuditLog;
 use App\Models\CleaningTask;
+use App\Models\FiscalDocument;
 use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\InventoryItem;
@@ -17,10 +18,14 @@ use App\Models\Room;
 use App\Models\Setting;
 use App\Models\Warehouse;
 use App\Services\AuditTimeline;
+use App\Services\BaseCurrency;
+use App\Services\CurrencyRates;
+use App\Services\FatureAlConfiguration;
 use App\Services\InventoryLedger;
 use App\Services\ReservationConflictService;
 use App\Services\RoomPricing;
 use App\Services\TenantBillingService;
+use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
 use App\Tenancy\TenantRule;
 use Illuminate\Database\Eloquent\Builder;
@@ -238,8 +243,12 @@ class ReservationController extends Controller
         ]);
     }
 
-    public function show(Reservation $reservation, AuditTimeline $timeline): Response
-    {
+    public function show(
+        Reservation $reservation,
+        AuditTimeline $timeline,
+        FatureAlConfiguration $fatureAlConfiguration,
+        VatConfiguration $vatConfiguration,
+    ): Response {
         $reservation->load([
             'room:id,room_number,room_type_id',
             'room.roomType:id,name,base_price',
@@ -257,10 +266,23 @@ class ReservationController extends Controller
         $discounts = (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
         $gross = round($roomCharge + $folioCharges - $discounts, 2);
 
-        // Menu/room prices are treated as VAT-INCLUSIVE (Albanian norm: shown price = paid price).
-        // We surface the tax portion without inflating what the guest owes.
-        $taxRate = (float) Setting::get('financial.tax_rate', 20);
-        $taxAmount = $taxRate > 0 ? round($gross - ($gross / (1 + $taxRate / 100)), 2) : 0.0;
+        // Prices are VAT-inclusive. Discounts are distributed proportionally so
+        // the 6% accommodation and 20% product bases stay mathematically correct.
+        $grossBeforeDiscount = $roomCharge + $folioCharges;
+        $discountFactor = $grossBeforeDiscount > 0
+            ? max(0, min(1, $gross / $grossBeforeDiscount))
+            : 1;
+        $taxAmount = $vatConfiguration->taxPortion(
+            $roomCharge * $discountFactor,
+            $vatConfiguration->accommodationRate(),
+        );
+        foreach ($reservation->folioItems->whereNotIn('type', ['discount', 'room']) as $folioItem) {
+            $taxAmount += $vatConfiguration->taxPortion(
+                (float) $folioItem->amount * $discountFactor,
+                $vatConfiguration->folioRate($folioItem->vat_rate),
+            );
+        }
+        $taxAmount = round($taxAmount, 2);
 
         $paid = (float) $reservation->payments->reject(fn ($p) => $p->is_voided)->sum('amount');
         $outstanding = round($gross - $paid, 2);
@@ -271,15 +293,36 @@ class ReservationController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
+        $fiscalEnvironment = (string) $fatureAlConfiguration->get('environment', 'sandbox');
+        $fiscalDocument = FiscalDocument::query()
+            ->where('reservation_id', $reservation->id)
+            ->where('provider', 'fature_al')
+            ->where('environment', $fiscalEnvironment)
+            ->first();
+        $paymentMethods = $reservation->payments
+            ->reject(fn ($payment) => $payment->is_voided)
+            ->pluck('method')
+            ->unique()
+            ->values();
+        $fiscalPaymentMethod = $paymentMethods->count() === 1
+            && in_array($paymentMethods->first(), ['cash', 'card'], true)
+                ? $paymentMethods->first()
+                : ($paymentMethods->count() > 1 ? 'mixed' : null);
+
         $history = AuditLog::query()
             ->with('causer:id,name')
             ->where('subject_type', Reservation::class)
             ->where('subject_id', $reservation->id)
+            ->where('action', '!=', 'fiscalization.retry_payload_updated')
             ->latest('id')
             ->limit(50)
             ->get();
 
         $tenant = app(TenantContext::class)->tenant();
+        $fiscalAccount = (array) $fatureAlConfiguration->get('account', []);
+        $providerVatStatus = data_get($fiscalAccount, 'issuer_in_vat');
+        $providerVatMatches = ! is_bool($providerVatStatus)
+            || $providerVatStatus === $vatConfiguration->registered();
         $inventoryEnabled = app(TenantBillingService::class)->enabled('finance', $tenant);
         $inventoryItems = collect();
         $inventoryWarehouses = collect();
@@ -293,10 +336,11 @@ class ReservationController extends Controller
             $items = InventoryItem::query()
                 ->where('is_active', true)
                 ->where('type', 'product')
-                ->whereNotNull('selling_price')
-                ->where('selling_price', '>', 0)
+                ->where('sell_in_rooms', true)
+                ->whereNotNull('room_selling_price')
+                ->where('room_selling_price', '>', 0)
                 ->orderBy('name')
-                ->get(['id', 'name', 'sku', 'unit', 'selling_price']);
+                ->get(['id', 'name', 'sku', 'unit', 'image_path', 'room_selling_price', 'room_warehouse_id']);
             $stockMap = InventoryMovement::query()
                 ->whereIn('inventory_item_id', $items->pluck('id'))
                 ->whereIn('warehouse_id', $inventoryWarehouses->pluck('id'))
@@ -310,7 +354,9 @@ class ReservationController extends Controller
                 'name' => $item->name,
                 'sku' => $item->sku,
                 'unit' => $item->unit,
-                'selling_price' => (float) $item->selling_price,
+                'image_path' => $item->image_path,
+                'selling_price' => (float) $item->room_selling_price,
+                'room_warehouse_id' => $item->room_warehouse_id,
                 'warehouse_stock' => collect($stockMap->get($item->id, []))
                     ->mapWithKeys(fn ($stock) => [(string) $stock->warehouse_id => round((float) $stock->quantity, 4)])
                     ->all(),
@@ -353,11 +399,14 @@ class ReservationController extends Controller
                         'description' => $i->description,
                         'type' => $i->type,
                         'amount' => (float) $i->amount,
+                        'vat_rate' => $i->vat_rate !== null ? (float) $i->vat_rate : null,
                         'charge_date' => $i->charge_date?->toDateString(),
                     ]),
                 'discounts' => round($discounts, 2),
                 'gross' => $gross,
-                'taxRate' => $taxRate,
+                'vatStatus' => $vatConfiguration->status(),
+                'accommodationVatRate' => $vatConfiguration->accommodationRate(),
+                'productVatRate' => $vatConfiguration->productRate(),
                 'taxAmount' => $taxAmount,
                 'net' => round($gross - $taxAmount, 2),
                 'paid' => round($paid, 2),
@@ -374,7 +423,59 @@ class ReservationController extends Controller
             'inventoryEnabled' => $inventoryEnabled,
             'inventoryItems' => $inventoryItems,
             'inventoryWarehouses' => $inventoryWarehouses,
-            'currency' => Setting::get('financial.default_currency_symbol', '€'),
+            'currency' => BaseCurrency::symbol(),
+            'invoicePrint' => [
+                'hotel_name' => Setting::get('hotel.name', $tenant?->name ?: 'Hotel'),
+                'legal_name' => $fiscalAccount['company'] ?? null,
+                'nipt' => $fiscalAccount['nipt'] ?? Setting::get('hotel.nipt'),
+                'branch' => $fiscalAccount['branch'] ?? null,
+                'address' => Setting::get('hotel.address'),
+                'phone' => Setting::get('hotel.phone'),
+                'email' => Setting::get('hotel.email'),
+                'currency' => strtoupper((string) ($tenant?->currency ?: 'EUR')),
+                'exchange_rate' => $fiscalDocument?->exchange_rate !== null
+                    ? (float) $fiscalDocument->exchange_rate
+                    : CurrencyRates::rate('ALL'),
+                'operator' => request()->user()?->name,
+                'vat_status' => $vatConfiguration->status(),
+                'accommodation_vat_rate' => $vatConfiguration->accommodationRate(),
+                'product_vat_rate' => $vatConfiguration->productRate(),
+            ],
+            'fiscalization' => [
+                'configured' => $fatureAlConfiguration->configured(),
+                'verified' => $fatureAlConfiguration->verified(),
+                'environment' => $fiscalEnvironment,
+                'vat_configured' => $vatConfiguration->configured(),
+                'vat_matches_provider' => $providerVatMatches,
+                'payment_method' => $fiscalPaymentMethod,
+                'can_issue' => $fatureAlConfiguration->configured()
+                    && $fatureAlConfiguration->verified()
+                    && $fiscalEnvironment === 'sandbox'
+                    && $vatConfiguration->configured()
+                    && $providerVatMatches
+                    && $reservation->status === 'checked_out'
+                    && in_array($fiscalPaymentMethod, ['cash', 'card'], true)
+                    && $fiscalDocument?->status !== FiscalDocument::STATUS_FISCALIZED,
+                'document' => $fiscalDocument ? [
+                    'status' => $fiscalDocument->status,
+                    'internal_id' => $fiscalDocument->internal_id,
+                    'payment_method' => $fiscalDocument->payment_method,
+                    'currency' => $fiscalDocument->currency,
+                    'exchange_rate' => $fiscalDocument->exchange_rate !== null ? (float) $fiscalDocument->exchange_rate : null,
+                    'total' => (float) $fiscalDocument->total,
+                    'vat_rate' => (float) $fiscalDocument->vat_rate,
+                    'invoice_payload' => $fiscalDocument->invoice_payload,
+                    'fiscal_number' => $fiscalDocument->fiscal_number,
+                    'iic' => $fiscalDocument->iic,
+                    'fic' => $fiscalDocument->fic,
+                    'tcr_code' => $fiscalDocument->tcr_code,
+                    'business_code' => $fiscalDocument->business_code,
+                    'operator_code' => $fiscalDocument->operator_code,
+                    'fiscalized_at' => $fiscalDocument->fiscalized_at?->toIso8601String(),
+                    'verify_url' => $fiscalDocument->verify_url,
+                    'last_error' => $fiscalDocument->last_error,
+                ] : null,
+            ],
         ]);
     }
 
@@ -434,7 +535,7 @@ class ReservationController extends Controller
         $data = $request->validate([
             'inventory_item_id' => [
                 'required', 'integer',
-                TenantRule::exists('inventory_items')->where('is_active', true)->where('type', 'product'),
+                TenantRule::exists('inventory_items')->where('is_active', true)->where('type', 'product')->where('sell_in_rooms', true),
             ],
             'warehouse_id' => [
                 'required', 'integer',
@@ -468,7 +569,12 @@ class ReservationController extends Controller
             }
 
             $item = InventoryItem::query()->lockForUpdate()->findOrFail($data['inventory_item_id']);
-            $price = (float) $item->selling_price;
+            if ($item->room_warehouse_id && (int) $item->room_warehouse_id !== (int) $data['warehouse_id']) {
+                throw ValidationException::withMessages([
+                    'warehouse_id' => 'Ky produkt shitet nga magazina e konfiguruar për dhomat.',
+                ]);
+            }
+            $price = (float) $item->room_selling_price;
             if ($price <= 0) {
                 throw ValidationException::withMessages([
                     'inventory_item_id' => 'Artikulli nuk ka çmim shitjeje të vlefshëm.',
@@ -537,13 +643,14 @@ class ReservationController extends Controller
 
             if ((float) $data['amount'] > $outstanding) {
                 throw ValidationException::withMessages([
-                    'amount' => 'Pagesa nuk mund të jetë më e madhe se shuma e mbetur prej '.number_format($outstanding, 2).' €.',
+                    'amount' => 'Pagesa nuk mund të jetë më e madhe se shuma e mbetur prej '.number_format($outstanding, 2).' '.BaseCurrency::code().'.',
                 ]);
             }
 
             return $lockedReservation->payments()->create([
                 'amount' => $data['amount'],
                 'method' => $data['method'],
+                'currency' => BaseCurrency::code(),
                 'created_by' => auth()->id(),
             ]);
         });
@@ -988,7 +1095,7 @@ class ReservationController extends Controller
         // OTA prepaid stay) checks out straight through.
         if ($outstanding > 0.005 && empty($data['settle_method'])) {
             throw ValidationException::withMessages([
-                'settle_method' => 'Klienti ka '.number_format($outstanding, 2).'€ pa paguar — regjistro pagesën para check-out.',
+                'settle_method' => 'Klienti ka '.number_format($outstanding, 2).' '.BaseCurrency::code().' pa paguar — regjistro pagesën para check-out.',
             ]);
         }
 
@@ -1005,6 +1112,7 @@ class ReservationController extends Controller
                 $reservation->payments()->create([
                     'amount' => $outstanding,
                     'method' => $data['settle_method'],
+                    'currency' => BaseCurrency::code(),
                     'created_by' => auth()->id(),
                 ]);
                 AuditLog::record('payment.record', $reservation, [

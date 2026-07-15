@@ -7,31 +7,45 @@ use App\Models\FolioItem;
 use App\Models\InventoryMovement;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
+use App\Models\PosFiscalDocument;
 use App\Models\PosOrder;
 use App\Models\PosOrderItem;
 use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Setting;
 use App\Models\Warehouse;
+use App\Services\BaseCurrency;
+use App\Services\CurrencyRates;
+use App\Services\FatureAlConfiguration;
 use App\Services\InventoryLedger;
+use App\Services\PosFiscalizationService;
+use App\Services\VatConfiguration;
+use App\Tenancy\TenantContext;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class PosController extends Controller
 {
-    public function __construct(private readonly InventoryLedger $inventoryLedger) {}
+    public function __construct(
+        private readonly InventoryLedger $inventoryLedger,
+        private readonly PosFiscalizationService $fiscalization,
+        private readonly FatureAlConfiguration $fatureAlConfiguration,
+        private readonly TenantContext $tenantContext,
+        private readonly VatConfiguration $vatConfiguration,
+    ) {}
 
     public function index(Request $request): Response
     {
         $query = PosOrder::select(
             'id', 'reservation_id', 'table_number', 'status',
-            'payment_method', 'total_amount', 'created_by', 'created_at'
+            'payment_method', 'total_amount', 'created_by', 'paid_at', 'business_date', 'created_at'
         )
-            ->with(['createdBy:id,name', 'items.menuItem:id,name'])
+            ->with(['createdBy:id,name', 'items.menuItem:id,name', 'fiscalDocument'])
             ->orderByDesc('created_at');
 
         if ($request->filled('status')) {
@@ -88,7 +102,7 @@ class PosController extends Controller
             ->groupBy('warehouse_id')->map(fn ($rows) => $rows->pluck('quantity', 'inventory_item_id'));
 
         $menu = MenuCategory::with(['items' => fn ($query) => $query
-            ->where('is_available', true)->with('inventoryComponents')])
+            ->where('is_available', true)->with(['inventoryComponents', 'warehouse'])])
             ->orderBy('sort_order')
             ->get()
             ->each(function (MenuCategory $category) use ($salesCounts, $warehouses, $defaultWarehouse, $warehouseStocks) {
@@ -96,23 +110,47 @@ class PosController extends Controller
                     ?? $warehouses->firstWhere('type', $category->outlet)
                     ?? $defaultWarehouse;
                 $category->items->each(function (MenuItem $item) use ($salesCounts, $warehouse, $warehouseStocks) {
+                    $itemWarehouse = $item->warehouse?->is_active ? $item->warehouse : $warehouse;
                     $components = $item->inventoryComponents;
-                    $available = $components->isEmpty() || ! $warehouse
+                    $available = $components->isEmpty() || ! $itemWarehouse
                         ? null
-                        : (int) floor($components->min(function ($component) use ($warehouse, $warehouseStocks) {
-                            $stock = (float) ($warehouseStocks->get($warehouse->id)?->get($component->inventory_item_id) ?? 0);
+                        : (int) floor($components->min(function ($component) use ($itemWarehouse, $warehouseStocks) {
+                            $stock = (float) ($warehouseStocks->get($itemWarehouse->id)?->get($component->inventory_item_id) ?? 0);
 
                             return $stock / max(0.0001, (float) $component->quantity);
                         }));
                     $item->setAttribute('sales_count', (int) ($salesCounts[$item->id] ?? 0));
                     $item->setAttribute('inventory_tracked', $components->isNotEmpty());
                     $item->setAttribute('available_portions', $available);
-                    $item->setAttribute('inventory_warehouse', $warehouse?->name);
+                    $item->setAttribute('inventory_warehouse', $itemWarehouse?->name);
                     $item->unsetRelation('inventoryComponents');
+                    $item->unsetRelation('warehouse');
                 });
             });
+
+        $orders = $query->paginate(15)->through(fn (PosOrder $order) => [
+            'id' => $order->id,
+            'reservation_id' => $order->reservation_id,
+            'table_number' => $order->table_number,
+            'status' => $order->status,
+            'payment_method' => $order->payment_method,
+            'total_amount' => (float) $order->total_amount,
+            'created_at' => $order->created_at?->toIso8601String(),
+            'paid_at' => $order->paid_at?->toIso8601String(),
+            'business_date' => $order->business_date?->toDateString(),
+            'created_by' => $order->createdBy ? ['name' => $order->createdBy->name] : null,
+            'items' => $order->items->map(fn ($item) => [
+                'id' => $item->id,
+                'quantity' => (int) $item->quantity,
+                'unit_price' => (float) $item->unit_price,
+                'total_price' => (float) $item->total_price,
+                'menu_item' => ['name' => $item->menuItem?->name ?: 'Artikull POS'],
+            ])->values(),
+            'fiscal_document' => $this->fiscalDocumentPayload($order->fiscalDocument),
+        ]);
+
         return Inertia::render('Pos/Index', [
-            'orders' => $query->paginate(15),
+            'orders' => $orders,
             'menu' => $menu,
             'activeReservations' => $activeReservations,
             'filters' => $request->only('status'),
@@ -120,6 +158,7 @@ class PosController extends Controller
             'canOpenShift' => $request->user()->can('open_pos_shift'),
             'canCloseShift' => $request->user()->can('close_pos_shift'),
             'defaultOpeningFloat' => (float) Setting::get('pos.default_opening_float', 0),
+            'receiptSettings' => $this->receiptSettings(),
             'stats' => [
                 'open' => PosOrder::where('status', 'open')->count(),
                 'today_completed' => PosOrder::where('status', 'completed')->whereDate('created_at', today())->count(),
@@ -172,7 +211,7 @@ class PosController extends Controller
             return $order;
         });
 
-        return back()->with('success', "Porosia #{$order->id} u krijua — €{$order->total_amount}");
+        return back()->with('success', "Porosia #{$order->id} u krijua — ".BaseCurrency::symbol().$order->total_amount);
     }
 
     public function complete(Request $request, PosOrder $posOrder): RedirectResponse
@@ -242,7 +281,24 @@ class PosController extends Controller
             'reservation_id' => $posOrder->reservation_id,
         ]);
 
-        return back()->with('success', 'Porosia u perfundua.');
+        // Payment is intentionally independent from the external fiscal provider.
+        // The operator can print a non-fiscal receipt immediately and fiscalize later.
+        return back()->with('success', 'Pagesa u regjistrua. Fatura mund të printohet ose fiskalizohet veçmas.');
+    }
+
+    public function fiscalize(PosOrder $posOrder): RedirectResponse
+    {
+        try {
+            $this->fiscalization->fiscalize($posOrder);
+
+            return back()->with('success', 'Fatura POS u fiskalizua dhe është gati për printim.');
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->withErrors([
+                'fiscalization' => $exception->getMessage(),
+            ]);
+        }
     }
 
     public function cancel(PosOrder $posOrder): RedirectResponse
@@ -264,5 +320,51 @@ class PosController extends Controller
         AuditLog::record('pos.cancel', $posOrder, ['amount' => $posOrder->total_amount]);
 
         return back()->with('success', 'Porosia u anulua.');
+    }
+
+    private function receiptSettings(): array
+    {
+        $account = (array) $this->fatureAlConfiguration->get('account', []);
+        $tenant = $this->tenantContext->tenant();
+
+        return [
+            'hotel_name' => Setting::get('hotel.name', $tenant?->name ?: 'Hotel'),
+            'legal_name' => $account['company'] ?? null,
+            'nipt' => $account['nipt'] ?? Setting::get('hotel.nipt'),
+            'branch' => $account['branch'] ?? null,
+            'address' => Setting::get('hotel.address'),
+            'phone' => Setting::get('hotel.phone'),
+            'currency' => strtoupper((string) ($tenant?->currency ?: 'EUR')),
+            'exchange_rate' => CurrencyRates::rate('ALL'),
+            'vat_status' => $this->vatConfiguration->status(),
+            'tax_rate' => $this->vatConfiguration->productRate(),
+        ];
+    }
+
+    private function fiscalDocumentPayload(?PosFiscalDocument $document): ?array
+    {
+        if (! $document) {
+            return null;
+        }
+
+        return [
+            'status' => $document->status,
+            'environment' => $document->environment,
+            'payment_method' => $document->payment_method,
+            'currency' => $document->currency,
+            'exchange_rate' => $document->exchange_rate !== null ? (float) $document->exchange_rate : null,
+            'total' => (float) $document->total,
+            'vat_rate' => (float) $document->vat_rate,
+            'invoice_payload' => $document->invoice_payload,
+            'fiscal_number' => $document->fiscal_number,
+            'iic' => $document->iic,
+            'fic' => $document->fic,
+            'tcr_code' => $document->tcr_code,
+            'business_code' => $document->business_code,
+            'operator_code' => $document->operator_code,
+            'fiscalized_at' => $document->fiscalized_at?->toIso8601String(),
+            'verify_url' => $document->verify_url,
+            'last_error' => $document->last_error,
+        ];
     }
 }

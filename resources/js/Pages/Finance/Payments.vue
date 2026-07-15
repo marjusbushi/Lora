@@ -30,6 +30,8 @@ const props = defineProps({
     summary: Object,
     baseCurrency: String,
     fxRate: Number,
+    currencies: { type: Array, default: () => ['EUR', 'ALL'] },
+    currencyRates: { type: Object, default: () => ({}) },
     can: Object,
 });
 
@@ -154,15 +156,15 @@ const form = useForm({
     direction: 'in',
     account_id: props.accounts[0]?.id,
     amount: null,
-    currency: props.accounts[0]?.currency || 'EUR',
-    fx_rate: props.fxRate,
+    currency: props.accounts[0]?.currency || props.baseCurrency,
+    fx_rate: props.currencyRates[props.accounts[0]?.currency] || null,
     method: props.accounts[0]?.type === 'bank' ? 'card' : 'cash',
     description: '',
     paid_at: localDateTime(),
 });
 const selectedFormAccount = computed(() => props.accounts.find((account) => account.id === Number(form.account_id)));
-const fxEquivalent = computed(() => form.currency === 'ALL' && form.fx_rate
-    ? money(Number(form.amount || 0) / Number(form.fx_rate))
+const fxEquivalent = computed(() => form.currency !== props.baseCurrency && form.fx_rate
+    ? money(Number(form.amount || 0) / Number(form.fx_rate), props.baseCurrency)
     : null);
 
 function syncAccountDefaults() {
@@ -173,6 +175,9 @@ function syncAccountDefaults() {
 }
 
 watch(() => form.account_id, syncAccountDefaults);
+watch(() => form.currency, (currency) => {
+    form.fx_rate = currency === props.baseCurrency ? null : (props.currencyRates[currency] || null);
+});
 
 function openNewPayment() {
     syncAccountDefaults();
@@ -223,15 +228,15 @@ function submit() {
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div class="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-card">
                     <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent-50 text-accent-700"><ArrowDown class="h-5 w-5" /></span>
-                    <div class="min-w-0"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.generated.k_97cd26a9596c') }}</p><p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums text-accent-700">{{ money(summary.income) }}</p></div>
+                    <div class="min-w-0"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.generated.k_97cd26a9596c') }}</p><p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums text-accent-700">{{ money(summary.income, baseCurrency) }}</p></div>
                 </div>
                 <div class="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-card">
                     <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-error-50 text-error-600"><ArrowUp class="h-5 w-5" /></span>
-                    <div class="min-w-0"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.generated.k_0dc7e9079945') }}</p><p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums text-error-600">{{ money(summary.expenses) }}</p></div>
+                    <div class="min-w-0"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.generated.k_0dc7e9079945') }}</p><p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums text-error-600">{{ money(summary.expenses, baseCurrency) }}</p></div>
                 </div>
                 <div class="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-card">
                     <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-accent-50 text-accent-700"><WalletCards class="h-5 w-5" /></span>
-                    <div class="min-w-0"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.generated.k_580c609c5d3b') }}</p><p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums" :class="summary.net < 0 ? 'text-error-600' : 'text-primary-900'">{{ money(summary.net) }}</p></div>
+                    <div class="min-w-0"><p class="text-body-sm font-medium text-neutral-500">{{ $t('admin.generated.k_580c609c5d3b') }}</p><p class="mt-0.5 truncate text-h3 font-extrabold tabular-nums" :class="summary.net < 0 ? 'text-error-600' : 'text-primary-900'">{{ money(summary.net, baseCurrency) }}</p></div>
                 </div>
                 <div class="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-card">
                     <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-neutral-100 text-neutral-600"><ArrowLeftRight class="h-5 w-5" /></span>
@@ -297,7 +302,7 @@ function submit() {
                                 <td class="px-4 py-3"><span class="rounded-full px-2 py-0.5 text-tiny font-bold" :class="sourceBadge(payment).cls">{{ sourceBadge(payment).text }}</span></td>
                                 <td class="whitespace-nowrap px-4 py-3 text-right font-semibold" :class="payment.direction === 'in' ? 'text-accent-700' : payment.direction === 'out' ? 'text-error-600' : 'text-neutral-600'">
                                     {{ payment.direction === 'in' ? '+' : payment.direction === 'out' ? '−' : '' }} {{ money(payment.amount, payment.currency) }}
-                                    <span v-if="payment.currency !== 'EUR'" class="block text-tiny font-normal text-neutral-400">≈ {{ money(payment.amount_base) }}</span>
+                                    <span v-if="payment.currency !== baseCurrency" class="block text-tiny font-normal text-neutral-400">≈ {{ money(payment.amount_base, baseCurrency) }}</span>
                                 </td>
                                 <td class="pr-3 text-neutral-300"><ChevronRight class="h-4 w-4" /></td>
                             </tr>
@@ -330,8 +335,8 @@ function submit() {
                     <div><label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_344d77ed0b66') }}</label><select v-model="form.method" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm"><option value="cash">{{ $t('admin.generated.k_7ac455cf0851') }}</option><option value="card">{{ $t('admin.generated.k_c4ba878993a8') }}</option><option value="bank">{{ $t('admin.generated.k_d2b6f19a8bef') }}</option></select></div>
                     <div><label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_d2b49f928901') }}</label><TextInput v-model="form.amount" type="number" min="0.01" step="0.01" class="w-full" placeholder="0.00" /><p v-if="form.errors.amount" class="mt-1 text-tiny text-error-600">{{ form.errors.amount }}</p></div>
                     <div>
-                        <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_b36654705cb7') }}</label><select v-model="form.currency" :disabled="selectedFormAccount?.currency !== 'EUR'" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-50"><option value="EUR">{{ $t('admin.generated.k_e89e22ad3b97') }}</option><option value="ALL">{{ $t('admin.generated.k_fd4d287d7420') }}</option></select>
-                        <div v-if="form.currency === 'ALL'" class="mt-2 rounded-lg bg-neutral-50 p-2"><label class="mb-1 block text-tiny font-semibold text-neutral-500">{{ $t('admin.generated.k_668919f6c94c') }}</label><TextInput v-model="form.fx_rate" type="number" min="1" step="0.01" class="w-full" /><p class="mt-1 text-tiny text-neutral-400">{{ $t('admin.generated.k_171af558d279') }} {{ fxEquivalent }}</p><p v-if="form.errors.fx_rate" class="mt-1 text-tiny text-error-600">{{ form.errors.fx_rate }}</p></div>
+                        <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_b36654705cb7') }}</label><select v-model="form.currency" :disabled="selectedFormAccount?.currency !== baseCurrency" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-50"><option v-for="currency in currencies" :key="currency" :value="currency">{{ currency }}</option></select>
+                        <div v-if="form.currency !== baseCurrency" class="mt-2 rounded-lg bg-neutral-50 p-2"><label class="mb-1 block text-tiny font-semibold text-neutral-500">{{ $t('admin.finance.payments.rateHelp', { base: baseCurrency, currency: form.currency }) }}</label><TextInput v-model="form.fx_rate" type="number" min="0.000001" step="0.000001" class="w-full" /><p class="mt-1 text-tiny text-neutral-400">{{ $t('admin.finance.payments.baseValue', { currency: baseCurrency, amount: fxEquivalent }) }}</p><p v-if="form.errors.fx_rate" class="mt-1 text-tiny text-error-600">{{ form.errors.fx_rate }}</p></div>
                     </div>
                     <div class="sm:col-span-2"><label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_5ed8e9c8f4d2') }}</label><textarea v-model="form.description" maxlength="300" rows="3" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('admin.generated.k_859da1bc6b2d')" /><p v-if="form.errors.description" class="mt-1 text-tiny text-error-600">{{ form.errors.description }}</p></div>
                     <div class="sm:col-span-2"><label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_0238235638a7') }}</label><input v-model="form.paid_at" type="datetime-local" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" /><p v-if="form.errors.paid_at" class="mt-1 text-tiny text-error-600">{{ form.errors.paid_at }}</p></div>
@@ -343,6 +348,6 @@ function submit() {
             </template>
         </Modal>
 
-        <TransactionDetailsDrawer :payment="selectedPayment" @close="selectedPayment = null" />
+        <TransactionDetailsDrawer :payment="selectedPayment" :base-currency="baseCurrency" @close="selectedPayment = null" />
     </AppLayout>
 </template>

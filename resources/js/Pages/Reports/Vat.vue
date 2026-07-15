@@ -4,6 +4,7 @@ import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import { Banknote, CirclePercent, HandCoins, ReceiptText } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 const props = defineProps({
     filters: Object,
@@ -22,11 +23,18 @@ const monthLabel = (m) => {
     return `${monthNames[idx] ?? mm} ${year}`;
 };
 
+const rateLabel = computed(() => {
+    if (props.summary.vat_status === 'not_registered') return translate('invoicePrint.withoutVat');
+    if (props.summary.vat_status !== 'registered') return translate('admin.vatSettings.notConfigured');
+
+    return `${props.summary.room_rate}% / ${props.summary.product_rate}%`;
+});
+
 const kpis = [
     { label: translate('admin.generated.k_36dfd2c3064d'), value: () => money(props.summary.gross), tone: 'accent', icon: ReceiptText },
-    { label: translate('admin.generated.k_029eabd1b540'), value: () => money(props.summary.vat), tone: 'warning', icon: Banknote, detail: () => `Norma ${props.summary.rate ?? 20}%` },
+    { label: translate('admin.generated.k_029eabd1b540'), value: () => money(props.summary.vat), tone: 'warning', icon: Banknote, detail: () => rateLabel.value },
     { label: translate('admin.generated.k_4f69532de876'), value: () => money(props.summary.net), tone: 'success', icon: HandCoins },
-    { label: translate('admin.generated.k_5fda0d2c419b'), value: () => `${props.summary.rate ?? 20}%`, tone: 'neutral', icon: CirclePercent },
+    { label: translate('admin.generated.k_5fda0d2c419b'), value: () => rateLabel.value, tone: 'neutral', icon: CirclePercent },
 ];
 
 const showMonthly = () => props.rows.length > 1;

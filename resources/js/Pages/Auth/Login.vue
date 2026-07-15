@@ -1,9 +1,10 @@
 <script setup>
 import GuestLayout from '@/Layouts/GuestLayout.vue';
 import Button from '@/Components/UI/Button.vue';
-import TextInput from '@/Components/UI/TextInput.vue';
+import TextInput from '@/Components/TextInput.vue';
+import InputLabel from '@/Components/InputLabel.vue';
+import InputError from '@/Components/InputError.vue';
 import Checkbox from '@/Components/UI/Checkbox.vue';
-import FormGroup from '@/Components/UI/FormGroup.vue';
 import Alert from '@/Components/UI/Alert.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
@@ -37,28 +38,32 @@ const submit = () => {
         <Alert v-if="status" variant="success" class="mb-4">{{ status }}</Alert>
 
         <form @submit.prevent="submit" class="space-y-5">
-            <FormGroup :label="$t('admin.generated.k_46418004f188')" html-for="email" :error="form.errors.email" required>
+            <div class="space-y-1.5">
+                <InputLabel for="email" :value="$t('admin.generated.k_46418004f188')" />
                 <TextInput
                     id="email"
                     type="email"
+                    class="mt-1 block w-full"
                     v-model="form.email"
-                    :placeholder="$t('admin.generated.k_53da0e246d4b')"
-                    :error="form.errors.email"
-                    :autofocus="true"
+                    required
+                    autofocus
                     autocomplete="username"
                 />
-            </FormGroup>
+                <InputError class="mt-2" :message="form.errors.email" />
+            </div>
 
-            <FormGroup :label="$t('admin.generated.k_2f77fb4fd984')" html-for="password" :error="form.errors.password" required>
+            <div class="space-y-1.5">
+                <InputLabel for="password" :value="$t('admin.generated.k_2f77fb4fd984')" />
                 <TextInput
                     id="password"
                     type="password"
+                    class="mt-1 block w-full"
                     v-model="form.password"
-                    placeholder="********"
-                    :error="form.errors.password"
+                    required
                     autocomplete="current-password"
                 />
-            </FormGroup>
+                <InputError class="mt-2" :message="form.errors.password" />
+            </div>
 
             <div class="flex items-center justify-between">
                 <Checkbox v-model="form.remember" :label="$t('admin.generated.k_fcb0f2e8be42')" />

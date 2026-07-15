@@ -18,16 +18,23 @@ use App\Http\Controllers\PricingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ReservationController;
+use App\Http\Controllers\ReservationFiscalizationController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SmartPricingController;
+use App\Http\Controllers\SuperAdmin\BillingInvoiceController as SuperAdminBillingInvoiceController;
+use App\Http\Controllers\SuperAdmin\BillingPaymentAttemptController as SuperAdminBillingPaymentAttemptController;
+use App\Http\Controllers\SuperAdmin\BillingPaymentController as SuperAdminBillingPaymentController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
+use App\Http\Controllers\SuperAdmin\ProfileController as SuperAdminProfileController;
+use App\Http\Controllers\SuperAdmin\ProviderEventController as SuperAdminProviderEventController;
 use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantController;
 use App\Http\Controllers\TenantHandoffController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebsiteController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -79,7 +86,7 @@ Route::get('/tenant-handoff', TenantHandoffController::class)
 // (same cached branding the <title> uses). display:standalone is what removes
 // the browser URL bar when the site is added to a phone's home screen.
 Route::get('/manifest.webmanifest', function () {
-    $brand = \Illuminate\Support\Facades\Cache::get('app.settings', []);
+    $brand = Cache::get('app.settings', []);
     $name = $brand['hotel_name'] ?? 'Villa Mucho';
 
     return response()->json([
@@ -106,19 +113,39 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
     ->group(function () {
         Route::get('/', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/activity', [SuperAdminDashboardController::class, 'activity'])->name('activity');
+        Route::get('/profile', [SuperAdminProfileController::class, 'edit'])->name('profile.edit');
+        Route::patch('/profile', [SuperAdminProfileController::class, 'update'])->name('profile.update');
         Route::get('/tenants', [SuperAdminTenantController::class, 'index'])->name('tenants.index');
         Route::get('/tenants/{tenant}', [SuperAdminTenantController::class, 'show'])->name('tenants.show');
         Route::post('/tenants', [SuperAdminTenantController::class, 'store'])->name('tenants.store');
+        Route::patch('/tenants/{tenant}', [SuperAdminTenantController::class, 'update'])->name('tenants.update');
+        Route::post('/tenants/{tenant}/members', [SuperAdminTenantController::class, 'storeMember'])->name('tenants.members.store');
+        Route::put('/tenants/{tenant}/members/{member}', [SuperAdminTenantController::class, 'updateMember'])->name('tenants.members.update');
         Route::put('/tenants/{tenant}/subscription', [SuperAdminTenantController::class, 'updateSubscription'])->name('tenants.subscription.update');
         Route::post('/tenants/{tenant}/switch', [SuperAdminTenantController::class, 'switch'])->name('tenants.switch');
         Route::patch('/tenants/{tenant}/status', [SuperAdminTenantController::class, 'updateStatus'])->name('tenants.status');
         Route::put('/tenants/{tenant}/integrations/{provider}', [SuperAdminTenantController::class, 'updateIntegration'])
-            ->whereIn('provider', ['channex', 'pok'])->name('tenants.integrations.update');
+            ->whereIn('provider', ['channex', 'pok', 'fature_al'])->name('tenants.integrations.update');
+        Route::post('/tenants/{tenant}/integrations/{provider}/test', [SuperAdminTenantController::class, 'testIntegration'])
+            ->whereIn('provider', ['fature_al'])->middleware('throttle:10,1')->name('tenants.integrations.test');
         Route::post('/tenants/{tenant}/domains', [SuperAdminTenantController::class, 'storeDomain'])->name('tenants.domains.store');
         Route::delete('/tenants/{tenant}/domains/{domain}', [SuperAdminTenantController::class, 'destroyDomain'])
             ->scopeBindings()->name('tenants.domains.destroy');
         Route::patch('/tenants/{tenant}/domains/{domain}/primary', [SuperAdminTenantController::class, 'makePrimaryDomain'])
             ->scopeBindings()->name('tenants.domains.primary');
+        Route::get('/billing/invoices', [SuperAdminBillingInvoiceController::class, 'index'])->name('billing.invoices.index');
+        Route::get('/billing/invoices/{invoice}', [SuperAdminBillingInvoiceController::class, 'show'])->name('billing.invoices.show');
+        Route::post('/billing/invoices', [SuperAdminBillingInvoiceController::class, 'store'])->name('billing.invoices.store');
+        Route::patch('/billing/invoices/{invoice}/publish', [SuperAdminBillingInvoiceController::class, 'publish'])->name('billing.invoices.publish');
+        Route::patch('/billing/invoices/{invoice}/void', [SuperAdminBillingInvoiceController::class, 'void'])->name('billing.invoices.void');
+        Route::get('/billing/payments', [SuperAdminBillingPaymentController::class, 'index'])->name('billing.payments.index');
+        Route::get('/billing/payments/{payment}', [SuperAdminBillingPaymentController::class, 'show'])->name('billing.payments.show');
+        Route::post('/billing/payments', [SuperAdminBillingPaymentController::class, 'store'])->name('billing.payments.store');
+        Route::get('/billing/payment-attempts', [SuperAdminBillingPaymentAttemptController::class, 'index'])->name('billing.payment-attempts.index');
+        Route::get('/billing/payment-attempts/{paymentAttempt}', [SuperAdminBillingPaymentAttemptController::class, 'show'])->name('billing.payment-attempts.show');
+        Route::get('/billing/provider-events', [SuperAdminProviderEventController::class, 'index'])->name('billing.provider-events.index');
+        Route::get('/billing/provider-events/{providerEvent}', [SuperAdminProviderEventController::class, 'show'])->name('billing.provider-events.show');
+        Route::patch('/billing/provider-events/{providerEvent}/retry', [SuperAdminProviderEventController::class, 'retry'])->name('billing.provider-events.retry');
     });
 
 // Internal component gallery (dev reference) — no data, but staff-only (not public).
@@ -211,6 +238,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/reservations/{reservation}/folio/inventory', [ReservationController::class, 'addInventoryFolioLine'])
             ->middleware(['module:finance', 'permission:update_reservations'])->name('reservations.folio.inventory');
         Route::post('/reservations/{reservation}/payment', [ReservationController::class, 'recordPayment'])->middleware('permission:update_reservations')->name('reservations.payment');
+        Route::post('/reservations/{reservation}/fiscalize', [ReservationFiscalizationController::class, 'store'])
+            ->middleware(['module:finance', 'permission:update_reservations', 'throttle:10,1'])
+            ->name('reservations.fiscalize');
     });
 
     // Housekeeping
@@ -229,6 +259,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
         Route::post('/pos', [PosController::class, 'store'])->middleware('permission:create_pos_orders')->name('pos.store');
         Route::post('/pos/{posOrder}/complete', [PosController::class, 'complete'])->middleware('permission:update_pos_orders')->name('pos.complete');
+        Route::post('/pos/{posOrder}/fiscalize', [PosController::class, 'fiscalize'])
+            ->middleware(['module:finance', 'permission:update_pos_orders', 'throttle:10,1'])
+            ->name('pos.fiscalize');
         Route::post('/pos/{posOrder}/cancel', [PosController::class, 'cancel'])->middleware('permission:update_pos_orders')->name('pos.cancel');
 
         // Cash-drawer shifts (hapje/mbyllje turni)
@@ -363,6 +396,8 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/settings/pricing-programs', [SettingsController::class, 'updatePricingPrograms'])->name('settings.pricing-programs');
         Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->middleware('module:housekeeping')->name('settings.housekeeping');
         Route::put('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai');
+        Route::post('/settings/integrations/{provider}/test', [SettingsController::class, 'testIntegration'])
+            ->whereIn('provider', ['fature_al'])->middleware('throttle:10,1')->name('settings.integrations.test');
 
         // Settings: Room Types
         // Settings: Floors (Katet)
