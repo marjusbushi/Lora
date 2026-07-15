@@ -137,6 +137,11 @@ class Reservation extends TenantModel
         return $this->hasMany(Payment::class);
     }
 
+    public function fiscalDocuments()
+    {
+        return $this->hasMany(FiscalDocument::class);
+    }
+
     public function getNightsAttribute(): int
     {
         return $this->check_in_date->diffInDays($this->check_out_date);

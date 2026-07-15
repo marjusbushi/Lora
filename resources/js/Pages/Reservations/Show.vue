@@ -43,6 +43,7 @@ const props = defineProps({
     inventoryItems: { type: Array, default: () => [] },
     inventoryWarehouses: { type: Array, default: () => [] },
     currency: { type: String, default: '€' },
+    fiscalization: { type: Object, default: () => ({ configured: false, verified: false, environment: 'sandbox', document: null }) },
 });
 
 const toasts = ref(null);
@@ -53,6 +54,7 @@ const showPayModal = ref(false);
 const showInvoice = ref(false);
 const checkoutMode = ref(false);
 const paymentSubmitting = ref(false);
+const fiscalizing = ref(false);
 
 const perms = usePage().props.auth.user?.permissions || [];
 const canUpdate = perms.includes('update_reservations');
@@ -141,6 +143,28 @@ const invoiceGroups = computed(() => {
 
 function printInvoice() {
     window.print();
+}
+
+const fiscalDocument = computed(() => props.fiscalization?.document || null);
+const fiscalized = computed(() => fiscalDocument.value?.status === 'fiscalized');
+const fiscalPaymentLabel = computed(() => (
+    props.fiscalization?.payment_method === 'cash'
+        ? translate('reservationShow.fiscalCash')
+        : props.fiscalization?.payment_method === 'card'
+            ? translate('reservationShow.fiscalCard')
+            : translate('reservationShow.fiscalMixed')
+));
+
+function fiscalizeInvoice() {
+    if (!props.fiscalization?.can_issue || fiscalizing.value) return;
+    fiscalizing.value = true;
+    router.post(route('reservations.fiscalize', props.reservation.id), {}, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => toasts.value?.success(translate('reservationShow.fiscalSuccess')),
+        onError: (errors) => toasts.value?.error(errors.fiscalization || translate('reservationShow.fiscalFailed')),
+        onFinish: () => { fiscalizing.value = false; },
+    });
 }
 
 const lineForm = useForm({ type: 'extra', description: '', amount: '', charge_date: '' });
@@ -782,6 +806,47 @@ function settleAndCheckout(method) {
                 </div>
 
                 <p class="text-tiny text-neutral-400 text-center pt-2">{{ $t('admin.generated.k_60a30ee15a06') }}</p>
+            </div>
+
+            <div v-if="!checkoutMode" class="mt-4 rounded-xl border p-4 print:hidden"
+                 :class="fiscalized ? 'border-success-200 bg-success-50/70' : fiscalDocument?.status === 'failed' ? 'border-error-200 bg-error-50/70' : 'border-info-200 bg-info-50/70'">
+                <div class="flex items-start gap-3">
+                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl"
+                          :class="fiscalized ? 'bg-success-100 text-success-700' : fiscalDocument?.status === 'failed' ? 'bg-error-100 text-error-700' : 'bg-info-100 text-info-700'">
+                        <ShieldCheck class="h-5 w-5" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <p class="font-semibold text-neutral-900">{{ $t('reservationShow.fiscalTitle') }}</p>
+                                <p class="mt-0.5 text-xs text-neutral-600">{{ $t('reservationShow.fiscalSandbox') }}</p>
+                            </div>
+                            <Badge v-if="fiscalized" variant="success">{{ $t('reservationShow.fiscalized') }}</Badge>
+                            <Badge v-else-if="fiscalDocument?.status === 'failed'" variant="error">{{ $t('reservationShow.fiscalRetry') }}</Badge>
+                            <Badge v-else variant="info">{{ $t('reservationShow.fiscalEnvironmentSandbox') }}</Badge>
+                        </div>
+
+                        <div v-if="fiscalized" class="mt-3 grid gap-2 rounded-lg border border-success-200 bg-white/70 p-3 text-xs sm:grid-cols-2">
+                            <div><span class="text-neutral-500">{{ $t('reservationShow.fiscalNumber') }}</span><p class="mt-0.5 font-semibold text-neutral-900">{{ fiscalDocument.fiscal_number || '—' }}</p></div>
+                            <div><span class="text-neutral-500">IIC</span><p class="mt-0.5 truncate font-mono text-neutral-900">{{ fiscalDocument.iic || '—' }}</p></div>
+                        </div>
+
+                        <p v-else-if="!fiscalization.configured" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalNotConfigured') }}</p>
+                        <p v-else-if="fiscalization.environment !== 'sandbox'" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalProductionBlocked') }}</p>
+                        <p v-else-if="!fiscalization.verified" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalNotVerified') }}</p>
+                        <p v-else-if="reservation.status !== 'checked_out'" class="mt-3 text-sm text-neutral-700">{{ $t('reservationShow.fiscalAfterCheckout') }}</p>
+                        <p v-else-if="!['cash', 'card'].includes(fiscalization.payment_method)" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalSinglePayment') }}</p>
+                        <template v-else>
+                            <p v-if="fiscalDocument?.last_error" class="mt-3 text-sm text-error-700">{{ fiscalDocument.last_error }}</p>
+                            <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+                                <p class="text-xs text-neutral-600">{{ $t('reservationShow.fiscalPayment') }}: <span class="font-semibold text-neutral-900">{{ fiscalPaymentLabel }}</span> · {{ money(folio.gross) }}</p>
+                                <Button variant="success" size="sm" :loading="fiscalizing" :disabled="!fiscalization.can_issue" @click="fiscalizeInvoice">
+                                    <ShieldCheck class="h-4 w-4" /> {{ fiscalDocument?.status === 'failed' ? $t('reservationShow.fiscalRetryButton') : $t('reservationShow.fiscalizeButton') }}
+                                </Button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
             </div>
 
             <!-- Checkout call-to-action (not part of the printed invoice) -->
