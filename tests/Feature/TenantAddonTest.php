@@ -58,17 +58,39 @@ class TenantAddonTest extends TestCase
 
     public function test_grandfather_migration_granted_existing_tenants(): void
     {
-        // RefreshDatabase ran ALL migrations incl. the grandfather one BEFORE
-        // this test's tenant existed — so simulate: the seeded tenant in this
-        // suite starts without; re-running the migration logic grants it.
+        // Reset the tenant, then exercise the real migration implementation.
         $tenant = tap($this->tenant())->update(['metadata' => null]);
-        Tenant::query()->each(function (Tenant $t) {
-            $meta = $t->metadata ?? [];
-            $meta['addons'] = array_values(array_unique([...($meta['addons'] ?? []), 'finance']));
-            $t->update(['metadata' => $meta]);
-        });
+        $migration = require database_path('migrations/2026_07_13_170000_grant_finance_addon_to_existing_tenants.php');
+
+        $migration->up();
 
         $this->assertTrue($tenant->fresh()->hasAddon('finance'));
+    }
+
+    public function test_grandfather_migration_restores_tenant_metadata_on_rollback(): void
+    {
+        $tenant = $this->tenant();
+        $before = [
+            'billing_access' => ['modules' => ['core' => true]],
+            'custom' => ['keep' => 'unchanged'],
+        ];
+        $tenant->update(['metadata' => $before]);
+        $otherBefore = [
+            'addons' => ['inventory'],
+            'custom' => ['keep' => 'other tenant'],
+        ];
+        $otherTenant = Tenant::factory()->create(['metadata' => $otherBefore]);
+
+        $migration = require database_path('migrations/2026_07_13_170000_grant_finance_addon_to_existing_tenants.php');
+        $migration->up();
+
+        $this->assertSame(['finance'], $tenant->fresh()->addons());
+        $this->assertSame(['inventory', 'finance'], $otherTenant->fresh()->addons());
+
+        $migration->down();
+
+        $this->assertSame($before, $tenant->fresh()->metadata);
+        $this->assertSame($otherBefore, $otherTenant->fresh()->metadata);
     }
 
     public function test_addon_command_grants_lists_and_revokes(): void
