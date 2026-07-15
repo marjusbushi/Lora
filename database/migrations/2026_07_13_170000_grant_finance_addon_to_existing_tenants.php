@@ -22,6 +22,24 @@ return new class extends Migration
 
     public function down(): void
     {
-        // Grandfathering is a data grant — leaving it in place on rollback is safe.
+        // Finance was introduced by this migration, so remove only that grant
+        // and preserve every other add-on and metadata value.
+        Tenant::query()->each(function (Tenant $tenant) {
+            $meta = $tenant->metadata ?? [];
+            $addons = is_array($meta['addons'] ?? null) ? $meta['addons'] : [];
+            $addons = array_values(array_filter(
+                $addons,
+                fn (mixed $addon): bool => $addon !== 'finance',
+            ));
+
+            if ($addons === []) {
+                unset($meta['addons']);
+            } else {
+                $meta['addons'] = $addons;
+            }
+
+            $tenant->timestamps = false;
+            $tenant->update(['metadata' => $meta === [] ? null : $meta]);
+        });
     }
 };
