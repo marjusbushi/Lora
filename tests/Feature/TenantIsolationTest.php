@@ -173,7 +173,15 @@ class TenantIsolationTest extends TestCase
         $this->assertTrue($superAdmin->unsetRelation('roles')->hasRole('admin'));
         app(TenantContext::class)->clear();
 
+        $this->actingAs($superAdmin)
+            ->withHeader('X-Inertia', 'true')
+            ->post(route('super-admin.tenants.switch', $tenant))
+            ->assertStatus(409)
+            ->assertHeader('X-Inertia-Location')
+            ->assertHeader('Referrer-Policy', 'no-referrer');
+
         $switchResponse = $this->actingAs($superAdmin)
+            ->withoutHeader('X-Inertia')
             ->post(route('super-admin.tenants.switch', $tenant))
             ->assertRedirectContains('http://riviera.lorapms.test/tenant-handoff?token=');
 

@@ -19,6 +19,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class TenantController extends Controller
 {
@@ -290,7 +291,7 @@ class TenantController extends Controller
         return back()->with('success', "Abonimi i {$tenant->name} u përditësua.");
     }
 
-    public function switch(Request $request, Tenant $tenant, TenantHandoff $handoff): RedirectResponse
+    public function switch(Request $request, Tenant $tenant, TenantHandoff $handoff): RedirectResponse|SymfonyResponse
     {
         abort_unless($tenant->status === 'active', 422, 'Ky hotel nuk eshte aktiv.');
 
@@ -306,10 +307,17 @@ class TenantController extends Controller
 
         $token = $handoff->issue($request->user(), $tenant, $targetHost);
 
-        return redirect()->away($this->tenantHandoffUrl($dashboardUrl, $token))->withHeaders([
+        $handoffUrl = $this->tenantHandoffUrl($dashboardUrl, $token);
+        $headers = [
             'Cache-Control' => 'no-store, max-age=0',
             'Referrer-Policy' => 'no-referrer',
-        ]);
+        ];
+
+        if ($request->header('X-Inertia')) {
+            return Inertia::location($handoffUrl)->withHeaders($headers);
+        }
+
+        return redirect()->away($handoffUrl)->withHeaders($headers);
     }
 
     public function updateStatus(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
