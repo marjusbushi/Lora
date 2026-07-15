@@ -143,6 +143,11 @@ class FatureAlIntegrationTest extends TestCase
             ->firstOrFail();
         $this->assertSame('success', $integration->configuration['last_test_status']);
         $this->assertNotEmpty($integration->configuration['last_tested_at']);
+        $this->assertSame([
+            'company' => 'Sandbox Hotel',
+            'nipt' => 'L00000000A',
+            'branch' => 'Main',
+        ], $integration->configuration['account']);
     }
 
     public function test_hotel_integration_center_exposes_status_but_not_token(): void

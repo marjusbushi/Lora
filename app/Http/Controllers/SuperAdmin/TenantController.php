@@ -618,7 +618,7 @@ class TenantController extends Controller
             filled($data['api_token'] ?? null)
             || ($configuration['environment'] ?? 'sandbox') !== $originalFatureEnvironment
         )) {
-            unset($configuration['last_test_status'], $configuration['last_tested_at']);
+            unset($configuration['last_test_status'], $configuration['last_tested_at'], $configuration['account']);
         }
 
         if ($provider === 'fature_al' && (bool) $data['enabled'] && blank($credentials['api_token'] ?? null)) {
@@ -654,8 +654,8 @@ class TenantController extends Controller
 
         try {
             $context->run($tenant, function () {
-                app(FatureAlClient::class)->testConnection();
-                $this->recordIntegrationTest('success');
+                $account = app(FatureAlClient::class)->testConnection();
+                $this->recordIntegrationTest('success', $account);
             });
 
             $context->run($tenant, fn () => AuditLog::record('tenant.integration.test', $tenant, [
@@ -770,7 +770,8 @@ class TenantController extends Controller
         ];
     }
 
-    private function recordIntegrationTest(string $status): void
+    /** @param array{company:string,nipt:string,branch:string}|null $account */
+    private function recordIntegrationTest(string $status, ?array $account = null): void
     {
         $integration = TenantIntegration::query()->where('provider', 'fature_al')->first();
 
@@ -781,6 +782,9 @@ class TenantController extends Controller
         $configuration = $integration->configuration ?? [];
         $configuration['last_tested_at'] = now()->toIso8601String();
         $configuration['last_test_status'] = $status;
+        if ($account !== null) {
+            $configuration['account'] = $account;
+        }
 
         $integration->forceFill(['configuration' => $configuration])->save();
     }

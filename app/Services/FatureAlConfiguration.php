@@ -40,6 +40,7 @@ class FatureAlConfiguration
             'environment' => $environment,
             'last_test_status' => $integration->configuration['last_test_status'] ?? null,
             'last_tested_at' => $integration->configuration['last_tested_at'] ?? null,
+            'account' => (array) ($integration->configuration['account'] ?? []),
             // The host is derived, never accepted from a browser request. This
             // prevents a stored URL from turning the integration into SSRF.
             'base_url' => $environment === 'production'
@@ -71,6 +72,7 @@ class FatureAlConfiguration
             'environment' => 'sandbox',
             'last_test_status' => null,
             'last_tested_at' => null,
+            'account' => [],
             'base_url' => 'https://demo.fature.al/api/v1',
         ];
     }

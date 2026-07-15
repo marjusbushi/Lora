@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-class FiscalDocument extends TenantModel
+class PosFiscalDocument extends TenantModel
 {
     public const STATUS_PROCESSING = 'processing';
 
@@ -11,7 +11,7 @@ class FiscalDocument extends TenantModel
     public const STATUS_FAILED = 'failed';
 
     protected $fillable = [
-        'reservation_id',
+        'pos_order_id',
         'provider',
         'environment',
         'document_type',
@@ -41,8 +41,8 @@ class FiscalDocument extends TenantModel
     protected function casts(): array
     {
         return [
-            'total' => 'decimal:2',
             'exchange_rate' => 'decimal:6',
+            'total' => 'decimal:2',
             'vat_rate' => 'decimal:2',
             'invoice_payload' => 'array',
             'fiscalized_at' => 'datetime',
@@ -50,8 +50,8 @@ class FiscalDocument extends TenantModel
         ];
     }
 
-    public function reservation()
+    public function order()
     {
-        return $this->belongsTo(Reservation::class);
+        return $this->belongsTo(PosOrder::class, 'pos_order_id');
     }
 }

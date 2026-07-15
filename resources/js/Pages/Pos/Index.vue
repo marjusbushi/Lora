@@ -12,6 +12,7 @@ import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ShiftBanner from '@/Components/Pos/ShiftBanner.vue';
+import PosReceipt from '@/Components/Invoices/PosReceipt.vue';
 import { Minus, Plus, ReceiptText, Search, ShoppingCart, Star, Trash2, X } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -24,12 +25,16 @@ const props = defineProps({
     canOpenShift: { type: Boolean, default: false },
     canCloseShift: { type: Boolean, default: false },
     defaultOpeningFloat: { type: Number, default: 0 },
+    receiptSettings: { type: Object, default: () => ({}) },
 });
 
 const toasts = ref(null);
 const showPayModal = ref(false);
 const showOrdersPanel = ref(false);
 const selectedOrder = ref(null);
+const showReceipt = ref(false);
+const receiptOrder = ref(null);
+const fiscalizingOrder = ref(null);
 const activeCategory = ref(props.menu?.[0]?.id || null);
 const searchQuery = ref('');
 const serviceMode = ref('table');
@@ -114,7 +119,9 @@ function submitCloseShift() {
 }
 
 function printZReport() {
+    document.body.classList.add('printing-z-report');
     window.print();
+    window.setTimeout(() => document.body.classList.remove('printing-z-report'), 500);
 }
 
 const cartTotal = computed(() =>
@@ -251,18 +258,48 @@ function openPay(order) {
 }
 
 function submitPay() {
+    const orderId = selectedOrder.value.id;
     router.post(route('pos.complete', selectedOrder.value.id), {
         payment_method: paymentMethod.value,
         reservation_id: paymentMethod.value === 'room_charge' ? selectedPayReservation.value : null,
     }, {
         preserveScroll: true,
-        onSuccess: () => {
+        onSuccess: (page) => {
             showPayModal.value = false;
-            toasts.value?.success(translate('admin.generated.k_4d1af80f8706'));
+            const finalized = page.props.orders?.data?.find((order) => Number(order.id) === Number(orderId));
+            if (finalized) openReceipt(finalized);
+            const error = page.props.flash?.error;
+            if (error) toasts.value?.error(error);
+            else toasts.value?.success(translate('admin.generated.k_4d1af80f8706'));
         },
         onError: (errors) => {
             if (errors.inventory) toasts.value?.error(errors.inventory);
         },
+    });
+}
+
+function openReceipt(order) {
+    receiptOrder.value = order;
+    showReceipt.value = true;
+}
+
+function printReceipt() {
+    document.body.classList.add('printing-pos-receipt');
+    window.print();
+    window.setTimeout(() => document.body.classList.remove('printing-pos-receipt'), 500);
+}
+
+function retryFiscalization(order) {
+    fiscalizingOrder.value = order.id;
+    router.post(route('pos.fiscalize', order.id), {}, {
+        preserveScroll: true,
+        onSuccess: (page) => {
+            const updated = page.props.orders?.data?.find((item) => Number(item.id) === Number(order.id));
+            if (updated) openReceipt(updated);
+            toasts.value?.success(translate('invoicePrint.posFiscalSuccess'));
+        },
+        onError: (errors) => toasts.value?.error(errors.fiscalization || translate('invoicePrint.posFiscalFailed')),
+        onFinish: () => { fiscalizingOrder.value = null; },
     });
 }
 
@@ -367,7 +404,19 @@ function formatTime(d) {
                                                 <Button size="sm" variant="primary" :disabled="!hasOpenShift" @click="openPay(order)">{{ $t('admin.generated.k_c0bc68ffb628') }}</Button>
                                                 <Button size="sm" variant="ghost" class="text-error-600" @click="cancelOrder(order)">{{ $t('admin.generated.k_28cc20e7fd5b') }}</Button>
                                             </div>
-                                            <Badge v-else-if="order.payment_method" variant="neutral" size="sm">{{ payLabel[order.payment_method] }}</Badge>
+                                            <div v-else-if="order.status === 'completed'" class="flex flex-wrap justify-end gap-1.5">
+                                                <Badge v-if="order.payment_method" variant="neutral" size="sm">{{ payLabel[order.payment_method] }}</Badge>
+                                                <Button
+                                                    v-if="order.fiscal_document?.status === 'failed'"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    :loading="fiscalizingOrder === order.id"
+                                                    @click="retryFiscalization(order)"
+                                                >{{ $t('invoicePrint.retryFiscalization') }}</Button>
+                                                <Button size="sm" variant="outline" @click="openReceipt(order)">
+                                                    <ReceiptText class="h-3.5 w-3.5" /> {{ $t('reservationShow.invoice') }}
+                                                </Button>
+                                            </div>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -580,6 +629,26 @@ function formatTime(d) {
             </template>
         </Modal>
 
+        <!-- Thermal POS receipt preview -->
+        <Modal :show="showReceipt" :title="$t('invoicePrint.posInvoiceTitle')" max-width="md" @close="showReceipt = false">
+            <div class="overflow-x-auto rounded-lg bg-neutral-100 py-4">
+                <PosReceipt v-if="receiptOrder" :order="receiptOrder" :settings="receiptSettings" class="shadow-lg" />
+            </div>
+            <div v-if="receiptOrder?.fiscal_document?.status === 'failed'" class="mt-3 rounded-lg border border-error-200 bg-error-50 px-3 py-2 text-small text-error-700">
+                {{ $t('invoicePrint.posFiscalPrintWarning') }}
+            </div>
+            <template #footer>
+                <Button variant="outline" @click="showReceipt = false">{{ $t('invoicePrint.close') }}</Button>
+                <Button
+                    v-if="receiptOrder?.fiscal_document?.status === 'failed'"
+                    variant="outline"
+                    :loading="fiscalizingOrder === receiptOrder.id"
+                    @click="retryFiscalization(receiptOrder)"
+                >{{ $t('invoicePrint.retryFiscalization') }}</Button>
+                <Button variant="primary" @click="printReceipt">{{ $t('invoicePrint.print80') }}</Button>
+            </template>
+        </Modal>
+
         <!-- Open shift modal -->
         <Modal :show="showOpenShift" :title="$t('admin.generated.k_b8387a4701eb')" max-width="sm" @close="showOpenShift = false">
             <div class="space-y-4">
@@ -656,8 +725,13 @@ function formatTime(d) {
 
 <style>
 @media print {
-    body * { visibility: hidden !important; }
-    #zreport, #zreport * { visibility: visible !important; }
-    #zreport { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+    @page { size: 80mm auto; margin: 0; }
+    body.printing-z-report * { visibility: hidden !important; }
+    body.printing-z-report #zreport, body.printing-z-report #zreport * { visibility: visible !important; }
+    body.printing-z-report #zreport { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+
+    body.printing-pos-receipt * { visibility: hidden !important; }
+    body.printing-pos-receipt #pos-receipt, body.printing-pos-receipt #pos-receipt * { visibility: visible !important; }
+    body.printing-pos-receipt #pos-receipt { position: absolute; left: 0; top: 0; margin: 0; box-shadow: none !important; }
 }
 </style>

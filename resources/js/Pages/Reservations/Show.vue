@@ -14,6 +14,7 @@ import Select from '@/Components/UI/Select.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import AuditTimeline from '@/Components/AuditTimeline.vue';
+import HotelInvoice from '@/Components/Invoices/HotelInvoice.vue';
 import { channelMeta } from '@/channels';
 import {
     ArrowLeft,
@@ -43,6 +44,7 @@ const props = defineProps({
     inventoryItems: { type: Array, default: () => [] },
     inventoryWarehouses: { type: Array, default: () => [] },
     currency: { type: String, default: '€' },
+    invoicePrint: { type: Object, default: () => ({}) },
     fiscalization: { type: Object, default: () => ({ configured: false, verified: false, environment: 'sandbox', document: null }) },
 });
 
@@ -101,7 +103,6 @@ const methodOptions = [
 const hasOpenOrders = computed(() => (props.openPosOrders?.length || 0) > 0);
 const unsettled = computed(() => Number(props.folio.outstanding) > 0.005);
 const canAddCharge = computed(() => canUpdate && ['pending', 'confirmed', 'checked_in'].includes(props.reservation.status));
-const hotelName = usePage().props.settings?.hotel_name || 'Hotel';
 const isCheckedIn = computed(() => props.reservation.status === 'checked_in');
 const guestInitials = computed(() => (props.reservation.guest?.name || '?')
     .split(/\s+/)
@@ -132,17 +133,10 @@ const checkoutState = computed(() => {
     };
 });
 
-// Group folio charges by category for the invoice (room + bar + restaurant + ...).
-const invoiceGroups = computed(() => {
-    const g = { room: Number(props.folio.roomCharge) || 0, bar: 0, restaurant: 0, minibar: 0, extra: 0, discount: 0 };
-    for (const it of (props.folio.items || [])) g[it.type] = (g[it.type] || 0) + Number(it.amount);
-    return ['room', 'bar', 'restaurant', 'minibar', 'extra', 'discount']
-        .filter((k) => g[k] > 0)
-        .map((k) => ({ key: k, label: typeLabel[k], amount: g[k] }));
-});
-
 function printInvoice() {
+    document.body.classList.add('printing-hotel-invoice');
     window.print();
+    window.setTimeout(() => document.body.classList.remove('printing-hotel-invoice'), 500);
 }
 
 const fiscalDocument = computed(() => props.fiscalization?.document || null);
@@ -767,45 +761,16 @@ function settleAndCheckout(method) {
         </Modal>
 
         <!-- Invoice (Fature) modal — also the settle-then-checkout flow -->
-        <Modal :show="showInvoice" :title="checkoutMode ? $t('admin.generated.k_d0677fc34bd1') : $t('admin.generated.k_9b8aa645dbf0')" max-width="lg" @close="showInvoice = false">
-            <div id="invoice" class="space-y-4 text-primary-900">
-                <div class="text-center border-b border-neutral-200 pb-3">
-                    <p class="text-h3">{{ hotelName }}</p>
-                    <p class="text-body-sm text-neutral-500">{{ $t('admin.generated.k_8f10080f8f3f') }}{{ reservation.id }}</p>
-                </div>
-
-                <div class="flex justify-between text-body-sm">
-                    <div>
-                        <p class="text-neutral-500">{{ $t('admin.generated.k_93eeb8e2c428') }}</p>
-                        <p class="font-medium">{{ reservation.guest?.name }}</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-neutral-500">{{ $t('admin.generated.k_7765353fdc9c') }} {{ reservation.room?.room_number }} — {{ reservation.room?.room_type }}</p>
-                        <p>{{ formatDate(reservation.check_in_date) }} → {{ formatDate(reservation.check_out_date) }} · {{ reservation.nights }} {{ $t('admin.generated.k_24dc7df026eb') }}</p>
-                    </div>
-                </div>
-
-                <table class="w-full text-body-sm">
-                    <tbody>
-                        <tr v-for="g in invoiceGroups" :key="g.key" class="border-b border-neutral-100">
-                            <td class="py-2">{{ g.label }}</td>
-                            <td class="py-2 text-right" :class="g.key === 'discount' ? 'text-success-600' : ''">{{ g.key === 'discount' ? '−' : '' }}{{ money(g.amount) }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <div class="space-y-1.5 text-body-sm border-t border-neutral-200 pt-3">
-                    <div class="flex justify-between text-neutral-500"><span>{{ $t('admin.generated.k_8e7d78994587') }}</span><span>{{ money(folio.net) }}</span></div>
-                    <div class="flex justify-between text-neutral-500"><span>{{ $t('admin.generated.k_aca304907dc3') }}{{ folio.taxRate }}%)</span><span>{{ money(folio.taxAmount) }}</span></div>
-                    <div class="flex justify-between font-medium border-t border-neutral-100 pt-1.5"><span>{{ $t('admin.generated.k_eb3e69f5ad4a') }}</span><span>{{ money(folio.gross) }}</span></div>
-                    <div class="flex justify-between text-neutral-500"><span>{{ $t('admin.generated.k_ea1bc96b45a5') }}</span><span>− {{ money(folio.paid) }}</span></div>
-                    <div class="flex justify-between border-t border-neutral-200 pt-2">
-                        <span class="font-semibold">{{ $t('admin.generated.k_224908982d79') }}</span>
-                        <span class="text-h4" :class="unsettled ? 'text-error-600' : 'text-success-600'">{{ money(folio.outstanding) }}</span>
-                    </div>
-                </div>
-
-                <p class="text-tiny text-neutral-400 text-center pt-2">{{ $t('admin.generated.k_60a30ee15a06') }}</p>
+        <Modal :show="showInvoice" :title="checkoutMode ? $t('admin.generated.k_d0677fc34bd1') : $t('admin.generated.k_9b8aa645dbf0')" max-width="4xl" @close="showInvoice = false">
+            <div class="overflow-x-auto rounded-xl bg-neutral-100 py-4">
+                <HotelInvoice
+                    :reservation="reservation"
+                    :folio="folio"
+                    :payments="payments"
+                    :meta="invoicePrint"
+                    :fiscal-document="fiscalDocument"
+                    class="shadow-xl"
+                />
             </div>
 
             <div v-if="!checkoutMode" class="mt-4 rounded-xl border p-4 print:hidden"
@@ -888,8 +853,9 @@ function settleAndCheckout(method) {
 
 <style>
 @media print {
-    body * { visibility: hidden !important; }
-    #invoice, #invoice * { visibility: visible !important; }
-    #invoice { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+    @page { size: A4; margin: 0; }
+    body.printing-hotel-invoice * { visibility: hidden !important; }
+    body.printing-hotel-invoice #hotel-invoice, body.printing-hotel-invoice #hotel-invoice * { visibility: visible !important; }
+    body.printing-hotel-invoice #hotel-invoice { position: absolute; left: 0; top: 0; margin: 0; box-shadow: none !important; }
 }
 </style>
