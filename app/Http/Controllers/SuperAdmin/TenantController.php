@@ -13,6 +13,8 @@ use App\Services\TenantBillingService;
 use App\Services\TenantHandoff;
 use App\Services\TenantRoleService;
 use App\Tenancy\TenantContext;
+use DateTimeImmutable;
+use DateTimeZone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +61,8 @@ class TenantController extends Controller
                     'integrations' => $this->integrationSummaries($tenant),
                 ]),
             'currentTenantId' => $request->user()->current_tenant_id,
+            'currencyOptions' => config('lora.tenant_currencies'),
+            'timezoneGroups' => $this->timezoneGroups(),
         ]);
     }
 
@@ -150,7 +154,7 @@ class TenantController extends Controller
             'slug' => ['required', 'string', 'max:80', 'alpha_dash:ascii', Rule::unique('tenants', 'slug')],
             'primary_domain' => ['nullable', 'string', 'max:255'],
             'timezone' => ['required', 'timezone:all'],
-            'currency' => ['required', 'string', 'size:3'],
+            'currency' => ['required', Rule::in(config('lora.tenant_currencies'))],
             'owner_name' => ['nullable', 'string', 'max:120', 'required_with:owner_email'],
             'owner_email' => ['nullable', 'email', 'max:255', 'required_with:owner_name'],
         ]);
@@ -259,6 +263,41 @@ class TenantController extends Controller
             : '';
 
         return back()->with('success', 'Hoteli u krijua.'.$ownerNote.' Tani mund te kalosh ne tenantin e ri.');
+    }
+
+    /**
+     * IANA timezones grouped for the tenant onboarding dropdown.
+     *
+     * @return array<string, array<int, array{value: string, label: string}>>
+     */
+    private function timezoneGroups(): array
+    {
+        $now = new DateTimeImmutable;
+        $groups = [];
+
+        foreach (DateTimeZone::listIdentifiers() as $identifier) {
+            if ($identifier === 'UTC') {
+                $groups['UTC'][] = ['value' => 'UTC', 'label' => 'UTC (UTC+00:00)'];
+
+                continue;
+            }
+
+            [$region] = explode('/', $identifier, 2);
+            $timezone = new DateTimeZone($identifier);
+            $offset = $timezone->getOffset($now);
+            $sign = $offset >= 0 ? '+' : '-';
+            $absoluteOffset = abs($offset);
+            $hours = intdiv($absoluteOffset, 3600);
+            $minutes = intdiv($absoluteOffset % 3600, 60);
+            $city = str_replace(['_', '/'], [' ', ' / '], substr($identifier, strlen($region) + 1));
+
+            $groups[$region][] = [
+                'value' => $identifier,
+                'label' => sprintf('%s (UTC%s%02d:%02d)', $city, $sign, $hours, $minutes),
+            ];
+        }
+
+        return $groups;
     }
 
     public function updateSubscription(

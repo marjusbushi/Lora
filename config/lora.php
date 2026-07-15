@@ -34,6 +34,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tenant onboarding
+    |--------------------------------------------------------------------------
+    |
+    | Keep the intentionally small currency list in one place so the control
+    | panel dropdown and server-side validation can never drift apart.
+    |
+    */
+    'tenant_currencies' => [
+        'EUR',
+        'ALL',
+        'USD',
+        'GBP',
+        'CHF',
+        'TRY',
+        'CAD',
+        'AUD',
+        'SEK',
+        'NOK',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Public product website hosts
     |--------------------------------------------------------------------------
     |

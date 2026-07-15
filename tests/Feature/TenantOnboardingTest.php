@@ -66,6 +66,33 @@ class TenantOnboardingTest extends TestCase
         app(TenantContext::class)->clear();
     }
 
+    public function test_tenant_form_exposes_supported_currencies_and_iana_timezones(): void
+    {
+        $this->actingAs($this->superAdmin)
+            ->get(route('super-admin.tenants.index'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('SuperAdmin/Tenants/Index')
+                ->where('currencyOptions', config('lora.tenant_currencies'))
+                ->has('currencyOptions', 10)
+                ->where('timezoneGroups.Europe', fn ($timezones) => collect($timezones)
+                    ->contains('value', 'Europe/Tirane')));
+    }
+
+    public function test_tenant_creation_rejects_a_currency_outside_the_supported_list(): void
+    {
+        $this->actingAs($this->superAdmin)
+            ->post(route('super-admin.tenants.store'), [
+                'name' => 'Unsupported Currency Hotel',
+                'slug' => 'unsupported-currency-hotel',
+                'timezone' => 'Europe/Tirane',
+                'currency' => 'BTC',
+            ])
+            ->assertSessionHasErrors('currency');
+
+        $this->assertDatabaseMissing('tenants', ['slug' => 'unsupported-currency-hotel']);
+    }
+
     public function test_integration_credentials_are_saved_per_tenant_and_never_echoed(): void
     {
         $tenant = Tenant::factory()->create(['name' => 'Hotel B']);
