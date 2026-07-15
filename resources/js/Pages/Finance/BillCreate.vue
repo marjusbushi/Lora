@@ -23,7 +23,10 @@ const props = defineProps({
     categories: Array,
     inventoryItems: Array,
     warehouses: Array,
+    baseCurrency: String,
     fxRate: Number,
+    currencies: { type: Array, default: () => ['EUR', 'ALL'] },
+    currencyRates: { type: Object, default: () => ({}) },
     can: Object,
 });
 const { t } = useI18n();
@@ -52,8 +55,8 @@ const form = useForm({
     category: props.categories[0] || t('admin.finance.billCreate.other'),
     issue_date: localDateString(),
     due_date: null,
-    currency: 'ALL',
-    fx_rate: props.fxRate,
+    currency: props.baseCurrency,
+    fx_rate: null,
     total: 0,
     notes: '',
     receive_stock: true,
@@ -64,7 +67,7 @@ const selectedSupplier = computed(() => props.suppliers.find((supplier) => suppl
 const lineTotal = (line) => Number(line.quantity || 0) * Number(line.unit_cost || 0);
 const invoiceTotal = computed(() => form.items.reduce((total, line) => total + lineTotal(line), 0));
 const totalBase = computed(() => {
-    if (form.currency === 'EUR') return invoiceTotal.value;
+    if (form.currency === props.baseCurrency) return invoiceTotal.value;
     const rate = Number(form.fx_rate || 0);
     return rate > 0 ? invoiceTotal.value / rate : 0;
 });
@@ -73,7 +76,7 @@ const errorMessages = computed(() => [...new Set(Object.values(form.errors))]);
 
 const canSubmit = computed(() => {
     if (!form.supplier_id || !form.issue_date || invoiceTotal.value <= 0 || !form.items.length) return false;
-    if (form.currency === 'ALL' && Number(form.fx_rate) < 1) return false;
+    if (form.currency !== props.baseCurrency && Number(form.fx_rate) <= 0) return false;
 
     return form.items.every((line) => {
         const item = selectedItem(line);
@@ -96,6 +99,9 @@ watch(() => form.supplier_id, () => {
 });
 
 watch(() => form.issue_date, applyPaymentTerms);
+watch(() => form.currency, (currency) => {
+    form.fx_rate = currency === props.baseCurrency ? null : (props.currencyRates[currency] || null);
+});
 
 function applyPaymentTerms() {
     const supplier = selectedSupplier.value;
@@ -201,19 +207,18 @@ function submit() {
                             <div>
                                 <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.currency') }}</label>
                                 <select v-model="form.currency" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
-                                    <option value="ALL">ALL · Lek</option>
-                                    <option value="EUR">EUR · Euro</option>
+                                    <option v-for="currency in currencies" :key="currency" :value="currency">{{ currency }}</option>
                                 </select>
                             </div>
-                            <div :class="form.currency === 'EUR' ? 'sm:col-span-2' : ''">
+                            <div :class="form.currency === baseCurrency ? 'sm:col-span-2' : ''">
                                 <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.category') }}</label>
                                 <select v-model="form.category" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
                                     <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
                                 </select>
                             </div>
-                            <div v-if="form.currency === 'ALL'">
-                                <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>{{ $t('admin.finance.billCreate.exchangeRate') }}</span><small class="font-normal text-neutral-400">{{ $t('admin.finance.billCreate.lekPerEuro') }}</small></label>
-                                <TextInput v-model="form.fx_rate" type="number" min="1" step="0.0001" class="w-full" :placeholder="$t('admin.finance.billCreate.ratePlaceholder')" />
+                            <div v-if="form.currency !== baseCurrency">
+                                <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>{{ $t('admin.finance.billCreate.exchangeRate') }}</span><small class="font-normal text-neutral-400">{{ $t('admin.finance.billCreate.rateHelp', { base: baseCurrency, currency: form.currency }) }}</small></label>
+                                <TextInput v-model="form.fx_rate" type="number" min="0.000001" step="0.000001" class="w-full" :placeholder="$t('admin.finance.billCreate.ratePlaceholder')" />
                                 <p v-if="form.errors.fx_rate" class="mt-1 text-tiny text-error-600">{{ form.errors.fx_rate }}</p>
                             </div>
                         </div>
@@ -305,7 +310,7 @@ function submit() {
                         <div class="space-y-3">
                             <div class="flex items-center justify-between gap-4 text-body-sm"><span class="text-neutral-500">{{ $t('admin.finance.billCreate.subtotal') }}</span><strong class="tabular-nums text-primary-900">{{ money(invoiceTotal, form.currency) }}</strong></div>
                             <div class="flex items-center justify-between gap-4 border-t border-neutral-200 pt-3"><span class="font-semibold text-primary-900">{{ $t('admin.finance.billCreate.invoiceTotal') }}</span><strong class="text-h2 tabular-nums text-accent-700">{{ money(invoiceTotal, form.currency) }}</strong></div>
-                            <div v-if="form.currency === 'ALL'" class="flex items-center justify-between gap-4 text-tiny text-neutral-400"><span>{{ $t('admin.finance.billCreate.payableEur') }}</span><strong class="tabular-nums text-neutral-600">{{ money(totalBase) }}</strong></div>
+                            <div v-if="form.currency !== baseCurrency" class="flex items-center justify-between gap-4 text-tiny text-neutral-400"><span>{{ $t('admin.finance.billCreate.payableBase', { currency: baseCurrency }) }}</span><strong class="tabular-nums text-neutral-600">{{ money(totalBase, baseCurrency) }}</strong></div>
                             <p class="flex items-start gap-2 pt-2 text-tiny leading-relaxed text-neutral-400"><Info class="mt-0.5 h-3.5 w-3.5 shrink-0" />{{ $t('admin.finance.billCreate.liabilityHint') }}</p>
                         </div>
                     </div>

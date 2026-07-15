@@ -18,6 +18,7 @@ use App\Models\Room;
 use App\Models\Setting;
 use App\Models\Warehouse;
 use App\Services\AuditTimeline;
+use App\Services\BaseCurrency;
 use App\Services\CurrencyRates;
 use App\Services\FatureAlConfiguration;
 use App\Services\InventoryLedger;
@@ -422,7 +423,7 @@ class ReservationController extends Controller
             'inventoryEnabled' => $inventoryEnabled,
             'inventoryItems' => $inventoryItems,
             'inventoryWarehouses' => $inventoryWarehouses,
-            'currency' => Setting::get('financial.default_currency_symbol', '€'),
+            'currency' => BaseCurrency::symbol(),
             'invoicePrint' => [
                 'hotel_name' => Setting::get('hotel.name', $tenant?->name ?: 'Hotel'),
                 'legal_name' => $fiscalAccount['company'] ?? null,
@@ -642,13 +643,14 @@ class ReservationController extends Controller
 
             if ((float) $data['amount'] > $outstanding) {
                 throw ValidationException::withMessages([
-                    'amount' => 'Pagesa nuk mund të jetë më e madhe se shuma e mbetur prej '.number_format($outstanding, 2).' €.',
+                    'amount' => 'Pagesa nuk mund të jetë më e madhe se shuma e mbetur prej '.number_format($outstanding, 2).' '.BaseCurrency::code().'.',
                 ]);
             }
 
             return $lockedReservation->payments()->create([
                 'amount' => $data['amount'],
                 'method' => $data['method'],
+                'currency' => BaseCurrency::code(),
                 'created_by' => auth()->id(),
             ]);
         });
@@ -1093,7 +1095,7 @@ class ReservationController extends Controller
         // OTA prepaid stay) checks out straight through.
         if ($outstanding > 0.005 && empty($data['settle_method'])) {
             throw ValidationException::withMessages([
-                'settle_method' => 'Klienti ka '.number_format($outstanding, 2).'€ pa paguar — regjistro pagesën para check-out.',
+                'settle_method' => 'Klienti ka '.number_format($outstanding, 2).' '.BaseCurrency::code().' pa paguar — regjistro pagesën para check-out.',
             ]);
         }
 
@@ -1110,6 +1112,7 @@ class ReservationController extends Controller
                 $reservation->payments()->create([
                     'amount' => $outstanding,
                     'method' => $data['settle_method'],
+                    'currency' => BaseCurrency::code(),
                     'created_by' => auth()->id(),
                 ]);
                 AuditLog::record('payment.record', $reservation, [

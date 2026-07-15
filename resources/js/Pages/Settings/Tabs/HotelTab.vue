@@ -32,6 +32,12 @@ const currencyOptions = [
     { value: 'ALL', label: translate('admin.generated.k_f80673073fb5') },
     { value: 'USD', label: translate('admin.generated.k_f57b24be53a0') },
     { value: 'GBP', label: translate('admin.generated.k_cfee1e2af2b7') },
+    { value: 'CHF', label: 'CHF · Franga zvicerane' },
+    { value: 'TRY', label: 'TRY · Lira turke' },
+    { value: 'CAD', label: 'CAD · Dollari kanadez' },
+    { value: 'AUD', label: 'AUD · Dollari australian' },
+    { value: 'SEK', label: 'SEK · Krona suedeze' },
+    { value: 'NOK', label: 'NOK · Krona norvegjeze' },
 ];
 
 const timezoneOptions = [

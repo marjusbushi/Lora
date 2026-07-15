@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\BaseCurrency;
 use InvalidArgumentException;
 
 /**
@@ -22,16 +23,16 @@ class FinancePayment extends TenantModel
     protected $casts = [
         'amount' => 'decimal:2',
         'amount_base' => 'decimal:2',
-        'fx_rate' => 'decimal:4',
+        'fx_rate' => 'decimal:6',
         'paid_at' => 'datetime',
     ];
 
     protected static function booted(): void
     {
-        // amount_base (EUR) is a DERIVED invariant — always computed here, so a
-        // caller can neither forget it nor send a contradictory value.
+        // amount_base is a DERIVED invariant in the tenant's functional
+        // currency, so callers cannot send a contradictory value.
         static::saving(function (FinancePayment $p) {
-            if (strtoupper((string) $p->currency) === 'EUR') {
+            if (strtoupper((string) $p->currency) === BaseCurrency::code()) {
                 $p->amount_base = $p->amount;
             } else {
                 if (! $p->fx_rate || (float) $p->fx_rate <= 0) {

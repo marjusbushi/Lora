@@ -29,6 +29,7 @@ const props = defineProps({
 });
 
 const perms = usePage().props.auth.user?.permissions || [];
+const currencyCode = usePage().props.tenant?.currency || 'EUR';
 const canCreate = perms.includes('create_reservations');
 const canUpdate = perms.includes('update_reservations');
 const menuItemClass = 'flex w-full items-center gap-2.5 px-3 py-2 text-left text-body-sm text-neutral-700 transition-colors hover:bg-neutral-50 no-underline';
@@ -148,7 +149,7 @@ function formatDate(value) {
     return new Date(`${value}T12:00:00`).toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short', year: 'numeric' });
 }
 function money(value) {
-    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: 'EUR' }).format(Number(value || 0));
+    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currencyCode }).format(Number(value || 0));
 }
 function isLatest(reservation) {
     return props.latestReservationId != null && Number(reservation.id) === Number(props.latestReservationId);

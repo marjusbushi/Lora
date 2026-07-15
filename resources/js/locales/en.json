@@ -402,6 +402,10 @@
         "cash": "Cash",
         "bank": "Bank"
       },
+      "payments": {
+        "rateHelp": "1 {base} = how many {currency}?",
+        "baseValue": "Value in {currency}: {amount}"
+      },
       "billCreate": {
         "title": "New purchase bill",
         "breadcrumbNew": "New bill",
@@ -424,6 +428,7 @@
         "dueDate": "Payment due date",
         "currency": "Currency",
         "exchangeRate": "Exchange rate",
+        "rateHelp": "1 {base} = how many {currency}?",
         "lekPerEuro": "ALL per €1",
         "itemsTitle": "Items and services",
         "itemsSubtitle": "Each item is recorded as a bill line.",
@@ -453,6 +458,7 @@
         "lockedRate": "Locked rate",
         "invoiceTotal": "Bill total",
         "payableEur": "Payable in EUR",
+        "payableBase": "Payable in {currency}",
         "liabilityHint": "The bill creates a liability to the supplier. Cash or bank balances change only when the payment is recorded.",
         "stockHint": "Physical items enter the warehouse selected on each line; services do not change inventory.",
         "other": "Other",
@@ -3980,7 +3986,8 @@
   },
   "currencySettings": {
     "manualAllRate": "Manual ALL/EUR rate (1 € =)",
-    "manualAllRateHelp": "Used when the API is disabled and stored separately for this hotel. The rate is frozen on each document."
+    "manualAllRateHelp": "Used when the API is disabled and stored separately for this hotel. The rate is frozen on each document.",
+    "baseCurrencyInherited": "Inherited automatically from the hotel's base currency."
   },
   "integrationCenter": {
     "title": "Integration Center",

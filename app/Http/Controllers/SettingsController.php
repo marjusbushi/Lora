@@ -6,6 +6,7 @@ use App\Jobs\PushRoomTypeAri;
 use App\Models\Amenity;
 use App\Models\AuditLog;
 use App\Models\CleaningTask;
+use App\Models\FinanceAccount;
 use App\Models\Floor;
 use App\Models\InventoryItem;
 use App\Models\MenuCategory;
@@ -15,9 +16,11 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\RoomTypeImage;
 use App\Models\Setting;
+use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Models\Warehouse;
 use App\Services\AuditTimeline;
+use App\Services\BaseCurrency;
 use App\Services\CurrencyRates;
 use App\Services\FatureAlClient;
 use App\Services\FatureAlConfiguration;
@@ -26,11 +29,13 @@ use App\Services\MarketRates;
 use App\Services\PricingRulesVersion;
 use App\Services\VatConfiguration;
 use App\Support\TenantStorage;
+use App\Tenancy\TenantContext;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -87,6 +92,7 @@ class SettingsController extends Controller
             'accommodation_vat_rate' => VatConfiguration::ACCOMMODATION_RATE,
             'product_vat_rate' => VatConfiguration::PRODUCT_RATE,
         ], $settings['financial'] ?? [], [
+            'default_currency_symbol' => BaseCurrency::symbol(),
             'provider_vat_registered' => is_bool($fiscalAccount['issuer_in_vat'] ?? null)
                 ? $fiscalAccount['issuer_in_vat']
                 : null,
@@ -204,7 +210,7 @@ class SettingsController extends Controller
             'phone' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
             'timezone' => ['required', 'string', 'max:50'],
-            'currency' => ['required', 'string', 'in:EUR,ALL,USD,GBP'],
+            'currency' => ['required', 'string', Rule::in(config('lora.tenant_currencies'))],
             'check_in_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
             'check_out_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
             'logo' => ['nullable', 'image', 'mimes:jpeg,png,webp', 'max:3072'],
@@ -217,14 +223,33 @@ class SettingsController extends Controller
             'hero_subtitle_en' => ['nullable', 'string', 'max:400'],
         ]);
 
-        foreach ([
-            'name', 'address', 'phone', 'email', 'timezone', 'currency', 'check_in_time', 'check_out_time',
-            'hero_eyebrow_sq', 'hero_eyebrow_en',
-            'hero_title_sq', 'hero_title_en',
-            'hero_subtitle_sq', 'hero_subtitle_en',
-        ] as $key) {
-            Setting::set("hotel.{$key}", $request->input($key));
-        }
+        /** @var Tenant $tenant */
+        $tenant = app(TenantContext::class)->tenant() ?? abort(404);
+        $currency = strtoupper((string) $request->input('currency'));
+        BaseCurrency::assertCanChange($tenant, $currency);
+
+        DB::transaction(function () use ($request, $tenant, $currency) {
+            foreach ([
+                'name', 'address', 'phone', 'email', 'timezone', 'check_in_time', 'check_out_time',
+                'hero_eyebrow_sq', 'hero_eyebrow_en',
+                'hero_title_sq', 'hero_title_en',
+                'hero_subtitle_sq', 'hero_subtitle_en',
+            ] as $key) {
+                Setting::set("hotel.{$key}", $request->input($key));
+            }
+
+            Setting::set('hotel.currency', $currency);
+            Setting::set('financial.default_currency_symbol', BaseCurrency::symbol($currency));
+
+            $tenant->forceFill([
+                'name' => trim((string) $request->input('name')),
+                'timezone' => $request->input('timezone'),
+                'currency' => $currency,
+            ])->save();
+
+            FinanceAccount::whereIn('name', ['Arka', 'Banka'])->update(['currency' => $currency]);
+            FinanceAccount::ensureDefaults();
+        });
 
         if ($request->hasFile('logo')) {
             $path = $request->file('logo')->store(TenantStorage::path('logos'), 'public');
@@ -347,7 +372,7 @@ class SettingsController extends Controller
             ? VatConfiguration::PRODUCT_RATE
             : 0, 'number');
         Setting::set('financial.payment_methods', $request->payment_methods, 'json');
-        Setting::set('financial.default_currency_symbol', $request->currency_symbol);
+        Setting::set('financial.default_currency_symbol', BaseCurrency::symbol());
 
         // Per-channel commission % — Direct is first-party and always commission-free.
         $fees = [];

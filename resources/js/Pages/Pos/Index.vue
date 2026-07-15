@@ -66,7 +66,9 @@ const openShiftForm = useForm({ opening_float: props.defaultOpeningFloat ?? 0 })
 const closeShiftForm = useForm({ counted_cash: '', closing_note: '' });
 
 function money(v) {
-    return `€${Number(v ?? 0).toFixed(2)}`;
+    return new Intl.NumberFormat(getIntlLocale(), {
+        style: 'currency', currency: props.receiptSettings.currency || 'EUR',
+    }).format(Number(v ?? 0));
 }
 
 function submitOpenShift() {
@@ -244,7 +246,7 @@ function submitOrder() {
     form.post(route('pos.store'), {
         onSuccess: () => {
             clearCart();
-            toasts.value?.success(`Porosia u krijua — €${submittedTotal.toFixed(2)}`);
+            toasts.value?.success(`Porosia u krijua — ${money(submittedTotal)}`);
         },
     });
 }
@@ -405,7 +407,7 @@ function formatTime(d) {
                                                 {{ statusBadge[order.status]?.label }}
                                             </Badge>
                                         </td>
-                                        <td class="px-4 py-2.5 text-right text-body-sm font-medium">€{{ order.total_amount }}</td>
+                                        <td class="px-4 py-2.5 text-right text-body-sm font-medium">{{ money(order.total_amount) }}</td>
                                         <td class="px-4 py-2.5 text-right">
                                             <div v-if="order.status === 'open'" class="flex justify-end gap-1">
                                                 <Button size="sm" variant="primary" :disabled="!hasOpenShift" @click="openPay(order)">{{ $t('admin.generated.k_c0bc68ffb628') }}</Button>

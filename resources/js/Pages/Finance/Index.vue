@@ -140,7 +140,9 @@ function moveChartSelection(direction) {
 }
 
 function compactMoney(value) {
-    return `€${new Intl.NumberFormat(getIntlLocale(), { notation: 'compact', maximumFractionDigits: 1 }).format(value)}`;
+    return new Intl.NumberFormat(getIntlLocale(), {
+        style: 'currency', currency: props.baseCurrency, notation: 'compact', maximumFractionDigits: 1,
+    }).format(value);
 }
 
 function changeText(value) {
@@ -206,7 +208,7 @@ function formatDateTime(value) {
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p class="text-tiny text-neutral-400">
 {{ $t('admin.generated.k_69be807b64bc') }} <span class="font-bold text-neutral-600">{{ $t('admin.generated.k_ac6cd901d88d') }}</span>
-                    <template v-if="fxRate"> · 1 € = {{ fxRate }} {{ $t('admin.generated.k_de6376ec5eec') }}</template>
+                    <template v-if="fxRate && baseCurrency !== 'ALL'"> · 1 {{ baseCurrency }} = {{ fxRate }} ALL</template>
                 </p>
                 <div class="inline-flex w-fit rounded-lg border border-neutral-200 bg-white p-1 shadow-sm">
                     <Link
@@ -227,7 +229,7 @@ function formatDateTime(value) {
                         <p class="text-tiny font-semibold text-neutral-500">{{ $t('admin.generated.k_59a879329b1a') }} {{ summary.period_label.toLowerCase() }}</p>
                         <span class="grid h-8 w-8 place-items-center rounded-lg bg-accent-50 text-accent-700"><TrendingUp class="h-4 w-4" /></span>
                     </div>
-                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.income) }}</p>
+                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.income, baseCurrency) }}</p>
                     <div class="mt-2 flex items-center gap-2 text-tiny text-neutral-400">
                         <span class="rounded px-1.5 py-0.5 font-bold" :class="changeClass(summary.income_change)">{{ changeText(summary.income_change) }}</span>
                         <span v-if="summary.income_change !== null" class="truncate">{{ summary.comparison_label }}</span>
@@ -239,7 +241,7 @@ function formatDateTime(value) {
                         <p class="text-tiny font-semibold text-neutral-500">{{ $t('admin.generated.k_bc6c62d904b9') }} {{ summary.period_label.toLowerCase() }}</p>
                         <span class="grid h-8 w-8 place-items-center rounded-lg bg-error-50 text-error-600"><TrendingDown class="h-4 w-4" /></span>
                     </div>
-                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.expenses) }}</p>
+                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.expenses, baseCurrency) }}</p>
                     <div class="mt-2 flex items-center gap-2 text-tiny text-neutral-400">
                         <span class="rounded px-1.5 py-0.5 font-bold" :class="changeClass(summary.expenses_change, true)">{{ changeText(summary.expenses_change) }}</span>
                         <span v-if="summary.expenses_change !== null" class="truncate">{{ summary.comparison_label }}</span>
@@ -251,7 +253,7 @@ function formatDateTime(value) {
                         <p class="text-tiny font-semibold text-neutral-500">{{ $t('admin.generated.k_930589af2e65') }}</p>
                         <span class="grid h-8 w-8 place-items-center rounded-lg bg-info-50 text-info-700"><Scale class="h-4 w-4" /></span>
                     </div>
-                    <p class="mt-2 text-h2 font-bold tabular-nums" :class="summary.net < 0 ? 'text-error-600' : 'text-primary-900'">{{ money(summary.net) }}</p>
+                    <p class="mt-2 text-h2 font-bold tabular-nums" :class="summary.net < 0 ? 'text-error-600' : 'text-primary-900'">{{ money(summary.net, baseCurrency) }}</p>
                     <div class="mt-2 flex items-center gap-2 text-tiny text-neutral-400">
                         <span class="rounded px-1.5 py-0.5 font-bold" :class="changeClass(summary.net_change)">{{ changeText(summary.net_change) }}</span>
                         <span v-if="summary.net_change !== null" class="truncate">{{ summary.comparison_label }}</span>
@@ -263,7 +265,7 @@ function formatDateTime(value) {
                         <p class="text-tiny font-semibold text-neutral-500">{{ $t('admin.generated.k_63b17bb86e75') }}</p>
                         <span class="grid h-8 w-8 place-items-center rounded-lg bg-warning-50 text-warning-700"><Clock3 class="h-4 w-4" /></span>
                     </div>
-                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(receivables.total) }}</p>
+                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(receivables.total, baseCurrency) }}</p>
                     <div class="mt-2 flex items-center gap-2 text-tiny text-neutral-400">
                         <span class="rounded bg-neutral-100 px-1.5 py-0.5 font-bold text-neutral-600">{{ receivables.count }} {{ receivables.count === 1 ? $t('admin.generated.k_da67adba6bf9') : $t('admin.generated.k_d050bac418b8') }}</span>
                         <span v-if="receivables.overdue_count" class="truncate text-error-600">{{ receivables.overdue_count }} {{ $t('admin.generated.k_e046bd02c28a') }}</span>
@@ -337,11 +339,11 @@ function formatDateTime(value) {
                             <p class="mb-2 text-tiny font-bold text-primary-900">{{ fullDate(activeChartDay.date) }}</p>
                             <div class="flex items-center justify-between gap-5 text-tiny">
                                 <span class="inline-flex items-center gap-1.5 text-neutral-500"><i class="h-2 w-2 rounded-full bg-accent-600" />{{ $t('admin.generated.k_49836d46cac1') }}</span>
-                                <strong class="tabular-nums text-accent-700">{{ money(activeChartDay.in) }}</strong>
+                                <strong class="tabular-nums text-accent-700">{{ money(activeChartDay.in, baseCurrency) }}</strong>
                             </div>
                             <div class="mt-1.5 flex items-center justify-between gap-5 text-tiny">
                                 <span class="inline-flex items-center gap-1.5 text-neutral-500"><i class="h-2 w-2 rounded-full bg-warning-500" />{{ $t('admin.generated.k_57e664bad287') }}</span>
-                                <strong class="tabular-nums text-warning-700">{{ money(activeChartDay.out) }}</strong>
+                                <strong class="tabular-nums text-warning-700">{{ money(activeChartDay.out, baseCurrency) }}</strong>
                             </div>
                         </div>
                         </div>
@@ -362,17 +364,17 @@ function formatDateTime(value) {
                             <p class="mt-1.5 text-tiny text-neutral-400">{{ $t('admin.generated.k_d15f7aa41687') }}</p>
                         </div>
                         <div class="py-3.5">
-                            <div class="flex items-center justify-between gap-3 text-body-sm"><span class="text-neutral-600">{{ $t('admin.generated.k_c3a7afb3142f') }}</span><strong class="tabular-nums text-warning-700">{{ money(payables.due_soon_total) }}</strong></div>
+                            <div class="flex items-center justify-between gap-3 text-body-sm"><span class="text-neutral-600">{{ $t('admin.generated.k_c3a7afb3142f') }}</span><strong class="tabular-nums text-warning-700">{{ money(payables.due_soon_total, baseCurrency) }}</strong></div>
                             <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100"><i class="block h-full rounded-full bg-warning-500" :style="{ width: relativeWidth(payables.due_soon_total, payables.total) }" /></div>
                             <p class="mt-1.5 text-tiny text-neutral-400">{{ payables.due_soon_count }} {{ payables.due_soon_count === 1 ? $t('admin.generated.k_680b8ba27719') : $t('admin.generated.k_bfae9a666755') }}</p>
                         </div>
                         <div class="py-3.5">
-                            <div class="flex items-center justify-between gap-3 text-body-sm"><span class="text-neutral-600">{{ $t('admin.generated.k_e7b619ac29b3') }}</span><strong class="tabular-nums" :class="payables.overdue_total > 0 ? 'text-error-600' : 'text-primary-900'">{{ money(payables.overdue_total) }}</strong></div>
+                            <div class="flex items-center justify-between gap-3 text-body-sm"><span class="text-neutral-600">{{ $t('admin.generated.k_e7b619ac29b3') }}</span><strong class="tabular-nums" :class="payables.overdue_total > 0 ? 'text-error-600' : 'text-primary-900'">{{ money(payables.overdue_total, baseCurrency) }}</strong></div>
                             <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100"><i class="block h-full rounded-full bg-error-500" :style="{ width: relativeWidth(payables.overdue_total, payables.total) }" /></div>
                             <p class="mt-1.5 text-tiny text-neutral-400">{{ payables.overdue_count }} {{ payables.overdue_count === 1 ? $t('admin.generated.k_30eb62d37512') : $t('admin.generated.k_31a0dd65f9fd') }} {{ $t('admin.generated.k_b9615e5cd814') }}</p>
                         </div>
                         <div class="py-3.5">
-                            <div class="flex items-center justify-between gap-3 text-body-sm"><span class="text-neutral-600">{{ $t('admin.generated.k_adf7dfda7566') }}</span><strong class="tabular-nums text-primary-900">{{ money(receivables.total) }}</strong></div>
+                            <div class="flex items-center justify-between gap-3 text-body-sm"><span class="text-neutral-600">{{ $t('admin.generated.k_adf7dfda7566') }}</span><strong class="tabular-nums text-primary-900">{{ money(receivables.total, baseCurrency) }}</strong></div>
                             <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100"><i class="block h-full rounded-full bg-info-500" :style="{ width: barWidth(Math.min(receivables.count * 10, 100)) }" /></div>
                             <p class="mt-1.5 text-tiny text-neutral-400">{{ receivables.count }} {{ receivables.count === 1 ? $t('admin.generated.k_85d161758696') : $t('admin.generated.k_9babc2140b96') }}</p>
                         </div>
@@ -402,7 +404,7 @@ function formatDateTime(value) {
                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-info-50 text-info-700"><WalletCards class="h-5 w-5" /></span>
                     <span class="min-w-0">
                         <span class="block text-tiny font-semibold text-neutral-500">{{ $t('admin.generated.k_62e8beb1f989') }}</span>
-                        <strong class="mt-0.5 block truncate text-h4 tabular-nums text-primary-900">{{ money(liquidityTotal) }}</strong>
+                        <strong class="mt-0.5 block truncate text-h4 tabular-nums text-primary-900">{{ money(liquidityTotal, baseCurrency) }}</strong>
                     </span>
                 </div>
             </div>
@@ -466,7 +468,7 @@ function formatDateTime(value) {
                                 <strong class="block text-body-sm text-primary-900 group-hover:text-accent-700">{{ alert.label }}</strong>
                                 <span class="mt-1 block text-tiny text-neutral-400">{{ alert.badge }}</span>
                             </span>
-                            <span class="shrink-0 text-right text-tiny font-bold tabular-nums" :class="alert.severity === 'error' ? 'text-error-600' : 'text-warning-700'">{{ money(alert.amount) }}</span>
+                            <span class="shrink-0 text-right text-tiny font-bold tabular-nums" :class="alert.severity === 'error' ? 'text-error-600' : 'text-warning-700'">{{ money(alert.amount, baseCurrency) }}</span>
                         </Link>
                     </div>
                     <div v-else class="flex flex-col items-center px-5 py-10 text-center">
@@ -478,6 +480,6 @@ function formatDateTime(value) {
             </div>
         </div>
 
-        <TransactionDetailsDrawer :payment="selectedPayment" @close="selectedPayment = null" />
+        <TransactionDetailsDrawer :payment="selectedPayment" :base-currency="baseCurrency" @close="selectedPayment = null" />
     </AppLayout>
 </template>

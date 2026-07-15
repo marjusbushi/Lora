@@ -11,7 +11,7 @@ use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
-use App\Models\Setting;
+use App\Services\BaseCurrency;
 use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
 use Carbon\CarbonInterface;
@@ -1295,6 +1295,6 @@ class ReportsController extends Controller
 
     private function currency(): string
     {
-        return Setting::get('financial.default_currency_symbol', '€');
+        return BaseCurrency::symbol();
     }
 }

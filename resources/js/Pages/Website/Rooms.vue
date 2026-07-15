@@ -8,6 +8,7 @@ import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { amenityIcon } from '@/Components/Website/amenities';
 
 const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
+const currencySymbol = computed(() => usePage().props.settings?.currency_symbol || '€');
 
 const { t } = useI18n();
 const bookingEnabled = computed(() => usePage().props.modules?.booking_engine === true);
@@ -48,7 +49,7 @@ const hasFromPrice = (room) => room?.from_price !== null
                                         <div class="text-right shrink-0">
                                             <template v-if="hasFromPrice(room)">
                                                 <p class="text-tiny text-ink/40 uppercase tracking-wider" :title="$t('rooms.card.fromPriceHint')">{{ $t('rooms.card.priceFrom') }}</p>
-                                                <p class="text-2xl text-brass leading-none">€{{ room.from_price }}</p>
+                                                <p class="text-2xl text-brass leading-none">{{ currencySymbol }}{{ room.from_price }}</p>
                                                 <p class="text-tiny text-ink/40 uppercase tracking-wider mt-1">{{ $t('rooms.card.perNight') }}</p>
                                             </template>
                                             <p v-else class="max-w-28 text-body-sm font-medium text-ionian">{{ $t('rooms.card.checkDates') }}</p>

@@ -4,11 +4,13 @@ namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\FinanceAccount;
 use App\Models\Setting;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
+use App\Services\BaseCurrency;
 use App\Services\FatureAlClient;
 use App\Services\TenantBillingService;
 use App\Services\TenantHandoff;
@@ -160,19 +162,24 @@ class TenantController extends Controller
         ]);
 
         $before = $tenant->only(['name', 'slug', 'timezone', 'currency']);
+        $newCurrency = Str::upper($data['currency']);
+        BaseCurrency::assertCanChange($tenant, $newCurrency);
 
-        DB::transaction(function () use ($tenant, $data) {
+        DB::transaction(function () use ($tenant, $data, $newCurrency) {
             $tenant->forceFill([
                 'name' => trim($data['name']),
                 'slug' => Str::lower($data['slug']),
                 'timezone' => $data['timezone'],
-                'currency' => Str::upper($data['currency']),
+                'currency' => $newCurrency,
             ])->save();
 
             app(TenantContext::class)->run($tenant, function () use ($tenant) {
                 Setting::set('hotel.name', $tenant->name);
                 Setting::set('hotel.timezone', $tenant->timezone);
                 Setting::set('hotel.currency', $tenant->currency);
+                Setting::set('financial.default_currency_symbol', BaseCurrency::symbol());
+                FinanceAccount::whereIn('name', ['Arka', 'Banka'])->update(['currency' => $tenant->currency]);
+                FinanceAccount::ensureDefaults();
             });
 
             $tenant->subscription()->update(['currency' => $tenant->currency]);
@@ -367,10 +374,20 @@ class TenantController extends Controller
                     'created_at' => now(),
                     'updated_at' => now(),
                 ],
+                [
+                    'tenant_id' => $tenant->id,
+                    'group' => 'financial',
+                    'key' => 'default_currency_symbol',
+                    'value' => BaseCurrency::symbol($tenant->currency),
+                    'type' => 'text',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
             ]);
 
             $tenantRoles->provision($tenant, $request->user());
             $billing->provision($tenant);
+            app(TenantContext::class)->run($tenant, fn () => FinanceAccount::ensureDefaults());
 
             // The hotel's first REAL owner: an existing account is linked
             // (password untouched), a new one is created with a random

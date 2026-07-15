@@ -32,6 +32,7 @@ const props = defineProps({
     filters: Object,
     summary: Object,
     priorities: Array,
+    baseCurrency: String,
     can: Object,
 });
 
@@ -128,7 +129,7 @@ function csvCell(value) {
 }
 
 function exportVisibleBills() {
-    const header = ['Furnitori', translate('admin.generated.k_7676d472d044'), 'Data', 'Afati', 'Kategoria', 'Monedha', 'Totali', 'Mbetja EUR', 'Statusi'];
+    const header = ['Furnitori', translate('admin.generated.k_7676d472d044'), 'Data', 'Afati', 'Kategoria', 'Monedha', 'Totali', `Mbetja ${props.baseCurrency}`, 'Statusi'];
     const rows = props.bills.data.map((bill) => [
         bill.supplier,
         bill.number || `#${bill.id}`,
@@ -203,7 +204,7 @@ const selectedAccount = computed(() => props.accounts.find((account) => account.
 const paymentBase = computed(() => {
     if (!paying.value) return 0;
     const amount = Number(payForm.amount || 0);
-    return paying.value.currency === 'EUR' ? amount : amount / Number(paying.value.fx_rate || 1);
+    return paying.value.currency === props.baseCurrency ? amount : amount / Number(paying.value.fx_rate || 1);
 });
 const remainingAfterPayment = computed(() => Math.max(0, Number(paying.value?.remaining_base || 0) - paymentBase.value));
 
@@ -211,7 +212,7 @@ function openPay(bill) {
     paying.value = bill;
     payForm.account_id = props.accounts[0]?.id;
     payForm.method = 'cash';
-    payForm.amount = bill.currency === 'EUR'
+    payForm.amount = bill.currency === props.baseCurrency
         ? bill.remaining_base
         : Math.round(bill.remaining_base * (bill.fx_rate || 1) * 100) / 100;
     payForm.clearErrors();
@@ -266,7 +267,7 @@ function submitPay() {
                         <p class="text-tiny font-semibold text-neutral-500">{{ $t('admin.generated.k_be4ec1e6b6ea') }}</p>
                         <span class="grid h-8 w-8 place-items-center rounded-lg bg-accent-50 text-accent-700"><CircleDollarSign class="h-4 w-4" /></span>
                     </div>
-                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.open_total) }}</p>
+                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.open_total, baseCurrency) }}</p>
                     <p class="mt-2 text-tiny text-neutral-400"><b class="text-accent-700">{{ summary.open_count }} {{ summary.open_count === 1 ? $t('admin.generated.k_67477e1e9ade') : $t('admin.generated.k_6877acf33608') }}</b> · {{ summary.supplier_count }} {{ summary.supplier_count === 1 ? $t('admin.generated.k_372c52096dd9') : $t('admin.generated.k_403e3c4713bc') }}</p>
                 </article>
 
@@ -275,7 +276,7 @@ function submitPay() {
                         <p class="text-tiny font-semibold text-neutral-500">{{ $t('admin.generated.k_a30602e01511') }}</p>
                         <span class="grid h-8 w-8 place-items-center rounded-lg bg-error-50 text-error-600"><AlertTriangle class="h-4 w-4" /></span>
                     </div>
-                    <p class="mt-2 text-h2 font-bold tabular-nums" :class="summary.overdue_total > 0 ? 'text-error-600' : 'text-primary-900'">{{ money(summary.overdue_total) }}</p>
+                    <p class="mt-2 text-h2 font-bold tabular-nums" :class="summary.overdue_total > 0 ? 'text-error-600' : 'text-primary-900'">{{ money(summary.overdue_total, baseCurrency) }}</p>
                     <p class="mt-2 text-tiny text-neutral-400"><b :class="summary.overdue_count ? 'text-error-600' : 'text-accent-700'">{{ summary.overdue_count }} {{ summary.overdue_count === 1 ? $t('admin.generated.k_67477e1e9ade') : $t('admin.generated.k_6877acf33608') }}</b> {{ summary.overdue_count === 1 ? $t('admin.generated.k_6e1ca2236d1b') : $t('admin.generated.k_cae9a8822038') }} {{ $t('admin.generated.k_f9451d8834a2') }}</p>
                 </article>
 
@@ -284,7 +285,7 @@ function submitPay() {
                         <p class="text-tiny font-semibold text-neutral-500">{{ $t('admin.generated.k_de6ece7be713') }}</p>
                         <span class="grid h-8 w-8 place-items-center rounded-lg bg-warning-50 text-warning-700"><Clock3 class="h-4 w-4" /></span>
                     </div>
-                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.due_soon_total) }}</p>
+                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.due_soon_total, baseCurrency) }}</p>
                     <p class="mt-2 text-tiny text-neutral-400"><b class="text-warning-700">{{ summary.due_soon_count }} {{ summary.due_soon_count === 1 ? $t('admin.generated.k_4edd93df3350') : $t('admin.generated.k_cfdec98e9055') }}</b> {{ $t('admin.generated.k_3de61d2766aa') }}</p>
                 </article>
 
@@ -293,7 +294,7 @@ function submitPay() {
                         <p class="text-tiny font-semibold text-neutral-500">{{ $t('admin.generated.k_cb2cf7aa976c') }}</p>
                         <span class="grid h-8 w-8 place-items-center rounded-lg bg-accent-50 text-accent-700"><CheckCircle2 class="h-4 w-4" /></span>
                     </div>
-                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.month_paid_total) }}</p>
+                    <p class="mt-2 text-h2 font-bold tabular-nums text-primary-900">{{ money(summary.month_paid_total, baseCurrency) }}</p>
                     <p class="mt-2 text-tiny text-neutral-400"><b class="text-accent-700">{{ summary.month_paid_count }} {{ summary.month_paid_count === 1 ? $t('admin.generated.k_67477e1e9ade') : $t('admin.generated.k_6877acf33608') }}</b> {{ $t('admin.generated.k_c94651e259b1') }}</p>
                 </article>
             </div>
@@ -357,9 +358,9 @@ function submitPay() {
                                         </td>
                                         <td class="px-4 py-3 text-right whitespace-nowrap font-bold text-primary-900">
                                             {{ money(bill.total, bill.currency) }}
-                                            <span v-if="bill.currency !== 'EUR'" class="mt-0.5 block text-tiny font-normal text-neutral-400">≈ {{ money(bill.total_base) }}</span>
+                                            <span v-if="bill.currency !== baseCurrency" class="mt-0.5 block text-tiny font-normal text-neutral-400">≈ {{ money(bill.total_base, baseCurrency) }}</span>
                                         </td>
-                                        <td class="px-4 py-3 text-right whitespace-nowrap font-bold" :class="bill.remaining_base > 0 ? 'text-error-600' : 'text-accent-700'">{{ money(bill.remaining_base) }}</td>
+                                        <td class="px-4 py-3 text-right whitespace-nowrap font-bold" :class="bill.remaining_base > 0 ? 'text-error-600' : 'text-accent-700'">{{ money(bill.remaining_base, baseCurrency) }}</td>
                                         <td class="px-4 py-3"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-tiny font-bold" :class="statusPill[bill.status]?.cls"><i class="h-1.5 w-1.5 rounded-full bg-current" />{{ statusPill[bill.status]?.text }}</span></td>
                                         <td class="px-5 py-3 text-right"><div class="flex justify-end gap-2">
                                             <Button v-if="can.manageInventory && bill.items_count > bill.received_items_count" size="sm" variant="success" @click="receiveStock(bill)">{{ $t('inventory.bill.receiveNow') }}</Button>
@@ -398,7 +399,7 @@ function submitPay() {
                         </template>
                         <div v-if="categoryEntries.length" class="divide-y divide-neutral-100 px-5 py-1">
                             <div v-for="([category, total]) in categoryEntries" :key="category" class="py-3">
-                                <div class="flex items-center justify-between gap-3 text-body-sm"><span class="truncate text-neutral-600">{{ category }}</span><strong class="shrink-0 tabular-nums text-primary-900">{{ money(total) }}</strong></div>
+                                <div class="flex items-center justify-between gap-3 text-body-sm"><span class="truncate text-neutral-600">{{ category }}</span><strong class="shrink-0 tabular-nums text-primary-900">{{ money(total, baseCurrency) }}</strong></div>
                                 <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100"><i class="block h-full rounded-full bg-accent-500" :style="{ width: categoryWidth(total) }" /></div>
                             </div>
                         </div>
@@ -419,7 +420,7 @@ function submitPay() {
                                     <strong class="block truncate text-body-sm text-primary-900">{{ bill.supplier }}</strong>
                                     <span class="mt-1 block text-tiny" :class="dueMeta(bill).cls">{{ dueMeta(bill).label }} · {{ bill.number || '#' + bill.id }}</span>
                                 </span>
-                                <strong class="shrink-0 text-tiny tabular-nums" :class="bill.due_state === 'overdue' ? 'text-error-600' : 'text-warning-700'">{{ money(bill.remaining_base) }}</strong>
+                                <strong class="shrink-0 text-tiny tabular-nums" :class="bill.due_state === 'overdue' ? 'text-error-600' : 'text-warning-700'">{{ money(bill.remaining_base, baseCurrency) }}</strong>
                             </button>
                         </div>
                         <div v-else class="flex flex-col items-center px-5 py-9 text-center">
@@ -438,9 +439,9 @@ function submitPay() {
                 <div class="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <strong class="text-body-sm text-primary-900">{{ paying.supplier }} · {{ paying.number || '#' + paying.id }}</strong>
-                        <p class="mt-1 text-tiny text-neutral-400">{{ $t('admin.generated.k_3150b7f0ee0d') }} {{ formatDate(paying.due_date) }}<template v-if="paying.currency !== 'EUR'"> {{ $t('admin.generated.k_0af2671a427f') }} {{ paying.fx_rate }}</template></p>
+                        <p class="mt-1 text-tiny text-neutral-400">{{ $t('admin.generated.k_3150b7f0ee0d') }} {{ formatDate(paying.due_date) }}<template v-if="paying.currency !== baseCurrency"> · 1 {{ baseCurrency }} = {{ paying.fx_rate }} {{ paying.currency }}</template></p>
                     </div>
-                    <strong class="text-h3 tabular-nums text-error-600">{{ money(paying.remaining_base) }}</strong>
+                    <strong class="text-h3 tabular-nums text-error-600">{{ money(paying.remaining_base, baseCurrency) }}</strong>
                 </div>
 
                 <div class="grid gap-3 sm:grid-cols-2">
@@ -468,7 +469,7 @@ function submitPay() {
 
                 <div class="flex items-center justify-between gap-3 rounded-lg bg-accent-50 px-3 py-2.5 text-body-sm text-accent-800">
                     <span>{{ $t('admin.generated.k_bd9990dc8f2f') }}</span>
-                    <b class="tabular-nums">{{ money(remainingAfterPayment) }}<template v-if="remainingAfterPayment <= 0.005"> {{ $t('admin.generated.k_fa56c9ad434a') }}</template></b>
+                    <b class="tabular-nums">{{ money(remainingAfterPayment, baseCurrency) }}<template v-if="remainingAfterPayment <= 0.005"> {{ $t('admin.generated.k_fa56c9ad434a') }}</template></b>
                 </div>
             </div>
             <template #footer>

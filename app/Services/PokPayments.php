@@ -41,11 +41,12 @@ class PokPayments
         }
 
         $expected = round((float) $reservation->total_amount, 2);
+        $currency = BaseCurrency::code();
         $paid = $order['isCompleted']
             && ! $order['isCanceled']
             && ! $order['isRefunded']
             && abs($order['finalAmount'] - $expected) < 0.01       // R2 amount bypass
-            && strtoupper($order['currencyCode']) === 'EUR';       // R6 currency
+            && strtoupper($order['currencyCode']) === $currency;   // R6 currency
 
         if (! $paid) {
             return false;
@@ -69,7 +70,7 @@ class PokPayments
                 'method' => 'card',
                 'type' => 'payment',
                 'pok_order_id' => $reservation->pok_order_id,
-                'currency' => 'EUR',
+                'currency' => $currency,
                 'created_by' => $reservation->created_by,
             ]);
         } catch (QueryException $e) {
@@ -79,7 +80,7 @@ class PokPayments
         AuditLog::record('payment.pok_capture', $reservation, [
             'pok_order_id' => $reservation->pok_order_id,
             'amount' => $expected,
-            'currency' => 'EUR',
+            'currency' => $currency,
         ]);
 
         return true;

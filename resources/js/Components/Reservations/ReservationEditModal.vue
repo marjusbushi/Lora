@@ -1,6 +1,6 @@
 <script setup>
 import { computed, watch } from 'vue';
-import { useForm } from '@inertiajs/vue3';
+import { useForm, usePage } from '@inertiajs/vue3';
 import Modal from '@/Components/UI/Modal.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import Select from '@/Components/UI/Select.vue';
@@ -21,6 +21,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'updated']);
+const currencyCode = usePage().props.tenant?.currency || 'EUR';
+const money = (value) => new Intl.NumberFormat('sq-AL', { style: 'currency', currency: currencyCode }).format(Number(value || 0));
 
 const guestOptions = computed(() =>
     props.guests
@@ -30,7 +32,7 @@ const guestOptions = computed(() =>
 const roomOptions = computed(() =>
     props.rooms.map((r) => ({
         value: r.id,
-        label: `${r.room_number} — ${r.room_type?.name}${r.room_type?.base_price ? ' (€' + r.room_type.base_price + ')' : ''}`,
+        label: `${r.room_number} — ${r.room_type?.name}${r.room_type?.base_price ? ' (' + money(r.room_type.base_price) + ')' : ''}`,
     }))
 );
 
@@ -171,8 +173,8 @@ function submit() {
                 </FormGroup>
             </div>
             <div class="rounded-lg bg-neutral-50 border border-neutral-100 px-4 py-2.5 flex items-center gap-x-6 gap-y-1 flex-wrap text-body-sm">
-                <span class="text-neutral-500">{{ $t('admin.generated.k_3369877794e7') }} <span class="text-neutral-400">{{ feePct(form.channel) }}%</span>: <span class="text-neutral-900 font-medium">€{{ commission.toFixed(2) }}</span></span>
-                <span class="text-neutral-500">{{ $t('admin.generated.k_6ebbccfcf663') }} <span class="text-accent-700 font-semibold">€{{ net.toFixed(2) }}</span></span>
+                <span class="text-neutral-500">{{ $t('admin.generated.k_3369877794e7') }} <span class="text-neutral-400">{{ feePct(form.channel) }}%</span>: <span class="text-neutral-900 font-medium">{{ money(commission) }}</span></span>
+                <span class="text-neutral-500">{{ $t('admin.generated.k_6ebbccfcf663') }} <span class="text-accent-700 font-semibold">{{ money(net) }}</span></span>
             </div>
             <FormGroup :label="$t('admin.generated.k_d393fa8ba7bb')">
                 <Textarea v-model="form.notes" :rows="2" />

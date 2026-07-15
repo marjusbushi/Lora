@@ -12,6 +12,7 @@ use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Setting;
+use App\Services\BaseCurrency;
 use App\Services\ChannexConfiguration;
 use App\Services\OtaSellWindow;
 use Illuminate\Database\Eloquent\Builder;
@@ -246,7 +247,7 @@ class DashboardController extends Controller
             ),
             'ownerPulse' => $permissions['view_financials'] ? $this->ownerPulse($today) : null,
             'forecast' => $this->occupancyForecast($today, $sellableRoomIds),
-            'currency' => Setting::get('financial.default_currency_symbol', '€'),
+            'currency' => BaseCurrency::symbol(),
         ]);
     }
 

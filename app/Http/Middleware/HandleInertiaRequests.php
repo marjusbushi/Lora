@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Setting;
+use App\Services\BaseCurrency;
 use App\Services\TenantBillingService;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\Request;
@@ -45,8 +46,8 @@ class HandleInertiaRequests extends Middleware
         $settings = $tenant
             ? Cache::rememberForever(Setting::cacheKey(), fn () => [
                 'hotel_name' => Setting::get('hotel.name', 'Hotel'),
-                'currency' => Setting::get('hotel.currency', 'EUR'),
-                'currency_symbol' => Setting::get('financial.default_currency_symbol', '€'),
+                'currency' => $tenant->currency,
+                'currency_symbol' => BaseCurrency::symbol(),
                 'tax_rate' => Setting::get('financial.tax_rate', 20),
                 'check_in_time' => Setting::get('hotel.check_in_time', '14:00'),
                 'check_out_time' => Setting::get('hotel.check_out_time', '11:00'),

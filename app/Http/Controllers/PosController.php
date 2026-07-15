@@ -14,6 +14,7 @@ use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Setting;
 use App\Models\Warehouse;
+use App\Services\BaseCurrency;
 use App\Services\CurrencyRates;
 use App\Services\FatureAlConfiguration;
 use App\Services\InventoryLedger;
@@ -210,7 +211,7 @@ class PosController extends Controller
             return $order;
         });
 
-        return back()->with('success', "Porosia #{$order->id} u krijua — €{$order->total_amount}");
+        return back()->with('success', "Porosia #{$order->id} u krijua — ".BaseCurrency::symbol().$order->total_amount);
     }
 
     public function complete(Request $request, PosOrder $posOrder): RedirectResponse

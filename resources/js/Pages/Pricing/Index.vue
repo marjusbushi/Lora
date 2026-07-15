@@ -21,6 +21,7 @@ const props = defineProps({
 });
 
 const toasts = ref(null);
+const currencyCode = usePage().props.tenant?.currency || 'EUR';
 const channelManagerEnabled = computed(() => usePage().props.modules?.channel_manager === true);
 
 function formatDate(value) {
@@ -61,7 +62,7 @@ function formatPrice(value) {
 
     return new Intl.NumberFormat(getIntlLocale(), {
         style: 'currency',
-        currency: 'EUR',
+        currency: currencyCode,
         minimumFractionDigits: Number.isInteger(number) ? 0 : 2,
     }).format(number);
 }
@@ -492,7 +493,7 @@ function fmtRange(s) {
                                 <th class="px-3 py-2 text-left text-label text-neutral-600">{{ $t('admin.generated.k_a6aa7eff1daa') }}</th>
                                 <th class="px-3 py-2 text-left text-label text-neutral-600 whitespace-nowrap">{{ $t('admin.generated.k_17da06e5a5dd') }}</th>
                                 <th v-for="s in seasons" :key="s.id" class="px-3 py-2 text-left text-label text-neutral-600 whitespace-nowrap">
-                                    {{ s.name }} (€)
+                                    {{ s.name }} ({{ currencyCode }})
                                 </th>
                             </tr>
                         </thead>
