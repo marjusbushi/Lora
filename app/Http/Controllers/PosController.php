@@ -18,6 +18,7 @@ use App\Services\CurrencyRates;
 use App\Services\FatureAlConfiguration;
 use App\Services\InventoryLedger;
 use App\Services\PosFiscalizationService;
+use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
@@ -34,6 +35,7 @@ class PosController extends Controller
         private readonly PosFiscalizationService $fiscalization,
         private readonly FatureAlConfiguration $fatureAlConfiguration,
         private readonly TenantContext $tenantContext,
+        private readonly VatConfiguration $vatConfiguration,
     ) {}
 
     public function index(Request $request): Response
@@ -342,7 +344,8 @@ class PosController extends Controller
             'phone' => Setting::get('hotel.phone'),
             'currency' => strtoupper((string) ($tenant?->currency ?: 'EUR')),
             'exchange_rate' => CurrencyRates::rate('ALL'),
-            'tax_rate' => (float) Setting::get('financial.tax_rate', 20),
+            'vat_status' => $this->vatConfiguration->status(),
+            'tax_rate' => $this->vatConfiguration->productRate(),
         ];
     }
 

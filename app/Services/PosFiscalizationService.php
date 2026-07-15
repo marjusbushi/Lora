@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\PosFiscalDocument;
 use App\Models\PosOrder;
-use App\Models\Setting;
 use App\Tenancy\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -19,12 +18,11 @@ class PosFiscalizationService
 
     private const ENVIRONMENT = 'sandbox';
 
-    private const ALLOWED_VAT_RATES = [0, 6, 10, 20];
-
     public function __construct(
         private readonly FatureAlConfiguration $configuration,
         private readonly FatureAlClient $client,
         private readonly TenantContext $tenantContext,
+        private readonly VatConfiguration $vatConfiguration,
     ) {}
 
     public function fiscalize(PosOrder $order): PosFiscalDocument
@@ -79,12 +77,9 @@ class PosFiscalizationService
         }
 
         $order->loadMissing(['items.menuItem']);
-        $vatRate = (float) Setting::get('financial.tax_rate', 20);
-        if (! in_array((int) $vatRate, self::ALLOWED_VAT_RATES, true) || abs($vatRate - (int) $vatRate) > 0.0001) {
-            throw ValidationException::withMessages([
-                'fiscalization' => 'TVSH-ja duhet të jetë 0%, 6%, 10% ose 20% sipas fature.al.',
-            ]);
-        }
+        $this->vatConfiguration->ensureConfigured();
+        $this->ensureProviderVatStatusMatches();
+        $vatRate = $this->vatConfiguration->productRate();
 
         $lines = $order->items->map(function ($item) use ($vatRate) {
             $quantity = max(1, (int) $item->quantity);
@@ -170,7 +165,7 @@ class PosFiscalizationService
                 'currency' => $payload['currency'],
                 'exchange_rate' => $payload['exchange_rate'] ?? null,
                 'total' => round(collect($payload['lines'])->sum('total'), 2),
-                'vat_rate' => (float) Setting::get('financial.tax_rate', 20),
+                'vat_rate' => $this->vatConfiguration->productRate(),
                 'invoice_payload' => $payload,
                 'request_hash' => $requestHash,
                 'status' => PosFiscalDocument::STATUS_PROCESSING,
@@ -225,5 +220,17 @@ class PosFiscalizationService
         AuditLog::record('pos.fiscalization.failed', $order);
 
         throw new RuntimeException($message, previous: $exception);
+    }
+
+    private function ensureProviderVatStatusMatches(): void
+    {
+        $providerStatus = data_get($this->configuration->get('account', []), 'issuer_in_vat');
+        if (! is_bool($providerStatus) || $providerStatus === $this->vatConfiguration->registered()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'fiscalization' => 'Statusi “me/pa TVSH” nuk përputhet me llogarinë fature.al. Kontrollo Settings → Financa dhe ritesto integrimin.',
+        ]);
     }
 }

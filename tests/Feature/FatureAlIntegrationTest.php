@@ -124,6 +124,7 @@ class FatureAlIntegrationTest extends TestCase
                     'company' => 'Sandbox Hotel',
                     'nipt' => 'L00000000A',
                     'branch' => ['name' => 'Main'],
+                    'vatConfigs' => ['issuerInVat' => 'true'],
                 ],
             ]),
         ]);
@@ -147,6 +148,7 @@ class FatureAlIntegrationTest extends TestCase
             'company' => 'Sandbox Hotel',
             'nipt' => 'L00000000A',
             'branch' => 'Main',
+            'issuer_in_vat' => true,
         ], $integration->configuration['account']);
     }
 

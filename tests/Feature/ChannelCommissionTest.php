@@ -34,13 +34,16 @@ class ChannelCommissionTest extends TestCase
         [$admin] = $this->setupHotel();
 
         $this->actingAs($admin)->put(route('settings.financial'), [
-            'tax_rate' => 20,
+            'vat_status' => 'registered',
             'payment_methods' => ['cash'],
             'currency_symbol' => '€',
             'channel_fees' => ['booking.com' => 12, 'airbnb' => 15, 'direct' => 20, 'bogus' => 99],
         ])->assertRedirect()->assertSessionHasNoErrors();
 
         $fees = Setting::get('financial.channel_fees');
+        $this->assertSame('registered', Setting::get('financial.vat_status'));
+        $this->assertSame(6.0, Setting::get('financial.accommodation_vat_rate'));
+        $this->assertSame(20.0, Setting::get('financial.product_vat_rate'));
         $this->assertEquals(12.0, $fees['booking.com']);
         $this->assertEquals(15.0, $fees['airbnb']);
         $this->assertArrayNotHasKey('direct', $fees);

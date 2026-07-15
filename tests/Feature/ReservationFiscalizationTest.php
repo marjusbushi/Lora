@@ -51,6 +51,9 @@ class ReservationFiscalizationTest extends TestCase
                     'last_tested_at' => now()->toIso8601String(),
                 ],
             ]);
+            Setting::set('financial.vat_status', 'registered');
+            Setting::set('financial.accommodation_vat_rate', 6, 'number');
+            Setting::set('financial.product_vat_rate', 20, 'number');
             Setting::set('financial.tax_rate', 20, 'number');
             Setting::set('financial.fx_all_per_eur', 93.7837, 'number');
         });
@@ -98,6 +101,9 @@ class ReservationFiscalizationTest extends TestCase
                 && $payload['invoice_discount_type'] === 'amount'
                 && (float) $payload['invoice_discount_value'] === 5.0
                 && count($payload['lines']) === 2
+                && str_starts_with($payload['lines'][0]['product_name'], 'Dhomë ')
+                && (int) $payload['lines'][0]['vat'] === 6
+                && (int) $payload['lines'][1]['vat'] === 20
                 && (float) $payload['lines'][0]['total'] === 100.0
                 && (float) $payload['lines'][1]['total'] === 10.0;
         });
@@ -150,6 +156,52 @@ class ReservationFiscalizationTest extends TestCase
                 'id' => 'BA1234567',
             ],
         ]);
+    }
+
+    public function test_non_vat_hotel_sends_zero_vat_for_accommodation_and_products(): void
+    {
+        Setting::set('financial.vat_status', 'not_registered');
+        Setting::set('financial.tax_rate', 0, 'number');
+        $reservation = $this->checkedOutStay('cash', 110);
+        FolioItem::create([
+            'reservation_id' => $reservation->id,
+            'description' => 'Minibar ujë',
+            'amount' => 10,
+            'type' => 'minibar',
+            'charge_date' => today(),
+        ]);
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://demo.fature.al/api/v1/invoice/cash' => Http::response($this->successResponse()),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('reservations.fiscalize', $reservation))
+            ->assertSessionHasNoErrors();
+
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://demo.fature.al/api/v1/invoice/cash'
+            && (int) $request->data()['lines'][0]['vat'] === 0
+            && (int) $request->data()['lines'][1]['vat'] === 0);
+        $this->assertEqualsWithDelta(0, (float) FiscalDocument::query()->sole()->vat_rate, 0.001);
+    }
+
+    public function test_provider_vat_status_mismatch_blocks_fiscalization(): void
+    {
+        $reservation = $this->checkedOutStay('cash');
+        $integration = TenantIntegration::query()->where('provider', 'fature_al')->firstOrFail();
+        $configuration = $integration->configuration;
+        $configuration['account'] = ['issuer_in_vat' => false];
+        $integration->update(['configuration' => $configuration]);
+
+        Http::preventStrayRequests();
+
+        $this->actingAs($this->admin)
+            ->post(route('reservations.fiscalize', $reservation))
+            ->assertSessionHasErrors('fiscalization');
+
+        Http::assertNothingSent();
+        $this->assertSame(0, FiscalDocument::query()->count());
     }
 
     public function test_unsupported_guest_document_is_not_guessed_as_a_fiscal_identity(): void

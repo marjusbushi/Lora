@@ -12,6 +12,7 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
+use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
@@ -31,7 +32,7 @@ class ReportsController extends Controller
     }
 
     /** Executive summary: revenue (room+F&B), occupancy, ADR, RevPAR, VAT, commission. */
-    public function executive(Request $request): Response
+    public function executive(Request $request, VatConfiguration $vatConfiguration): Response
     {
         [$from, $to, $days] = $this->range($request);
 
@@ -51,8 +52,11 @@ class ReportsController extends Controller
         $totalRevenue = $roomRevenue + $posRevenue;
         $roomsCount = Room::count();
         $availableRoomNights = $roomsCount * $days;
-        $taxRate = (float) Setting::get('financial.tax_rate', 20);
-        $vat = $taxRate > 0 ? round($totalRevenue - ($totalRevenue / (1 + $taxRate / 100)), 2) : 0.0;
+        $vat = round(
+            $vatConfiguration->taxPortion($roomRevenue, $vatConfiguration->accommodationRate())
+            + $vatConfiguration->taxPortion($posRevenue, $vatConfiguration->productRate()),
+            2,
+        );
 
         $byStatus = Reservation::whereBetween('check_in_date', [$from, $to])
             ->select('status', DB::raw('count(*) as count'), DB::raw('sum(total_amount) as revenue'))
@@ -677,12 +681,11 @@ class ReportsController extends Controller
     }
 
     /** Raport TVSH: VAT-inclusive breakdown (gross/net/vat) for room + F&B revenue, with per-month rows. */
-    public function vat(Request $request): Response
+    public function vat(Request $request, VatConfiguration $vatConfiguration): Response
     {
-        [$from, $to, $days] = $this->range($request);
-
-        $rate = (float) Setting::get('financial.tax_rate', 20);
-        $divisor = 1 + $rate / 100;
+        [$from, $to] = $this->range($request);
+        $roomRate = $vatConfiguration->accommodationRate();
+        $productRate = $vatConfiguration->productRate();
 
         // Room revenue — by check_in_date (excl cancelled). Fetch dates+amounts, group by month in PHP (cross-DB safe).
         $rooms = Reservation::whereBetween('check_in_date', [$from, $to])
@@ -695,33 +698,41 @@ class ReportsController extends Controller
             ->get(['created_at', 'total_amount']);
 
         $monthly = [];
-        $add = function (string $month, float $amount) use (&$monthly) {
+        $add = function (string $month, string $type, float $amount) use (&$monthly) {
             if (! isset($monthly[$month])) {
-                $monthly[$month] = 0.0;
+                $monthly[$month] = ['room' => 0.0, 'product' => 0.0];
             }
-            $monthly[$month] += $amount;
+            $monthly[$month][$type] += $amount;
         };
 
         foreach ($rooms as $r) {
             $month = substr((string) ($r->check_in_date instanceof CarbonInterface ? $r->check_in_date->toDateString() : $r->check_in_date), 0, 7);
-            $add($month, (float) $r->total_amount);
+            $add($month, 'room', (float) $r->total_amount);
         }
         foreach ($pos as $o) {
             $month = substr((string) ($o->created_at instanceof CarbonInterface ? $o->created_at->toDateString() : $o->created_at), 0, 7);
-            $add($month, (float) $o->total_amount);
+            $add($month, 'product', (float) $o->total_amount);
         }
 
         $roomRevenue = (float) $rooms->sum('total_amount');
         $posRevenue = (float) $pos->sum('total_amount');
         $gross = $roomRevenue + $posRevenue;
-        $vat = $divisor > 0 ? round($gross - ($gross / $divisor), 2) : 0.0;
+        $vat = round(
+            $vatConfiguration->taxPortion($roomRevenue, $roomRate)
+            + $vatConfiguration->taxPortion($posRevenue, $productRate),
+            2,
+        );
         $net = round($gross - $vat, 2);
 
         ksort($monthly);
         $rows = [];
-        foreach ($monthly as $month => $g) {
-            $g = round($g, 2);
-            $v = $divisor > 0 ? round($g - ($g / $divisor), 2) : 0.0;
+        foreach ($monthly as $month => $amounts) {
+            $g = round($amounts['room'] + $amounts['product'], 2);
+            $v = round(
+                $vatConfiguration->taxPortion($amounts['room'], $roomRate)
+                + $vatConfiguration->taxPortion($amounts['product'], $productRate),
+                2,
+            );
             $rows[] = [
                 'month' => $month,
                 'gross' => $g,
@@ -736,7 +747,9 @@ class ReportsController extends Controller
                 'gross' => round($gross, 2),
                 'net' => $net,
                 'vat' => $vat,
-                'rate' => $rate,
+                'vat_status' => $vatConfiguration->status(),
+                'room_rate' => $roomRate,
+                'product_rate' => $productRate,
                 'room_revenue' => round($roomRevenue, 2),
                 'pos_revenue' => round($posRevenue, 2),
             ],

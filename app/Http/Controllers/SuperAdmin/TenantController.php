@@ -770,7 +770,7 @@ class TenantController extends Controller
         ];
     }
 
-    /** @param array{company:string,nipt:string,branch:string}|null $account */
+    /** @param array{company:string,nipt:string,branch:string,issuer_in_vat:bool|null}|null $account */
     private function recordIntegrationTest(string $status, ?array $account = null): void
     {
         $integration = TenantIntegration::query()->where('provider', 'fature_al')->first();

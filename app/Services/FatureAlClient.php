@@ -13,7 +13,7 @@ class FatureAlClient
     /**
      * Read-only authentication check. It never creates or changes a fiscal record.
      *
-     * @return array{company: string, nipt: string, branch: string}
+     * @return array{company: string, nipt: string, branch: string, issuer_in_vat: bool|null}
      */
     public function testConnection(): array
     {
@@ -44,10 +44,17 @@ class FatureAlClient
             throw new RuntimeException('Përgjigjja nga fature.al nuk ishte e vlefshme.');
         }
 
+        $issuerInVat = filter_var(
+            data_get($payload, 'data.vatConfigs.issuerInVat'),
+            FILTER_VALIDATE_BOOLEAN,
+            FILTER_NULL_ON_FAILURE,
+        );
+
         return [
             'company' => (string) ($payload['data']['company'] ?? ''),
             'nipt' => (string) ($payload['data']['nipt'] ?? ''),
             'branch' => (string) ($payload['data']['branch']['name'] ?? ''),
+            'issuer_in_vat' => $issuerInVat,
         ];
     }
 

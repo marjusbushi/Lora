@@ -47,6 +47,9 @@ class PosFiscalizationTest extends TestCase
                 ],
             ],
         ]);
+        Setting::set('financial.vat_status', 'registered');
+        Setting::set('financial.accommodation_vat_rate', 6, 'number');
+        Setting::set('financial.product_vat_rate', 20, 'number');
         Setting::set('financial.tax_rate', 20, 'number');
         Setting::set('financial.fx_all_per_eur', 93.7837, 'number');
     }
@@ -75,6 +78,7 @@ class PosFiscalizationTest extends TestCase
                 && $payload['payment_method'] === 'BANKNOTE'
                 && (float) $payload['exchange_rate'] === 93.7837
                 && $payload['lines'][0]['product_name'] === 'Espresso'
+                && (int) $payload['lines'][0]['vat'] === 20
                 && (int) $payload['lines'][0]['quantity'] === 2
                 && (float) $payload['lines'][0]['total'] === 3.0;
         });
@@ -120,6 +124,26 @@ class PosFiscalizationTest extends TestCase
         $this->assertSame(PosFiscalDocument::STATUS_FISCALIZED, PosFiscalDocument::query()->sole()->status);
         $this->assertSame(1, Http::recorded(fn (Request $request) => $request->url()
             === 'https://demo.fature.al/api/v1/invoice/cash')->count());
+    }
+
+    public function test_non_vat_hotel_sends_zero_vat_for_pos_products(): void
+    {
+        Setting::set('financial.vat_status', 'not_registered');
+        Setting::set('financial.tax_rate', 0, 'number');
+        [$order] = $this->openOrder();
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://demo.fature.al/api/v1/invoice/cash' => Http::response($this->successResponse()),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('pos.complete', $order), ['payment_method' => 'cash'])
+            ->assertSessionHasNoErrors();
+
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://demo.fature.al/api/v1/invoice/cash'
+            && (int) $request->data()['lines'][0]['vat'] === 0);
+        $this->assertEqualsWithDelta(0, (float) PosFiscalDocument::query()->sole()->vat_rate, 0.001);
     }
 
     public function test_room_charge_is_not_fiscalized_in_pos_to_avoid_double_billing(): void

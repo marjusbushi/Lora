@@ -24,6 +24,7 @@ use App\Services\InventoryLedger;
 use App\Services\ReservationConflictService;
 use App\Services\RoomPricing;
 use App\Services\TenantBillingService;
+use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
 use App\Tenancy\TenantRule;
 use Illuminate\Database\Eloquent\Builder;
@@ -245,6 +246,7 @@ class ReservationController extends Controller
         Reservation $reservation,
         AuditTimeline $timeline,
         FatureAlConfiguration $fatureAlConfiguration,
+        VatConfiguration $vatConfiguration,
     ): Response {
         $reservation->load([
             'room:id,room_number,room_type_id',
@@ -263,10 +265,23 @@ class ReservationController extends Controller
         $discounts = (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
         $gross = round($roomCharge + $folioCharges - $discounts, 2);
 
-        // Menu/room prices are treated as VAT-INCLUSIVE (Albanian norm: shown price = paid price).
-        // We surface the tax portion without inflating what the guest owes.
-        $taxRate = (float) Setting::get('financial.tax_rate', 20);
-        $taxAmount = $taxRate > 0 ? round($gross - ($gross / (1 + $taxRate / 100)), 2) : 0.0;
+        // Prices are VAT-inclusive. Discounts are distributed proportionally so
+        // the 6% accommodation and 20% product bases stay mathematically correct.
+        $grossBeforeDiscount = $roomCharge + $folioCharges;
+        $discountFactor = $grossBeforeDiscount > 0
+            ? max(0, min(1, $gross / $grossBeforeDiscount))
+            : 1;
+        $taxAmount = $vatConfiguration->taxPortion(
+            $roomCharge * $discountFactor,
+            $vatConfiguration->accommodationRate(),
+        );
+        foreach ($reservation->folioItems->whereNotIn('type', ['discount', 'room']) as $folioItem) {
+            $taxAmount += $vatConfiguration->taxPortion(
+                (float) $folioItem->amount * $discountFactor,
+                $vatConfiguration->folioRate($folioItem->vat_rate),
+            );
+        }
+        $taxAmount = round($taxAmount, 2);
 
         $paid = (float) $reservation->payments->reject(fn ($p) => $p->is_voided)->sum('amount');
         $outstanding = round($gross - $paid, 2);
@@ -304,6 +319,9 @@ class ReservationController extends Controller
 
         $tenant = app(TenantContext::class)->tenant();
         $fiscalAccount = (array) $fatureAlConfiguration->get('account', []);
+        $providerVatStatus = data_get($fiscalAccount, 'issuer_in_vat');
+        $providerVatMatches = ! is_bool($providerVatStatus)
+            || $providerVatStatus === $vatConfiguration->registered();
         $inventoryEnabled = app(TenantBillingService::class)->enabled('finance', $tenant);
         $inventoryItems = collect();
         $inventoryWarehouses = collect();
@@ -385,7 +403,9 @@ class ReservationController extends Controller
                     ]),
                 'discounts' => round($discounts, 2),
                 'gross' => $gross,
-                'taxRate' => $taxRate,
+                'vatStatus' => $vatConfiguration->status(),
+                'accommodationVatRate' => $vatConfiguration->accommodationRate(),
+                'productVatRate' => $vatConfiguration->productRate(),
                 'taxAmount' => $taxAmount,
                 'net' => round($gross - $taxAmount, 2),
                 'paid' => round($paid, 2),
@@ -416,15 +436,22 @@ class ReservationController extends Controller
                     ? (float) $fiscalDocument->exchange_rate
                     : CurrencyRates::rate('ALL'),
                 'operator' => request()->user()?->name,
+                'vat_status' => $vatConfiguration->status(),
+                'accommodation_vat_rate' => $vatConfiguration->accommodationRate(),
+                'product_vat_rate' => $vatConfiguration->productRate(),
             ],
             'fiscalization' => [
                 'configured' => $fatureAlConfiguration->configured(),
                 'verified' => $fatureAlConfiguration->verified(),
                 'environment' => $fiscalEnvironment,
+                'vat_configured' => $vatConfiguration->configured(),
+                'vat_matches_provider' => $providerVatMatches,
                 'payment_method' => $fiscalPaymentMethod,
                 'can_issue' => $fatureAlConfiguration->configured()
                     && $fatureAlConfiguration->verified()
                     && $fiscalEnvironment === 'sandbox'
+                    && $vatConfiguration->configured()
+                    && $providerVatMatches
                     && $reservation->status === 'checked_out'
                     && in_array($fiscalPaymentMethod, ['cash', 'card'], true)
                     && $fiscalDocument?->status !== FiscalDocument::STATUS_FISCALIZED,

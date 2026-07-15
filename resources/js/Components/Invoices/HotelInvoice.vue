@@ -35,7 +35,7 @@ const lines = computed(() => {
             }),
             quantity: 1,
             price: Number(props.folio.roomCharge),
-            vat: Number(props.folio.taxRate || 0),
+            vat: Number(props.meta.accommodation_vat_rate || 0),
             total: Number(props.folio.roomCharge),
         });
     }
@@ -44,7 +44,7 @@ const lines = computed(() => {
             description: item.description,
             quantity: 1,
             price: Number(item.amount || 0),
-            vat: Number(item.vat_rate ?? props.folio.taxRate ?? 0),
+            vat: Number(item.vat_rate ?? props.meta.product_vat_rate ?? 0),
             total: Number(item.amount || 0),
         });
     }
@@ -86,6 +86,12 @@ function dateTime(value) {
     return new Date(value).toLocaleString(getIntlLocale(), {
         day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
     });
+}
+
+function vatLabel(rate) {
+    return Number(rate) === 0 && props.meta.vat_status === 'not_registered'
+        ? translate('invoicePrint.withoutVat')
+        : `${Number(rate)}%`;
 }
 
 const paymentLabel = computed(() => {
@@ -150,7 +156,7 @@ const paymentLabel = computed(() => {
                     <td>{{ line.description }}</td>
                     <td>{{ line.quantity }}</td>
                     <td>{{ number(line.price) }} {{ currency }}</td>
-                    <td>{{ line.vat }}%</td>
+                    <td>{{ vatLabel(line.vat) }}</td>
                     <td>{{ number(line.total) }} {{ currency }}</td>
                 </tr>
                 <tr v-if="discount > 0" class="discount-row">
@@ -166,7 +172,7 @@ const paymentLabel = computed(() => {
                     <thead><tr><th>{{ $t('invoicePrint.rate') }}</th><th>{{ $t('invoicePrint.base') }}</th><th>TVSH</th><th>{{ $t('invoicePrint.withVat') }}</th></tr></thead>
                     <tbody>
                         <tr v-for="row in vatSummary" :key="row.rate">
-                            <td>{{ row.rate }}%</td><td>{{ number(row.net) }}</td><td>{{ number(row.tax) }}</td><td>{{ number(row.gross) }}</td>
+                            <td>{{ vatLabel(row.rate) }}</td><td>{{ number(row.net) }}</td><td>{{ number(row.tax) }}</td><td>{{ number(row.gross) }}</td>
                         </tr>
                     </tbody>
                 </table>

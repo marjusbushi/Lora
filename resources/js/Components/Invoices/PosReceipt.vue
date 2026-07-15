@@ -37,6 +37,11 @@ const gross = computed(() => Number(document.value?.total ?? props.order?.total_
 const net = computed(() => rate.value > 0 ? gross.value / (1 + rate.value / 100) : gross.value);
 const tax = computed(() => gross.value - net.value);
 const allTotal = computed(() => currency.value === 'ALL' ? gross.value : gross.value * exchangeRate.value);
+const vatLabel = computed(() => (
+    rate.value === 0 && props.settings.vat_status === 'not_registered'
+        ? translate('invoicePrint.withoutVat')
+        : `TVSH ${rate.value}%`
+));
 
 const invoiceDate = computed(() => (
     document.value?.fiscalized_at || props.order?.paid_at || props.order?.created_at
@@ -105,7 +110,7 @@ function paymentLabel(method) {
         <div class="receipt-rule" />
         <dl class="receipt-totals">
             <div><dt>{{ $t('invoicePrint.subtotal') }}</dt><dd>{{ number(net) }} {{ currency }}</dd></div>
-            <div><dt>TVSH {{ rate }}%</dt><dd>{{ number(tax) }} {{ currency }}</dd></div>
+            <div><dt>{{ vatLabel }}</dt><dd>{{ number(tax) }} {{ currency }}</dd></div>
             <div class="grand"><dt>TOTALI</dt><dd>{{ number(gross) }} {{ currency }}</dd></div>
             <div v-if="currency !== 'ALL' && exchangeRate"><dt>{{ $t('invoicePrint.valueInAll') }}</dt><dd>{{ number(allTotal) }} ALL</dd></div>
         </dl>

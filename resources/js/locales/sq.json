@@ -292,6 +292,7 @@
     "rate": "Norma",
     "base": "Baza",
     "withVat": "Me TVSH",
+    "withoutVat": "Pa TVSH",
     "fiscalData": "TË DHËNAT FISKALE",
     "iic": "NIVF",
     "fic": "NSLF",
@@ -304,6 +305,22 @@
     "close": "Mbyll"
   },
   "admin": {
+    "vatSettings": {
+      "title": "Regjimi i TVSH-së",
+      "description": "Zgjidhe manualisht për këtë hotel. Ndryshimi zbatohet vetëm në faturat e reja.",
+      "registered": "Subjekt me TVSH",
+      "notRegistered": "Subjekt pa TVSH",
+      "registeredHint": "Faturat ndajnë normën sipas llojit të shërbimit ose produktit.",
+      "notRegisteredHint": "Faturat fiskalizohen pa llogaritur TVSH.",
+      "accommodation": "Akomodim",
+      "products": "Produkte dhe shërbime",
+      "allLines": "Të gjithë rreshtat",
+      "providerStatus": "fature.al",
+      "mismatch": "Statusi nuk përputhet me llogarinë fature.al. Fiskalizimi do të bllokohet derisa të korrigjohet.",
+      "annualTurnoverNote": "Statusi varet nga regjistrimi tatimor i biznesit dhe qarkullimi vjetor, jo nga vlera e një fature.",
+      "mixedRates": "sipas artikullit",
+      "notConfigured": "e pakonfiguruar"
+    },
     "pricingPrograms": {
       "directTitle": "Avantazhi i rezervimit direkt",
       "directDescription": "Apliko një ulje automatike mbi çmimin inteligjent vetëm për rezervimet nga webi.",
@@ -3567,6 +3584,8 @@
     "fiscalNumber": "Numri fiskal",
     "fiscalNotConfigured": "Konfiguro dhe testo fature.al te Settings → Integrimet.",
     "fiscalNotVerified": "Testo me sukses lidhjen fature.al te Settings → Integrimet.",
+    "vatNotConfigured": "Zgjidh në Settings → Financa nëse hoteli është me apo pa TVSH.",
+    "vatProviderMismatch": "Statusi i TVSH-së nuk përputhet me llogarinë fature.al.",
     "fiscalProductionBlocked": "Production është i bllokuar derisa rrjedha sandbox të aprovohet.",
     "fiscalAfterCheckout": "Fiskalizimi aktivizohet pasi rezervimi përfundon check-out.",
     "fiscalSinglePayment": "Kërkohet vetëm një mënyrë pagese: cash ose card.",

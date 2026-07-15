@@ -20,9 +20,11 @@ use App\Models\Warehouse;
 use App\Services\AuditTimeline;
 use App\Services\CurrencyRates;
 use App\Services\FatureAlClient;
+use App\Services\FatureAlConfiguration;
 use App\Services\IntegrationCatalog;
 use App\Services\MarketRates;
 use App\Services\PricingRulesVersion;
+use App\Services\VatConfiguration;
 use App\Support\TenantStorage;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
@@ -43,6 +45,7 @@ class SettingsController extends Controller
         AuditLogController $auditLogController,
         AuditTimeline $timeline,
         IntegrationCatalog $integrationCatalog,
+        FatureAlConfiguration $fatureAlConfiguration,
     ): Response {
         $settings = Setting::allGrouped();
 
@@ -77,6 +80,17 @@ class SettingsController extends Controller
             'frequency' => MarketRates::frequency(),
             'search_query' => MarketRates::searchQuery(),
         ];
+
+        $fiscalAccount = (array) $fatureAlConfiguration->get('account', []);
+        $settings['financial'] = array_merge([
+            'vat_status' => null,
+            'accommodation_vat_rate' => VatConfiguration::ACCOMMODATION_RATE,
+            'product_vat_rate' => VatConfiguration::PRODUCT_RATE,
+        ], $settings['financial'] ?? [], [
+            'provider_vat_registered' => is_bool($fiscalAccount['issuer_in_vat'] ?? null)
+                ? $fiscalAccount['issuer_in_vat']
+                : null,
+        ]);
 
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
@@ -125,7 +139,7 @@ class SettingsController extends Controller
         }
     }
 
-    /** @param array{company:string,nipt:string,branch:string}|null $account */
+    /** @param array{company:string,nipt:string,branch:string,issuer_in_vat:bool|null}|null $account */
     private function recordIntegrationTest(string $status, ?array $account = null): void
     {
         $integration = TenantIntegration::query()->where('provider', 'fature_al')->first();
@@ -316,8 +330,8 @@ class SettingsController extends Controller
     // --- Financial ---
     public function updateFinancial(Request $request): RedirectResponse
     {
-        $request->validate([
-            'tax_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+        $data = $request->validate([
+            'vat_status' => ['required', 'in:registered,not_registered'],
             'payment_methods' => ['required', 'array', 'min:1'],
             'payment_methods.*' => ['in:cash,card,room_charge'],
             'currency_symbol' => ['required', 'string', 'max:5'],
@@ -325,7 +339,13 @@ class SettingsController extends Controller
             'channel_fees.*' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
-        Setting::set('financial.tax_rate', $request->tax_rate, 'number');
+        Setting::set('financial.vat_status', $data['vat_status']);
+        Setting::set('financial.accommodation_vat_rate', VatConfiguration::ACCOMMODATION_RATE, 'number');
+        Setting::set('financial.product_vat_rate', VatConfiguration::PRODUCT_RATE, 'number');
+        // Kept as a compatibility alias for older screens that expect one product rate.
+        Setting::set('financial.tax_rate', $data['vat_status'] === VatConfiguration::REGISTERED
+            ? VatConfiguration::PRODUCT_RATE
+            : 0, 'number');
         Setting::set('financial.payment_methods', $request->payment_methods, 'json');
         Setting::set('financial.default_currency_symbol', $request->currency_symbol);
 
@@ -337,6 +357,16 @@ class SettingsController extends Controller
             }
         }
         Setting::set('financial.channel_fees', $fees, 'json');
+
+        AuditLog::record('settings.financial.update', null, [
+            'vat_status' => $data['vat_status'],
+            'accommodation_vat_rate' => $data['vat_status'] === VatConfiguration::REGISTERED
+                ? VatConfiguration::ACCOMMODATION_RATE
+                : 0,
+            'product_vat_rate' => $data['vat_status'] === VatConfiguration::REGISTERED
+                ? VatConfiguration::PRODUCT_RATE
+                : 0,
+        ]);
 
         return back()->with('success', 'Konfigurimet financiare u ruajten.');
     }

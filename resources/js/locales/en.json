@@ -292,6 +292,7 @@
     "rate": "Rate",
     "base": "Tax base",
     "withVat": "Gross",
+    "withoutVat": "No VAT",
     "fiscalData": "FISCAL DATA",
     "iic": "NIVF",
     "fic": "NSLF",
@@ -304,6 +305,22 @@
     "close": "Close"
   },
   "admin": {
+    "vatSettings": {
+      "title": "VAT regime",
+      "description": "Choose it manually for this hotel. The change applies only to new invoices.",
+      "registered": "VAT-registered business",
+      "notRegistered": "Business not registered for VAT",
+      "registeredHint": "Invoices apply the rate that matches each service or product type.",
+      "notRegisteredHint": "Invoices are fiscalized without calculating VAT.",
+      "accommodation": "Accommodation",
+      "products": "Products and services",
+      "allLines": "All lines",
+      "providerStatus": "fature.al",
+      "mismatch": "This status does not match the fature.al account. Fiscalization will be blocked until it is corrected.",
+      "annualTurnoverNote": "Status depends on the business tax registration and annual turnover, not on the value of one invoice.",
+      "mixedRates": "by item",
+      "notConfigured": "not configured"
+    },
     "pricingPrograms": {
       "directTitle": "Direct booking advantage",
       "directDescription": "Apply an automatic discount to the live smart price for website bookings only.",
@@ -3567,6 +3584,8 @@
     "fiscalNumber": "Fiscal number",
     "fiscalNotConfigured": "Configure and test fature.al in Settings → Integrations.",
     "fiscalNotVerified": "Successfully test the fature.al connection in Settings → Integrations.",
+    "vatNotConfigured": "Choose whether this hotel is registered for VAT in Settings → Finance.",
+    "vatProviderMismatch": "The VAT status does not match the fature.al account.",
     "fiscalProductionBlocked": "Production is blocked until the sandbox flow is approved.",
     "fiscalAfterCheckout": "Fiscalization becomes available after the reservation is checked out.",
     "fiscalSinglePayment": "Exactly one payment method is required: cash or card.",

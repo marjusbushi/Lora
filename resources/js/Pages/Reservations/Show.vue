@@ -141,6 +141,14 @@ function printInvoice() {
 
 const fiscalDocument = computed(() => props.fiscalization?.document || null);
 const fiscalized = computed(() => fiscalDocument.value?.status === 'fiscalized');
+const vatSummaryLabel = computed(() => {
+    if (props.folio.vatStatus === 'not_registered') return translate('invoicePrint.withoutVat');
+    if (props.folio.vatStatus === 'registered') {
+        return `${translate('reservationShow.vat')} (${props.folio.accommodationVatRate}% / ${props.folio.productVatRate}%)`;
+    }
+
+    return `${translate('reservationShow.vat')} (${translate('admin.vatSettings.notConfigured')})`;
+});
 const fiscalPaymentLabel = computed(() => (
     props.fiscalization?.payment_method === 'cash'
         ? translate('reservationShow.fiscalCash')
@@ -568,7 +576,7 @@ function settleAndCheckout(method) {
                         <span>{{ money(folio.net) }}</span>
                     </div>
                     <div class="flex justify-between text-body-sm text-neutral-500">
-                        <span>{{ $t('reservationShow.vat') }} ({{ folio.taxRate }}%)</span>
+                        <span>{{ vatSummaryLabel }}</span>
                         <span>{{ money(folio.taxAmount) }}</span>
                     </div>
                     <div v-if="folio.discounts > 0" class="flex justify-between text-body-sm text-success-600">
@@ -799,6 +807,8 @@ function settleAndCheckout(method) {
                         <p v-else-if="!fiscalization.configured" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalNotConfigured') }}</p>
                         <p v-else-if="fiscalization.environment !== 'sandbox'" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalProductionBlocked') }}</p>
                         <p v-else-if="!fiscalization.verified" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalNotVerified') }}</p>
+                        <p v-else-if="!fiscalization.vat_configured" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.vatNotConfigured') }}</p>
+                        <p v-else-if="!fiscalization.vat_matches_provider" class="mt-3 text-sm text-error-700">{{ $t('reservationShow.vatProviderMismatch') }}</p>
                         <p v-else-if="reservation.status !== 'checked_out'" class="mt-3 text-sm text-neutral-700">{{ $t('reservationShow.fiscalAfterCheckout') }}</p>
                         <p v-else-if="!['cash', 'card'].includes(fiscalization.payment_method)" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalSinglePayment') }}</p>
                         <template v-else>

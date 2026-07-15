@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\FiscalDocument;
 use App\Models\Reservation;
-use App\Models\Setting;
 use App\Tenancy\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -19,12 +18,11 @@ class ReservationFiscalizationService
 
     private const ENVIRONMENT = 'sandbox';
 
-    private const ALLOWED_VAT_RATES = [0, 6, 10, 20];
-
     public function __construct(
         private readonly FatureAlConfiguration $configuration,
         private readonly FatureAlClient $client,
         private readonly TenantContext $tenantContext,
+        private readonly VatConfiguration $vatConfiguration,
     ) {}
 
     public function fiscalize(Reservation $reservation): FiscalDocument
@@ -177,15 +175,15 @@ class ReservationFiscalizationService
 
         $reservation->loadMissing(['room.roomType', 'guest', 'folioItems', 'payments']);
 
-        $vatRate = (float) Setting::get('financial.tax_rate', 20);
-        if (! in_array((int) $vatRate, self::ALLOWED_VAT_RATES, true) || abs($vatRate - (int) $vatRate) > 0.0001) {
-            throw ValidationException::withMessages([
-                'fiscalization' => 'TVSH-ja duhet të jetë 0%, 6%, 10% ose 20% sipas fature.al.',
-            ]);
-        }
+        $this->vatConfiguration->ensureConfigured();
+        $this->ensureProviderVatStatusMatches();
 
         $paymentMethod = $this->paymentMethod($reservation);
-        $lines = $this->lines($reservation, (int) $vatRate);
+        $lines = $this->lines(
+            $reservation,
+            $this->vatConfiguration->accommodationRate(),
+            $this->vatConfiguration->productRate(),
+        );
         $discount = round((float) $reservation->folioItems->where('type', 'discount')->sum('amount'), 2);
         $total = round(collect($lines)->sum('total') - $discount, 2);
         if ($total <= 0) {
@@ -311,7 +309,7 @@ class ReservationFiscalizationService
                 'currency' => $payload['currency'],
                 'exchange_rate' => $payload['exchange_rate'] ?? null,
                 'total' => round(collect($payload['lines'])->sum('total') - (float) ($payload['invoice_discount_value'] ?? 0), 2),
-                'vat_rate' => (float) Setting::get('financial.tax_rate', 20),
+                'vat_rate' => $this->vatConfiguration->accommodationRate(),
                 'invoice_payload' => $payload,
                 'request_hash' => $requestHash,
                 'status' => FiscalDocument::STATUS_PROCESSING,
@@ -349,19 +347,19 @@ class ReservationFiscalizationService
     }
 
     /** @return array<int, array<string, mixed>> */
-    private function lines(Reservation $reservation, int $defaultVatRate): array
+    private function lines(Reservation $reservation, int $accommodationVatRate, int $productVatRate): array
     {
         $lines = [];
         $roomCharge = round((float) $reservation->total_amount, 2);
         if ($roomCharge > 0) {
             $lines[] = [
-                'product_name' => 'Qëndrim hotelerie · Dhoma '.($reservation->room?->room_number ?: '—'),
+                'product_name' => 'Dhomë '.($reservation->room?->room_number ?: '—').' · Akomodim',
                 'product_code' => 'ROOM-STAY',
                 'unit' => 'shërbim',
                 'quantity' => 1,
                 'price' => $roomCharge,
                 'total' => $roomCharge,
-                'vat' => $defaultVatRate,
+                'vat' => $accommodationVatRate,
             ];
         }
 
@@ -371,12 +369,9 @@ class ReservationFiscalizationService
                 continue;
             }
 
-            $vatRate = $item->vat_rate !== null ? (float) $item->vat_rate : $defaultVatRate;
-            if (! in_array((int) $vatRate, self::ALLOWED_VAT_RATES, true) || abs($vatRate - (int) $vatRate) > 0.0001) {
-                throw ValidationException::withMessages([
-                    'fiscalization' => "Rreshti '{$item->description}' ka TVSH të pambështetur.",
-                ]);
-            }
+            $vatRate = $item->vat_rate !== null
+                ? $this->vatConfiguration->folioRate($item->vat_rate)
+                : $productVatRate;
 
             $lines[] = [
                 'product_name' => Str::limit($item->description, 255, ''),
@@ -396,5 +391,17 @@ class ReservationFiscalizationService
         }
 
         return $lines;
+    }
+
+    private function ensureProviderVatStatusMatches(): void
+    {
+        $providerStatus = data_get($this->configuration->get('account', []), 'issuer_in_vat');
+        if (! is_bool($providerStatus) || $providerStatus === $this->vatConfiguration->registered()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'fiscalization' => 'Statusi “me/pa TVSH” nuk përputhet me llogarinë fature.al. Kontrollo Settings → Financa dhe ritesto integrimin.',
+        ]);
     }
 }
