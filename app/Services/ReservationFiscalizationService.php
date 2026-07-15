@@ -31,37 +31,78 @@ class ReservationFiscalizationService
     {
         $payload = $this->payload($reservation);
         $requestHash = hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
-        $document = $this->startAttempt($reservation, $payload, $requestHash);
+        $existing = FiscalDocument::query()
+            ->where('reservation_id', $reservation->id)
+            ->where('provider', self::PROVIDER)
+            ->where('environment', self::ENVIRONMENT)
+            ->first();
+
+        if ($existing?->status === FiscalDocument::STATUS_FISCALIZED) {
+            return $existing;
+        }
+
+        $payloadChanged = $existing && ! hash_equals($existing->request_hash, $requestHash);
+        $previousRequestHash = $payloadChanged ? $existing->request_hash : null;
+        $invoice = null;
+
+        if ($payloadChanged) {
+            if ($existing->status !== FiscalDocument::STATUS_FAILED
+                || $existing->remote_id
+                || $existing->fiscal_number) {
+                throw ValidationException::withMessages([
+                    'fiscalization' => 'Fatura ka ndryshuar pas tentativës së parë. Kontrolloje përpara riprovimit.',
+                ]);
+            }
+
+            try {
+                // Reconcile the old payload first. If fature.al already has the
+                // invoice, preserve that fiscal record instead of retrying with
+                // amended data under the same idempotency key.
+                $invoice = $this->client->findInvoiceByInternalId($existing->internal_id);
+            } catch (Throwable $exception) {
+                $this->markFailed($existing, $reservation, $exception);
+            }
+
+            if ($invoice) {
+                return $this->complete($existing, $reservation, $invoice);
+            }
+        }
+
+        $document = $this->startAttempt($reservation, $payload, $requestHash, $payloadChanged);
 
         if ($document->status === FiscalDocument::STATUS_FISCALIZED) {
             return $document;
+        }
+
+        if ($payloadChanged) {
+            AuditLog::record('fiscalization.retry_payload_updated', $reservation, [
+                'provider' => self::PROVIDER,
+                'environment' => self::ENVIRONMENT,
+                'internal_id' => $document->internal_id,
+                'previous_request_hash' => $previousRequestHash,
+                'request_hash' => $requestHash,
+                'exchange_rate' => $payload['exchange_rate'] ?? null,
+            ]);
         }
 
         try {
             // A failed/uncertain attempt may have reached fature.al even when
             // its response did not reach us. Reconcile by the stable internalId
             // before another create request so retries cannot duplicate invoices.
-            $invoice = $document->wasRecentlyCreated
+            $invoice ??= $document->wasRecentlyCreated || $payloadChanged
                 ? null
                 : $this->client->findInvoiceByInternalId($document->internal_id);
             $invoice ??= $this->client->createCashInvoice($payload);
         } catch (Throwable $exception) {
-            $message = Str::limit($exception->getMessage(), 1000, '');
-            $document->forceFill([
-                'status' => FiscalDocument::STATUS_FAILED,
-                'last_error' => $message,
-            ])->save();
-
-            AuditLog::record('fiscalization.failed', $reservation, [
-                'provider' => self::PROVIDER,
-                'environment' => self::ENVIRONMENT,
-                'internal_id' => $document->internal_id,
-                'total' => (float) $document->total,
-            ]);
-
-            throw new RuntimeException($message, previous: $exception);
+            $this->markFailed($document, $reservation, $exception);
         }
 
+        return $this->complete($document, $reservation, $invoice);
+    }
+
+    /** @param array<string, mixed> $invoice */
+    private function complete(FiscalDocument $document, Reservation $reservation, array $invoice): FiscalDocument
+    {
         $document->forceFill([
             'status' => FiscalDocument::STATUS_FISCALIZED,
             'remote_id' => isset($invoice['id']) ? (string) $invoice['id'] : null,
@@ -87,6 +128,24 @@ class ReservationFiscalizationService
         ]);
 
         return $document;
+    }
+
+    private function markFailed(FiscalDocument $document, Reservation $reservation, Throwable $exception): never
+    {
+        $message = Str::limit($exception->getMessage(), 1000, '');
+        $document->forceFill([
+            'status' => FiscalDocument::STATUS_FAILED,
+            'last_error' => $message,
+        ])->save();
+
+        AuditLog::record('fiscalization.failed', $reservation, [
+            'provider' => self::PROVIDER,
+            'environment' => self::ENVIRONMENT,
+            'internal_id' => $document->internal_id,
+            'total' => (float) $document->total,
+        ]);
+
+        throw new RuntimeException($message, previous: $exception);
     }
 
     /** @return array<string, mixed> */
@@ -162,6 +221,17 @@ class ReservationFiscalizationService
             'lines' => $lines,
         ];
 
+        if ($currency !== 'ALL') {
+            $exchangeRate = CurrencyRates::rate('ALL');
+            if ($exchangeRate === null || $exchangeRate <= 0) {
+                throw ValidationException::withMessages([
+                    'fiscalization' => 'Kursi ALL/EUR mungon. Vendose te Settings → Monedhat përpara fiskalizimit.',
+                ]);
+            }
+
+            $payload['exchange_rate'] = round($exchangeRate, 4);
+        }
+
         if ($discount > 0) {
             $payload['invoice_discount_type'] = 'amount';
             $payload['invoice_discount_value'] = $discount;
@@ -171,9 +241,13 @@ class ReservationFiscalizationService
     }
 
     /** @param array<string, mixed> $payload */
-    private function startAttempt(Reservation $reservation, array $payload, string $requestHash): FiscalDocument
-    {
-        return DB::transaction(function () use ($reservation, $payload, $requestHash) {
+    private function startAttempt(
+        Reservation $reservation,
+        array $payload,
+        string $requestHash,
+        bool $allowFailedPayloadUpdate = false,
+    ): FiscalDocument {
+        return DB::transaction(function () use ($reservation, $payload, $requestHash, $allowFailedPayloadUpdate) {
             $document = FiscalDocument::query()
                 ->where('reservation_id', $reservation->id)
                 ->where('provider', self::PROVIDER)
@@ -192,7 +266,12 @@ class ReservationFiscalizationService
                 ]);
             }
 
-            if ($document && ! hash_equals($document->request_hash, $requestHash)) {
+            if ($document
+                && ! hash_equals($document->request_hash, $requestHash)
+                && ! ($allowFailedPayloadUpdate
+                    && $document->status === FiscalDocument::STATUS_FAILED
+                    && ! $document->remote_id
+                    && ! $document->fiscal_number)) {
                 throw ValidationException::withMessages([
                     'fiscalization' => 'Fatura ka ndryshuar pas tentativës së parë. Kontrolloje përpara riprovimit.',
                 ]);
@@ -205,6 +284,7 @@ class ReservationFiscalizationService
                 'internal_id' => $payload['internalId'],
                 'payment_method' => $payload['payment_method'],
                 'currency' => $payload['currency'],
+                'exchange_rate' => $payload['exchange_rate'] ?? null,
                 'total' => round(collect($payload['lines'])->sum('total') - (float) ($payload['invoice_discount_value'] ?? 0), 2),
                 'vat_rate' => (float) Setting::get('financial.tax_rate', 20),
                 'request_hash' => $requestHash,

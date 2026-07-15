@@ -18,6 +18,7 @@ class FiscalDocument extends TenantModel
         'internal_id',
         'payment_method',
         'currency',
+        'exchange_rate',
         'total',
         'vat_rate',
         'request_hash',
@@ -40,6 +41,7 @@ class FiscalDocument extends TenantModel
     {
         return [
             'total' => 'decimal:2',
+            'exchange_rate' => 'decimal:6',
             'vat_rate' => 'decimal:2',
             'fiscalized_at' => 'datetime',
             'attempted_at' => 'datetime',

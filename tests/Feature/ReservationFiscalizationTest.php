@@ -14,6 +14,7 @@ use App\Models\Setting;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Models\User;
+use App\Services\ReservationFiscalizationService;
 use App\Tenancy\TenantContext;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -50,6 +51,7 @@ class ReservationFiscalizationTest extends TestCase
                 ],
             ]);
             Setting::set('financial.tax_rate', 20, 'number');
+            Setting::set('financial.fx_all_per_eur', 93.7837, 'number');
         });
     }
 
@@ -90,6 +92,7 @@ class ReservationFiscalizationTest extends TestCase
                 && $request->hasHeader('Authorization', 'Bearer sandbox-fiscal-token')
                 && $payload['internalId'] === 'LORA-T'.$this->tenant->id.'-RES-'.$reservation->id
                 && $payload['payment_method'] === 'BANKNOTE'
+                && (float) $payload['exchange_rate'] === 93.7837
                 && $payload['invoice_discount_type'] === 'amount'
                 && (float) $payload['invoice_discount_value'] === 5.0
                 && count($payload['lines']) === 2
@@ -101,6 +104,7 @@ class ReservationFiscalizationTest extends TestCase
         $this->assertSame(FiscalDocument::STATUS_FISCALIZED, $document->status);
         $this->assertSame('LORA-T'.$this->tenant->id.'-RES-'.$reservation->id, $document->internal_id);
         $this->assertSame('BANKNOTE', $document->payment_method);
+        $this->assertEqualsWithDelta(93.7837, (float) $document->exchange_rate, 0.000001);
         $this->assertSame('TEST-2026-1', $document->fiscal_number);
         $this->assertSame('IIC-TEST', $document->iic);
         $this->assertEqualsWithDelta(105.0, (float) $document->total, 0.001);
@@ -204,6 +208,75 @@ class ReservationFiscalizationTest extends TestCase
         $this->assertSame(FiscalDocument::STATUS_FISCALIZED, $document->status);
         $this->assertSame('TEST-2026-1', $document->fiscal_number);
         $this->assertSame('IIC-TEST', $document->iic);
+    }
+
+    public function test_failed_legacy_payload_is_reconciled_before_adding_exchange_rate(): void
+    {
+        $reservation = $this->checkedOutStay('cash');
+        $payload = app(TenantContext::class)->run(
+            $this->tenant,
+            fn () => app(ReservationFiscalizationService::class)->payload($reservation),
+        );
+        $oldPayload = $payload;
+        unset($oldPayload['exchange_rate']);
+        $oldHash = hash('sha256', json_encode($oldPayload, JSON_THROW_ON_ERROR));
+
+        app(TenantContext::class)->run($this->tenant, function () use ($reservation, $oldPayload, $oldHash) {
+            FiscalDocument::query()->create([
+                'reservation_id' => $reservation->id,
+                'provider' => 'fature_al',
+                'environment' => 'sandbox',
+                'document_type' => 'cash_invoice',
+                'internal_id' => $oldPayload['internalId'],
+                'payment_method' => $oldPayload['payment_method'],
+                'currency' => $oldPayload['currency'],
+                'total' => 100,
+                'vat_rate' => 20,
+                'request_hash' => $oldHash,
+                'status' => FiscalDocument::STATUS_FAILED,
+                'attempted_at' => now()->subMinutes(10),
+                'last_error' => 'HTTP 500',
+            ]);
+        });
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://demo.fature.al/api/v1/invoice/details/*' => Http::response([], 404),
+            'https://demo.fature.al/api/v1/invoice/cash' => Http::response($this->successResponse()),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('reservations.fiscalize', $reservation))
+            ->assertSessionHasNoErrors();
+
+        Http::assertSentCount(2);
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://demo.fature.al/api/v1/invoice/cash'
+            && (float) $request->data()['exchange_rate'] === 93.7837);
+
+        $document = FiscalDocument::query()->sole();
+        $this->assertSame(FiscalDocument::STATUS_FISCALIZED, $document->status);
+        $this->assertNotSame($oldHash, $document->request_hash);
+        $this->assertEqualsWithDelta(93.7837, (float) $document->exchange_rate, 0.000001);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'fiscalization.retry_payload_updated',
+            'subject_type' => Reservation::class,
+            'subject_id' => $reservation->id,
+        ]);
+    }
+
+    public function test_foreign_currency_requires_an_all_exchange_rate(): void
+    {
+        $reservation = $this->checkedOutStay('cash');
+        Setting::set('financial.fx_all_per_eur', 0, 'number');
+
+        Http::preventStrayRequests();
+
+        $this->actingAs($this->admin)
+            ->post(route('reservations.fiscalize', $reservation))
+            ->assertSessionHasErrors('fiscalization');
+
+        Http::assertNothingSent();
+        $this->assertSame(0, FiscalDocument::query()->count());
     }
 
     public function test_production_configuration_is_blocked_by_this_sandbox_phase(): void
