@@ -98,7 +98,7 @@
         font-weight: 600;
     }
 
-    .super-admin-shell :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']):not([type='file']):not([type='color']), select) {
+    .super-admin-shell :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']):not([type='file']):not([type='color']), select) {
         height: var(--sa-control-height);
         border-color: var(--sa-line);
         border-radius: var(--sa-control-radius);
@@ -114,7 +114,7 @@
         font-size: var(--sa-font-label);
     }
 
-    .super-admin-shell :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']):not([type='file']):not([type='color']), select, textarea):focus {
+    .super-admin-shell :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']):not([type='file']):not([type='color']), select, textarea):focus {
         border-color: #6fb29d;
         box-shadow: 0 0 0 3px rgba(37, 133, 108, 0.12);
         outline: none;
