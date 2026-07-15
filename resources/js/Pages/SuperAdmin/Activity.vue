@@ -38,6 +38,9 @@ const rangeFilter = ref(props.filter?.range || '7');
 const selectedLog = ref(null);
 let searchTimer;
 
+const SQ_MONTHS_LONG = ['janar', 'shkurt', 'mars', 'prill', 'maj', 'qershor', 'korrik', 'gusht', 'shtator', 'tetor', 'nëntor', 'dhjetor'];
+const SQ_MONTHS_SHORT = ['jan', 'shk', 'mar', 'pri', 'maj', 'qer', 'korr', 'gush', 'sht', 'tet', 'nën', 'dhj'];
+
 const rows = computed(() => props.logs?.data || []);
 const hasFilters = computed(() => Boolean(
     search.value.trim()
@@ -117,11 +120,14 @@ function dayLabel(value) {
     const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const startValue = new Date(valueDate.getFullYear(), valueDate.getMonth(), valueDate.getDate());
     const diff = Math.round((startToday - startValue) / 86400000);
-    const activeLocale = locale.value.startsWith('en') ? 'en-GB' : 'sq-AL';
-    const formatted = new Intl.DateTimeFormat(activeLocale, { day: 'numeric', month: 'long' }).format(valueDate);
+    const formatted = locale.value.startsWith('en')
+        ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(valueDate)
+        : `${valueDate.getDate()} ${SQ_MONTHS_LONG[valueDate.getMonth()]}`;
     if (diff === 0) return `${t('superAdmin.dynamic.today')} · ${formatted}`;
     if (diff === 1) return `${t('superAdmin.dynamic.yesterday')} · ${formatted}`;
-    return new Intl.DateTimeFormat(activeLocale, { day: 'numeric', month: 'long', year: 'numeric' }).format(valueDate);
+    return locale.value.startsWith('en')
+        ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(valueDate)
+        : `${formatted} ${valueDate.getFullYear()}`;
 }
 
 function time(value) {
@@ -143,9 +149,16 @@ function shortDay(value) {
 
 function fullDate(value) {
     if (!value) return '—';
-    return new Intl.DateTimeFormat(locale.value.startsWith('en') ? 'en-GB' : 'sq-AL', {
+    const valueDate = new Date(value);
+    if (!locale.value.startsWith('en')) {
+        const day = String(valueDate.getDate()).padStart(2, '0');
+        const hours = String(valueDate.getHours()).padStart(2, '0');
+        const minutes = String(valueDate.getMinutes()).padStart(2, '0');
+        return `${day} ${SQ_MONTHS_SHORT[valueDate.getMonth()]} ${valueDate.getFullYear()}, ${hours}:${minutes}`;
+    }
+    return new Intl.DateTimeFormat('en-GB', {
         day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    }).format(new Date(value));
+    }).format(valueDate);
 }
 
 function applyFilters() {
