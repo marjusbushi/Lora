@@ -4102,6 +4102,13 @@
     "compact": {
       "publicSiteAria": "Hap faqen publike të Lora PMS",
       "platform": "Platforma",
+      "overview": "Përmbledhje",
+      "subscriptions": "Abonimet",
+      "activity": "Aktiviteti",
+      "loraFinance": "Financa e Lora",
+      "invoices": "Faturat",
+      "payments": "Pagesat",
+      "providerEvents": "Provider Events",
       "open": "Hap",
       "close": "Mbyll",
       "openMenu": "Hap menunë",

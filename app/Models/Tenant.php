@@ -105,6 +105,16 @@ class Tenant extends Model
         return $this->hasMany(TenantModuleEntitlement::class);
     }
 
+    public function billingInvoices(): HasMany
+    {
+        return $this->hasMany(BillingInvoice::class);
+    }
+
+    public function billingPayments(): HasMany
+    {
+        return $this->hasMany(BillingPayment::class);
+    }
+
     public function scopeActive($query)
     {
         return $query->where('status', 'active');

@@ -4102,6 +4102,13 @@
     "compact": {
       "publicSiteAria": "Open the Lora PMS public website",
       "platform": "Platform",
+      "overview": "Overview",
+      "subscriptions": "Subscriptions",
+      "activity": "Activity",
+      "loraFinance": "Lora Finance",
+      "invoices": "Invoices",
+      "payments": "Payments",
+      "providerEvents": "Provider Events",
       "open": "Open",
       "close": "Close",
       "openMenu": "Open menu",

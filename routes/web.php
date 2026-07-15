@@ -23,8 +23,11 @@ use App\Http\Controllers\RoomController;
 use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SmartPricingController;
+use App\Http\Controllers\SuperAdmin\BillingInvoiceController as SuperAdminBillingInvoiceController;
+use App\Http\Controllers\SuperAdmin\BillingPaymentController as SuperAdminBillingPaymentController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Http\Controllers\SuperAdmin\ProfileController as SuperAdminProfileController;
+use App\Http\Controllers\SuperAdmin\ProviderEventController as SuperAdminProviderEventController;
 use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantController;
 use App\Http\Controllers\TenantHandoffController;
 use App\Http\Controllers\UserController;
@@ -129,6 +132,14 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
             ->scopeBindings()->name('tenants.domains.destroy');
         Route::patch('/tenants/{tenant}/domains/{domain}/primary', [SuperAdminTenantController::class, 'makePrimaryDomain'])
             ->scopeBindings()->name('tenants.domains.primary');
+        Route::get('/billing/invoices', [SuperAdminBillingInvoiceController::class, 'index'])->name('billing.invoices.index');
+        Route::post('/billing/invoices', [SuperAdminBillingInvoiceController::class, 'store'])->name('billing.invoices.store');
+        Route::patch('/billing/invoices/{invoice}/publish', [SuperAdminBillingInvoiceController::class, 'publish'])->name('billing.invoices.publish');
+        Route::patch('/billing/invoices/{invoice}/void', [SuperAdminBillingInvoiceController::class, 'void'])->name('billing.invoices.void');
+        Route::get('/billing/payments', [SuperAdminBillingPaymentController::class, 'index'])->name('billing.payments.index');
+        Route::post('/billing/payments', [SuperAdminBillingPaymentController::class, 'store'])->name('billing.payments.store');
+        Route::get('/billing/provider-events', [SuperAdminProviderEventController::class, 'index'])->name('billing.provider-events.index');
+        Route::patch('/billing/provider-events/{providerEvent}/retry', [SuperAdminProviderEventController::class, 'retry'])->name('billing.provider-events.retry');
     });
 
 // Internal component gallery (dev reference) — no data, but staff-only (not public).

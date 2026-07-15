@@ -3,14 +3,17 @@ import Dropdown from '@/Components/Dropdown.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     Bell,
-    Building2,
+    CreditCard,
+    FileText,
     LayoutDashboard,
     ListChecks,
     LogOut,
     Menu,
     PanelLeftClose,
+    Repeat2,
     ShieldCheck,
     UserRound,
+    Webhook,
     X,
 } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
@@ -33,10 +36,15 @@ watch(sidebarCollapsed, (collapsed) => {
 });
 
 const navigation = [
-    { label: t('superAdmin.auto.copy120'), href: '/super-admin', match: '/super-admin', exact: true, icon: LayoutDashboard },
-    { label: t('superAdmin.auto.copy070'), href: '/super-admin/tenants', match: '/super-admin/tenants', icon: Building2 },
-    { label: t('superAdmin.auto.copy107'), href: '/super-admin/activity', match: '/super-admin/activity', icon: ListChecks },
+    { label: t('superAdmin.compact.overview'), href: '/super-admin', match: '/super-admin', exact: true, icon: LayoutDashboard, group: t('superAdmin.compact.platform') },
+    { label: t('superAdmin.compact.subscriptions'), href: '/super-admin/tenants', match: '/super-admin/tenants', icon: Repeat2, group: t('superAdmin.compact.platform') },
+    { label: t('superAdmin.compact.activity'), href: '/super-admin/activity', match: '/super-admin/activity', icon: ListChecks, group: t('superAdmin.compact.platform') },
+    { label: t('superAdmin.compact.invoices'), href: '/super-admin/billing/invoices', match: '/super-admin/billing/invoices', icon: FileText, group: t('superAdmin.compact.loraFinance') },
+    { label: t('superAdmin.compact.payments'), href: '/super-admin/billing/payments', match: '/super-admin/billing/payments', icon: CreditCard, group: t('superAdmin.compact.loraFinance') },
+    { label: t('superAdmin.compact.providerEvents'), href: '/super-admin/billing/provider-events', match: '/super-admin/billing/provider-events', icon: Webhook, group: t('superAdmin.compact.loraFinance') },
 ];
+
+const navigationGroups = computed(() => [...new Set(navigation.map((item) => item.group))]);
 
 function isActive(item) {
     if (item.exact) return page.url === item.href || page.url === `${item.href}/`;
@@ -80,28 +88,30 @@ function isActive(item) {
                 </button>
             </div>
 
-            <nav class="flex-1 px-3 py-[18px]">
-                <p class="px-[10px] pb-[5px] pt-[9px] text-[10px] font-bold uppercase tracking-[0.13em] text-[#98a39e]" :class="sidebarCollapsed && 'lg:hidden'">{{ t('superAdmin.compact.platform') }}</p>
-                <div class="space-y-[5px]">
-                    <Link
-                        v-for="item in navigation"
-                        :key="item.href"
-                        :href="item.href"
-                        class="flex h-[42px] items-center gap-[11px] rounded-[10px] px-3 text-sm font-medium text-[#64726c] no-underline transition"
-                        :class="[
-                            isActive(item)
-                                ? 'bg-emerald-50 font-semibold text-emerald-900 ring-1 ring-inset ring-emerald-100'
-                                : 'hover:bg-[#f5f7f6] hover:text-[var(--sa-ink)]',
-                            sidebarCollapsed && 'lg:mx-auto lg:w-[50px] lg:justify-center lg:gap-0 lg:px-0',
-                        ]"
-                        :title="sidebarCollapsed ? item.label : undefined"
-                        @click="mobileOpen = false"
-                    >
-                        <span class="grid w-7 shrink-0 place-items-center" :class="isActive(item) && 'text-emerald-700'">
-                            <component :is="item.icon" class="h-[18px] w-[18px]" :stroke-width="1.8" />
-                        </span>
-                        <span class="whitespace-nowrap" :class="sidebarCollapsed && 'lg:hidden'">{{ item.label }}</span>
-                    </Link>
+            <nav class="flex-1 overflow-y-auto px-3 py-[18px]">
+                <div v-for="group in navigationGroups" :key="group" class="mb-6 last:mb-0">
+                    <p class="px-[10px] pb-[5px] pt-[9px] text-[10px] font-bold uppercase tracking-[0.13em] text-[#98a39e]" :class="sidebarCollapsed && 'lg:hidden'">{{ group }}</p>
+                    <div class="space-y-[5px]">
+                        <Link
+                            v-for="item in navigation.filter((entry) => entry.group === group)"
+                            :key="item.href"
+                            :href="item.href"
+                            class="flex h-[42px] items-center gap-[11px] rounded-[10px] px-3 text-sm font-medium text-[#64726c] no-underline transition"
+                            :class="[
+                                isActive(item)
+                                    ? 'bg-emerald-50 font-semibold text-emerald-900 ring-1 ring-inset ring-emerald-100'
+                                    : 'hover:bg-[#f5f7f6] hover:text-[var(--sa-ink)]',
+                                sidebarCollapsed && 'lg:mx-auto lg:w-[50px] lg:justify-center lg:gap-0 lg:px-0',
+                            ]"
+                            :title="sidebarCollapsed ? item.label : undefined"
+                            @click="mobileOpen = false"
+                        >
+                            <span class="grid w-7 shrink-0 place-items-center" :class="isActive(item) && 'text-emerald-700'">
+                                <component :is="item.icon" class="h-[18px] w-[18px]" :stroke-width="1.8" />
+                            </span>
+                            <span class="whitespace-nowrap" :class="sidebarCollapsed && 'lg:hidden'">{{ item.label }}</span>
+                        </Link>
+                    </div>
                 </div>
             </nav>
 
