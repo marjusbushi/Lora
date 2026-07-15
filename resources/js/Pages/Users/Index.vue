@@ -1,7 +1,7 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { Link, router, useForm } from '@inertiajs/vue3';
+import { router, useForm } from '@inertiajs/vue3';
 import {
     ChevronLeft,
     ChevronRight,
@@ -34,6 +34,7 @@ const props = defineProps({
     stats: { type: Object, default: () => ({}) },
     permissionModules: { type: Array, default: () => [] },
     rolesDetailed: { type: Array, default: () => [] },
+    embedded: { type: Boolean, default: false },
 });
 
 const toasts = ref(null);
@@ -127,17 +128,38 @@ function selectKpi(key) {
 }
 
 let searchTimer = null;
-function applyFilters() {
-    const params = {};
-    if (searchQuery.value.trim()) params.search = searchQuery.value.trim();
-    if (roleFilter.value) params.role = roleFilter.value;
-    if (statusFilter.value) params.status = statusFilter.value;
+function params(extra = {}) {
+    const filters = {
+        search: searchQuery.value.trim() || undefined,
+        role: roleFilter.value || undefined,
+        status: statusFilter.value || undefined,
+        ...extra,
+    };
 
-    router.get(route('users.index'), params, {
+    if (!props.embedded) return filters;
+
+    return {
+        tab: 'users',
+        ...Object.fromEntries(Object.entries(filters).map(([key, value]) => [`user_${key}`, value])),
+    };
+}
+
+function applyFilters() {
+    router.get(props.embedded ? route('settings.index') : route('users.index'), params(), {
         preserveState: true,
         preserveScroll: true,
         replace: true,
-        only: ['users', 'filters', 'stats'],
+        only: props.embedded ? ['userManagement'] : ['users', 'filters', 'stats'],
+    });
+}
+
+function pageTo(url) {
+    if (!url) return;
+    const page = new URL(url, window.location.origin).searchParams.get(props.embedded ? 'user_page' : 'page');
+    router.get(props.embedded ? route('settings.index') : route('users.index'), params({ page }), {
+        preserveState: true,
+        preserveScroll: true,
+        only: props.embedded ? ['userManagement'] : ['users', 'filters', 'stats'],
     });
 }
 
@@ -146,6 +168,11 @@ watch(searchQuery, () => {
     searchTimer = window.setTimeout(applyFilters, 300);
 });
 watch([roleFilter, statusFilter], applyFilters);
+watch(() => props.filters, (value) => {
+    searchQuery.value = value?.search || '';
+    roleFilter.value = value?.role || '';
+    statusFilter.value = value?.status || '';
+});
 onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
 const createForm = useForm({ name: '', email: '', password: '', role: '' });
@@ -249,8 +276,9 @@ function submitRole() {
 </script>
 
 <template>
-    <AppLayout>
+    <component :is="embedded ? 'div' : AppLayout">
         <PageHeader
+            v-if="!embedded"
             :title="$t('admin.generated.k_33bf8e325133')"
             :breadcrumbs="[{ label: $t('admin.generated.k_db09aa5de9ce'), href: '/dashboard' }, { label: $t('admin.generated.k_d589a610b5e6') }]"
         >
@@ -263,7 +291,22 @@ function submitRole() {
 {{ $t('admin.generated.k_99ca548187bb') }} </Button>
             </template>
         </PageHeader>
-        <p class="mt-1 text-body-sm text-neutral-500">{{ $t('admin.generated.k_ec8630017d31') }}</p>
+        <p v-if="!embedded" class="mt-1 text-body-sm text-neutral-500">{{ $t('admin.generated.k_ec8630017d31') }}</p>
+
+        <div v-else class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+                <h2 class="text-h2 text-neutral-900">{{ $t('admin.generated.k_33bf8e325133') }}</h2>
+                <p class="mt-1 text-body-sm text-neutral-500">{{ $t('admin.generated.k_ec8630017d31') }}</p>
+            </div>
+            <Button v-if="activeTab === 'users'" variant="primary" @click="showCreateModal = true">
+                <template #icon-left><Plus class="h-4 w-4" :stroke-width="2" /></template>
+                {{ $t('admin.generated.k_beae8f440e69') }}
+            </Button>
+            <Button v-else variant="outline" @click="showRoleModal = true">
+                <template #icon-left><Plus class="h-4 w-4" :stroke-width="2" /></template>
+                {{ $t('admin.generated.k_99ca548187bb') }}
+            </Button>
+        </div>
 
         <div class="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <button
@@ -387,30 +430,24 @@ function submitRole() {
                     <p class="text-body-sm text-neutral-500">
                         {{ users.from || 0 }}–{{ users.to || 0 }} {{ $t('admin.generated.k_80bd07c2edc9') }} {{ users.total || 0 }} {{ $t('admin.generated.k_b15db26df203') }} </p>
                     <div class="flex items-center gap-2">
-                        <Link
-                            v-if="users.prev_page_url"
-                            :href="users.prev_page_url"
-                            preserve-scroll
-                            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 transition-colors hover:bg-neutral-50"
+                        <button
+                            type="button"
+                            :disabled="!users.prev_page_url"
+                            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-300 disabled:hover:bg-white"
                             :aria-label="$t('admin.generated.k_7344e9c850c8')"
+                            @click="pageTo(users.prev_page_url)"
                         >
                             <ChevronLeft class="h-4 w-4" />
-                        </Link>
-                        <span v-else class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-neutral-200 text-neutral-300" aria-hidden="true">
-                            <ChevronLeft class="h-4 w-4" />
-                        </span>
-                        <Link
-                            v-if="users.next_page_url"
-                            :href="users.next_page_url"
-                            preserve-scroll
-                            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 transition-colors hover:bg-neutral-50"
+                        </button>
+                        <button
+                            type="button"
+                            :disabled="!users.next_page_url"
+                            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-300 disabled:hover:bg-white"
                             :aria-label="$t('admin.generated.k_68e96d1c2a56')"
+                            @click="pageTo(users.next_page_url)"
                         >
                             <ChevronRight class="h-4 w-4" />
-                        </Link>
-                        <span v-else class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-neutral-200 text-neutral-300" aria-hidden="true">
-                            <ChevronRight class="h-4 w-4" />
-                        </span>
+                        </button>
                     </div>
                 </div>
             </template>
@@ -541,5 +578,5 @@ function submitRole() {
         </Modal>
 
         <ToastContainer ref="toasts" />
-    </AppLayout>
+    </component>
 </template>
