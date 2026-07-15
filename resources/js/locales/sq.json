@@ -3985,6 +3985,8 @@
     }
   },
   "currencySettings": {
+    "baseCurrencyLabel": "Monedha bazë",
+    "baseCurrencyLocked": "Nuk mund të ndryshohet sepse hoteli ka transaksione të regjistruara.",
     "manualAllRate": "Kursi manual ALL/EUR (1 € =)",
     "manualAllRateHelp": "Përdoret kur API është joaktive dhe ruhet veçmas për këtë hotel. Kursi ngrihet në çdo dokument.",
     "baseCurrencyInherited": "Trashëgohet automatikisht nga monedha bazë e hotelit."

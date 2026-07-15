@@ -53,6 +53,13 @@ class SettingsController extends Controller
         FatureAlConfiguration $fatureAlConfiguration,
     ): Response {
         $settings = Setting::allGrouped();
+        $tenant = app(TenantContext::class)->tenant();
+        $settings['hotel'] = array_merge($settings['hotel'] ?? [], [
+            // Tenant.currency is authoritative. A stale legacy Setting must never
+            // make the form display a currency that operations do not use.
+            'currency' => BaseCurrency::code(),
+            'base_currency_locked' => $tenant ? BaseCurrency::isLocked($tenant) : true,
+        ]);
 
         // Never ship the raw AI key to the browser — expose only a masked hint + a configured flag.
         $aiKey = $settings['ai']['gemini_key'] ?? null;

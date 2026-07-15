@@ -5,12 +5,16 @@ namespace Tests\Feature;
 use App\Models\Bill;
 use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
+use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\Tenant;
+use App\Models\User;
 use App\Services\BaseCurrency;
 use App\Tenancy\TenantContext;
+use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class BaseCurrencyTest extends TestCase
@@ -84,5 +88,34 @@ class BaseCurrencyTest extends TestCase
 
         $this->expectException(ValidationException::class);
         BaseCurrency::assertCanChange($tenant, 'ALL');
+    }
+
+    public function test_settings_shows_and_locks_the_authoritative_tenant_currency(): void
+    {
+        $tenant = Tenant::query()->sole();
+        app(TenantContext::class)->set($tenant);
+        FinanceAccount::ensureDefaults();
+        FinancePayment::create([
+            'direction' => 'in',
+            'account_id' => FinanceAccount::where('name', 'Arka')->value('id'),
+            'amount' => 25,
+            'currency' => 'EUR',
+            'method' => 'cash',
+            'source' => 'manual',
+            'description' => 'Aktivitet ekzistues',
+            'paid_at' => now(),
+        ]);
+        Setting::set('hotel.currency', 'ALL'); // stale legacy setting
+
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)
+            ->get(route('settings.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('settings.hotel.currency', 'EUR')
+                ->where('settings.hotel.base_currency_locked', true));
     }
 }

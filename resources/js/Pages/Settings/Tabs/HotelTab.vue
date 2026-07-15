@@ -71,8 +71,9 @@ function submit() {
                 <FormGroup :label="$t('admin.generated.k_e9f7f48f4515')" :error="form.errors.phone">
                     <TextInput v-model="form.phone" placeholder="+355 4 234 5678" :error="form.errors.phone" />
                 </FormGroup>
-                <FormGroup :label="$t('admin.generated.k_cfa912b527cc')" :error="form.errors.currency" required>
-                    <Select v-model="form.currency" :options="currencyOptions" :error="form.errors.currency" />
+                <FormGroup :label="$t('currencySettings.baseCurrencyLabel')" :error="form.errors.currency" required>
+                    <Select v-model="form.currency" :options="currencyOptions" :error="form.errors.currency" :disabled="settings.base_currency_locked" />
+                    <p v-if="settings.base_currency_locked" class="mt-1 text-tiny text-neutral-400">{{ $t('currencySettings.baseCurrencyLocked') }}</p>
                 </FormGroup>
             </div>
 

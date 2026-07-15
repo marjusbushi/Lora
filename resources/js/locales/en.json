@@ -3985,6 +3985,8 @@
     }
   },
   "currencySettings": {
+    "baseCurrencyLabel": "Base currency",
+    "baseCurrencyLocked": "It cannot be changed because the hotel has recorded transactions.",
     "manualAllRate": "Manual ALL/EUR rate (1 € =)",
     "manualAllRateHelp": "Used when the API is disabled and stored separately for this hotel. The rate is frozen on each document.",
     "baseCurrencyInherited": "Inherited automatically from the hotel's base currency."

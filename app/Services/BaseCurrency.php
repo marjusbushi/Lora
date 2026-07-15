@@ -64,12 +64,21 @@ class BaseCurrency
             return;
         }
 
+        if (self::isLocked($tenant)) {
+            throw ValidationException::withMessages([
+                'currency' => 'Monedha bazë nuk mund të ndryshohet pasi hoteli ka transaksione. Kërkohet migrim financiar i kontrolluar.',
+            ]);
+        }
+    }
+
+    public static function isLocked(Tenant $tenant): bool
+    {
         foreach (['finance_payments', 'bills', 'invoices', 'payments', 'pos_orders', 'reservations'] as $table) {
             if (Schema::hasTable($table) && DB::table($table)->where('tenant_id', $tenant->id)->exists()) {
-                throw ValidationException::withMessages([
-                    'currency' => 'Monedha bazë nuk mund të ndryshohet pasi hoteli ka transaksione. Kërkohet migrim financiar i kontrolluar.',
-                ]);
+                return true;
             }
         }
+
+        return false;
     }
 }
