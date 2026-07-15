@@ -3894,6 +3894,10 @@
       "other": "Të tjera"
     }
   },
+  "currencySettings": {
+    "manualAllRate": "Kursi manual ALL/EUR (1 € =)",
+    "manualAllRateHelp": "Përdoret kur API është joaktive dhe ruhet veçmas për këtë hotel. Kursi ngrihet në çdo dokument."
+  },
   "integrationCenter": {
     "title": "Qendra e integrimeve",
     "fiscalization": "Fiskalizimi",

@@ -92,6 +92,31 @@ class CurrencyRatesTest extends TestCase
         $this->assertSame('test-fx-key', CurrencyRates::apiKey());
     }
 
+    public function test_hotel_can_save_a_tenant_scoped_manual_all_rate(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)->put(route('settings.currencies'), [
+            'enabled' => false,
+            'api_key' => '',
+            'clear_key' => false,
+            'manual_all_rate' => 93.7837,
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $this->assertSame(93.7837, CurrencyRates::rate('ALL'));
+
+        $this->actingAs($admin)->put(route('settings.currencies'), [
+            'enabled' => false,
+            'api_key' => '',
+            'clear_key' => false,
+            'manual_all_rate' => 0,
+        ])->assertSessionHasErrors('manual_all_rate');
+
+        $this->assertSame(93.7837, CurrencyRates::rate('ALL'));
+    }
+
     public function test_failed_api_reports_a_clean_error(): void
     {
         $this->enable();

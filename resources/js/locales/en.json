@@ -3894,6 +3894,10 @@
       "other": "Other"
     }
   },
+  "currencySettings": {
+    "manualAllRate": "Manual ALL/EUR rate (1 € =)",
+    "manualAllRateHelp": "Used when the API is disabled and stored separately for this hotel. The rate is frozen on each document."
+  },
   "integrationCenter": {
     "title": "Integration Center",
     "fiscalization": "Fiscalization",

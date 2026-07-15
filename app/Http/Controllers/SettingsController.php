@@ -443,6 +443,7 @@ class SettingsController extends Controller
             'enabled' => ['required', 'boolean'],
             'api_key' => ['nullable', 'string', 'max:100'],
             'clear_key' => ['nullable', 'boolean'],
+            'manual_all_rate' => ['nullable', 'numeric', 'min:1', 'max:1000'],
         ]);
 
         Setting::set('currencies.enabled', $data['enabled'] ? '1' : '0', 'boolean');
@@ -450,6 +451,9 @@ class SettingsController extends Controller
             Setting::set('currencies.api_key', '', 'text');
         } elseif (trim((string) ($data['api_key'] ?? '')) !== '') {
             Setting::set('currencies.api_key', trim($data['api_key']), 'text');
+        }
+        if ($request->exists('manual_all_rate')) {
+            Setting::set('financial.fx_all_per_eur', $data['manual_all_rate'] ?? 0, 'number');
         }
 
         return back()->with('success', 'Monedhat u ruajtën.');

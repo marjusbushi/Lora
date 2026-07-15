@@ -5,6 +5,7 @@ import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import Checkbox from '@/Components/UI/Checkbox.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
+import FormGroup from '@/Components/UI/FormGroup.vue';
 
 const props = defineProps({ settings: Object, toasts: Object });
 
@@ -18,6 +19,7 @@ const form = useForm({
     enabled: Boolean(props.settings.enabled),
     api_key: '',
     clear_key: false,
+    manual_all_rate: props.settings.fallback_all ?? '',
 });
 
 function submit() {
@@ -71,6 +73,19 @@ function refresh() {
                     <span v-if="settings.updated_at" class="text-tiny text-neutral-400 pb-2">{{ $t('admin.generated.k_12b49da83767') }} {{ settings.updated_at }}</span>
                 </div>
             </div>
+
+            <FormGroup :label="$t('currencySettings.manualAllRate')" :error="form.errors.manual_all_rate">
+                <TextInput
+                    v-model="form.manual_all_rate"
+                    type="number"
+                    min="1"
+                    max="1000"
+                    step="0.0001"
+                    placeholder="93.7837"
+                    :error="form.errors.manual_all_rate"
+                />
+                <p class="mt-1 text-tiny text-neutral-500">{{ $t('currencySettings.manualAllRateHelp') }}</p>
+            </FormGroup>
 
             <!-- rates table -->
             <div>
