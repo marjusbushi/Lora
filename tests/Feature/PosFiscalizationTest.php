@@ -54,17 +54,40 @@ class PosFiscalizationTest extends TestCase
         Setting::set('financial.fx_all_per_eur', 93.7837, 'number');
     }
 
-    public function test_cash_pos_sale_is_fiscalized_automatically_after_completion(): void
+    public function test_cash_pos_sale_is_completed_without_contacting_the_fiscal_provider(): void
     {
         [$order] = $this->openOrder();
 
         Http::preventStrayRequests();
+
+        $this->actingAs($this->admin)
+            ->post(route('pos.complete', $order), ['payment_method' => 'cash'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        Http::assertNothingSent();
+        $this->assertSame('completed', $order->fresh()->status);
+        $this->assertSame('cash', $order->fresh()->payment_method);
+        $this->assertNotNull($order->fresh()->paid_at);
+        $this->assertSame(0, PosFiscalDocument::query()->count());
+    }
+
+    public function test_paid_cash_pos_sale_is_fiscalized_only_after_the_manual_action(): void
+    {
+        [$order] = $this->openOrder();
+
+        Http::preventStrayRequests();
+        $this->actingAs($this->admin)
+            ->post(route('pos.complete', $order), ['payment_method' => 'cash'])
+            ->assertSessionHasNoErrors();
+        Http::assertNothingSent();
+
         Http::fake([
             'https://demo.fature.al/api/v1/invoice/cash' => Http::response($this->successResponse()),
         ]);
 
         $this->actingAs($this->admin)
-            ->post(route('pos.complete', $order), ['payment_method' => 'cash'])
+            ->post(route('pos.fiscalize', $order))
             ->assertRedirect()
             ->assertSessionHasNoErrors();
 
@@ -139,6 +162,12 @@ class PosFiscalizationTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('pos.complete', $order), ['payment_method' => 'cash'])
+            ->assertSessionHasNoErrors();
+
+        Http::assertNothingSent();
+
+        $this->actingAs($this->admin)
+            ->post(route('pos.fiscalize', $order))
             ->assertSessionHasNoErrors();
 
         Http::assertSent(fn (Request $request) => $request->url() === 'https://demo.fature.al/api/v1/invoice/cash'

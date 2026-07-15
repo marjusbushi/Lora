@@ -280,18 +280,9 @@ class PosController extends Controller
             'reservation_id' => $posOrder->reservation_id,
         ]);
 
-        if (in_array($request->payment_method, ['cash', 'card'], true)
-            && $this->fatureAlConfiguration->configured()) {
-            try {
-                $this->fiscalization->fiscalize($posOrder->fresh());
-            } catch (Throwable $exception) {
-                report($exception);
-
-                return back()->with('error', 'Porosia u mbyll, por fiskalizimi dështoi. Përdor “Riprovo fiskalizimin” te porosia.');
-            }
-        }
-
-        return back()->with('success', 'Porosia u perfundua.');
+        // Payment is intentionally independent from the external fiscal provider.
+        // The operator can print a non-fiscal receipt immediately and fiscalize later.
+        return back()->with('success', 'Pagesa u regjistrua. Fatura mund të printohet ose fiskalizohet veçmas.');
     }
 
     public function fiscalize(PosOrder $posOrder): RedirectResponse

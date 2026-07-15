@@ -1,6 +1,6 @@
 <script setup>
 import { getIntlLocale, i18n, translate } from '@/i18n';
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -289,7 +289,13 @@ function printReceipt() {
     window.setTimeout(() => document.body.classList.remove('printing-pos-receipt'), 500);
 }
 
-function retryFiscalization(order) {
+function canFiscalize(order) {
+    return order?.status === 'completed'
+        && ['cash', 'card'].includes(order?.payment_method)
+        && order?.fiscal_document?.status !== 'fiscalized';
+}
+
+function fiscalizeReceipt(order) {
     fiscalizingOrder.value = order.id;
     router.post(route('pos.fiscalize', order.id), {}, {
         preserveScroll: true,
@@ -297,6 +303,7 @@ function retryFiscalization(order) {
             const updated = page.props.orders?.data?.find((item) => Number(item.id) === Number(order.id));
             if (updated) openReceipt(updated);
             toasts.value?.success(translate('invoicePrint.posFiscalSuccess'));
+            nextTick(() => printReceipt());
         },
         onError: (errors) => toasts.value?.error(errors.fiscalization || translate('invoicePrint.posFiscalFailed')),
         onFinish: () => { fiscalizingOrder.value = null; },
@@ -407,12 +414,12 @@ function formatTime(d) {
                                             <div v-else-if="order.status === 'completed'" class="flex flex-wrap justify-end gap-1.5">
                                                 <Badge v-if="order.payment_method" variant="neutral" size="sm">{{ payLabel[order.payment_method] }}</Badge>
                                                 <Button
-                                                    v-if="order.fiscal_document?.status === 'failed'"
+                                                    v-if="canFiscalize(order)"
                                                     size="sm"
                                                     variant="outline"
                                                     :loading="fiscalizingOrder === order.id"
-                                                    @click="retryFiscalization(order)"
-                                                >{{ $t('invoicePrint.retryFiscalization') }}</Button>
+                                                    @click="fiscalizeReceipt(order)"
+                                                >{{ $t('invoicePrint.fiscalize') }}</Button>
                                                 <Button size="sm" variant="outline" @click="openReceipt(order)">
                                                     <ReceiptText class="h-3.5 w-3.5" /> {{ $t('reservationShow.invoice') }}
                                                 </Button>
@@ -637,15 +644,24 @@ function formatTime(d) {
             <div v-if="receiptOrder?.fiscal_document?.status === 'failed'" class="mt-3 rounded-lg border border-error-200 bg-error-50 px-3 py-2 text-small text-error-700">
                 {{ $t('invoicePrint.posFiscalPrintWarning') }}
             </div>
+            <div v-else-if="receiptOrder?.payment_method === 'room_charge'" class="mt-3 rounded-lg border border-info-200 bg-info-50 px-3 py-2 text-small text-info-800">
+                {{ $t('invoicePrint.roomChargeFiscalHint') }}
+            </div>
+            <div v-else-if="receiptOrder?.fiscal_document?.status !== 'fiscalized'" class="mt-3 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-small text-warning-800">
+                {{ $t('invoicePrint.nonFiscalPrintHint') }}
+            </div>
+            <div v-else class="mt-3 rounded-lg border border-success-200 bg-success-50 px-3 py-2 text-small text-success-800">
+                {{ $t('invoicePrint.fiscalReady') }}
+            </div>
             <template #footer>
-                <Button variant="outline" @click="showReceipt = false">{{ $t('invoicePrint.close') }}</Button>
+                <Button variant="outline" @click="showReceipt = false">{{ $t('invoicePrint.cancel') }}</Button>
                 <Button
-                    v-if="receiptOrder?.fiscal_document?.status === 'failed'"
-                    variant="outline"
+                    variant="primary"
                     :loading="fiscalizingOrder === receiptOrder.id"
-                    @click="retryFiscalization(receiptOrder)"
-                >{{ $t('invoicePrint.retryFiscalization') }}</Button>
-                <Button variant="primary" @click="printReceipt">{{ $t('invoicePrint.print80') }}</Button>
+                    :disabled="!canFiscalize(receiptOrder)"
+                    @click="fiscalizeReceipt(receiptOrder)"
+                >{{ receiptOrder?.fiscal_document?.status === 'fiscalized' ? $t('invoicePrint.fiscalizedButton') : $t('invoicePrint.fiscalize') }}</Button>
+                <Button variant="outline" @click="printReceipt">{{ $t('invoicePrint.print80') }}</Button>
             </template>
         </Modal>
 

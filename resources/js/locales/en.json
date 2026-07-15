@@ -297,12 +297,18 @@
     "iic": "NIVF",
     "fic": "NSLF",
     "posInvoiceTitle": "Bar invoice · 80 mm",
-    "posFiscalSuccess": "The POS invoice was fiscalized.",
+    "posFiscalSuccess": "The POS invoice was fiscalized and sent to print.",
     "posFiscalFailed": "Fiscalization was not completed.",
-    "posFiscalPrintWarning": "Fiscalization failed. Retry before printing the fiscal invoice.",
+    "posFiscalPrintWarning": "Fiscalization was not completed. Payment is saved; print a non-fiscal document or retry later.",
     "retryFiscalization": "Retry fiscalization",
+    "fiscalize": "Fiscalize",
+    "fiscalizedButton": "Fiscalized",
+    "fiscalReady": "The invoice is fiscalized and includes verification data.",
+    "nonFiscalPrintHint": "Payment is saved. Print a non-fiscal document now or fiscalize when internet is available.",
+    "roomChargeFiscalHint": "A room charge is fiscalized later on the final hotel invoice.",
     "print80": "Print 80 mm",
-    "close": "Close"
+    "close": "Close",
+    "cancel": "Cancel"
   },
   "admin": {
     "vatSettings": {
