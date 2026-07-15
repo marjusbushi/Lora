@@ -20,7 +20,7 @@ import {
     X,
 } from 'lucide-vue-next';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const props = defineProps({
     logs: Object,
     actions: Array,
@@ -117,16 +117,16 @@ function dayLabel(value) {
     const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const startValue = new Date(valueDate.getFullYear(), valueDate.getMonth(), valueDate.getDate());
     const diff = Math.round((startToday - startValue) / 86400000);
-    const locale = document.documentElement.lang === 'en' ? 'en-GB' : 'sq-AL';
-    const formatted = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }).format(valueDate);
+    const activeLocale = locale.value.startsWith('en') ? 'en-GB' : 'sq-AL';
+    const formatted = new Intl.DateTimeFormat(activeLocale, { day: 'numeric', month: 'long' }).format(valueDate);
     if (diff === 0) return `${t('superAdmin.dynamic.today')} · ${formatted}`;
     if (diff === 1) return `${t('superAdmin.dynamic.yesterday')} · ${formatted}`;
-    return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(valueDate);
+    return new Intl.DateTimeFormat(activeLocale, { day: 'numeric', month: 'long', year: 'numeric' }).format(valueDate);
 }
 
 function time(value) {
     if (!value) return '—';
-    return new Intl.DateTimeFormat('sq-AL', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+    return new Intl.DateTimeFormat(locale.value.startsWith('en') ? 'en-GB' : 'sq-AL', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
 function shortDay(value) {
@@ -138,12 +138,12 @@ function shortDay(value) {
     const diff = Math.round((startToday - startValue) / 86400000);
     if (diff === 0) return t('superAdmin.dynamic.today').toLowerCase();
     if (diff === 1) return t('superAdmin.dynamic.yesterday').toLowerCase();
-    return new Intl.DateTimeFormat('sq-AL', { day: '2-digit', month: '2-digit' }).format(valueDate);
+    return new Intl.DateTimeFormat(locale.value.startsWith('en') ? 'en-GB' : 'sq-AL', { day: '2-digit', month: '2-digit' }).format(valueDate);
 }
 
 function fullDate(value) {
     if (!value) return '—';
-    return new Intl.DateTimeFormat('sq-AL', {
+    return new Intl.DateTimeFormat(locale.value.startsWith('en') ? 'en-GB' : 'sq-AL', {
         day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
     }).format(new Date(value));
 }
