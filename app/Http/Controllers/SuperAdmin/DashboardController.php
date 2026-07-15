@@ -177,7 +177,16 @@ class DashboardController extends Controller
      */
     public function activity(Request $request): Response
     {
+        $categoryActions = [
+            'login' => ['tenant.switch'],
+            'integrations' => ['tenant.integration.update', 'tenant.integration.test'],
+            'subscriptions' => ['tenant.subscription.update'],
+            'domains' => ['tenant.domain.create', 'tenant.domain.delete', 'tenant.domain.primary'],
+        ];
         $action = (string) $request->query('action', '');
+        $category = array_key_exists((string) $request->query('category', ''), $categoryActions)
+            ? (string) $request->query('category')
+            : '';
         $search = trim((string) $request->query('q', ''));
         $tenantId = $request->integer('tenant') ?: null;
         $range = in_array((string) $request->query('range', '7'), ['today', '7', '30'], true)
@@ -189,11 +198,14 @@ class DashboardController extends Controller
             default => now()->subDays(7),
         };
 
-        $logsQuery = AuditLog::withoutGlobalScopes()
+        $rangeQuery = AuditLog::withoutGlobalScopes()
             ->where('action', 'like', 'tenant.%')
-            ->when($action !== '', fn ($query) => $query->where('action', $action))
             ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
-            ->where('created_at', '>=', $rangeStart)
+            ->where('created_at', '>=', $rangeStart);
+
+        $logsQuery = (clone $rangeQuery)
+            ->when($category !== '', fn ($query) => $query->whereIn('action', $categoryActions[$category]))
+            ->when($action !== '', fn ($query) => $query->where('action', $action))
             ->when($search !== '', function ($query) use ($search) {
                 $like = '%'.$search.'%';
                 $query->where(function ($query) use ($like) {
@@ -220,6 +232,9 @@ class DashboardController extends Controller
                 'actor' => $log->causer?->name ?? 'Sistemi',
                 'actor_email' => $log->causer?->email,
                 'tenant' => $log->tenant?->name,
+                'outcome' => $log->action === 'tenant.integration.test'
+                    ? ($log->properties['status'] ?? 'success')
+                    : 'success',
                 // Compact, secret-free summary — properties only ever hold field
                 // NAMES / booleans / non-secret config for platform actions.
                 'summary' => $this->summarizeAudit($log),
@@ -235,6 +250,9 @@ class DashboardController extends Controller
             ->orderBy('action')
             ->pluck('action');
 
+        $categoryCounts = collect($categoryActions)
+            ->map(fn (array $categoryActionList) => (clone $rangeQuery)->whereIn('action', $categoryActionList)->count());
+
         return Inertia::render('SuperAdmin/Activity', [
             'logs' => $logs,
             'actions' => $actions,
@@ -243,9 +261,15 @@ class DashboardController extends Controller
                 'actions_24h' => (clone $lastDay)->count(),
                 'hotels_24h' => (clone $lastDay)->whereNotNull('tenant_id')->distinct()->count('tenant_id'),
                 'admins_24h' => (clone $lastDay)->whereNotNull('causer_id')->distinct()->count('causer_id'),
+                'actions_range' => (clone $rangeQuery)->count(),
+                'hotels_range' => (clone $rangeQuery)->whereNotNull('tenant_id')->distinct()->count('tenant_id'),
+                'admins_range' => (clone $rangeQuery)->whereNotNull('causer_id')->distinct()->count('causer_id'),
+                'hotels_total' => Tenant::query()->count(),
             ],
+            'categoryCounts' => $categoryCounts,
             'filter' => [
                 'action' => $action,
+                'category' => $category,
                 'q' => $search,
                 'tenant' => $tenantId,
                 'range' => $range,
@@ -259,13 +283,19 @@ class DashboardController extends Controller
 
         return match ($log->action) {
             'tenant.create' => $props['tenant_name'] ?? null,
+            'tenant.update' => 'Të dhënat bazë u përditësuan',
             'tenant.switch' => 'Hyri në panelin e hotelit',
+            'tenant.member.create' => 'Rol: '.($props['role'] ?? 'përdorues'),
+            'tenant.member.update' => 'Rol: '.($props['role'] ?? 'përdorues')
+                .(isset($props['is_active']) ? ($props['is_active'] ? ' · aktiv' : ' · joaktiv') : ''),
             'tenant.subscription.update' => 'Abonimi u përditësua',
             'tenant.integration.update' => trim(
                 ucfirst((string) ($props['provider'] ?? 'integrim'))
                 .(isset($props['enabled']) ? ($props['enabled'] ? ' · aktiv' : ' · joaktiv') : '')
                 .(! empty($props['updated_fields']) ? ' · '.implode(', ', (array) $props['updated_fields']) : ''),
             ),
+            'tenant.integration.test' => ucfirst((string) ($props['provider'] ?? 'integrim'))
+                .' · '.(($props['status'] ?? null) === 'success' ? 'lidhje e suksesshme' : 'lidhja dështoi'),
             'tenant.domain.create' => 'Shtoi '.($props['domain'] ?? 'domain'),
             'tenant.domain.delete' => 'Hoqi '.($props['domain'] ?? 'domain'),
             'tenant.domain.primary' => ($props['domain'] ?? 'domain').' u bë primar',

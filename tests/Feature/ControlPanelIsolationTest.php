@@ -183,15 +183,19 @@ class ControlPanelIsolationTest extends TestCase
                 ->where('logs.data.0.action', 'tenant.integration.update')
                 ->where('stats.actions_24h', 1)
                 ->where('stats.hotels_24h', 1)
+                ->where('stats.actions_range', 1)
+                ->where('stats.hotels_range', 1)
+                ->where('categoryCounts.integrations', 1)
                 ->has('hotels', 1));
 
         $this->actingAs($superAdmin)
-            ->get('https://admin.lorapms.test/super-admin/activity?q='.urlencode($tenant->name).'&tenant='.$tenant->id.'&range=30')
+            ->get('https://admin.lorapms.test/super-admin/activity?q='.urlencode($tenant->name).'&tenant='.$tenant->id.'&category=integrations&range=30')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('logs.data', 1)
                 ->where('filter.q', $tenant->name)
                 ->where('filter.tenant', $tenant->id)
+                ->where('filter.category', 'integrations')
                 ->where('filter.range', '30'));
 
         // Field NAMES may show; secret VALUES must never reach the page.
