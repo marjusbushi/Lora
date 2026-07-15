@@ -4,6 +4,7 @@ namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Setting;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
@@ -140,7 +141,159 @@ class TenantController extends Controller
             'members' => $members,
             'activity' => $activity,
             'currentTenantId' => request()->user()->current_tenant_id,
+            'currencyOptions' => config('lora.tenant_currencies'),
+            'timezoneGroups' => $this->timezoneGroups(),
+            'roleOptions' => array_keys(TenantRoleService::definitions()),
         ]);
+    }
+
+    public function update(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'slug' => [
+                'required', 'string', 'max:80', 'alpha_dash:ascii',
+                Rule::unique('tenants', 'slug')->ignore($tenant->id),
+            ],
+            'timezone' => ['required', 'timezone:all'],
+            'currency' => ['required', Rule::in(config('lora.tenant_currencies'))],
+        ]);
+
+        $before = $tenant->only(['name', 'slug', 'timezone', 'currency']);
+
+        DB::transaction(function () use ($tenant, $data) {
+            $tenant->forceFill([
+                'name' => trim($data['name']),
+                'slug' => Str::lower($data['slug']),
+                'timezone' => $data['timezone'],
+                'currency' => Str::upper($data['currency']),
+            ])->save();
+
+            app(TenantContext::class)->run($tenant, function () use ($tenant) {
+                Setting::set('hotel.name', $tenant->name);
+                Setting::set('hotel.timezone', $tenant->timezone);
+                Setting::set('hotel.currency', $tenant->currency);
+            });
+
+            $tenant->subscription()->update(['currency' => $tenant->currency]);
+        });
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.update', $tenant, [
+            'before' => $before,
+            'after' => $tenant->only(['name', 'slug', 'timezone', 'currency']),
+        ]));
+
+        return back()->with('success', "Të dhënat e {$tenant->name} u përditësuan.");
+    }
+
+    public function storeMember(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
+    {
+        $data = $this->validateMember($request);
+        $email = Str::lower(trim($data['email']));
+        $member = User::withoutGlobalScopes()->withTrashed()->where('email', $email)->first();
+        $existing = (bool) $member;
+
+        DB::transaction(function () use (&$member, $existing, $tenant, $data, $email, $context) {
+            if (! $member) {
+                $member = User::create([
+                    'name' => trim($data['name']),
+                    'email' => $email,
+                    'password' => Str::random(40),
+                    'current_tenant_id' => $tenant->id,
+                ]);
+            } elseif ($member->trashed()) {
+                $member->restore();
+            }
+
+            $belongsToAnotherTenant = DB::table('tenant_user')
+                ->where('user_id', $member->id)
+                ->where('tenant_id', '!=', $tenant->id)
+                ->exists();
+
+            if (! $existing || ! $belongsToAnotherTenant) {
+                $member->forceFill(['name' => trim($data['name'])])->save();
+            }
+
+            $tenant->users()->syncWithoutDetaching([
+                $member->id => ['is_owner' => false, 'is_active' => (bool) $data['is_active']],
+            ]);
+
+            if (! $member->current_tenant_id) {
+                $member->forceFill(['current_tenant_id' => $tenant->id])->save();
+            }
+
+            $context->run($tenant, fn () => $member->unsetRelation('roles')->syncRoles([$data['role']]));
+        });
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.member.create', $member, [
+            'role' => $data['role'],
+            'linked_existing_account' => $existing,
+        ]));
+
+        return back()->with('success', $existing
+            ? 'Llogaria ekzistuese u lidh me hotelin.'
+            : 'Përdoruesi u shtua. Ai mund ta vendosë fjalëkalimin me “Harrove fjalëkalimin?”.');
+    }
+
+    public function updateMember(
+        Request $request,
+        Tenant $tenant,
+        int $member,
+        TenantContext $context,
+    ): RedirectResponse {
+        $pivot = DB::table('tenant_user')
+            ->where('tenant_id', $tenant->id)
+            ->where('user_id', $member)
+            ->first();
+        abort_unless($pivot, 404);
+
+        $user = User::withoutGlobalScopes()->withTrashed()->findOrFail($member);
+        $data = $this->validateMember($request, $user);
+
+        if ((bool) $pivot->is_owner && ($data['role'] !== 'admin' || ! $data['is_active'])) {
+            throw ValidationException::withMessages([
+                'role' => 'Pronari duhet të mbetet administrator aktiv.',
+            ]);
+        }
+
+        $sharedAccount = DB::table('tenant_user')
+            ->where('user_id', $user->id)
+            ->where('is_active', true)
+            ->count() > 1;
+
+        if ($sharedAccount && (
+            trim($data['name']) !== $user->name
+            || Str::lower(trim($data['email'])) !== Str::lower($user->email)
+        )) {
+            throw ValidationException::withMessages([
+                'email' => 'Kjo llogari përdoret në disa hotele. Këtu mund të ndryshosh vetëm rolin dhe statusin.',
+            ]);
+        }
+
+        DB::transaction(function () use ($tenant, $user, $data, $context) {
+            $user->forceFill([
+                'name' => trim($data['name']),
+                'email' => Str::lower(trim($data['email'])),
+            ])->save();
+
+            DB::table('tenant_user')
+                ->where('tenant_id', $tenant->id)
+                ->where('user_id', $user->id)
+                ->update(['is_active' => (bool) $data['is_active'], 'updated_at' => now()]);
+
+            if ($data['is_active'] && $user->trashed()) {
+                $user->restore();
+            }
+
+            $context->run($tenant, fn () => $user->unsetRelation('roles')->syncRoles([$data['role']]));
+        });
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.member.update', $user, [
+            'role' => $data['role'],
+            'is_active' => (bool) $data['is_active'],
+        ]));
+
+        return back()->with('success', 'Përdoruesi u përditësua.');
     }
 
     public function store(
@@ -630,6 +783,22 @@ class TenantController extends Controller
         $configuration['last_test_status'] = $status;
 
         $integration->forceFill(['configuration' => $configuration])->save();
+    }
+
+    /** @return array{name: string, email: string, role: string, is_active: bool} */
+    private function validateMember(Request $request, ?User $member = null): array
+    {
+        $emailRules = ['required', 'email', 'max:255'];
+        if ($member) {
+            $emailRules[] = Rule::unique('users', 'email')->ignore($member->id);
+        }
+
+        return $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'email' => $emailRules,
+            'role' => ['required', Rule::in(array_keys(TenantRoleService::definitions()))],
+            'is_active' => ['required', 'boolean'],
+        ]);
     }
 
     private function normalizeDomain(?string $domain): ?string

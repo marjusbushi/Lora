@@ -114,6 +114,9 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
         Route::get('/tenants', [SuperAdminTenantController::class, 'index'])->name('tenants.index');
         Route::get('/tenants/{tenant}', [SuperAdminTenantController::class, 'show'])->name('tenants.show');
         Route::post('/tenants', [SuperAdminTenantController::class, 'store'])->name('tenants.store');
+        Route::patch('/tenants/{tenant}', [SuperAdminTenantController::class, 'update'])->name('tenants.update');
+        Route::post('/tenants/{tenant}/members', [SuperAdminTenantController::class, 'storeMember'])->name('tenants.members.store');
+        Route::put('/tenants/{tenant}/members/{member}', [SuperAdminTenantController::class, 'updateMember'])->name('tenants.members.update');
         Route::put('/tenants/{tenant}/subscription', [SuperAdminTenantController::class, 'updateSubscription'])->name('tenants.subscription.update');
         Route::post('/tenants/{tenant}/switch', [SuperAdminTenantController::class, 'switch'])->name('tenants.switch');
         Route::patch('/tenants/{tenant}/status', [SuperAdminTenantController::class, 'updateStatus'])->name('tenants.status');
