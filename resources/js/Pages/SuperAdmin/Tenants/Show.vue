@@ -372,7 +372,7 @@ function toggleStatus() {
                             </div>
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
                                 <span class="sa-icon-box bg-emerald-50 text-emerald-700"><CreditCard class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">Abonimi dhe modulet</strong><p class="sa-table-meta">{{ enabledModules.length }} module aktive · rinovim {{ date(tenant.billing.current_period_ends_at) }}</p></div>
+                                <div><strong class="sa-table-primary">Abonimi dhe modulet</strong><p class="sa-table-meta">{{ enabledModules.length }} module aktive · faturimi i ardhshëm {{ date(tenant.billing.next_billing_at) }}</p></div>
                                 <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="billingIsHealthy ? 'text-emerald-700' : 'text-amber-700'">{{ statusLabel(tenant.billing.status) }}</span><Button size="sm" variant="outline" @click="openBilling">Ndrysho</Button></div>
                             </div>
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
@@ -422,7 +422,7 @@ function toggleStatus() {
                 <aside class="space-y-3">
                     <section class="sa-card">
                         <div class="bg-gradient-to-br from-emerald-50 to-white p-4"><p class="text-[9px] font-bold uppercase tracking-[.12em] text-neutral-500">Abonimi mujor</p><p class="mt-1 text-3xl font-bold tracking-tight text-neutral-950">{{ money(tenant.mrr_cents) }} <small class="text-[11px] font-medium text-neutral-500">/ muaj</small></p></div>
-                        <div class="divide-y divide-neutral-100 px-4 text-[11px]"><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Statusi</span><strong class="text-emerald-700">{{ statusLabel(tenant.billing.status) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Rinovimi</span><strong>{{ date(tenant.billing.current_period_ends_at) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Modulet</span><strong>{{ enabledModules.length }} aktive</strong></div></div>
+                        <div class="divide-y divide-neutral-100 px-4 text-[11px]"><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Statusi</span><strong class="text-emerald-700">{{ statusLabel(tenant.billing.status) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Faturimi i ardhshëm</span><strong>{{ date(tenant.billing.next_billing_at) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Modulet</span><strong>{{ enabledModules.length }} aktive</strong></div></div>
                         <div class="border-t border-neutral-100 p-3"><Button variant="outline" class="w-full" @click="openBilling"><CreditCard class="h-4 w-4" /> Menaxho abonimin</Button></div>
                     </section>
 

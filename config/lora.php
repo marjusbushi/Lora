@@ -16,6 +16,9 @@ return [
     // and capped in code so a deployment misconfiguration cannot make it long-lived.
     'tenant_handoff_ttl_seconds' => (int) env('LORA_TENANT_HANDOFF_TTL_SECONDS', 60),
 
+    // Platform invoices are due this many days after an automatic billing cycle starts.
+    'platform_billing_due_days' => (int) env('LORA_PLATFORM_BILLING_DUE_DAYS', 14),
+
     'control_panel_hosts' => array_values(array_filter(array_map(
         static fn (string $host): string => strtolower(trim($host)),
         explode(',', (string) env(

@@ -111,5 +111,11 @@ return Application::configure(basePath: dirname(__DIR__))
             requiredModule: TenantBillingService::HOUSEKEEPING,
         ))
             ->name('tenants:housekeeping:archive-inspected')->daily();
+        // Platform billing is driven by each active subscription's next_billing_at.
+        $schedule->command('billing:run-recurring')
+            ->name('platform:billing:run-recurring')
+            ->dailyAt('00:10')
+            ->withoutOverlapping()
+            ->onOneServer();
     })
     ->create();

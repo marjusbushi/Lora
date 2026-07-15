@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Models\TenantModuleEntitlement;
 use App\Models\TenantSubscription;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class TenantBillingService
@@ -71,9 +72,11 @@ class TenantBillingService
             $subscription = $tenant->subscription()->firstOrCreate([], [
                 'status' => 'active',
                 'billing_cycle' => 'monthly',
+                'billing_anchor_day' => now()->day,
                 'currency' => $tenant->currency,
                 'annual_discount_percent' => (int) config('lora_modules.annual_discount_percent', 20),
                 'starts_at' => now(),
+                'next_billing_at' => now()->startOfDay(),
             ]);
 
             foreach ($this->catalog() as $code => $module) {
@@ -101,14 +104,27 @@ class TenantBillingService
     {
         DB::transaction(function () use ($tenant, $data) {
             $subscription = $tenant->subscription()->firstOrNew();
+            $wasActive = $subscription->exists && $subscription->status === 'active';
+            $periodEndsAt = isset($data['current_period_ends_at'])
+                ? Carbon::parse($data['current_period_ends_at'])->endOfDay()
+                : null;
             $subscription->fill([
                 'status' => $data['status'],
                 'billing_cycle' => $data['billing_cycle'],
                 'currency' => $tenant->currency,
                 'starts_at' => $subscription->starts_at ?? now(),
-                'current_period_ends_at' => $data['current_period_ends_at'] ?? null,
+                'current_period_ends_at' => $periodEndsAt,
                 'notes' => $data['notes'] ?? null,
             ]);
+
+            if ($periodEndsAt) {
+                $nextBillingAt = $periodEndsAt->copy()->addDay()->startOfDay();
+                $subscription->next_billing_at = $nextBillingAt;
+                $subscription->billing_anchor_day = $nextBillingAt->day;
+            } elseif ($data['status'] === 'active' && (! $wasActive || ! $subscription->next_billing_at)) {
+                $subscription->next_billing_at = now()->startOfDay();
+                $subscription->billing_anchor_day = now()->day;
+            }
             $subscription->save();
 
             foreach ($this->catalog() as $code => $module) {
@@ -176,6 +192,8 @@ class TenantBillingService
             'billing_cycle' => $subscription?->billing_cycle ?? 'monthly',
             'currency' => $subscription?->currency ?? $tenant->currency,
             'current_period_ends_at' => $subscription?->current_period_ends_at?->toDateString(),
+            'next_billing_at' => $subscription?->next_billing_at?->toIso8601String(),
+            'last_billed_at' => $subscription?->last_billed_at?->toIso8601String(),
             'notes' => $subscription?->notes,
             'monthly_fixed_cents' => $monthlyFixedCents,
             'annual_cents' => $annualCents,

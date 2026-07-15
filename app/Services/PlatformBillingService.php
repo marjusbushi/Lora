@@ -2,17 +2,24 @@
 
 namespace App\Services;
 
+use App\Models\AuditLog;
 use App\Models\BillingInvoice;
 use App\Models\BillingPayment;
 use App\Models\Tenant;
+use App\Models\TenantSubscription;
 use App\Models\User;
+use App\Tenancy\TenantContext;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class PlatformBillingService
 {
-    public function __construct(private TenantBillingService $tenantBilling) {}
+    public function __construct(
+        private TenantBillingService $tenantBilling,
+        private TenantContext $tenantContext,
+    ) {}
 
     public function createInvoice(Tenant $tenant, array $data): BillingInvoice
     {
@@ -60,6 +67,7 @@ class PlatformBillingService
             $invoice = BillingInvoice::query()->create([
                 'tenant_id' => $tenant->id,
                 'tenant_subscription_id' => $tenant->subscription?->id,
+                'idempotency_key' => $data['idempotency_key'] ?? null,
                 'status' => ($data['issue_now'] ?? false) ? 'open' : 'draft',
                 'currency' => $summary['currency'],
                 'subtotal_cents' => $subtotal,
@@ -74,6 +82,7 @@ class PlatformBillingService
                 'metadata' => [
                     'billing_cycle' => $summary['billing_cycle'],
                     'annual_discount_percent' => $summary['annual_discount_percent'],
+                    'source' => $data['source'] ?? 'manual',
                 ],
             ]);
 
@@ -150,5 +159,107 @@ class PlatformBillingService
             ->where('status', 'open')
             ->whereDate('due_on', '<', today())
             ->update(['status' => 'overdue']);
+    }
+
+    /**
+     * Generate every cycle currently due, with a safety cap for stale subscriptions.
+     *
+     * @return array{created: Collection<int, BillingInvoice>, failed: int}
+     */
+    public function processDueSubscriptions(?Carbon $asOf = null): array
+    {
+        $asOf ??= now();
+        $created = collect();
+        $failed = 0;
+
+        $subscriptionIds = TenantSubscription::query()
+            ->where('status', 'active')
+            ->whereNotNull('next_billing_at')
+            ->where('next_billing_at', '<=', $asOf)
+            ->orderBy('next_billing_at')
+            ->pluck('id');
+
+        foreach ($subscriptionIds as $subscriptionId) {
+            try {
+                for ($cycle = 0; $cycle < 24; $cycle++) {
+                    $invoice = $this->createNextRecurringInvoice((int) $subscriptionId, $asOf);
+
+                    if (! $invoice) {
+                        break;
+                    }
+
+                    $created->push($invoice);
+                }
+            } catch (\Throwable $exception) {
+                report($exception);
+                $failed++;
+            }
+        }
+
+        return ['created' => $created, 'failed' => $failed];
+    }
+
+    private function createNextRecurringInvoice(int $subscriptionId, Carbon $asOf): ?BillingInvoice
+    {
+        return DB::transaction(function () use ($subscriptionId, $asOf) {
+            /** @var TenantSubscription|null $subscription */
+            $subscription = TenantSubscription::query()->lockForUpdate()->find($subscriptionId);
+
+            if (! $subscription
+                || $subscription->status !== 'active'
+                || ! $subscription->next_billing_at
+                || $subscription->next_billing_at->isAfter($asOf)) {
+                return null;
+            }
+
+            $periodStartsOn = $subscription->next_billing_at->copy()->startOfDay();
+            $nextBillingAt = $this->nextBillingDate($periodStartsOn, $subscription);
+            $periodEndsOn = $nextBillingAt->copy()->subDay();
+            $idempotencyKey = "subscription:{$subscription->id}:{$periodStartsOn->toDateString()}";
+
+            $invoice = BillingInvoice::query()->where('idempotency_key', $idempotencyKey)->first();
+
+            if (! $invoice) {
+                $invoice = $this->createInvoice($subscription->tenant, [
+                    'period_starts_on' => $periodStartsOn,
+                    'period_ends_on' => $periodEndsOn,
+                    'due_on' => $periodStartsOn->copy()->addDays(max(0, (int) config('lora.platform_billing_due_days', 14))),
+                    'issue_now' => true,
+                    'idempotency_key' => $idempotencyKey,
+                    'source' => 'subscription_schedule',
+                    'notes' => 'Faturë e krijuar automatikisht nga abonimi.',
+                ]);
+            }
+
+            $subscription->update([
+                'current_period_ends_at' => $periodEndsOn->copy()->endOfDay(),
+                'next_billing_at' => $nextBillingAt,
+                'last_billed_at' => $asOf,
+            ]);
+
+            $this->tenantContext->run($subscription->tenant, fn () => AuditLog::record(
+                'platform.invoice.recurring',
+                $invoice,
+                [
+                    'subscription_id' => $subscription->id,
+                    'period_starts_on' => $periodStartsOn->toDateString(),
+                    'period_ends_on' => $periodEndsOn->toDateString(),
+                    'total_cents' => $invoice->total_cents,
+                ],
+                'system',
+            ));
+
+            return $invoice;
+        }, 3);
+    }
+
+    private function nextBillingDate(Carbon $periodStartsOn, TenantSubscription $subscription): Carbon
+    {
+        $anchorDay = min(31, max(1, $subscription->billing_anchor_day));
+        $next = $subscription->billing_cycle === 'annual'
+            ? $periodStartsOn->copy()->startOfMonth()->addYear()
+            : $periodStartsOn->copy()->startOfMonth()->addMonth();
+
+        return $next->day(min($anchorDay, $next->daysInMonth))->startOfDay();
     }
 }
