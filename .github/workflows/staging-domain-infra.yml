@@ -1,0 +1,39 @@
+name: Configure staging tenant domains
+
+on:
+  push:
+    branches:
+      - codex/staging-domain-infra
+    paths:
+      - .github/workflows/staging-domain-infra.yml
+      - deploy/nginx/staging-tenants.conf
+      - deploy/scripts/configure-staging-domains.sh
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Inspect staging web configuration
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_SERVER_IP }}
+          username: root
+          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          script: |
+            set -Eeuo pipefail
+            echo "Host: $(hostname)"
+            echo "Nginx server names and certificate paths:"
+            nginx -T 2>/dev/null \
+              | grep -E '^[[:space:]]*(server_name|ssl_certificate|ssl_certificate_key|root)[[:space:]]' \
+              | sed -E 's/[[:space:]]+/ /g' \
+              | sort -u
+            echo "Available certificates:"
+            certbot certificates 2>/dev/null \
+              | grep -E 'Certificate Name:|Domains:|Expiry Date:|Certificate Path:|Private Key Path:' \
+              || true
+            echo "Application paths:"
+            find /var/www -maxdepth 3 -name artisan -print
