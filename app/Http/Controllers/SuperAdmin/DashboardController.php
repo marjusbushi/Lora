@@ -133,6 +133,21 @@ class DashboardController extends Controller
             + ($ratio($integrationsReady, $integrationsTotal) * 15)
         );
 
+        $recentActivity = AuditLog::withoutGlobalScopes()
+            ->where('action', 'like', 'tenant.%')
+            ->with(['causer:id,name,email', 'tenant:id,name,slug'])
+            ->orderByDesc('id')
+            ->limit(4)
+            ->get()
+            ->map(fn (AuditLog $log) => [
+                'id' => $log->id,
+                'action' => $log->action,
+                'created_at' => $log->created_at?->toIso8601String(),
+                'actor' => $log->causer?->name ?? 'Sistemi',
+                'tenant' => $log->tenant?->name,
+                'summary' => $this->summarizeAudit($log),
+            ]);
+
         return Inertia::render('SuperAdmin/Dashboard', [
             'stats' => [
                 'hotels_total' => $hotelsTotal,
@@ -149,6 +164,7 @@ class DashboardController extends Controller
             'moduleAdoption' => $moduleAdoption,
             'needsAttention' => $needsAttention,
             'recentTenants' => $rows->take(5)->values(),
+            'recentActivity' => $recentActivity,
         ]);
     }
 

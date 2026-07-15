@@ -1,18 +1,25 @@
 <script setup>
-import { useI18n } from 'vue-i18n';
-import { computed, ref } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
+import { Link, router } from '@inertiajs/vue3';
 import {
+    AlertTriangle,
     ArrowRight,
     Building2,
     Check,
     CreditCard,
-    Gauge,
+    Globe2,
     Layers3,
+    ListChecks,
+    LogIn,
+    MoreHorizontal,
+    Plug,
+    Plus,
     RefreshCw,
+    Search,
     Users,
 } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 const props = defineProps({
@@ -20,12 +27,23 @@ const props = defineProps({
     moduleAdoption: Array,
     needsAttention: Array,
     recentTenants: Array,
+    recentActivity: Array,
 });
 
 const refreshing = ref(false);
+const tenantSearch = ref('');
+const tenantStatus = ref('');
 
 function ratio(value, total) {
     return total > 0 ? Math.round((value / total) * 100) : 100;
+}
+
+function money(cents) {
+    return new Intl.NumberFormat('sq-AL', {
+        style: 'currency',
+        currency: 'EUR',
+        maximumFractionDigits: 0,
+    }).format((cents || 0) / 100);
 }
 
 const kpis = computed(() => [
@@ -33,7 +51,6 @@ const kpis = computed(() => [
         label: t('superAdmin.auto.copy017'),
         value: props.stats.hotels_active,
         lead: `${ratio(props.stats.hotels_active, props.stats.hotels_total)}%`,
-        leadClass: 'text-emerald-700',
         detail: t('superAdmin.dynamic.activePortfolio'),
         icon: Building2,
         tone: 'emerald',
@@ -49,7 +66,6 @@ const kpis = computed(() => [
         label: t('superAdmin.dynamic.activeSubscriptions'),
         value: props.stats.subscriptions_active,
         lead: props.stats.subscriptions_attention,
-        leadClass: props.stats.subscriptions_attention ? 'text-amber-700' : 'text-emerald-700',
         detail: t('superAdmin.dynamic.latePayments'),
         icon: Layers3,
         tone: 'emerald',
@@ -68,31 +84,31 @@ const signals = computed(() => [
         label: t('superAdmin.auto.copy132'),
         value: props.stats.subscriptions_active,
         total: props.stats.hotels_total,
-        tone: props.stats.subscriptions_attention ? 'attention' : 'ok',
     },
     {
         label: t('superAdmin.dynamic.domains'),
         value: props.stats.domains_configured,
         total: props.stats.hotels_total,
-        tone: props.stats.domains_configured === props.stats.hotels_total ? 'ok' : 'attention',
     },
     {
         label: t('superAdmin.auto.copy088'),
         value: props.stats.integrations_ready,
         total: props.stats.integrations_total,
-        tone: props.stats.integrations_ready === props.stats.integrations_total ? 'ok' : 'attention',
     },
 ]);
 
-const healthLabel = computed(() => {
-    if (props.stats.health_score >= 85) return t('superAdmin.dynamic.healthExcellent');
-    if (props.stats.health_score >= 65) return t('superAdmin.dynamic.healthGood');
-    return t('superAdmin.auto.copy064');
+const filteredTenants = computed(() => {
+    const query = tenantSearch.value.trim().toLocaleLowerCase('sq');
+    return (props.recentTenants || []).filter((tenant) => {
+        const matchesQuery = !query || [tenant.name, tenant.domain, tenant.slug]
+            .filter(Boolean)
+            .some((value) => value.toLocaleLowerCase('sq').includes(query));
+        const matchesStatus = !tenantStatus.value || tenant.status === tenantStatus.value;
+        return matchesQuery && matchesStatus;
+    });
 });
 
-const healthDetail = computed(() => props.stats.subscriptions_attention
-    ? t('superAdmin.dynamic.subscriptionsNeedAttention')
-    : t('superAdmin.dynamic.subscriptionsHealthyDetail'));
+const platformHealthy = computed(() => props.needsAttention.length === 0);
 
 function toneClass(tone) {
     return {
@@ -102,23 +118,14 @@ function toneClass(tone) {
     }[tone] || 'bg-neutral-100 text-neutral-600';
 }
 
-function money(cents) {
-    return new Intl.NumberFormat('sq-AL', {
-        style: 'currency',
-        currency: 'EUR',
-        maximumFractionDigits: 0,
-    }).format((cents || 0) / 100);
-}
-
-function date(value) {
-    if (!value) return '—';
-    return new Intl.DateTimeFormat('sq-AL', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
-}
-
 function statusLabel(status) {
     return {
-        trialing: t('superAdmin.auto.copy049'), active: t('superAdmin.auto.copy005'), past_due: t('superAdmin.auto.copy042'),
-        suspended: t('superAdmin.auto.copy044'), canceled: t('superAdmin.auto.copy009'), inactive: t('superAdmin.dynamic.inactive'),
+        trialing: t('superAdmin.auto.copy049'),
+        active: t('superAdmin.auto.copy005'),
+        past_due: t('superAdmin.auto.copy042'),
+        suspended: t('superAdmin.auto.copy044'),
+        canceled: t('superAdmin.auto.copy009'),
+        inactive: t('superAdmin.dynamic.inactive'),
     }[status] || status;
 }
 
@@ -131,20 +138,59 @@ function statusClass(status) {
 function statusDotClass(status) {
     if (status === 'past_due') return 'bg-amber-500';
     if (['suspended', 'canceled', 'inactive'].includes(status)) return 'bg-red-500';
-    return 'bg-emerald-500';
+    return 'bg-emerald-600';
 }
 
-function attentionClass(severity) {
+function initials(name) {
+    return String(name || 'L')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join('')
+        .toUpperCase();
+}
+
+const ACTIONS = {
+    'tenant.create': { label: t('superAdmin.dynamic.actionHotelCreated'), icon: Plus, tone: 'blue' },
+    'tenant.switch': { label: t('superAdmin.dynamic.actionHotelLogin'), icon: LogIn, tone: 'emerald' },
+    'tenant.subscription.update': { label: t('superAdmin.dynamic.actionSubscriptionUpdated'), icon: CreditCard, tone: 'blue' },
+    'tenant.integration.update': { label: t('superAdmin.dynamic.actionIntegrationUpdated'), icon: Plug, tone: 'violet' },
+    'tenant.domain.create': { label: t('superAdmin.dynamic.actionDomainAdded'), icon: Globe2, tone: 'blue' },
+    'tenant.domain.delete': { label: t('superAdmin.dynamic.actionDomainRemoved'), icon: Globe2, tone: 'red' },
+    'tenant.domain.primary': { label: t('superAdmin.dynamic.actionPrimaryDomainUpdated'), icon: Globe2, tone: 'emerald' },
+};
+
+function actionMeta(action) {
+    return ACTIONS[action] || { label: action, icon: ListChecks, tone: 'neutral' };
+}
+
+function activityIconClass(tone) {
     return {
-        danger: 'border-red-200 bg-red-50 text-red-700',
-        warning: 'border-amber-200 bg-amber-50 text-amber-700',
-        info: 'border-neutral-200 bg-neutral-50 text-neutral-600',
-    }[severity] || 'border-neutral-200 bg-neutral-50 text-neutral-600';
+        emerald: 'bg-emerald-50 text-emerald-700',
+        blue: 'bg-blue-50 text-blue-700',
+        violet: 'bg-violet-50 text-violet-700',
+        red: 'bg-red-50 text-red-700',
+        neutral: 'bg-neutral-100 text-neutral-600',
+    }[tone] || 'bg-neutral-100 text-neutral-600';
+}
+
+function relativeTime(value) {
+    if (!value) return '—';
+    const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000);
+    const absolute = Math.abs(seconds);
+    if (absolute < 60) return t('superAdmin.compact.now');
+    const units = absolute < 3600
+        ? [Math.round(seconds / 60), 'minute']
+        : absolute < 86400
+            ? [Math.round(seconds / 3600), 'hour']
+            : [Math.round(seconds / 86400), 'day'];
+    return new Intl.RelativeTimeFormat('sq-AL', { numeric: 'auto' }).format(units[0], units[1]);
 }
 
 function refresh() {
     router.reload({
-        only: ['stats', 'moduleAdoption', 'needsAttention', 'recentTenants'],
+        only: ['stats', 'moduleAdoption', 'needsAttention', 'recentTenants', 'recentActivity'],
         onStart: () => { refreshing.value = true; },
         onFinish: () => { refreshing.value = false; },
     });
@@ -153,145 +199,131 @@ function refresh() {
 
 <template>
     <SuperAdminLayout :title="$t('superAdmin.auto.copy145')">
-        <div class="mx-auto max-w-[1480px] space-y-5">
-            <div>
-                <div class="text-xs text-neutral-400">
-                    <span>Control Panel</span><span class="mx-2">/</span><span>{{ $t('superAdmin.auto.copy120') }}</span>
+        <div class="sa-page space-y-4">
+            <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <div class="text-[11px] text-neutral-400"><span>Control Panel</span><span class="mx-2">/</span><span>{{ $t('superAdmin.auto.copy120') }}</span></div>
+                    <h1 class="mt-2 text-[27px] font-semibold leading-tight tracking-[-0.035em] text-neutral-950">{{ $t('superAdmin.auto.copy120') }}</h1>
+                    <p class="mt-1 text-[13px] text-neutral-500">{{ $t('superAdmin.auto.copy136') }}</p>
                 </div>
-                <div class="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <h1 class="text-3xl font-semibold tracking-tight text-neutral-950">{{ $t('superAdmin.auto.copy120') }}</h1>
-                        <p class="mt-2 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy136') }}</p>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                        <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-700 shadow-sm hover:bg-neutral-50 disabled:opacity-60" :disabled="refreshing" @click="refresh">
-                            <RefreshCw class="h-4 w-4" :class="refreshing && 'animate-spin'" />
-                            {{ refreshing ? 'Duke rifreskuar…' : 'Rifresko' }}
-                        </button>
-                        <Link href="/super-admin/tenants" class="inline-flex items-center gap-2 rounded-xl bg-[#17745c] px-4 py-2.5 text-sm font-semibold text-white no-underline shadow-sm hover:bg-[#125f4c]">
-                            {{ t('superAdmin.dynamic.manageHotels') }} <ArrowRight class="h-4 w-4" />
-                        </Link>
-                    </div>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" class="sa-button" :disabled="refreshing" @click="refresh">
+                        <RefreshCw class="h-4 w-4" :class="refreshing && 'animate-spin'" />
+                        {{ refreshing ? t('superAdmin.compact.refreshing') : t('superAdmin.compact.refresh') }}
+                    </button>
+                    <Link href="/super-admin/tenants" class="sa-button sa-button-primary">
+                        {{ t('superAdmin.dynamic.manageHotels') }} <ArrowRight class="h-4 w-4" />
+                    </Link>
                 </div>
-            </div>
+            </header>
 
-            <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <article v-for="kpi in kpis" :key="kpi.label" class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
+            <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <article v-for="kpi in kpis" :key="kpi.label" class="sa-card min-h-[140px] p-4">
                     <div class="flex items-start justify-between gap-4">
-                        <div>
-                            <p class="text-sm font-semibold text-neutral-500">{{ kpi.label }}</p>
-                            <p class="mt-3 text-3xl font-semibold tracking-tight text-neutral-950">{{ kpi.value }}</p>
-                            <p class="mt-2 text-xs text-neutral-400">
-                                <span v-if="kpi.lead !== undefined" class="font-semibold" :class="kpi.leadClass">{{ kpi.lead }}</span>
+                        <div class="min-w-0">
+                            <p class="truncate text-xs font-semibold text-neutral-500">{{ kpi.label }}</p>
+                            <p class="mt-3 text-[29px] font-semibold leading-none tracking-tight text-neutral-950">{{ kpi.value }}</p>
+                            <p class="mt-3 text-xs text-neutral-400">
+                                <span v-if="kpi.lead !== undefined" class="font-semibold" :class="kpi.lead ? 'text-emerald-700' : 'text-neutral-500'">{{ kpi.lead }}</span>
                                 <span :class="kpi.lead !== undefined && 'ml-1'">{{ kpi.detail }}</span>
                             </p>
                         </div>
-                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl" :class="toneClass(kpi.tone)">
-                            <component :is="kpi.icon" class="h-5 w-5" :stroke-width="1.8" />
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl" :class="toneClass(kpi.tone)">
+                            <component :is="kpi.icon" class="h-[18px] w-[18px]" :stroke-width="1.8" />
                         </span>
                     </div>
                 </article>
             </section>
 
-            <div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.75fr)]">
-                <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                    <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
-                        <div>
-                            <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy141') }}</h2>
-                            <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy144') }}</p>
-                        </div>
-                        <span class="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-600">{{ t('superAdmin.dynamic.urgentCount', { count: needsAttention.length }) }}</span>
+            <section class="sa-card flex flex-col gap-4 border-emerald-200/80 bg-emerald-50/35 p-4 xl:flex-row xl:items-center">
+                <div class="flex min-w-0 flex-1 items-center gap-3">
+                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl" :class="platformHealthy ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'">
+                        <Check v-if="platformHealthy" class="h-5 w-5" :stroke-width="2.2" />
+                        <AlertTriangle v-else class="h-5 w-5" :stroke-width="2" />
+                    </span>
+                    <div class="min-w-0">
+                        <p class="font-semibold text-neutral-900">{{ platformHealthy ? t('superAdmin.compact.platformHealthy') : t('superAdmin.compact.platformAttention') }}</p>
+                        <p class="mt-0.5 truncate text-xs text-neutral-500">{{ platformHealthy ? t('superAdmin.compact.platformHealthyDetail') : t('superAdmin.compact.issuesCount', { count: needsAttention.length }) }}</p>
                     </div>
-
-                    <div v-if="!needsAttention.length" class="m-5 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
-                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700"><Check class="h-5 w-5" :stroke-width="2.4" /></span>
-                        <div>
-                            <p class="font-semibold text-emerald-800">{{ $t('superAdmin.auto.copy133') }}</p>
-                            <p class="mt-1 text-xs text-emerald-700/70">{{ $t('superAdmin.auto.copy135') }}</p>
-                        </div>
-                    </div>
-
-                    <ul v-else class="divide-y divide-neutral-100 border-b border-neutral-100">
-                        <li v-for="item in needsAttention" :key="item.id" class="flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="flex min-w-0 items-center gap-3">
-                                <span class="h-2 w-2 shrink-0 rounded-full" :class="item.severity === 'danger' ? 'bg-red-500' : 'bg-amber-500'" />
-                                <Link :href="`/super-admin/tenants/${item.id}`" class="truncate text-sm font-semibold text-neutral-900 no-underline hover:text-emerald-700">{{ item.name }}</Link>
-                            </div>
-                            <div class="flex items-center gap-3 pl-5 sm:pl-0">
-                                <span class="rounded-full border px-2 py-0.5 text-xs font-medium" :class="attentionClass(item.severity)">{{ item.reason }}</span>
-                                <span v-if="item.date" class="text-xs text-neutral-400">{{ date(item.date) }}</span>
-                            </div>
-                        </li>
-                    </ul>
-
-                    <div class="grid gap-3 px-5 pb-5 sm:grid-cols-3" :class="needsAttention.length && 'pt-5'">
-                        <div v-for="signal in signals" :key="signal.label" class="rounded-xl border border-neutral-200 p-3">
-                            <div class="flex items-center justify-between text-sm">
-                                <span class="text-neutral-500">{{ signal.label }}</span>
-                                <span class="font-semibold" :class="signal.tone === 'ok' ? 'text-emerald-700' : 'text-amber-700'">{{ signal.value }}/{{ signal.total }}</span>
-                            </div>
-                            <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-100">
-                                <div class="h-full rounded-full" :class="signal.tone === 'ok' ? 'bg-emerald-600' : 'bg-amber-500'" :style="{ width: `${ratio(signal.value, signal.total)}%` }" />
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                    <div class="border-b border-neutral-200 px-5 py-4">
-                        <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy143') }}</h2>
-                        <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy138') }}</p>
-                    </div>
-                    <div class="flex items-center gap-5 px-5 py-5">
-                        <div class="relative grid h-24 w-24 shrink-0 place-items-center rounded-full" :style="{ background: `conic-gradient(#17745c 0 ${stats.health_score}%, #edf1ef ${stats.health_score}% 100%)` }">
-                            <span class="absolute inset-2 rounded-full bg-white" />
-                            <span class="relative text-xl font-semibold text-neutral-900">{{ stats.health_score }}%</span>
-                        </div>
-                        <div>
-                            <p class="font-semibold text-neutral-900">{{ healthLabel }}</p>
-                            <p class="mt-1 text-xs leading-5 text-neutral-500">{{ healthDetail }}</p>
-                        </div>
-                    </div>
-                    <div class="divide-y divide-neutral-100 border-t border-neutral-200 px-5">
-                        <div class="flex items-center justify-between py-3 text-sm"><span class="text-neutral-600">{{ $t('superAdmin.auto.copy132') }}</span><span class="font-semibold" :class="stats.subscriptions_attention ? 'text-amber-700' : 'text-emerald-700'">{{ stats.subscriptions_attention ? t('superAdmin.dynamic.needAttentionCount', { count: stats.subscriptions_attention }) : t('superAdmin.auto.copy063') }}</span></div>
-                        <div class="flex items-center justify-between py-3 text-sm"><span class="text-neutral-600">{{ $t('superAdmin.auto.copy012') }}</span><span class="font-semibold" :class="stats.domains_configured === stats.hotels_total ? 'text-emerald-700' : 'text-amber-700'">{{ stats.hotels_total - stats.domains_configured ? t('superAdmin.dynamic.missingCount', { count: stats.hotels_total - stats.domains_configured }) : t('superAdmin.dynamic.complete') }}</span></div>
-                        <div class="flex items-center justify-between py-3 text-sm"><span class="text-neutral-600">Channex / POK</span><span class="font-semibold" :class="stats.integrations_ready === stats.integrations_total ? 'text-emerald-700' : 'text-amber-700'">{{ stats.integrations_ready === stats.integrations_total ? t('superAdmin.dynamic.configuredPlural') : t('superAdmin.dynamic.needsConfiguration') }}</span></div>
-                    </div>
-                </section>
-            </div>
-
-            <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
-                    <div>
-                        <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy137') }}</h2>
-                        <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy140') }}</p>
-                    </div>
-                    <Link href="/super-admin/tenants" class="text-sm font-semibold text-emerald-700 no-underline">{{ $t('superAdmin.auto.copy142') }} <ArrowRight class="ml-1 inline h-4 w-4" /></Link>
                 </div>
-
-                <div class="overflow-x-auto">
-                    <table class="w-full min-w-[720px] text-sm">
-                        <thead><tr class="border-b border-neutral-200 bg-neutral-50/70 text-left text-[11px] uppercase tracking-wide text-neutral-400"><th class="px-5 py-3 font-semibold">{{ $t('superAdmin.auto.copy018') }}</th><th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy003') }}</th><th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy050') }}</th><th class="px-5 py-3 text-right font-semibold">{{ $t('superAdmin.auto.copy059') }}</th></tr></thead>
-                        <tbody class="divide-y divide-neutral-100">
-                            <tr v-for="tenant in recentTenants" :key="tenant.id" class="hover:bg-neutral-50/60">
-                                <td class="px-5 py-3.5"><div class="flex items-center gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-xs font-bold text-emerald-700">{{ tenant.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase() }}</span><div class="min-w-0"><Link :href="`/super-admin/tenants/${tenant.id}`" class="truncate font-semibold text-neutral-900 no-underline hover:text-emerald-700">{{ tenant.name }}</Link><p class="mt-0.5 truncate text-xs text-neutral-400">{{ tenant.domain || tenant.slug }} · {{ date(tenant.created_at) }}</p></div></div></td>
-                                <td class="px-4 py-3.5"><p class="font-semibold text-neutral-900">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(tenant.mrr_cents) }) }}</p><p class="mt-0.5 text-xs text-neutral-400">{{ t('superAdmin.dynamic.billingCycle', { cycle: tenant.billing_cycle === 'annual' ? t('superAdmin.dynamic.annualLower') : t('superAdmin.dynamic.monthlyLower') }) }}</p></td>
-                                <td class="px-4 py-3.5"><p class="text-neutral-700">{{ t('superAdmin.dynamic.usersCount', { count: tenant.users_count }) }}</p><p class="mt-0.5 text-xs text-neutral-400">{{ t('superAdmin.dynamic.modulesCount', { count: tenant.modules.length }) }}</p></td>
-                                <td class="px-5 py-3.5 text-right"><span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="statusClass(tenant.subscription_status)"><span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(tenant.subscription_status)" />{{ statusLabel(tenant.subscription_status) }}</span></td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="grid flex-[1.55] gap-3 sm:grid-cols-3">
+                    <div v-for="signal in signals" :key="signal.label" class="border-l border-neutral-200 pl-4">
+                        <div class="flex items-center justify-between text-xs"><span class="text-neutral-500">{{ signal.label }}</span><strong class="text-neutral-900">{{ signal.value }}/{{ signal.total }}</strong></div>
+                        <div class="mt-2 h-1 overflow-hidden rounded-full bg-neutral-200/80"><div class="h-full rounded-full" :class="signal.value === signal.total ? 'bg-emerald-700' : 'bg-amber-500'" :style="{ width: `${ratio(signal.value, signal.total)}%` }" /></div>
+                    </div>
                 </div>
             </section>
 
-            <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
-                    <div><h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy134') }}</h2><p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy139') }}</p></div>
-                    <Gauge class="h-5 w-5 text-neutral-400" />
+            <div class="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.65fr)]">
+                <section class="sa-card">
+                    <div class="sa-card-header flex-col items-stretch lg:flex-row lg:items-center">
+                        <div>
+                            <h2 class="text-base font-semibold text-neutral-900">{{ t('superAdmin.compact.hotels') }}</h2>
+                            <p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.compact.portfolioDescription') }}</p>
+                        </div>
+                        <div class="flex flex-col gap-2 sm:flex-row">
+                            <label class="relative block sm:w-[210px]">
+                                <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                                <input v-model="tenantSearch" type="search" class="sa-control w-full py-0 pl-9 pr-3" :placeholder="t('superAdmin.compact.searchHotel')" />
+                            </label>
+                            <select v-model="tenantStatus" class="sa-control min-w-[120px] py-0 pl-3 pr-8">
+                                <option value="">{{ t('superAdmin.compact.all') }}</option>
+                                <option value="active">{{ t('superAdmin.compact.active') }}</option>
+                                <option value="suspended">{{ t('superAdmin.compact.suspended') }}</option>
+                            </select>
+                            <Link href="/super-admin/tenants?create=1" class="sa-button sa-button-primary whitespace-nowrap"><Plus class="h-4 w-4" /> {{ t('superAdmin.compact.addHotel') }}</Link>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full min-w-[720px] text-sm">
+                            <thead><tr class="h-11 border-b border-[var(--sa-line)] bg-neutral-50/60 text-left text-[10px] uppercase tracking-[0.12em] text-neutral-400"><th class="px-[18px] font-semibold">{{ t('superAdmin.compact.hotel') }}</th><th class="px-4 font-semibold">{{ t('superAdmin.compact.subscription') }}</th><th class="px-4 font-semibold">{{ t('superAdmin.compact.usage') }}</th><th class="px-4 font-semibold">{{ t('superAdmin.compact.status') }}</th><th class="w-12" /></tr></thead>
+                            <tbody class="divide-y divide-neutral-100">
+                                <tr v-for="tenant in filteredTenants" :key="tenant.id" class="h-[58px] hover:bg-neutral-50/60">
+                                    <td class="px-[18px] py-2"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-emerald-50 text-[11px] font-bold text-emerald-800">{{ initials(tenant.name) }}</span><div class="min-w-0"><Link :href="`/super-admin/tenants/${tenant.id}`" class="block truncate text-[13px] font-semibold text-neutral-900 no-underline hover:text-emerald-700">{{ tenant.name }}</Link><p class="mt-0.5 max-w-[260px] truncate text-[11px] text-neutral-400">{{ tenant.domain || tenant.slug }}</p></div></div></td>
+                                    <td class="px-4 py-2"><p class="text-xs font-semibold text-neutral-900">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(tenant.mrr_cents) }) }}</p><p class="mt-0.5 text-[11px] text-neutral-400">{{ tenant.billing_cycle === 'annual' ? t('superAdmin.compact.annualBilling') : t('superAdmin.compact.monthlyBilling') }}</p></td>
+                                    <td class="px-4 py-2"><p class="text-xs font-semibold text-neutral-800">{{ t('superAdmin.dynamic.usersCount', { count: tenant.users_count }) }}</p><p class="mt-0.5 text-[11px] text-neutral-400">{{ t('superAdmin.dynamic.modulesCount', { count: tenant.modules.length }) }}</p></td>
+                                    <td class="px-4 py-2"><span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold" :class="statusClass(tenant.subscription_status)"><span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(tenant.subscription_status)" />{{ statusLabel(tenant.subscription_status) }}</span></td>
+                                    <td class="px-3 text-right"><Link :href="`/super-admin/tenants/${tenant.id}`" class="inline-grid h-8 w-8 place-items-center rounded-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" :aria-label="t('superAdmin.compact.openHotel')"><MoreHorizontal class="h-4 w-4" /></Link></td>
+                                </tr>
+                                <tr v-if="!filteredTenants.length"><td colspan="5" class="px-5 py-12 text-center text-sm text-neutral-500">{{ t('superAdmin.compact.noHotels') }}</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <div class="space-y-4">
+                    <section class="sa-card">
+                        <div class="sa-card-header">
+                            <div><h2 class="text-base font-semibold text-neutral-900">{{ t('superAdmin.compact.recentActivity') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.compact.importantActions') }}</p></div>
+                            <Link href="/super-admin/activity" class="text-xs font-semibold text-emerald-700 no-underline hover:text-emerald-900">{{ t('superAdmin.compact.viewAll') }} <ArrowRight class="ml-0.5 inline h-3.5 w-3.5" /></Link>
+                        </div>
+                        <div v-if="recentActivity?.length" class="divide-y divide-neutral-100 px-4">
+                            <div v-for="log in recentActivity" :key="log.id" class="flex items-start gap-3 py-3">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-[10px]" :class="activityIconClass(actionMeta(log.action).tone)"><component :is="actionMeta(log.action).icon" class="h-4 w-4" :stroke-width="1.9" /></span>
+                                <div class="min-w-0 flex-1"><p class="truncate text-xs font-semibold text-neutral-900">{{ actionMeta(log.action).label }}<template v-if="log.tenant"> · {{ log.tenant }}</template></p><p class="mt-1 truncate text-[11px] text-neutral-400">{{ log.summary || log.actor }}</p></div>
+                                <time class="shrink-0 pt-0.5 text-[10px] text-neutral-400">{{ relativeTime(log.created_at) }}</time>
+                            </div>
+                        </div>
+                        <div v-else class="px-5 py-8 text-center text-xs text-neutral-500">{{ t('superAdmin.compact.noRecentActivity') }}</div>
+                    </section>
+
+                    <section class="sa-card">
+                        <div class="sa-card-header">
+                            <div><h2 class="text-base font-semibold text-neutral-900">{{ t('superAdmin.compact.attention') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.compact.nonUrgentActions') }}</p></div>
+                            <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">{{ t('superAdmin.compact.points', { count: needsAttention.length }) }}</span>
+                        </div>
+                        <div v-if="needsAttention.length" class="space-y-2 p-4">
+                            <Link v-for="item in needsAttention.slice(0, 3)" :key="item.id" :href="`/super-admin/tenants/${item.id}`" class="block rounded-[10px] border border-amber-100 bg-amber-50/70 p-3 no-underline hover:bg-amber-50"><p class="text-xs font-semibold text-amber-900">{{ item.name }}</p><p class="mt-1 text-[11px] text-amber-700">{{ item.reason }}</p></Link>
+                        </div>
+                        <div v-else class="flex items-center gap-3 p-4"><span class="grid h-9 w-9 place-items-center rounded-[10px] bg-emerald-50 text-emerald-700"><Check class="h-4 w-4" /></span><div><p class="text-xs font-semibold text-neutral-900">{{ t('superAdmin.compact.allGood') }}</p><p class="mt-0.5 text-[11px] text-neutral-500">{{ t('superAdmin.compact.noIssues') }}</p></div></div>
+                    </section>
                 </div>
-                <div class="flex flex-wrap gap-2 p-5">
-                    <span v-for="module in moduleAdoption" :key="module.code" class="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600"><strong class="mr-1 text-neutral-900">{{ module.hotels_count }}/{{ stats.hotels_total }}</strong>{{ module.name }}</span>
-                </div>
+            </div>
+
+            <section v-if="moduleAdoption?.length" class="sa-card">
+                <div class="sa-card-header"><div><h2 class="text-base font-semibold text-neutral-900">{{ t('superAdmin.compact.moduleUsage') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.compact.moduleUsageDescription') }}</p></div></div>
+                <div class="flex flex-wrap gap-2 p-4"><span v-for="module in moduleAdoption" :key="module.code" class="rounded-[9px] border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] text-neutral-600"><strong class="mr-1 text-neutral-900">{{ module.hotels_count }}/{{ stats.hotels_total }}</strong>{{ module.name }}</span></div>
             </section>
         </div>
     </SuperAdminLayout>

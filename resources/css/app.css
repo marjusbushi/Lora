@@ -56,6 +56,94 @@
     .divider {
         @apply border-t border-neutral-200/80;
     }
+
+    /* Lora Control Panel — compact Super Admin template.
+       Scoped tokens keep the platform UI consistent without changing hotel PMS screens. */
+    .super-admin-shell {
+        --sa-ink: #16211d;
+        --sa-muted: #69756f;
+        --sa-line: #dfe6e2;
+        --sa-surface: #ffffff;
+        --sa-canvas: #f5f7f6;
+        --sa-brand: #1d765f;
+        --sa-brand-dark: #104c3d;
+        --sa-brand-soft: #eff9f5;
+        --sa-radius: 14px;
+        --sa-shadow: 0 1px 2px rgba(18, 45, 36, 0.04), 0 8px 24px rgba(18, 45, 36, 0.035);
+    }
+
+    .sa-page {
+        width: min(1480px, 100%);
+        margin-inline: auto;
+    }
+
+    .sa-card {
+        overflow: hidden;
+        border: 1px solid var(--sa-line);
+        border-radius: var(--sa-radius);
+        background: var(--sa-surface);
+        box-shadow: var(--sa-shadow);
+    }
+
+    .sa-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 64px;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--sa-line);
+    }
+
+    .sa-control {
+        height: 38px;
+        border: 1px solid var(--sa-line);
+        border-radius: 10px;
+        background: var(--sa-surface);
+        color: #405149;
+        font-size: 12px;
+    }
+
+    .sa-control:focus {
+        border-color: #6fb29d;
+        box-shadow: 0 0 0 3px rgba(37, 133, 108, 0.12);
+        outline: none;
+    }
+
+    .sa-button {
+        display: inline-flex;
+        height: 38px;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding-inline: 13px;
+        border: 1px solid var(--sa-line);
+        border-radius: 10px;
+        background: var(--sa-surface);
+        color: #405149;
+        font-size: 12px;
+        font-weight: 700;
+        text-decoration: none;
+        transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+    }
+
+    .sa-button:hover {
+        border-color: #cbd7d1;
+        background: #fbfcfc;
+        color: var(--sa-ink);
+    }
+
+    .sa-button-primary {
+        border-color: var(--sa-brand);
+        background: var(--sa-brand);
+        color: #fff;
+    }
+
+    .sa-button-primary:hover {
+        border-color: var(--sa-brand-dark);
+        background: var(--sa-brand-dark);
+        color: #fff;
+    }
 }
 
 /* ───────────────────────────────────────────────────────────────────

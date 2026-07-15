@@ -23,6 +23,7 @@ use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SmartPricingController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
+use App\Http\Controllers\SuperAdmin\ProfileController as SuperAdminProfileController;
 use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantController;
 use App\Http\Controllers\TenantHandoffController;
 use App\Http\Controllers\UserController;
@@ -107,6 +108,8 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
     ->group(function () {
         Route::get('/', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/activity', [SuperAdminDashboardController::class, 'activity'])->name('activity');
+        Route::get('/profile', [SuperAdminProfileController::class, 'edit'])->name('profile.edit');
+        Route::patch('/profile', [SuperAdminProfileController::class, 'update'])->name('profile.update');
         Route::get('/tenants', [SuperAdminTenantController::class, 'index'])->name('tenants.index');
         Route::get('/tenants/{tenant}', [SuperAdminTenantController::class, 'show'])->name('tenants.show');
         Route::post('/tenants', [SuperAdminTenantController::class, 'store'])->name('tenants.store');
