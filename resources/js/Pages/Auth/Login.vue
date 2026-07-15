@@ -39,20 +39,12 @@ const submit = () => {
 
         <form @submit.prevent="submit" class="space-y-5">
             <div class="space-y-1.5">
-                <InputLabel for="email">
-                    {{ $t('admin.generated.k_46418004f188') }}
-                    <span class="text-error-500">*</span>
-                </InputLabel>
+                <InputLabel for="email" :value="$t('admin.generated.k_46418004f188')" />
                 <TextInput
                     id="email"
-                    name="email"
                     type="email"
-                    class="block w-full border-neutral-200 px-3 py-2 text-body-sm text-neutral-900 placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500/40"
+                    class="mt-1 block w-full"
                     v-model="form.email"
-                    :placeholder="$t('admin.generated.k_53da0e246d4b')"
-                    inputmode="email"
-                    autocapitalize="none"
-                    :spellcheck="false"
                     required
                     autofocus
                     autocomplete="username"
@@ -61,17 +53,12 @@ const submit = () => {
             </div>
 
             <div class="space-y-1.5">
-                <InputLabel for="password">
-                    {{ $t('admin.generated.k_2f77fb4fd984') }}
-                    <span class="text-error-500">*</span>
-                </InputLabel>
+                <InputLabel for="password" :value="$t('admin.generated.k_2f77fb4fd984')" />
                 <TextInput
                     id="password"
-                    name="password"
                     type="password"
-                    class="block w-full border-neutral-200 px-3 py-2 text-body-sm text-neutral-900 placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500/40"
+                    class="mt-1 block w-full"
                     v-model="form.password"
-                    placeholder="********"
                     required
                     autocomplete="current-password"
                 />
