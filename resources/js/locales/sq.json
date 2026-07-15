@@ -402,6 +402,10 @@
         "cash": "Arkë (kesh)",
         "bank": "Bankë"
       },
+      "payments": {
+        "rateHelp": "1 {base} = sa {currency}?",
+        "baseValue": "Vlera në {currency}: {amount}"
+      },
       "billCreate": {
         "title": "Faturë e re blerjeje",
         "breadcrumbNew": "Faturë e re",
@@ -424,6 +428,7 @@
         "dueDate": "Afati i pagesës",
         "currency": "Monedha",
         "exchangeRate": "Kursi",
+        "rateHelp": "1 {base} = sa {currency}?",
         "lekPerEuro": "L për 1 €",
         "itemsTitle": "Artikujt dhe shërbimet",
         "itemsSubtitle": "Çdo artikull regjistrohet si rresht i faturës.",
@@ -453,6 +458,7 @@
         "lockedRate": "Kursi i ngrirë",
         "invoiceTotal": "Totali i faturës",
         "payableEur": "Detyrimi në EUR",
+        "payableBase": "Detyrimi në {currency}",
         "liabilityHint": "Fatura krijon detyrim ndaj furnitorit. Arka ose banka ndryshon vetëm kur regjistrohet pagesa.",
         "stockHint": "Artikujt fizikë hyjnë në magazinën e çdo rreshti; shërbimet nuk ndryshojnë inventarin.",
         "other": "Të tjera",
@@ -3980,7 +3986,8 @@
   },
   "currencySettings": {
     "manualAllRate": "Kursi manual ALL/EUR (1 € =)",
-    "manualAllRateHelp": "Përdoret kur API është joaktive dhe ruhet veçmas për këtë hotel. Kursi ngrihet në çdo dokument."
+    "manualAllRateHelp": "Përdoret kur API është joaktive dhe ruhet veçmas për këtë hotel. Kursi ngrihet në çdo dokument.",
+    "baseCurrencyInherited": "Trashëgohet automatikisht nga monedha bazë e hotelit."
   },
   "integrationCenter": {
     "title": "Qendra e integrimeve",

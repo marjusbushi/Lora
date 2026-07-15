@@ -14,6 +14,7 @@ use App\Models\Reservation;
 use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\Warehouse;
+use App\Services\BaseCurrency;
 use App\Services\CurrencyRates;
 use App\Services\InventoryLedger;
 use App\Tenancy\TenantRule;
@@ -22,6 +23,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -85,7 +87,7 @@ class FinanceController extends Controller
             'net_change' => $this->percentageChange($currentSummary['net'], $previousSummary['net']),
         ]);
 
-        // 14-day cash-flow in base EUR (transfers move money between our own
+        // 14-day cash-flow in the hotel's base currency (transfers move money between our own
         // pockets — they are neither income nor spend, so they stay out).
         $from = $today->subDays(13);
         $rows = FinancePayment::where('paid_at', '>=', $from->startOfDay())
@@ -128,7 +130,7 @@ class FinanceController extends Controller
         $cash = $accounts->firstWhere('type', 'cash');
         if ($cash && $cash['balance'] > $arkaLimit) {
             $alerts->push([
-                'label' => 'Arka mbi limitin e sigurisë (€'.number_format($arkaLimit, 0).') — bëj depozitim në bankë',
+                'label' => 'Arka mbi limitin e sigurisë ('.BaseCurrency::symbol().number_format($arkaLimit, 0).') — bëj depozitim në bankë',
                 'amount' => $cash['balance'],
                 'severity' => 'warning',
                 'badge' => 'Sugjerim',
@@ -196,7 +198,7 @@ class FinanceController extends Controller
             'accounts' => $accounts,
             'selectedId' => $selectedId,
             'ledger' => $ledger,
-            'currencies' => ['EUR', 'ALL'],
+            'currencies' => config('lora.tenant_currencies', ['EUR', 'ALL']),
         ]));
     }
 
@@ -206,9 +208,7 @@ class FinanceController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:60'],
             'type' => ['required', 'in:cash,bank'],
-            // EUR + ALL only for now: every money screen (manual payments,
-            // bills) is built around these two; more currencies need Phase 3.
-            'currency' => ['required', 'in:EUR,ALL'],
+            'currency' => ['required', Rule::in(config('lora.tenant_currencies', ['EUR', 'ALL']))],
             'iban' => ['nullable', 'string', 'max:40'],
         ]);
 
@@ -236,8 +236,9 @@ class FinanceController extends Controller
      */
     public function toggleAccount(Request $request, FinanceAccount $account): RedirectResponse
     {
-        if ($account->is_active) {
+        if ($account->is_active && $account->currency === BaseCurrency::code()) {
             $lastOfType = ! FinanceAccount::where('type', $account->type)
+                ->where('currency', BaseCurrency::code())
                 ->where('is_active', true)->where('id', '!=', $account->id)->exists();
             if ($lastOfType) {
                 $lloji = $account->type === 'cash' ? 'arkë' : 'bankë';
@@ -326,12 +327,13 @@ class FinanceController extends Controller
     /** Manual movement: an ad-hoc arkëtim (in) or expense (out). */
     public function storePayment(Request $request): RedirectResponse
     {
+        $baseCurrency = BaseCurrency::code();
         $data = $request->validate([
             'direction' => ['required', 'in:in,out'],
             'account_id' => ['required', 'integer'],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:999999'],
-            'currency' => ['required', 'in:EUR,ALL'],
-            'fx_rate' => ['required_if:currency,ALL', 'nullable', 'numeric', 'min:1'],
+            'currency' => ['required', Rule::in(config('lora.tenant_currencies', ['EUR', 'ALL']))],
+            'fx_rate' => ['nullable', 'numeric', 'min:0.000001'],
             'method' => ['required', 'in:cash,card,bank'],
             'description' => ['required', 'string', 'max:300'],
             'paid_at' => ['nullable', 'date'],
@@ -345,7 +347,12 @@ class FinanceController extends Controller
         if (! $account) {
             abort(403); // never move money on an account this user cannot see
         }
-        if ($account['currency'] !== 'EUR' && $data['currency'] !== $account['currency']) {
+        if ($data['currency'] !== $baseCurrency && empty($data['fx_rate'])) {
+            throw ValidationException::withMessages([
+                'fx_rate' => "Vendos kursin për {$data['currency']} ndaj {$baseCurrency}.",
+            ]);
+        }
+        if ($account['currency'] !== $baseCurrency && $data['currency'] !== $account['currency']) {
             return back()->with('error', "Kjo llogari mban vetëm {$account['currency']}.");
         }
 
@@ -354,7 +361,7 @@ class FinanceController extends Controller
             'account_id' => $account['id'],
             'amount' => $data['amount'],
             'currency' => $data['currency'],
-            'fx_rate' => $data['currency'] === 'ALL' ? $data['fx_rate'] : null,
+            'fx_rate' => $data['currency'] === $baseCurrency ? null : $data['fx_rate'],
             'method' => $data['method'],
             'source' => 'manual',
             'description' => $data['description'],
@@ -384,15 +391,19 @@ class FinanceController extends Controller
         if ($from['currency'] !== $to['currency']) {
             return back()->with('error', 'Transferta lejohet vetëm mes llogarive me të njëjtën monedhë (Faza 1).');
         }
+        $fxRate = $from['currency'] === BaseCurrency::code() ? null : BaseCurrency::rate($from['currency']);
+        if ($from['currency'] !== BaseCurrency::code() && ! $fxRate) {
+            return back()->with('error', "Kursi {$from['currency']}/".BaseCurrency::code().' mungon. Përditëso kurset te Cilësimet → Monedhat.');
+        }
 
-        DB::transaction(function () use ($data, $from, $to, $request) {
+        DB::transaction(function () use ($data, $from, $to, $request, $fxRate) {
             FinancePayment::create([
                 'direction' => 'transfer',
                 'account_id' => $from['id'],
                 'counter_account_id' => $to['id'],
                 'amount' => $data['amount'],
                 'currency' => $from['currency'],
-                'fx_rate' => null,
+                'fx_rate' => $fxRate,
                 'method' => $from['type'] === 'cash' ? 'cash' : 'bank',
                 'source' => 'manual',
                 'description' => ($data['description'] ?? null) ?: "Transfertë {$from['name']} → {$to['name']}",
@@ -510,14 +521,15 @@ class FinanceController extends Controller
 
     public function storeBill(Request $request): RedirectResponse
     {
+        $baseCurrency = BaseCurrency::code();
         $data = $request->validate([
             'supplier_id' => ['required', 'integer', TenantRule::exists('suppliers')],
             'number' => ['nullable', 'string', 'max:60'],
             'category' => ['required', 'string', 'max:60'],
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
-            'currency' => ['required', 'in:EUR,ALL'],
-            'fx_rate' => ['required_if:currency,ALL', 'nullable', 'numeric', 'min:1'],
+            'currency' => ['required', Rule::in(config('lora.tenant_currencies', ['EUR', 'ALL']))],
+            'fx_rate' => ['nullable', 'numeric', 'min:0.000001'],
             'total' => ['required', 'numeric', 'min:0.01', 'max:9999999'],
             'notes' => ['nullable', 'string', 'max:500'],
             'receive_stock' => ['nullable', 'boolean'],
@@ -527,6 +539,12 @@ class FinanceController extends Controller
             'items.*.quantity' => ['required', 'numeric', 'min:0.0001', 'max:9999999'],
             'items.*.unit_cost' => ['required', 'numeric', 'min:0', 'max:9999999'],
         ]);
+
+        if ($data['currency'] !== $baseCurrency && empty($data['fx_rate'])) {
+            throw ValidationException::withMessages([
+                'fx_rate' => "Vendos kursin për {$data['currency']} ndaj {$baseCurrency}.",
+            ]);
+        }
 
         $lines = collect($data['items'] ?? [])->values();
         if ($lines->isNotEmpty()) {
@@ -609,6 +627,7 @@ class FinanceController extends Controller
     /** Pay a bill (fully or partially) from a visible account — atomic. */
     public function payBill(Request $request, Bill $bill): RedirectResponse
     {
+        $baseCurrency = BaseCurrency::code();
         $data = $request->validate([
             'account_id' => ['required', 'integer'],
             'amount' => ['required', 'numeric', 'min:0.01'],
@@ -619,25 +638,25 @@ class FinanceController extends Controller
             abort(403);
         }
 
-        if ($account['currency'] !== 'EUR' && strtoupper($bill->currency) !== $account['currency']) {
+        if ($account['currency'] !== $baseCurrency && strtoupper($bill->currency) !== $account['currency']) {
             return back()->with('error', "Kjo llogari mban vetëm {$account['currency']} — fatura është në {$bill->currency}.");
         }
 
         // Payment rides the BILL's currency + frozen fx, so remainder math is exact.
-        $amountBase = strtoupper($bill->currency) === 'EUR'
+        $amountBase = strtoupper($bill->currency) === $baseCurrency
             ? round((float) $data['amount'], 2)
             : round((float) $data['amount'] / (float) $bill->fx_rate, 2);
         if ($amountBase > $bill->remainingBase() + 0.01) {
-            return back()->with('error', 'Shuma e kalon mbetjen e faturës ('.number_format($bill->remainingBase(), 2).' € mbetje).');
+            return back()->with('error', 'Shuma e kalon mbetjen e faturës ('.number_format($bill->remainingBase(), 2).' '.$baseCurrency.' mbetje).');
         }
 
-        DB::transaction(function () use ($data, $bill, $account, $request) {
+        DB::transaction(function () use ($data, $bill, $account, $request, $baseCurrency) {
             FinancePayment::create([
                 'direction' => 'out',
                 'account_id' => $account['id'],
                 'amount' => $data['amount'],
                 'currency' => $bill->currency,
-                'fx_rate' => strtoupper($bill->currency) === 'EUR' ? null : $bill->fx_rate,
+                'fx_rate' => strtoupper($bill->currency) === $baseCurrency ? null : $bill->fx_rate,
                 'method' => $data['method'],
                 'source' => 'manual',
                 'bill_id' => $bill->id,
@@ -833,7 +852,7 @@ class FinanceController extends Controller
 
         return $q->get()->map(function (FinanceAccount $a) {
             $balance = $a->balance();
-            $rate = $a->currency === 'EUR' ? 1.0 : CurrencyRates::rate($a->currency);
+            $rate = BaseCurrency::rate($a->currency);
 
             return [
                 'id' => $a->id,
@@ -980,8 +999,11 @@ class FinanceController extends Controller
     protected function shared(Request $request): array
     {
         return [
-            'baseCurrency' => 'EUR',
-            'fxRate' => CurrencyRates::rate('ALL'),
+            'baseCurrency' => BaseCurrency::code(),
+            'baseCurrencySymbol' => BaseCurrency::symbol(),
+            'currencies' => config('lora.tenant_currencies', ['EUR', 'ALL']),
+            'currencyRates' => BaseCurrency::rates(),
+            'fxRate' => BaseCurrency::rate('ALL'),
             'fxUpdatedAt' => CurrencyRates::updatedAt(),
             'can' => [
                 'createPayment' => $request->user()->can('create_payment'),

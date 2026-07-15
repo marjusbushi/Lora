@@ -124,7 +124,8 @@ function submit() {
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormGroup :label="$t('admin.generated.k_8b3ea4fc70a0')" :error="form.errors.currency_symbol" required>
-                    <TextInput v-model="form.currency_symbol" placeholder="€" maxlength="5" :error="form.errors.currency_symbol" />
+                    <TextInput v-model="form.currency_symbol" disabled maxlength="5" :error="form.errors.currency_symbol" />
+                    <p class="mt-1 text-tiny text-neutral-400">{{ $t('currencySettings.baseCurrencyInherited') }}</p>
                 </FormGroup>
             </div>
 

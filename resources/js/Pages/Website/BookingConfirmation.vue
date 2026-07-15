@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 
 const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
+const currencySymbol = computed(() => usePage().props.settings?.currency_symbol || '€');
 
 defineProps({ reservation: Object, hotel: Object, status: { type: String, default: 'confirmed' } });
 
@@ -68,7 +69,7 @@ onMounted(() => headingEl.value?.focus({ preventScroll: true }));
                     </div>
                     <div class="flex justify-between border-t border-neutral-200 pt-3">
                         <span class="text-label text-neutral-700">{{ $t('confirmation.labels.total') }}</span>
-                        <span class="text-h4 text-brass">€{{ reservation.total_amount }}</span>
+                        <span class="text-h4 text-brass">{{ currencySymbol }}{{ reservation.total_amount }}</span>
                     </div>
                 </div>
 

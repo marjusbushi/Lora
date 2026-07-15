@@ -8,6 +8,7 @@ import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { amenityIcon } from '@/Components/Website/amenities';
 
 const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
+const currencySymbol = computed(() => usePage().props.settings?.currency_symbol || '€');
 
 const props = defineProps({
     roomTypes: Array,
@@ -149,7 +150,7 @@ const features = computed(() => [
                         <div class="flex items-center justify-between mt-8 pt-6 border-t border-driftwood/15">
                             <p class="text-body-sm text-ink/55" :title="$t('home.rooms.fromPriceHint')">
                                 <template v-if="hasFromPrice(featured)">
-                                    {{ $t('home.rooms.priceFrom') }} <span class="text-brass text-lg">€{{ featured.from_price }}</span> {{ $t('home.rooms.perNight') }}
+                                    {{ $t('home.rooms.priceFrom') }} <span class="text-brass text-lg">{{ currencySymbol }}{{ featured.from_price }}</span> {{ $t('home.rooms.perNight') }}
                                 </template>
                                 <span v-else>{{ $t('home.rooms.checkDates') }}</span>
                             </p>
@@ -167,7 +168,7 @@ const features = computed(() => [
                                 <h3 class="text-2xl text-ink">{{ room.name }}</h3>
                                 <p class="text-body-sm text-ink/55 whitespace-nowrap" :title="$t('home.rooms.fromPriceHint')">
                                     <template v-if="hasFromPrice(room)">
-                                        {{ $t('home.rooms.priceFrom') }} <span class="text-brass">€{{ room.from_price }}</span>
+                                        {{ $t('home.rooms.priceFrom') }} <span class="text-brass">{{ currencySymbol }}{{ room.from_price }}</span>
                                     </template>
                                     <span v-else>{{ $t('home.rooms.checkDates') }}</span>
                                 </p>

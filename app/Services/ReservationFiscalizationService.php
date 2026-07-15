@@ -221,10 +221,10 @@ class ReservationFiscalizationService
         }
 
         if ($currency !== 'ALL') {
-            $exchangeRate = CurrencyRates::rate('ALL');
+            $exchangeRate = BaseCurrency::rate('ALL');
             if ($exchangeRate === null || $exchangeRate <= 0) {
                 throw ValidationException::withMessages([
-                    'fiscalization' => 'Kursi ALL/EUR mungon. Vendose te Settings → Monedhat përpara fiskalizimit.',
+                    'fiscalization' => "Kursi ALL/{$currency} mungon. Vendose te Settings → Monedhat përpara fiskalizimit.",
                 ]);
             }
 

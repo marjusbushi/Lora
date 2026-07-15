@@ -244,7 +244,7 @@ class InventoryLedger
     private function baseUnitCost(BillItem $billItem): float
     {
         $unitCost = (float) $billItem->unit_cost;
-        if (strtoupper((string) $billItem->bill->currency) === 'EUR') {
+        if (strtoupper((string) $billItem->bill->currency) === BaseCurrency::code()) {
             return round($unitCost, 4);
         }
 

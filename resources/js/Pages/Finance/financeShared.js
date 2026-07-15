@@ -1,7 +1,11 @@
 /** Shared display helpers for the Finance screens. */
 export function money(v, currency = 'EUR') {
-    const n = Number(v || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return currency === 'ALL' ? `${n} L` : `€ ${n}`;
+    return new Intl.NumberFormat('de-DE', {
+        style: 'currency',
+        currency: currency || 'EUR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(Number(v || 0));
 }
 
 export const sourceLabels = { auto: 'auto', manual: 'manuale' };

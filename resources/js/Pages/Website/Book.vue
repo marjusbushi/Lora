@@ -10,6 +10,7 @@ import { countryOptions, PRIORITY_COUNTRIES } from '@/countries';
 
 const { t, locale } = useI18n();
 const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
+const currencySymbol = computed(() => usePage().props.settings?.currency_symbol || '€');
 
 const props = defineProps({
     roomTypes: Array,
@@ -251,8 +252,8 @@ watch(step, (current) => nextTick(() => {
                                 <div class="mt-4 flex items-end justify-between gap-3">
                                     <div>
                                         <p class="flex items-center gap-1.5 text-tiny font-semibold text-success-700"><span class="h-2 w-2 rounded-full bg-success-500" />{{ $t('book.direct.liveSmartPrice') }}</p>
-                                        <p v-if="previewFor(room)?.direct_discount_pct > 0" class="mt-1 text-body-sm text-ink/35 line-through">€{{ money(previewFor(room).smart_price_per_night) }}</p>
-                                        <p v-if="previewFor(room)" class="font-serif text-3xl text-brass">€{{ money(previewFor(room).price_per_night) }} <span class="font-sans text-tiny text-ink/45">/ {{ $t('book.search.perNight') }}</span></p>
+                                        <p v-if="previewFor(room)?.direct_discount_pct > 0" class="mt-1 text-body-sm text-ink/35 line-through">{{ currencySymbol }}{{ money(previewFor(room).smart_price_per_night) }}</p>
+                                        <p v-if="previewFor(room)" class="font-serif text-3xl text-brass">{{ currencySymbol }}{{ money(previewFor(room).price_per_night) }} <span class="font-sans text-tiny text-ink/45">/ {{ $t('book.search.perNight') }}</span></p>
                                         <p v-else class="text-body-sm font-medium text-ionian">{{ $t('book.search.checkDatesForPrice') }}</p>
                                     </div>
                                     <span v-if="previewFor(room)?.direct_discount_pct > 0" class="rounded-lg bg-success-50 px-2.5 py-2 text-tiny font-semibold text-success-800">-{{ previewFor(room).direct_discount_pct }}% {{ $t('book.direct.direct') }}</span>
@@ -292,8 +293,8 @@ watch(step, (current) => nextTick(() => {
                                                     <span v-if="room.direct_discount_pct > 0" class="rounded-lg bg-success-50 px-2.5 py-2 text-tiny font-semibold text-success-800">-{{ room.direct_discount_pct }}% {{ $t('book.direct.direct') }}</span>
                                                     <div>
                                                         <p class="flex items-center gap-1.5 text-tiny font-semibold text-success-700"><span class="h-2 w-2 rounded-full bg-success-500" />{{ $t('book.direct.liveSmartPrice') }}</p>
-                                                        <p v-if="room.direct_discount_pct > 0" class="text-body-sm text-ink/35 line-through">€{{ money(room.smart_price_per_night) }}</p>
-                                                        <p class="font-serif text-3xl text-ink">€{{ money(room.price_per_night) }} <span class="font-sans text-tiny text-ink/45">/ {{ $t('book.search.perNight') }}</span></p>
+                                                        <p v-if="room.direct_discount_pct > 0" class="text-body-sm text-ink/35 line-through">{{ currencySymbol }}{{ money(room.smart_price_per_night) }}</p>
+                                                        <p class="font-serif text-3xl text-ink">{{ currencySymbol }}{{ money(room.price_per_night) }} <span class="font-sans text-tiny text-ink/45">/ {{ $t('book.search.perNight') }}</span></p>
                                                     </div>
                                                 </div>
                                                 <button type="button" class="rounded-lg border border-ionian px-5 py-3 text-body-sm font-medium text-ionian transition hover:bg-ionian hover:text-bone" @click="selectRoom(room)">{{ $t('book.direct.selectRoom') }}</button>
