@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\BillingInvoice;
 use App\Models\BillingPayment;
+use App\Models\BillingPaymentAttempt;
+use App\Models\ProviderEvent;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\PlatformBillingService;
@@ -116,6 +118,99 @@ class PlatformBillingTest extends TestCase
         $this->get('https://admin.lorapms.test/super-admin/billing/provider-events')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('SuperAdmin/Billing/ProviderEvents'));
+
+        $this->get('https://admin.lorapms.test/super-admin/billing/payment-attempts')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('SuperAdmin/Billing/PaymentAttempts'));
+    }
+
+    public function test_billing_entities_have_linked_detail_pages(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $admin = User::factory()->create(['is_super_admin' => true]);
+        $invoice = BillingInvoice::query()->create([
+            'tenant_id' => $tenant->id,
+            'tenant_subscription_id' => $tenant->subscription->id,
+            'number' => 'INV-2026-LINKED',
+            'status' => 'paid',
+            'currency' => 'EUR',
+            'subtotal_cents' => 10000,
+            'total_cents' => 10000,
+            'amount_paid_cents' => 10000,
+            'period_starts_on' => '2026-08-01',
+            'period_ends_on' => '2026-08-31',
+            'due_on' => '2026-08-15',
+        ]);
+        $payment = BillingPayment::query()->create([
+            'tenant_id' => $tenant->id,
+            'billing_invoice_id' => $invoice->id,
+            'number' => 'PAY-2026-LINKED',
+            'provider' => 'stripe',
+            'provider_payment_id' => 'pi_linked',
+            'method' => 'card',
+            'status' => 'completed',
+            'currency' => 'EUR',
+            'amount_cents' => 10000,
+            'paid_at' => now(),
+        ]);
+        $attempt = BillingPaymentAttempt::query()->create([
+            'tenant_id' => $tenant->id,
+            'tenant_subscription_id' => $tenant->subscription->id,
+            'billing_invoice_id' => $invoice->id,
+            'billing_payment_id' => $payment->id,
+            'provider' => 'stripe',
+            'provider_attempt_id' => 'pa_linked',
+            'status' => 'succeeded',
+            'currency' => 'EUR',
+            'amount_cents' => 10000,
+            'attempted_at' => now(),
+            'resolved_at' => now(),
+        ]);
+        $event = ProviderEvent::query()->create([
+            'tenant_id' => $tenant->id,
+            'billing_payment_attempt_id' => $attempt->id,
+            'billing_invoice_id' => $invoice->id,
+            'billing_payment_id' => $payment->id,
+            'provider' => 'stripe',
+            'external_id' => 'evt_linked',
+            'event_type' => 'payment_intent.succeeded',
+            'status' => 'processed',
+            'payload' => ['id' => 'evt_linked'],
+            'occurred_at' => now(),
+            'processed_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->get("https://admin.lorapms.test/super-admin/billing/invoices/{$invoice->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SuperAdmin/Billing/InvoiceShow')
+                ->where('invoice.payments.0.id', $payment->id)
+                ->where('invoice.attempts.0.id', $attempt->id)
+                ->where('invoice.events.0.id', $event->id));
+
+        $this->get("https://admin.lorapms.test/super-admin/billing/payments/{$payment->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SuperAdmin/Billing/PaymentShow')
+                ->where('payment.invoice.id', $invoice->id)
+                ->where('payment.attempts.0.id', $attempt->id));
+
+        $this->get("https://admin.lorapms.test/super-admin/billing/payment-attempts/{$attempt->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SuperAdmin/Billing/PaymentAttemptShow')
+                ->where('attempt.invoice.id', $invoice->id)
+                ->where('attempt.payment.id', $payment->id)
+                ->where('attempt.events.0.id', $event->id));
+
+        $this->get("https://admin.lorapms.test/super-admin/billing/provider-events/{$event->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SuperAdmin/Billing/ProviderEventShow')
+                ->where('event.attempt.id', $attempt->id)
+                ->where('event.invoice.id', $invoice->id)
+                ->where('event.payment.id', $payment->id));
     }
 
     public function test_regular_hotel_user_cannot_access_platform_billing(): void

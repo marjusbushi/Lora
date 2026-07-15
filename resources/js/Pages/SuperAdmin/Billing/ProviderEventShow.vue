@@ -1,0 +1,16 @@
+<script setup>
+import { Link, router } from '@inertiajs/vue3';
+import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
+import BillingWorkspaceNav from '@/Components/SuperAdmin/BillingWorkspaceNav.vue';
+import BillingEntityTrail from '@/Components/SuperAdmin/BillingEntityTrail.vue';
+import { ArrowLeft, RotateCw } from 'lucide-vue-next';
+
+defineProps({ event: Object });
+function dateTime(value) { return value ? new Intl.DateTimeFormat('sq-AL', { dateStyle: 'medium', timeStyle: 'long' }).format(new Date(value)) : '—'; }
+function statusClass(status) { return { processed: 'bg-emerald-50 text-emerald-700', failed: 'bg-red-50 text-red-700', duplicate: 'bg-neutral-100 text-neutral-600', pending: 'bg-amber-50 text-amber-700' }[status] || 'bg-neutral-100 text-neutral-600'; }
+function retry(event) { router.patch(`/super-admin/billing/provider-events/${event.id}/retry`); }
+</script>
+
+<template>
+    <SuperAdminLayout :title="`Event #${event.id} — Billing`"><div class="mx-auto max-w-6xl space-y-5"><BillingWorkspaceNav /><Link href="/super-admin/billing/provider-events" class="inline-flex items-center gap-2 text-xs font-semibold text-neutral-500 no-underline hover:text-emerald-700"><ArrowLeft class="h-4 w-4" /> Kthehu te provider events</Link><header class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div class="space-y-3"><BillingEntityTrail :tenant="event.tenant" :subscription-id="event.subscription_id" :invoice="event.invoice" :payment="event.payment" :attempt="event.attempt" :event="event" /><div class="flex flex-wrap items-center gap-3"><h1 class="text-3xl font-semibold">{{ event.event_type }}</h1><span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="statusClass(event.status)">{{ event.status }}</span></div><p class="font-mono text-xs text-neutral-500">{{ event.provider }} / {{ event.external_id }}</p></div><button v-if="event.status === 'failed'" class="inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-300 px-4 py-2 text-sm font-semibold" @click="retry(event)"><RotateCw class="h-4 w-4" /> Retry</button></header><div class="grid gap-5 lg:grid-cols-[.7fr_1.3fr]"><section class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm"><h2 class="font-semibold">Procesimi</h2><dl class="mt-4 space-y-3 text-sm"><div class="flex justify-between"><dt class="text-neutral-500">Occurred</dt><dd class="font-semibold">{{ dateTime(event.occurred_at) }}</dd></div><div class="flex justify-between"><dt class="text-neutral-500">Processed</dt><dd class="font-semibold">{{ dateTime(event.processed_at) }}</dd></div><div class="flex justify-between"><dt class="text-neutral-500">Retry count</dt><dd class="font-semibold">{{ event.attempt_count }}</dd></div></dl><div v-if="event.last_error" class="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{{ event.last_error }}</div></section><section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm"><div class="border-b border-neutral-200 px-5 py-4"><h2 class="font-semibold">Payload</h2><p class="mt-1 text-xs text-neutral-500">Payload i plotë për audit dhe debugging.</p></div><pre class="max-h-[620px] overflow-auto bg-neutral-950 p-5 text-xs leading-5 text-neutral-200">{{ JSON.stringify(event.payload || {}, null, 2) }}</pre></section></div></div></SuperAdminLayout>
+</template>

@@ -4114,6 +4114,7 @@
       "loraFinance": "Financa e Lora",
       "invoices": "Faturat",
       "payments": "Pagesat",
+      "paymentAttempts": "Tentativat",
       "providerEvents": "Provider Events",
       "open": "Hap",
       "close": "Mbyll",

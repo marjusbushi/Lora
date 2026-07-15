@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
+import BillingWorkspaceNav from '@/Components/SuperAdmin/BillingWorkspaceNav.vue';
 import { CircleAlert, Clock3, FilePlus2, ReceiptText, X } from 'lucide-vue-next';
 
 const props = defineProps({ invoices: Object, tenants: Array, stats: Object, filters: Object });
@@ -43,8 +44,8 @@ function statusClass(status) {
     }[status];
 }
 
-function filter(status) {
-    router.get('/super-admin/billing/invoices', status ? { status } : {}, { preserveState: true, replace: true });
+function filter(key, value) {
+    router.get('/super-admin/billing/invoices', { ...props.filters, [key]: value || undefined }, { preserveState: true, replace: true });
 }
 
 function submit() {
@@ -68,6 +69,7 @@ function voidInvoice(invoice) {
 <template>
     <SuperAdminLayout title="Faturat — Lora Control Panel">
         <div class="mx-auto max-w-7xl space-y-6">
+            <BillingWorkspaceNav />
             <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <p class="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Financa e Lora / Faturat</p>
@@ -91,19 +93,21 @@ function voidInvoice(invoice) {
             <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
                 <div class="flex flex-col gap-4 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
                     <div><h2 class="font-semibold text-neutral-900">Lista e faturave</h2><p class="mt-1 text-xs text-neutral-500">Kliko numrin për detajet dhe line items.</p></div>
-                    <label class="text-xs font-medium text-neutral-600">Statusi
-                        <select :value="filters.status" class="mt-1 block rounded-xl border-neutral-300 text-sm" @change="filter($event.target.value)">
+                    <div class="flex flex-wrap gap-2"><label class="text-xs font-medium text-neutral-600">Hoteli
+                        <select :value="filters.tenant_id || ''" class="mt-1 block rounded-xl border-neutral-300 text-sm" @change="filter('tenant_id', $event.target.value)"><option value="">Të gjithë</option><option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">{{ tenant.name }}</option></select>
+                    </label><label class="text-xs font-medium text-neutral-600">Statusi
+                        <select :value="filters.status" class="mt-1 block rounded-xl border-neutral-300 text-sm" @change="filter('status', $event.target.value)">
                             <option value="">Të gjitha</option><option value="draft">Draft</option><option value="open">Open</option><option value="paid">Paguar</option><option value="overdue">Vonuar</option><option value="void">Anuluar</option>
                         </select>
-                    </label>
+                    </label></div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-neutral-200 text-sm">
                         <thead class="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500"><tr><th class="px-5 py-3 font-semibold">Fatura</th><th class="px-5 py-3 font-semibold">Hoteli</th><th class="px-5 py-3 font-semibold">Periudha</th><th class="px-5 py-3 font-semibold">Afati</th><th class="px-5 py-3 font-semibold">Statusi</th><th class="px-5 py-3 text-right font-semibold">Totali</th></tr></thead>
                         <tbody class="divide-y divide-neutral-100">
                             <tr v-for="invoice in invoices.data" :key="invoice.id" class="hover:bg-neutral-50/70">
-                                <td class="px-5 py-4"><button class="font-semibold text-emerald-700 hover:text-emerald-800" @click="selected = invoice">{{ invoice.number }}</button></td>
-                                <td class="px-5 py-4 font-medium text-neutral-900">{{ invoice.tenant.name }}</td>
+                                <td class="px-5 py-4"><Link :href="`/super-admin/billing/invoices/${invoice.id}`" class="font-semibold text-emerald-700 no-underline hover:text-emerald-800">{{ invoice.number }}</Link><button class="mt-1 block text-[11px] text-neutral-400 hover:text-neutral-700" @click="selected = invoice">Shiko shpejt</button></td>
+                                <td class="px-5 py-4"><Link :href="`/super-admin/tenants/${invoice.tenant.id}`" class="font-medium text-neutral-900 no-underline hover:text-emerald-700">{{ invoice.tenant.name }}</Link><p class="mt-1 text-[11px] text-neutral-400">{{ invoice.subscription_id ? `Abonimi #${invoice.subscription_id}` : 'Pa abonim' }}</p></td>
                                 <td class="whitespace-nowrap px-5 py-4 text-neutral-500">{{ date(invoice.period_starts_on) }} – {{ date(invoice.period_ends_on) }}</td>
                                 <td class="whitespace-nowrap px-5 py-4 text-neutral-500">{{ date(invoice.due_on) }}</td>
                                 <td class="px-5 py-4"><span class="rounded-full px-2.5 py-1 text-xs font-medium" :class="statusClass(invoice.status)">{{ statusLabel(invoice.status) }}</span></td>

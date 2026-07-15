@@ -47,4 +47,9 @@ class TenantSubscription extends Model
     {
         return $this->hasMany(BillingInvoice::class);
     }
+
+    public function paymentAttempts(): HasMany
+    {
+        return $this->hasMany(BillingPaymentAttempt::class);
+    }
 }

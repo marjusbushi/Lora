@@ -4114,6 +4114,7 @@
       "loraFinance": "Lora Finance",
       "invoices": "Invoices",
       "payments": "Payments",
+      "paymentAttempts": "Payment Attempts",
       "providerEvents": "Provider Events",
       "open": "Open",
       "close": "Close",

@@ -1,17 +1,18 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Link, useForm } from '@inertiajs/vue3';
+import { Link, router, useForm } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
+import BillingWorkspaceNav from '@/Components/SuperAdmin/BillingWorkspaceNav.vue';
 import { Banknote, CreditCard, Landmark, WalletCards, X } from 'lucide-vue-next';
 
-const props = defineProps({ payments: Object, openInvoices: Array, stats: Object });
+const props = defineProps({ payments: Object, openInvoices: Array, stats: Object, tenants: Array, filters: Object });
 const modalOpen = ref(false);
-const form = useForm({ billing_invoice_id: '', amount: '', method: 'bank_transfer', reference: '', paid_at: new Date().toISOString().slice(0, 16), note: '' });
+const form = useForm({ billing_invoice_id: props.filters?.invoice_id || '', amount: '', method: 'bank_transfer', reference: '', paid_at: new Date().toISOString().slice(0, 16), note: '' });
 const selectedInvoice = computed(() => props.openInvoices.find((invoice) => invoice.id === Number(form.billing_invoice_id)));
 
 watch(selectedInvoice, (invoice) => {
     form.amount = invoice ? (invoice.balance_cents / 100).toFixed(2) : '';
-});
+}, { immediate: true });
 
 const cards = computed(() => [
     { label: 'Arkëtuar këtë muaj', value: money(props.stats.month_cents), detail: 'Të gjitha metodat', icon: WalletCards },
@@ -37,11 +38,13 @@ function submit() {
         onSuccess: () => { modalOpen.value = false; form.reset('billing_invoice_id', 'amount', 'reference', 'note'); },
     });
 }
+function filter(key, value) { router.get('/super-admin/billing/payments', { ...props.filters, [key]: value || undefined }, { preserveState: true, replace: true }); }
 </script>
 
 <template>
     <SuperAdminLayout title="Pagesat — Lora Control Panel">
         <div class="mx-auto max-w-7xl space-y-6">
+            <BillingWorkspaceNav />
             <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div><p class="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Financa e Lora / Pagesat</p><h1 class="mt-2 text-3xl font-semibold tracking-tight text-neutral-950">Pagesat</h1><p class="mt-2 text-sm text-neutral-500">Ledger unik për pagesat manuale dhe online të platformës.</p></div>
                 <button class="inline-flex items-center justify-center gap-2 rounded-xl bg-[#16875d] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#116f4c]" @click="modalOpen = true"><Banknote class="h-4 w-4" /> Regjistro pagesë</button>
@@ -52,8 +55,8 @@ function submit() {
             </section>
 
             <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-                <div class="border-b border-neutral-200 px-5 py-4"><h2 class="font-semibold text-neutral-900">Transaksionet</h2><p class="mt-1 text-xs text-neutral-500">Çdo pagesë lidhet me faturën dhe hotelin përkatës.</p></div>
-                <div class="overflow-x-auto"><table class="min-w-full divide-y divide-neutral-200 text-sm"><thead class="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500"><tr><th class="px-5 py-3 font-semibold">Pagesa</th><th class="px-5 py-3 font-semibold">Hoteli</th><th class="px-5 py-3 font-semibold">Fatura</th><th class="px-5 py-3 font-semibold">Metoda</th><th class="px-5 py-3 font-semibold">Data</th><th class="px-5 py-3 font-semibold">Statusi</th><th class="px-5 py-3 text-right font-semibold">Shuma</th></tr></thead><tbody class="divide-y divide-neutral-100"><tr v-for="payment in payments.data" :key="payment.id"><td class="px-5 py-4 font-semibold text-neutral-900">{{ payment.number }}</td><td class="px-5 py-4 font-medium text-neutral-900">{{ payment.tenant.name }}</td><td class="px-5 py-4 text-emerald-700">{{ payment.invoice?.number || '—' }}</td><td class="px-5 py-4 text-neutral-500"><span class="block">{{ payment.provider === 'manual' ? methodLabel(payment.method) : payment.provider }}</span><span class="text-xs text-neutral-400">{{ payment.reference || 'Pa referencë' }}</span></td><td class="whitespace-nowrap px-5 py-4 text-neutral-500">{{ dateTime(payment.paid_at) }}</td><td class="px-5 py-4"><span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">{{ payment.status }}</span></td><td class="whitespace-nowrap px-5 py-4 text-right font-semibold text-neutral-900">{{ money(payment.amount_cents, payment.currency) }}</td></tr><tr v-if="!payments.data.length"><td colspan="7" class="px-5 py-12 text-center text-neutral-500">Nuk ka ende pagesa.</td></tr></tbody></table></div>
+                <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 md:flex-row md:items-end md:justify-between"><div><h2 class="font-semibold text-neutral-900">Transaksionet</h2><p class="mt-1 text-xs text-neutral-500">Çdo pagesë lidhet me faturën dhe hotelin përkatës.</p></div><div class="flex flex-wrap gap-2"><label class="text-xs text-neutral-500">Hoteli<select :value="filters.tenant_id || ''" class="ml-2 rounded-lg border-neutral-300 text-xs" @change="filter('tenant_id', $event.target.value)"><option value="">Të gjithë</option><option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">{{ tenant.name }}</option></select></label><label class="text-xs text-neutral-500">Statusi<select :value="filters.status || ''" class="ml-2 rounded-lg border-neutral-300 text-xs" @change="filter('status', $event.target.value)"><option value="">Të gjitha</option><option value="completed">Completed</option><option value="pending">Pending</option><option value="failed">Failed</option><option value="refunded">Refunded</option></select></label></div></div>
+                <div class="overflow-x-auto"><table class="min-w-full divide-y divide-neutral-200 text-sm"><thead class="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500"><tr><th class="px-5 py-3 font-semibold">Pagesa</th><th class="px-5 py-3 font-semibold">Hoteli</th><th class="px-5 py-3 font-semibold">Fatura</th><th class="px-5 py-3 font-semibold">Metoda</th><th class="px-5 py-3 font-semibold">Data</th><th class="px-5 py-3 font-semibold">Statusi</th><th class="px-5 py-3 text-right font-semibold">Shuma</th></tr></thead><tbody class="divide-y divide-neutral-100"><tr v-for="payment in payments.data" :key="payment.id" class="hover:bg-neutral-50"><td class="px-5 py-4"><Link :href="`/super-admin/billing/payments/${payment.id}`" class="font-semibold text-emerald-700 no-underline">{{ payment.number }}</Link></td><td class="px-5 py-4"><Link :href="`/super-admin/tenants/${payment.tenant.id}`" class="font-medium text-neutral-900 no-underline hover:text-emerald-700">{{ payment.tenant.name }}</Link></td><td class="px-5 py-4"><Link v-if="payment.invoice" :href="`/super-admin/billing/invoices/${payment.invoice.id}`" class="font-semibold text-emerald-700 no-underline">{{ payment.invoice.number }}</Link><span v-else>—</span></td><td class="px-5 py-4 text-neutral-500"><span class="block">{{ payment.provider === 'manual' ? methodLabel(payment.method) : payment.provider }}</span><span class="text-xs text-neutral-400">{{ payment.reference || 'Pa referencë' }}</span></td><td class="whitespace-nowrap px-5 py-4 text-neutral-500">{{ dateTime(payment.paid_at) }}</td><td class="px-5 py-4"><span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">{{ payment.status }}</span></td><td class="whitespace-nowrap px-5 py-4 text-right font-semibold text-neutral-900">{{ money(payment.amount_cents, payment.currency) }}</td></tr><tr v-if="!payments.data.length"><td colspan="7" class="px-5 py-12 text-center text-neutral-500">Nuk ka ende pagesa.</td></tr></tbody></table></div>
                 <div v-if="payments.links?.length > 3" class="flex flex-wrap justify-end gap-1 border-t border-neutral-200 px-5 py-4"><Link v-for="link in payments.links" :key="link.label" :href="link.url || '#'" class="rounded-lg px-3 py-1.5 text-xs no-underline" :class="link.active ? 'bg-[#16875d] text-white' : 'text-neutral-500 hover:bg-neutral-100'" v-html="link.label" /></div>
             </section>
         </div>

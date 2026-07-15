@@ -24,6 +24,7 @@ use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SmartPricingController;
 use App\Http\Controllers\SuperAdmin\BillingInvoiceController as SuperAdminBillingInvoiceController;
+use App\Http\Controllers\SuperAdmin\BillingPaymentAttemptController as SuperAdminBillingPaymentAttemptController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentController as SuperAdminBillingPaymentController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Http\Controllers\SuperAdmin\ProfileController as SuperAdminProfileController;
@@ -133,12 +134,17 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
         Route::patch('/tenants/{tenant}/domains/{domain}/primary', [SuperAdminTenantController::class, 'makePrimaryDomain'])
             ->scopeBindings()->name('tenants.domains.primary');
         Route::get('/billing/invoices', [SuperAdminBillingInvoiceController::class, 'index'])->name('billing.invoices.index');
+        Route::get('/billing/invoices/{invoice}', [SuperAdminBillingInvoiceController::class, 'show'])->name('billing.invoices.show');
         Route::post('/billing/invoices', [SuperAdminBillingInvoiceController::class, 'store'])->name('billing.invoices.store');
         Route::patch('/billing/invoices/{invoice}/publish', [SuperAdminBillingInvoiceController::class, 'publish'])->name('billing.invoices.publish');
         Route::patch('/billing/invoices/{invoice}/void', [SuperAdminBillingInvoiceController::class, 'void'])->name('billing.invoices.void');
         Route::get('/billing/payments', [SuperAdminBillingPaymentController::class, 'index'])->name('billing.payments.index');
+        Route::get('/billing/payments/{payment}', [SuperAdminBillingPaymentController::class, 'show'])->name('billing.payments.show');
         Route::post('/billing/payments', [SuperAdminBillingPaymentController::class, 'store'])->name('billing.payments.store');
+        Route::get('/billing/payment-attempts', [SuperAdminBillingPaymentAttemptController::class, 'index'])->name('billing.payment-attempts.index');
+        Route::get('/billing/payment-attempts/{paymentAttempt}', [SuperAdminBillingPaymentAttemptController::class, 'show'])->name('billing.payment-attempts.show');
         Route::get('/billing/provider-events', [SuperAdminProviderEventController::class, 'index'])->name('billing.provider-events.index');
+        Route::get('/billing/provider-events/{providerEvent}', [SuperAdminProviderEventController::class, 'show'])->name('billing.provider-events.show');
         Route::patch('/billing/provider-events/{providerEvent}/retry', [SuperAdminProviderEventController::class, 'retry'])->name('billing.provider-events.retry');
     });
 

@@ -11,6 +11,7 @@ import {
     Menu,
     PanelLeftClose,
     Repeat2,
+    RefreshCw,
     ShieldCheck,
     UserRound,
     Webhook,
@@ -41,6 +42,7 @@ const navigation = [
     { label: t('superAdmin.compact.activity'), href: '/super-admin/activity', match: '/super-admin/activity', icon: ListChecks, group: t('superAdmin.compact.platform') },
     { label: t('superAdmin.compact.invoices'), href: '/super-admin/billing/invoices', match: '/super-admin/billing/invoices', icon: FileText, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.payments'), href: '/super-admin/billing/payments', match: '/super-admin/billing/payments', icon: CreditCard, group: t('superAdmin.compact.loraFinance') },
+    { label: t('superAdmin.compact.paymentAttempts'), href: '/super-admin/billing/payment-attempts', match: '/super-admin/billing/payment-attempts', icon: RefreshCw, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.providerEvents'), href: '/super-admin/billing/provider-events', match: '/super-admin/billing/provider-events', icon: Webhook, group: t('superAdmin.compact.loraFinance') },
 ];
 

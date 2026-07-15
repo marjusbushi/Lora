@@ -52,6 +52,16 @@ class BillingInvoice extends Model
         return $this->hasMany(BillingPayment::class);
     }
 
+    public function paymentAttempts(): HasMany
+    {
+        return $this->hasMany(BillingPaymentAttempt::class);
+    }
+
+    public function providerEvents(): HasMany
+    {
+        return $this->hasMany(ProviderEvent::class);
+    }
+
     public function getBalanceCentsAttribute(): int
     {
         return max(0, $this->total_cents - $this->amount_paid_cents);

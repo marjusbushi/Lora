@@ -115,6 +115,16 @@ class Tenant extends Model
         return $this->hasMany(BillingPayment::class);
     }
 
+    public function billingPaymentAttempts(): HasMany
+    {
+        return $this->hasMany(BillingPaymentAttempt::class);
+    }
+
+    public function providerEvents(): HasMany
+    {
+        return $this->hasMany(ProviderEvent::class);
+    }
+
     public function scopeActive($query)
     {
         return $query->where('status', 'active');
