@@ -20,6 +20,7 @@ use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 class ReservationFiscalizationTest extends TestCase
@@ -114,6 +115,15 @@ class ReservationFiscalizationTest extends TestCase
             'subject_type' => Reservation::class,
             'subject_id' => $reservation->id,
         ]);
+
+        $this->withoutVite();
+        $this->actingAs($this->admin)->get(route('reservations.show', $reservation))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('fiscalization.document.fiscal_number', 'TEST-2026-1')
+                ->where('fiscalization.document.iic', 'IIC-TEST')
+                ->where('fiscalization.document.invoice_payload.lines.0.product_code', 'ROOM-STAY')
+                ->where('fiscalization.document.verify_url', 'https://demo.fature.al/verify/test')
+                ->where('invoicePrint.currency', 'EUR'));
     }
 
     public function test_identified_guest_is_sent_as_a_fature_al_client(): void

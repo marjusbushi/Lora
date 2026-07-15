@@ -47,6 +47,11 @@ class PosOrder extends TenantModel
         return $this->belongsTo(PosShift::class, 'pos_shift_id');
     }
 
+    public function fiscalDocument()
+    {
+        return $this->hasOne(PosFiscalDocument::class, 'pos_order_id');
+    }
+
     public function recalculateTotal(): void
     {
         $this->update([

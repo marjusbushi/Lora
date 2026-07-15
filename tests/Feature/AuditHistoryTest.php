@@ -8,6 +8,7 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\User;
+use App\Services\AuditTimeline;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
@@ -154,5 +155,43 @@ class AuditHistoryTest extends TestCase
         $log = AuditLog::where('action', 'reservation.created')->where('subject_id', $reservation->id)->sole();
         $this->assertNull($log->causer_id);
         $this->assertSame('channex', $log->source);
+    }
+
+    public function test_reservation_timeline_keeps_fiscal_action_but_hides_invoice_metadata(): void
+    {
+        $reservation = Reservation::create([
+            'room_id' => $this->room->id,
+            'guest_id' => $this->guest->id,
+            'created_by' => $this->admin->id,
+            'check_in_date' => '2026-10-10',
+            'check_out_date' => '2026-10-11',
+            'status' => 'checked_out',
+            'total_amount' => 100,
+            'adults' => 1,
+            'channel' => 'direct',
+        ]);
+
+        AuditLog::record('fiscalization.completed', $reservation, [
+            'provider' => 'fature_al',
+            'environment' => 'sandbox',
+            'internal_id' => 'LORA-T1-RES-'.$reservation->id,
+            'fiscal_number' => 'TEST-1',
+            'payment_method' => 'BANKNOTE',
+            'total' => 100,
+        ]);
+        AuditLog::record('fiscalization.retry_payload_updated', $reservation, [
+            'request_hash' => str_repeat('a', 64),
+        ]);
+
+        $completed = AuditLog::where('action', 'fiscalization.completed')->sole();
+        $entry = app(AuditTimeline::class)->entry($completed);
+        $this->assertSame('Fatura u fiskalizua', $entry['label']);
+        $this->assertSame([], $entry['details']);
+
+        $this->get(route('reservations.show', $reservation))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('history', fn ($history) => collect($history)
+                    ->pluck('action')
+                    ->doesntContain('fiscalization.retry_payload_updated')));
     }
 }

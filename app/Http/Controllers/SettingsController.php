@@ -104,8 +104,8 @@ class SettingsController extends Controller
         abort_unless($provider === 'fature_al', 404);
 
         try {
-            $client->testConnection();
-            $this->recordIntegrationTest('success');
+            $account = $client->testConnection();
+            $this->recordIntegrationTest('success', $account);
             AuditLog::record('tenant.integration.test', null, [
                 'provider' => 'fature_al',
                 'status' => 'success',
@@ -125,7 +125,8 @@ class SettingsController extends Controller
         }
     }
 
-    private function recordIntegrationTest(string $status): void
+    /** @param array{company:string,nipt:string,branch:string}|null $account */
+    private function recordIntegrationTest(string $status, ?array $account = null): void
     {
         $integration = TenantIntegration::query()->where('provider', 'fature_al')->first();
 
@@ -136,6 +137,9 @@ class SettingsController extends Controller
         $configuration = $integration->configuration ?? [];
         $configuration['last_tested_at'] = now()->toIso8601String();
         $configuration['last_test_status'] = $status;
+        if ($account !== null) {
+            $configuration['account'] = $account;
+        }
 
         $integration->forceFill(['configuration' => $configuration])->save();
     }

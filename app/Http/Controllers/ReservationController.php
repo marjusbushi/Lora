@@ -18,6 +18,7 @@ use App\Models\Room;
 use App\Models\Setting;
 use App\Models\Warehouse;
 use App\Services\AuditTimeline;
+use App\Services\CurrencyRates;
 use App\Services\FatureAlConfiguration;
 use App\Services\InventoryLedger;
 use App\Services\ReservationConflictService;
@@ -296,11 +297,13 @@ class ReservationController extends Controller
             ->with('causer:id,name')
             ->where('subject_type', Reservation::class)
             ->where('subject_id', $reservation->id)
+            ->where('action', '!=', 'fiscalization.retry_payload_updated')
             ->latest('id')
             ->limit(50)
             ->get();
 
         $tenant = app(TenantContext::class)->tenant();
+        $fiscalAccount = (array) $fatureAlConfiguration->get('account', []);
         $inventoryEnabled = app(TenantBillingService::class)->enabled('finance', $tenant);
         $inventoryItems = collect();
         $inventoryWarehouses = collect();
@@ -377,6 +380,7 @@ class ReservationController extends Controller
                         'description' => $i->description,
                         'type' => $i->type,
                         'amount' => (float) $i->amount,
+                        'vat_rate' => $i->vat_rate !== null ? (float) $i->vat_rate : null,
                         'charge_date' => $i->charge_date?->toDateString(),
                     ]),
                 'discounts' => round($discounts, 2),
@@ -399,6 +403,20 @@ class ReservationController extends Controller
             'inventoryItems' => $inventoryItems,
             'inventoryWarehouses' => $inventoryWarehouses,
             'currency' => Setting::get('financial.default_currency_symbol', '€'),
+            'invoicePrint' => [
+                'hotel_name' => Setting::get('hotel.name', $tenant?->name ?: 'Hotel'),
+                'legal_name' => $fiscalAccount['company'] ?? null,
+                'nipt' => $fiscalAccount['nipt'] ?? Setting::get('hotel.nipt'),
+                'branch' => $fiscalAccount['branch'] ?? null,
+                'address' => Setting::get('hotel.address'),
+                'phone' => Setting::get('hotel.phone'),
+                'email' => Setting::get('hotel.email'),
+                'currency' => strtoupper((string) ($tenant?->currency ?: 'EUR')),
+                'exchange_rate' => $fiscalDocument?->exchange_rate !== null
+                    ? (float) $fiscalDocument->exchange_rate
+                    : CurrencyRates::rate('ALL'),
+                'operator' => request()->user()?->name,
+            ],
             'fiscalization' => [
                 'configured' => $fatureAlConfiguration->configured(),
                 'verified' => $fatureAlConfiguration->verified(),
@@ -414,11 +432,19 @@ class ReservationController extends Controller
                     'status' => $fiscalDocument->status,
                     'internal_id' => $fiscalDocument->internal_id,
                     'payment_method' => $fiscalDocument->payment_method,
+                    'currency' => $fiscalDocument->currency,
+                    'exchange_rate' => $fiscalDocument->exchange_rate !== null ? (float) $fiscalDocument->exchange_rate : null,
                     'total' => (float) $fiscalDocument->total,
+                    'vat_rate' => (float) $fiscalDocument->vat_rate,
+                    'invoice_payload' => $fiscalDocument->invoice_payload,
                     'fiscal_number' => $fiscalDocument->fiscal_number,
                     'iic' => $fiscalDocument->iic,
                     'fic' => $fiscalDocument->fic,
+                    'tcr_code' => $fiscalDocument->tcr_code,
+                    'business_code' => $fiscalDocument->business_code,
+                    'operator_code' => $fiscalDocument->operator_code,
                     'fiscalized_at' => $fiscalDocument->fiscalized_at?->toIso8601String(),
+                    'verify_url' => $fiscalDocument->verify_url,
                     'last_error' => $fiscalDocument->last_error,
                 ] : null,
             ],

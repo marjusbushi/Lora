@@ -312,6 +312,7 @@ class ReservationFiscalizationService
                 'exchange_rate' => $payload['exchange_rate'] ?? null,
                 'total' => round(collect($payload['lines'])->sum('total') - (float) ($payload['invoice_discount_value'] ?? 0), 2),
                 'vat_rate' => (float) Setting::get('financial.tax_rate', 20),
+                'invoice_payload' => $payload,
                 'request_hash' => $requestHash,
                 'status' => FiscalDocument::STATUS_PROCESSING,
                 'attempted_at' => now(),
