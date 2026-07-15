@@ -297,12 +297,18 @@
     "iic": "NIVF",
     "fic": "NSLF",
     "posInvoiceTitle": "Fatura e barit · 80 mm",
-    "posFiscalSuccess": "Fatura POS u fiskalizua.",
+    "posFiscalSuccess": "Fatura POS u fiskalizua dhe u dërgua për printim.",
     "posFiscalFailed": "Fiskalizimi nuk u krye.",
-    "posFiscalPrintWarning": "Fiskalizimi dështoi. Riprovoje përpara printimit të faturës fiskale.",
+    "posFiscalPrintWarning": "Fiskalizimi nuk u krye. Pagesa është ruajtur; printoje si dokument jo fiskal ose provo përsëri më vonë.",
     "retryFiscalization": "Riprovo fiskalizimin",
+    "fiscalize": "Fiskalizo",
+    "fiscalizedButton": "Fiskalizuar",
+    "fiscalReady": "Fatura është fiskalizuar dhe përmban të dhënat e verifikimit.",
+    "nonFiscalPrintHint": "Pagesa është ruajtur. Mund ta printosh tani si dokument jo fiskal ose ta fiskalizosh kur ka internet.",
+    "roomChargeFiscalHint": "Ngarkesa në dhomë fiskalizohet më vonë në faturën përfundimtare të hotelit.",
     "print80": "Printo 80 mm",
-    "close": "Mbyll"
+    "close": "Mbyll",
+    "cancel": "Anulo"
   },
   "admin": {
     "vatSettings": {
