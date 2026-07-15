@@ -6,6 +6,7 @@ use App\Http\Requests\ReservationStoreRequest;
 use App\Http\Requests\ReservationUpdateRequest;
 use App\Models\AuditLog;
 use App\Models\CleaningTask;
+use App\Models\FiscalDocument;
 use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\InventoryItem;
@@ -17,6 +18,7 @@ use App\Models\Room;
 use App\Models\Setting;
 use App\Models\Warehouse;
 use App\Services\AuditTimeline;
+use App\Services\FatureAlConfiguration;
 use App\Services\InventoryLedger;
 use App\Services\ReservationConflictService;
 use App\Services\RoomPricing;
@@ -238,8 +240,11 @@ class ReservationController extends Controller
         ]);
     }
 
-    public function show(Reservation $reservation, AuditTimeline $timeline): Response
-    {
+    public function show(
+        Reservation $reservation,
+        AuditTimeline $timeline,
+        FatureAlConfiguration $fatureAlConfiguration,
+    ): Response {
         $reservation->load([
             'room:id,room_number,room_type_id',
             'room.roomType:id,name,base_price',
@@ -270,6 +275,22 @@ class ReservationController extends Controller
             ->select('id', 'table_number', 'total_amount', 'created_at')
             ->orderByDesc('created_at')
             ->get();
+
+        $fiscalEnvironment = (string) $fatureAlConfiguration->get('environment', 'sandbox');
+        $fiscalDocument = FiscalDocument::query()
+            ->where('reservation_id', $reservation->id)
+            ->where('provider', 'fature_al')
+            ->where('environment', $fiscalEnvironment)
+            ->first();
+        $paymentMethods = $reservation->payments
+            ->reject(fn ($payment) => $payment->is_voided)
+            ->pluck('method')
+            ->unique()
+            ->values();
+        $fiscalPaymentMethod = $paymentMethods->count() === 1
+            && in_array($paymentMethods->first(), ['cash', 'card'], true)
+                ? $paymentMethods->first()
+                : ($paymentMethods->count() > 1 ? 'mixed' : null);
 
         $history = AuditLog::query()
             ->with('causer:id,name')
@@ -378,6 +399,29 @@ class ReservationController extends Controller
             'inventoryItems' => $inventoryItems,
             'inventoryWarehouses' => $inventoryWarehouses,
             'currency' => Setting::get('financial.default_currency_symbol', '€'),
+            'fiscalization' => [
+                'configured' => $fatureAlConfiguration->configured(),
+                'verified' => $fatureAlConfiguration->verified(),
+                'environment' => $fiscalEnvironment,
+                'payment_method' => $fiscalPaymentMethod,
+                'can_issue' => $fatureAlConfiguration->configured()
+                    && $fatureAlConfiguration->verified()
+                    && $fiscalEnvironment === 'sandbox'
+                    && $reservation->status === 'checked_out'
+                    && in_array($fiscalPaymentMethod, ['cash', 'card'], true)
+                    && $fiscalDocument?->status !== FiscalDocument::STATUS_FISCALIZED,
+                'document' => $fiscalDocument ? [
+                    'status' => $fiscalDocument->status,
+                    'internal_id' => $fiscalDocument->internal_id,
+                    'payment_method' => $fiscalDocument->payment_method,
+                    'total' => (float) $fiscalDocument->total,
+                    'fiscal_number' => $fiscalDocument->fiscal_number,
+                    'iic' => $fiscalDocument->iic,
+                    'fic' => $fiscalDocument->fic,
+                    'fiscalized_at' => $fiscalDocument->fiscalized_at?->toIso8601String(),
+                    'last_error' => $fiscalDocument->last_error,
+                ] : null,
+            ],
         ]);
     }
 

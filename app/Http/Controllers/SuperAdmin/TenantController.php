@@ -382,6 +382,9 @@ class TenantController extends Controller
 
         $credentials = $integration->credentials ?? [];
         $configuration = $integration->configuration ?? [];
+        $originalFatureEnvironment = $provider === 'fature_al'
+            ? ($configuration['environment'] ?? 'sandbox')
+            : null;
 
         // A blank secret field means "keep the stored one" — stored values are
         // never sent back to the browser, so blanks are the normal case.
@@ -417,6 +420,13 @@ class TenantController extends Controller
 
         if ($provider === 'pok') {
             $configuration['production'] = (bool) $data['production'];
+        }
+
+        if ($provider === 'fature_al' && (
+            filled($data['api_token'] ?? null)
+            || ($configuration['environment'] ?? 'sandbox') !== $originalFatureEnvironment
+        )) {
+            unset($configuration['last_test_status'], $configuration['last_tested_at']);
         }
 
         if ($provider === 'fature_al' && (bool) $data['enabled'] && blank($credentials['api_token'] ?? null)) {

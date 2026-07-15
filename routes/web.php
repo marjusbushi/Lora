@@ -18,6 +18,7 @@ use App\Http\Controllers\PricingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ReservationController;
+use App\Http\Controllers\ReservationFiscalizationController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
@@ -217,6 +218,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/reservations/{reservation}/folio/inventory', [ReservationController::class, 'addInventoryFolioLine'])
             ->middleware(['module:finance', 'permission:update_reservations'])->name('reservations.folio.inventory');
         Route::post('/reservations/{reservation}/payment', [ReservationController::class, 'recordPayment'])->middleware('permission:update_reservations')->name('reservations.payment');
+        Route::post('/reservations/{reservation}/fiscalize', [ReservationFiscalizationController::class, 'store'])
+            ->middleware(['module:finance', 'permission:update_reservations', 'throttle:10,1'])
+            ->name('reservations.fiscalize');
     });
 
     // Housekeeping

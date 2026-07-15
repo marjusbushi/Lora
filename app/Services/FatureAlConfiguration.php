@@ -38,6 +38,8 @@ class FatureAlConfiguration
             'enabled' => (bool) $integration->enabled,
             'api_token' => (string) ($integration->credentials['api_token'] ?? ''),
             'environment' => $environment,
+            'last_test_status' => $integration->configuration['last_test_status'] ?? null,
+            'last_tested_at' => $integration->configuration['last_tested_at'] ?? null,
             // The host is derived, never accepted from a browser request. This
             // prevents a stored URL from turning the integration into SSRF.
             'base_url' => $environment === 'production'
@@ -56,12 +58,19 @@ class FatureAlConfiguration
         return $this->get('enabled', false) && $this->get('api_token', '') !== '';
     }
 
+    public function verified(): bool
+    {
+        return $this->configured() && $this->get('last_test_status') === 'success';
+    }
+
     private function emptyConfig(): array
     {
         return [
             'enabled' => false,
             'api_token' => '',
             'environment' => 'sandbox',
+            'last_test_status' => null,
+            'last_tested_at' => null,
             'base_url' => 'https://demo.fature.al/api/v1',
         ];
     }

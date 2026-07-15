@@ -64,6 +64,12 @@ class FatureAlIntegrationTest extends TestCase
             $configuration = app(FatureAlConfiguration::class);
             $this->assertSame($token, $configuration->get('api_token'));
             $this->assertSame('https://demo.fature.al/api/v1', $configuration->get('base_url'));
+
+            $integration = TenantIntegration::query()->where('provider', 'fature_al')->firstOrFail();
+            $values = $integration->configuration;
+            $values['last_test_status'] = 'success';
+            $values['last_tested_at'] = now()->toIso8601String();
+            $integration->forceFill(['configuration' => $values])->save();
         });
 
         // Blank token means keep the encrypted value while updating non-secret config.
@@ -78,6 +84,7 @@ class FatureAlIntegrationTest extends TestCase
 
         $this->assertSame($token, $integration->refresh()->credentials['api_token']);
         $this->assertSame('production', $integration->configuration['environment']);
+        $this->assertArrayNotHasKey('last_test_status', $integration->configuration);
 
         $response = $this->actingAs($this->superAdmin)->get(route('super-admin.tenants.index'));
         $response->assertOk();
