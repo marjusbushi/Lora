@@ -1,9 +1,10 @@
 <script setup>
 import GuestLayout from '@/Layouts/GuestLayout.vue';
 import Button from '@/Components/UI/Button.vue';
-import TextInput from '@/Components/UI/TextInput.vue';
+import TextInput from '@/Components/TextInput.vue';
+import InputLabel from '@/Components/InputLabel.vue';
+import InputError from '@/Components/InputError.vue';
 import Checkbox from '@/Components/UI/Checkbox.vue';
-import FormGroup from '@/Components/UI/FormGroup.vue';
 import Alert from '@/Components/UI/Alert.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
@@ -38,14 +39,15 @@ const submit = () => {
 
         <form @submit.prevent="submit" class="space-y-5">
             <div class="space-y-1.5">
-                <label for="email" class="block text-label text-neutral-700">
+                <InputLabel for="email">
                     {{ $t('admin.generated.k_46418004f188') }}
                     <span class="text-error-500">*</span>
-                </label>
-                <input
+                </InputLabel>
+                <TextInput
                     id="email"
                     name="email"
                     type="email"
+                    class="block w-full border-neutral-200 px-3 py-2 text-body-sm text-neutral-900 placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500/40"
                     v-model="form.email"
                     :placeholder="$t('admin.generated.k_53da0e246d4b')"
                     inputmode="email"
@@ -54,32 +56,27 @@ const submit = () => {
                     required
                     autofocus
                     autocomplete="username"
-                    :aria-invalid="Boolean(form.errors.email)"
-                    :class="[
-                        'block w-full rounded-md border px-3 py-2 text-body-sm text-neutral-900 placeholder:text-neutral-400 transition-colors duration-150',
-                        'focus:outline-none focus:ring-2 focus:ring-offset-0',
-                        form.errors.email
-                            ? 'border-error-300 focus:border-error-500 focus:ring-error-500/40'
-                            : 'border-neutral-200 focus:border-accent-500 focus:ring-accent-500/40',
-                    ]"
                 />
-                <p v-if="form.errors.email" class="text-small text-error-600">
-                    {{ form.errors.email }}
-                </p>
+                <InputError class="mt-2" :message="form.errors.email" />
             </div>
 
-            <FormGroup :label="$t('admin.generated.k_2f77fb4fd984')" html-for="password" :error="form.errors.password" required>
+            <div class="space-y-1.5">
+                <InputLabel for="password">
+                    {{ $t('admin.generated.k_2f77fb4fd984') }}
+                    <span class="text-error-500">*</span>
+                </InputLabel>
                 <TextInput
                     id="password"
                     name="password"
                     type="password"
+                    class="block w-full border-neutral-200 px-3 py-2 text-body-sm text-neutral-900 placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500/40"
                     v-model="form.password"
                     placeholder="********"
-                    :error="form.errors.password"
                     required
                     autocomplete="current-password"
                 />
-            </FormGroup>
+                <InputError class="mt-2" :message="form.errors.password" />
+            </div>
 
             <div class="flex items-center justify-between">
                 <Checkbox v-model="form.remember" :label="$t('admin.generated.k_fcb0f2e8be42')" />
