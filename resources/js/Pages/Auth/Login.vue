@@ -38,24 +38,38 @@ const submit = () => {
 
         <form @submit.prevent="submit" class="space-y-5">
             <FormGroup :label="$t('admin.generated.k_46418004f188')" html-for="email" :error="form.errors.email" required>
-                <TextInput
+                <input
                     id="email"
+                    name="email"
                     type="email"
                     v-model="form.email"
                     :placeholder="$t('admin.generated.k_53da0e246d4b')"
-                    :error="form.errors.email"
-                    :autofocus="true"
+                    inputmode="email"
+                    autocapitalize="none"
+                    :spellcheck="false"
+                    required
+                    autofocus
                     autocomplete="username"
+                    :aria-invalid="Boolean(form.errors.email)"
+                    :class="[
+                        'block w-full rounded-md border px-3 py-2 text-body-sm text-neutral-900 placeholder:text-neutral-400 transition-colors duration-150',
+                        'focus:outline-none focus:ring-2 focus:ring-offset-0',
+                        form.errors.email
+                            ? 'border-error-300 focus:border-error-500 focus:ring-error-500/40'
+                            : 'border-neutral-200 focus:border-accent-500 focus:ring-accent-500/40',
+                    ]"
                 />
             </FormGroup>
 
             <FormGroup :label="$t('admin.generated.k_2f77fb4fd984')" html-for="password" :error="form.errors.password" required>
                 <TextInput
                     id="password"
+                    name="password"
                     type="password"
                     v-model="form.password"
                     placeholder="********"
                     :error="form.errors.password"
+                    required
                     autocomplete="current-password"
                 />
             </FormGroup>
