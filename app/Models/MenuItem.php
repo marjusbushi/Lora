@@ -4,7 +4,10 @@ namespace App\Models;
 
 class MenuItem extends TenantModel
 {
-    protected $fillable = ['menu_category_id', 'name', 'price', 'cost_price', 'is_available', 'image_path'];
+    protected $fillable = [
+        'menu_category_id', 'inventory_item_id', 'warehouse_id', 'name',
+        'price', 'cost_price', 'is_available', 'image_path',
+    ];
 
     protected function casts(): array
     {
@@ -23,5 +26,15 @@ class MenuItem extends TenantModel
     public function inventoryComponents()
     {
         return $this->hasMany(MenuItemInventory::class);
+    }
+
+    public function inventoryItem()
+    {
+        return $this->belongsTo(InventoryItem::class);
+    }
+
+    public function warehouse()
+    {
+        return $this->belongsTo(Warehouse::class);
     }
 }

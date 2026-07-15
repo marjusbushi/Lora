@@ -96,6 +96,29 @@ class PosInventoryTest extends TestCase
             ->where('sourceable_id', $untrackedLine->id)->count());
     }
 
+    public function test_menu_item_warehouse_overrides_category_warehouse(): void
+    {
+        $admin = $this->admin();
+        $central = Warehouse::ensureDefault();
+        $bar = Warehouse::create(['name' => 'Bar', 'type' => 'bar', 'is_active' => true]);
+        $product = InventoryItem::create(['name' => 'Cola', 'sku' => 'COLA', 'type' => 'product', 'unit' => 'piece']);
+        app(InventoryLedger::class)->openingBalance($product, $central, 20, 1, null, $admin->id);
+        app(InventoryLedger::class)->openingBalance($product, $bar, 5, 1, null, $admin->id);
+        $category = MenuCategory::create(['name' => 'Pije', 'sort_order' => 1, 'warehouse_id' => $central->id]);
+        $menuItem = MenuItem::create([
+            'menu_category_id' => $category->id, 'inventory_item_id' => $product->id,
+            'warehouse_id' => $bar->id, 'name' => 'Cola', 'price' => 3, 'is_available' => true,
+        ]);
+        $menuItem->inventoryComponents()->create(['inventory_item_id' => $product->id, 'quantity' => 1]);
+        $order = PosOrder::create(['status' => 'completed', 'payment_method' => 'cash', 'total_amount' => 6, 'paid_at' => now(), 'created_by' => $admin->id]);
+        $line = PosOrderItem::create(['pos_order_id' => $order->id, 'menu_item_id' => $menuItem->id, 'quantity' => 2, 'unit_price' => 3, 'total_price' => 6]);
+
+        app(InventoryLedger::class)->consumePosOrderItem($line, $admin->id);
+
+        $this->assertSame(3.0, $product->fresh()->stock($bar->id));
+        $this->assertSame(20.0, $product->fresh()->stock($central->id));
+    }
+
     public function test_menu_settings_save_warehouse_and_inventory_recipe(): void
     {
         $admin = $this->admin();

@@ -293,10 +293,11 @@ class ReservationController extends Controller
             $items = InventoryItem::query()
                 ->where('is_active', true)
                 ->where('type', 'product')
-                ->whereNotNull('selling_price')
-                ->where('selling_price', '>', 0)
+                ->where('sell_in_rooms', true)
+                ->whereNotNull('room_selling_price')
+                ->where('room_selling_price', '>', 0)
                 ->orderBy('name')
-                ->get(['id', 'name', 'sku', 'unit', 'selling_price']);
+                ->get(['id', 'name', 'sku', 'unit', 'image_path', 'room_selling_price', 'room_warehouse_id']);
             $stockMap = InventoryMovement::query()
                 ->whereIn('inventory_item_id', $items->pluck('id'))
                 ->whereIn('warehouse_id', $inventoryWarehouses->pluck('id'))
@@ -310,7 +311,9 @@ class ReservationController extends Controller
                 'name' => $item->name,
                 'sku' => $item->sku,
                 'unit' => $item->unit,
-                'selling_price' => (float) $item->selling_price,
+                'image_path' => $item->image_path,
+                'selling_price' => (float) $item->room_selling_price,
+                'room_warehouse_id' => $item->room_warehouse_id,
                 'warehouse_stock' => collect($stockMap->get($item->id, []))
                     ->mapWithKeys(fn ($stock) => [(string) $stock->warehouse_id => round((float) $stock->quantity, 4)])
                     ->all(),
@@ -434,7 +437,7 @@ class ReservationController extends Controller
         $data = $request->validate([
             'inventory_item_id' => [
                 'required', 'integer',
-                TenantRule::exists('inventory_items')->where('is_active', true)->where('type', 'product'),
+                TenantRule::exists('inventory_items')->where('is_active', true)->where('type', 'product')->where('sell_in_rooms', true),
             ],
             'warehouse_id' => [
                 'required', 'integer',
@@ -468,7 +471,12 @@ class ReservationController extends Controller
             }
 
             $item = InventoryItem::query()->lockForUpdate()->findOrFail($data['inventory_item_id']);
-            $price = (float) $item->selling_price;
+            if ($item->room_warehouse_id && (int) $item->room_warehouse_id !== (int) $data['warehouse_id']) {
+                throw ValidationException::withMessages([
+                    'warehouse_id' => 'Ky produkt shitet nga magazina e konfiguruar për dhomat.',
+                ]);
+            }
+            $price = (float) $item->room_selling_price;
             if ($price <= 0) {
                 throw ValidationException::withMessages([
                     'inventory_item_id' => 'Artikulli nuk ka çmim shitjeje të vlefshëm.',

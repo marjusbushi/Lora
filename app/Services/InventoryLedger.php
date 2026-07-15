@@ -142,15 +142,18 @@ class InventoryLedger
             $orderItem->loadMissing([
                 'order',
                 'menuItem.category.warehouse',
+                'menuItem.warehouse',
                 'menuItem.inventoryComponents.inventoryItem',
             ]);
 
             $category = $orderItem->menuItem?->category;
-            $warehouse = $category?->warehouse?->is_active
-                ? $category->warehouse
-                : Warehouse::query()->where('is_active', true)
-                    ->when($category?->outlet, fn ($query, $outlet) => $query->where('type', $outlet))
-                    ->first();
+            $warehouse = $orderItem->menuItem?->warehouse?->is_active
+                ? $orderItem->menuItem->warehouse
+                : null;
+            $warehouse ??= $category?->warehouse?->is_active ? $category->warehouse : null;
+            $warehouse ??= Warehouse::query()->where('is_active', true)
+                ->when($category?->outlet, fn ($query, $outlet) => $query->where('type', $outlet))
+                ->first();
             $warehouse ??= Warehouse::ensureDefault();
 
             foreach ($orderItem->menuItem?->inventoryComponents ?? [] as $component) {

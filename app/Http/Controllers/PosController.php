@@ -88,7 +88,7 @@ class PosController extends Controller
             ->groupBy('warehouse_id')->map(fn ($rows) => $rows->pluck('quantity', 'inventory_item_id'));
 
         $menu = MenuCategory::with(['items' => fn ($query) => $query
-            ->where('is_available', true)->with('inventoryComponents')])
+            ->where('is_available', true)->with(['inventoryComponents', 'warehouse'])])
             ->orderBy('sort_order')
             ->get()
             ->each(function (MenuCategory $category) use ($salesCounts, $warehouses, $defaultWarehouse, $warehouseStocks) {
@@ -96,21 +96,24 @@ class PosController extends Controller
                     ?? $warehouses->firstWhere('type', $category->outlet)
                     ?? $defaultWarehouse;
                 $category->items->each(function (MenuItem $item) use ($salesCounts, $warehouse, $warehouseStocks) {
+                    $itemWarehouse = $item->warehouse?->is_active ? $item->warehouse : $warehouse;
                     $components = $item->inventoryComponents;
-                    $available = $components->isEmpty() || ! $warehouse
+                    $available = $components->isEmpty() || ! $itemWarehouse
                         ? null
-                        : (int) floor($components->min(function ($component) use ($warehouse, $warehouseStocks) {
-                            $stock = (float) ($warehouseStocks->get($warehouse->id)?->get($component->inventory_item_id) ?? 0);
+                        : (int) floor($components->min(function ($component) use ($itemWarehouse, $warehouseStocks) {
+                            $stock = (float) ($warehouseStocks->get($itemWarehouse->id)?->get($component->inventory_item_id) ?? 0);
 
                             return $stock / max(0.0001, (float) $component->quantity);
                         }));
                     $item->setAttribute('sales_count', (int) ($salesCounts[$item->id] ?? 0));
                     $item->setAttribute('inventory_tracked', $components->isNotEmpty());
                     $item->setAttribute('available_portions', $available);
-                    $item->setAttribute('inventory_warehouse', $warehouse?->name);
+                    $item->setAttribute('inventory_warehouse', $itemWarehouse?->name);
                     $item->unsetRelation('inventoryComponents');
+                    $item->unsetRelation('warehouse');
                 });
             });
+
         return Inertia::render('Pos/Index', [
             'orders' => $query->paginate(15),
             'menu' => $menu,

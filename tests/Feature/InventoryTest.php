@@ -6,12 +6,16 @@ use App\Models\Bill;
 use App\Models\BillItem;
 use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
+use App\Models\MenuCategory;
+use App\Models\MenuItem;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\InventoryLedger;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class InventoryTest extends TestCase
@@ -72,6 +76,47 @@ class InventoryTest extends TestCase
         $this->assertNotNull($line->received_at);
         $this->assertSame(10.0, $item->fresh()->stock($warehouse->id));
         $this->assertSame(9.5, (float) $item->fresh()->average_cost);
+    }
+
+    public function test_product_photo_and_sales_channels_publish_controlled_catalog_items(): void
+    {
+        Storage::fake('public');
+        $admin = $this->role('admin');
+        $central = Warehouse::ensureDefault();
+        $bar = Warehouse::create(['name' => 'Magazina Bar', 'type' => 'bar', 'is_active' => true]);
+        $rooms = Warehouse::create(['name' => 'Magazina Dhoma', 'type' => 'rooms', 'is_active' => true]);
+        $category = MenuCategory::create(['name' => 'Pije', 'sort_order' => 1, 'outlet' => 'bar']);
+
+        $this->actingAs($admin)->post(route('inventory.items.store'), [
+            'name' => 'Coca-Cola 330ml', 'sku' => 'COLA-330', 'type' => 'product', 'unit' => 'piece',
+            'image' => UploadedFile::fake()->image('cola.jpg', 600, 600),
+            'average_cost' => 0.8, 'selling_price' => 3, 'minimum_stock' => 5,
+            'sell_in_pos' => true, 'pos_menu_category_id' => $category->id, 'pos_warehouse_id' => $bar->id,
+            'sell_in_rooms' => true, 'room_selling_price' => 4, 'room_warehouse_id' => $rooms->id,
+            'initial_quantity' => 10, 'initial_warehouse_id' => $central->id,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $item = InventoryItem::where('sku', 'COLA-330')->firstOrFail();
+        $menuItem = MenuItem::where('inventory_item_id', $item->id)->firstOrFail();
+        Storage::disk('public')->assertExists($item->image_path);
+        $this->assertTrue($item->sell_in_pos);
+        $this->assertTrue($item->sell_in_rooms);
+        $this->assertSame(4.0, (float) $item->room_selling_price);
+        $this->assertSame($category->id, $menuItem->menu_category_id);
+        $this->assertSame($bar->id, $menuItem->warehouse_id);
+        $this->assertSame($item->image_path, $menuItem->image_path);
+        $this->assertDatabaseHas('menu_item_inventory', [
+            'menu_item_id' => $menuItem->id, 'inventory_item_id' => $item->id, 'quantity' => 1,
+        ]);
+
+        $this->actingAs($admin)->put(route('inventory.items.update', $item), [
+            'name' => $item->name, 'sku' => $item->sku, 'type' => 'product', 'unit' => 'piece',
+            'selling_price' => 3, 'minimum_stock' => 5,
+            'sell_in_pos' => false, 'sell_in_rooms' => true,
+            'room_selling_price' => 4, 'room_warehouse_id' => $rooms->id, 'is_active' => true,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertFalse($menuItem->fresh()->is_available);
     }
 
     public function test_receiving_the_same_bill_line_is_idempotent(): void

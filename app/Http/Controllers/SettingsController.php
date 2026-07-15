@@ -19,12 +19,13 @@ use App\Services\AuditTimeline;
 use App\Services\CurrencyRates;
 use App\Services\MarketRates;
 use App\Services\PricingRulesVersion;
+use App\Support\TenantStorage;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Support\TenantStorage;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -35,8 +36,7 @@ class SettingsController extends Controller
         UserController $userController,
         AuditLogController $auditLogController,
         AuditTimeline $timeline,
-    ): Response
-    {
+    ): Response {
         $settings = Setting::allGrouped();
 
         // Never ship the raw AI key to the browser — expose only a masked hint + a configured flag.
@@ -647,6 +647,12 @@ class SettingsController extends Controller
 
     public function updateMenuItem(Request $request, MenuItem $menuItem): RedirectResponse
     {
+        if ($menuItem->inventory_item_id) {
+            throw ValidationException::withMessages([
+                'name' => 'Ky produkt menaxhohet nga Inventari.',
+            ]);
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0.01'],
@@ -688,6 +694,10 @@ class SettingsController extends Controller
 
     public function destroyMenuItem(MenuItem $menuItem): RedirectResponse
     {
+        if ($menuItem->inventory_item_id) {
+            return back()->with('error', 'Ky produkt menaxhohet nga Inventari dhe nuk mund të fshihet nga menuja POS.');
+        }
+
         $menuItem->delete();
 
         return back()->with('success', 'Artikulli u fshi.');
