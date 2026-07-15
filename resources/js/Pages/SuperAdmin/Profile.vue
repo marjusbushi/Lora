@@ -33,9 +33,9 @@ function saveProfile() {
     <SuperAdminLayout :title="t('superAdmin.compact.profile')">
         <div class="sa-page max-w-5xl space-y-4">
             <header>
-                <div class="text-[11px] text-neutral-400"><span>Control Panel</span><span class="mx-2">/</span><span>{{ t('superAdmin.compact.profile') }}</span></div>
-                <h1 class="mt-2 text-[27px] font-semibold leading-tight tracking-[-0.035em] text-neutral-950">{{ t('superAdmin.compact.profile') }}</h1>
-                <p class="mt-1 text-[13px] text-neutral-500">{{ t('superAdmin.compact.profileSubtitle') }}</p>
+                <div class="sa-breadcrumb"><span>Control Panel</span><span class="mx-2">/</span><span>{{ t('superAdmin.compact.profile') }}</span></div>
+                <h1 class="sa-page-title">{{ t('superAdmin.compact.profile') }}</h1>
+                <p class="sa-page-subtitle">{{ t('superAdmin.compact.profileSubtitle') }}</p>
             </header>
 
             <section class="sa-card">
@@ -48,7 +48,7 @@ function saveProfile() {
                 </div>
 
                 <form class="p-5" @submit.prevent="saveProfile">
-                    <div class="mb-5 flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-emerald-50 text-emerald-700"><UserRound class="h-5 w-5" /></span><div><h2 class="text-sm font-semibold text-neutral-900">{{ t('superAdmin.compact.profileData') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.compact.profileDataDescription') }}</p></div></div>
+                    <div class="mb-5 flex items-start gap-3"><span class="sa-icon-box-lg bg-emerald-50 text-emerald-700"><UserRound class="sa-icon-lg" /></span><div><h2 class="sa-card-title">{{ t('superAdmin.compact.profileData') }}</h2><p class="sa-card-subtitle">{{ t('superAdmin.compact.profileDataDescription') }}</p></div></div>
                     <div class="grid gap-4 sm:grid-cols-2">
                         <label class="block"><span class="mb-1.5 block text-xs font-semibold text-neutral-800">{{ t('superAdmin.compact.name') }}</span><TextInput v-model="form.name" type="text" autocomplete="name" required :error="form.errors.name" /><span v-if="form.errors.name" class="mt-1 block text-[11px] text-red-600">{{ form.errors.name }}</span></label>
                         <label class="block"><span class="mb-1.5 block text-xs font-semibold text-neutral-800">Email</span><TextInput v-model="form.email" type="email" autocomplete="username" required :error="form.errors.email" /><span v-if="form.errors.email" class="mt-1 block text-[11px] text-red-600">{{ form.errors.email }}</span></label>

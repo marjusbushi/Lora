@@ -202,9 +202,9 @@ function refresh() {
         <div class="sa-page space-y-4">
             <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <div class="text-[11px] text-neutral-400"><span>Control Panel</span><span class="mx-2">/</span><span>{{ $t('superAdmin.auto.copy120') }}</span></div>
-                    <h1 class="mt-2 text-[27px] font-semibold leading-tight tracking-[-0.035em] text-neutral-950">{{ $t('superAdmin.auto.copy120') }}</h1>
-                    <p class="mt-1 text-[13px] text-neutral-500">{{ $t('superAdmin.auto.copy136') }}</p>
+                    <div class="sa-breadcrumb"><span>Control Panel</span><span class="mx-2">/</span><span>{{ $t('superAdmin.auto.copy120') }}</span></div>
+                    <h1 class="sa-page-title">{{ $t('superAdmin.auto.copy120') }}</h1>
+                    <p class="sa-page-subtitle">{{ $t('superAdmin.auto.copy136') }}</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button type="button" class="sa-button" :disabled="refreshing" @click="refresh">
@@ -218,18 +218,18 @@ function refresh() {
             </header>
 
             <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <article v-for="kpi in kpis" :key="kpi.label" class="sa-card min-h-[140px] p-4">
+                <article v-for="kpi in kpis" :key="kpi.label" class="sa-card sa-kpi-card">
                     <div class="flex items-start justify-between gap-4">
                         <div class="min-w-0">
-                            <p class="truncate text-xs font-semibold text-neutral-500">{{ kpi.label }}</p>
-                            <p class="mt-3 text-[29px] font-semibold leading-none tracking-tight text-neutral-950">{{ kpi.value }}</p>
-                            <p class="mt-3 text-xs text-neutral-400">
+                            <p class="sa-kpi-label truncate">{{ kpi.label }}</p>
+                            <p class="sa-kpi-value">{{ kpi.value }}</p>
+                            <p class="sa-kpi-meta">
                                 <span v-if="kpi.lead !== undefined" class="font-semibold" :class="kpi.lead ? 'text-emerald-700' : 'text-neutral-500'">{{ kpi.lead }}</span>
                                 <span :class="kpi.lead !== undefined && 'ml-1'">{{ kpi.detail }}</span>
                             </p>
                         </div>
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl" :class="toneClass(kpi.tone)">
-                            <component :is="kpi.icon" class="h-[18px] w-[18px]" :stroke-width="1.8" />
+                        <span class="sa-icon-box-lg" :class="toneClass(kpi.tone)">
+                            <component :is="kpi.icon" class="sa-icon-lg" />
                         </span>
                     </div>
                 </article>
@@ -237,9 +237,9 @@ function refresh() {
 
             <section class="sa-card flex flex-col gap-4 border-emerald-200/80 bg-emerald-50/35 p-4 xl:flex-row xl:items-center">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
-                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl" :class="platformHealthy ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'">
-                        <Check v-if="platformHealthy" class="h-5 w-5" :stroke-width="2.2" />
-                        <AlertTriangle v-else class="h-5 w-5" :stroke-width="2" />
+                    <span class="sa-icon-box-lg" :class="platformHealthy ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'">
+                        <Check v-if="platformHealthy" class="sa-icon-lg" />
+                        <AlertTriangle v-else class="sa-icon-lg" />
                     </span>
                     <div class="min-w-0">
                         <p class="font-semibold text-neutral-900">{{ platformHealthy ? t('superAdmin.compact.platformHealthy') : t('superAdmin.compact.platformAttention') }}</p>
@@ -258,8 +258,8 @@ function refresh() {
                 <section class="sa-card">
                     <div class="sa-card-header flex-col items-stretch lg:flex-row lg:items-center">
                         <div>
-                            <h2 class="text-base font-semibold text-neutral-900">{{ t('superAdmin.compact.hotels') }}</h2>
-                            <p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.compact.portfolioDescription') }}</p>
+                            <h2 class="sa-card-title">{{ t('superAdmin.compact.hotels') }}</h2>
+                            <p class="sa-card-subtitle">{{ t('superAdmin.compact.portfolioDescription') }}</p>
                         </div>
                         <div class="flex flex-col gap-2 sm:flex-row">
                             <label class="relative block sm:w-[210px]">
@@ -277,10 +277,10 @@ function refresh() {
 
                     <div class="overflow-x-auto">
                         <table class="w-full min-w-[720px] text-sm">
-                            <thead><tr class="h-11 border-b border-[var(--sa-line)] bg-neutral-50/60 text-left text-[10px] uppercase tracking-[0.12em] text-neutral-400"><th class="px-[18px] font-semibold">{{ t('superAdmin.compact.hotel') }}</th><th class="px-4 font-semibold">{{ t('superAdmin.compact.subscription') }}</th><th class="px-4 font-semibold">{{ t('superAdmin.compact.usage') }}</th><th class="px-4 font-semibold">{{ t('superAdmin.compact.status') }}</th><th class="w-12" /></tr></thead>
+                            <thead><tr class="sa-table-head text-left"><th class="px-[18px] font-semibold">{{ t('superAdmin.compact.hotel') }}</th><th class="px-4 font-semibold">{{ t('superAdmin.compact.subscription') }}</th><th class="px-4 font-semibold">{{ t('superAdmin.compact.usage') }}</th><th class="px-4 font-semibold">{{ t('superAdmin.compact.status') }}</th><th class="w-12" /></tr></thead>
                             <tbody class="divide-y divide-neutral-100">
                                 <tr v-for="tenant in filteredTenants" :key="tenant.id" class="h-[58px] hover:bg-neutral-50/60">
-                                    <td class="px-[18px] py-2"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-emerald-50 text-[11px] font-bold text-emerald-800">{{ initials(tenant.name) }}</span><div class="min-w-0"><Link :href="`/super-admin/tenants/${tenant.id}`" class="block truncate text-[13px] font-semibold text-neutral-900 no-underline hover:text-emerald-700">{{ tenant.name }}</Link><p class="mt-0.5 max-w-[260px] truncate text-[11px] text-neutral-400">{{ tenant.domain || tenant.slug }}</p></div></div></td>
+                                    <td class="px-[18px] py-2"><div class="flex items-center gap-3"><span class="sa-icon-box bg-emerald-50 text-[11px] font-bold text-emerald-800">{{ initials(tenant.name) }}</span><div class="min-w-0"><Link :href="`/super-admin/tenants/${tenant.id}`" class="sa-table-primary block truncate no-underline hover:text-emerald-700">{{ tenant.name }}</Link><p class="sa-table-meta max-w-[260px] truncate">{{ tenant.domain || tenant.slug }}</p></div></div></td>
                                     <td class="px-4 py-2"><p class="text-xs font-semibold text-neutral-900">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(tenant.mrr_cents) }) }}</p><p class="mt-0.5 text-[11px] text-neutral-400">{{ tenant.billing_cycle === 'annual' ? t('superAdmin.compact.annualBilling') : t('superAdmin.compact.monthlyBilling') }}</p></td>
                                     <td class="px-4 py-2"><p class="text-xs font-semibold text-neutral-800">{{ t('superAdmin.dynamic.usersCount', { count: tenant.users_count }) }}</p><p class="mt-0.5 text-[11px] text-neutral-400">{{ t('superAdmin.dynamic.modulesCount', { count: tenant.modules.length }) }}</p></td>
                                     <td class="px-4 py-2"><span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold" :class="statusClass(tenant.subscription_status)"><span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(tenant.subscription_status)" />{{ statusLabel(tenant.subscription_status) }}</span></td>
@@ -295,12 +295,12 @@ function refresh() {
                 <div class="space-y-4">
                     <section class="sa-card">
                         <div class="sa-card-header">
-                            <div><h2 class="text-base font-semibold text-neutral-900">{{ t('superAdmin.compact.recentActivity') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.compact.importantActions') }}</p></div>
+                            <div><h2 class="sa-card-title">{{ t('superAdmin.compact.recentActivity') }}</h2><p class="sa-card-subtitle">{{ t('superAdmin.compact.importantActions') }}</p></div>
                             <Link href="/super-admin/activity" class="text-xs font-semibold text-emerald-700 no-underline hover:text-emerald-900">{{ t('superAdmin.compact.viewAll') }} <ArrowRight class="ml-0.5 inline h-3.5 w-3.5" /></Link>
                         </div>
                         <div v-if="recentActivity?.length" class="divide-y divide-neutral-100 px-4">
                             <div v-for="log in recentActivity" :key="log.id" class="flex items-start gap-3 py-3">
-                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-[10px]" :class="activityIconClass(actionMeta(log.action).tone)"><component :is="actionMeta(log.action).icon" class="h-4 w-4" :stroke-width="1.9" /></span>
+                                <span class="sa-icon-box" :class="activityIconClass(actionMeta(log.action).tone)"><component :is="actionMeta(log.action).icon" class="sa-icon" /></span>
                                 <div class="min-w-0 flex-1"><p class="truncate text-xs font-semibold text-neutral-900">{{ actionMeta(log.action).label }}<template v-if="log.tenant"> · {{ log.tenant }}</template></p><p class="mt-1 truncate text-[11px] text-neutral-400">{{ log.summary || log.actor }}</p></div>
                                 <time class="shrink-0 pt-0.5 text-[10px] text-neutral-400">{{ relativeTime(log.created_at) }}</time>
                             </div>
@@ -310,7 +310,7 @@ function refresh() {
 
                     <section class="sa-card">
                         <div class="sa-card-header">
-                            <div><h2 class="text-base font-semibold text-neutral-900">{{ t('superAdmin.compact.attention') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.compact.nonUrgentActions') }}</p></div>
+                            <div><h2 class="sa-card-title">{{ t('superAdmin.compact.attention') }}</h2><p class="sa-card-subtitle">{{ t('superAdmin.compact.nonUrgentActions') }}</p></div>
                             <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">{{ t('superAdmin.compact.points', { count: needsAttention.length }) }}</span>
                         </div>
                         <div v-if="needsAttention.length" class="space-y-2 p-4">
@@ -322,7 +322,7 @@ function refresh() {
             </div>
 
             <section v-if="moduleAdoption?.length" class="sa-card">
-                <div class="sa-card-header"><div><h2 class="text-base font-semibold text-neutral-900">{{ t('superAdmin.compact.moduleUsage') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.compact.moduleUsageDescription') }}</p></div></div>
+                <div class="sa-card-header"><div><h2 class="sa-card-title">{{ t('superAdmin.compact.moduleUsage') }}</h2><p class="sa-card-subtitle">{{ t('superAdmin.compact.moduleUsageDescription') }}</p></div></div>
                 <div class="flex flex-wrap gap-2 p-4"><span v-for="module in moduleAdoption" :key="module.code" class="rounded-[9px] border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] text-neutral-600"><strong class="mr-1 text-neutral-900">{{ module.hotels_count }}/{{ stats.hotels_total }}</strong>{{ module.name }}</span></div>
             </section>
         </div>

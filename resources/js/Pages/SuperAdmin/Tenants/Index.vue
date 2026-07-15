@@ -1,7 +1,6 @@
 <script setup>
 import { useI18n } from 'vue-i18n';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
-import PageHeader from '@/Components/UI/PageHeader.vue';
 import Button from '@/Components/UI/Button.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
@@ -392,74 +391,70 @@ function statusLabel(status) {
     <Head :title="$t('admin.generated.k_0f144fdc6f3c')" />
 
     <SuperAdminLayout :title="$t('superAdmin.auto.copy071')">
-        <div class="mx-auto max-w-[1480px] space-y-6">
+        <div class="sa-page space-y-4">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <PageHeader
-                        :title="$t('superAdmin.auto.copy070')"
-                        :breadcrumbs="[{ label: 'Control Panel', href: '/super-admin' }, { label: t('superAdmin.auto.copy070') }]"
-                    />
-                    <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy031') }}</p>
+                    <div class="sa-breadcrumb"><Link href="/super-admin" class="text-inherit no-underline hover:text-neutral-700">Control Panel</Link><span class="mx-2">/</span><span>{{ t('superAdmin.auto.copy070') }}</span></div>
+                    <h1 class="sa-page-title">{{ t('superAdmin.auto.copy070') }}</h1>
+                    <p class="sa-page-subtitle">{{ t('superAdmin.auto.copy031') }}</p>
                 </div>
-                <Button variant="primary" @click="openCreate">+ {{ t('superAdmin.dynamic.addHotel') }}</Button>
+                <button type="button" class="sa-button sa-button-primary" @click="openCreate">+ {{ t('superAdmin.dynamic.addHotel') }}</button>
             </div>
 
-            <section class="grid gap-4 md:grid-cols-3">
-                <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
+            <section class="grid gap-3 md:grid-cols-3">
+                <article class="sa-card sa-kpi-card">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy017') }}</p>
-                            <p class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900">{{ summary.active }}</p>
-                            <p class="mt-1 text-xs text-neutral-400">{{ t('superAdmin.dynamic.platformUsersCount', { count: summary.users }) }}</p>
+                            <p class="sa-kpi-label">{{ t('superAdmin.auto.copy017') }}</p>
+                            <p class="sa-kpi-value">{{ summary.active }}</p>
+                            <p class="sa-kpi-meta">{{ t('superAdmin.dynamic.platformUsersCount', { count: summary.users }) }}</p>
                         </div>
-                        <span class="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><Building2 class="h-5 w-5" /></span>
+                        <span class="sa-icon-box-lg bg-emerald-50 text-emerald-700"><Building2 class="sa-icon-lg" /></span>
                     </div>
                 </article>
-                <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
+                <article class="sa-card sa-kpi-card">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy027') }}</p>
-                            <p class="mt-3 text-3xl font-semibold tracking-tight text-neutral-900">{{ money(summary.mrr, 'EUR') }}</p>
-                            <p class="mt-1 text-xs text-neutral-400">{{ $t('superAdmin.auto.copy040') }}</p>
+                            <p class="sa-kpi-label">{{ t('superAdmin.auto.copy027') }}</p>
+                            <p class="sa-kpi-value">{{ money(summary.mrr, 'EUR') }}</p>
+                            <p class="sa-kpi-meta">{{ t('superAdmin.auto.copy040') }}</p>
                         </div>
-                        <span class="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-700"><CreditCard class="h-5 w-5" /></span>
+                        <span class="sa-icon-box-lg bg-blue-50 text-blue-700"><CreditCard class="sa-icon-lg" /></span>
                     </div>
                 </article>
-                <article class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm shadow-neutral-200/30">
+                <article class="sa-card sa-kpi-card">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <p class="text-sm font-medium text-neutral-500">{{ $t('superAdmin.auto.copy025') }}</p>
-                            <p class="mt-3 text-3xl font-semibold tracking-tight" :class="summary.attention ? 'text-amber-700' : 'text-neutral-900'">{{ summary.attention }}</p>
-                            <p class="mt-1 text-xs text-neutral-400">{{ $t('superAdmin.auto.copy002') }}</p>
+                            <p class="sa-kpi-label">{{ t('superAdmin.auto.copy025') }}</p>
+                            <p class="sa-kpi-value" :class="summary.attention ? '!text-amber-700' : ''">{{ summary.attention }}</p>
+                            <p class="sa-kpi-meta">{{ t('superAdmin.auto.copy002') }}</p>
                         </div>
-                        <span class="grid h-11 w-11 place-items-center rounded-xl bg-amber-50 text-amber-700"><CircleAlert class="h-5 w-5" /></span>
+                        <span class="sa-icon-box-lg bg-amber-50 text-amber-700"><CircleAlert class="sa-icon-lg" /></span>
                     </div>
                 </article>
             </section>
 
-            <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                <div class="flex flex-col gap-4 border-b border-neutral-200 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+            <section class="sa-card">
+                <div class="sa-card-header flex-col items-stretch lg:flex-row lg:items-center">
                     <div>
-                        <h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.auto.copy045') }}</h2>
-                        <p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.auto.copy043') }}</p>
+                        <h2 class="sa-card-title">{{ t('superAdmin.auto.copy045') }}</h2>
+                        <p class="sa-card-subtitle">{{ t('superAdmin.auto.copy043') }}</p>
                     </div>
-                    <Button v-if="tenants.length" variant="outline" class="gap-2" @click="exportTenants">
-                        <Download class="h-4 w-4" /> {{ t('superAdmin.dynamic.exportCsv') }}
-                    </Button>
+                    <button v-if="tenants.length" type="button" class="sa-button" @click="exportTenants"><Download class="sa-icon" /> {{ t('superAdmin.dynamic.exportCsv') }}</button>
                 </div>
 
-                <div v-if="tenants.length" class="space-y-4 border-b border-neutral-100 px-5 py-4">
+                <div v-if="tenants.length" class="space-y-3 border-b border-neutral-100 p-4">
                     <div class="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_190px_190px]">
                         <label class="relative block">
-                            <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                            <input v-model="search" type="search" :placeholder="$t('superAdmin.auto.copy073')" class="w-full rounded-xl border-neutral-300 py-2.5 pl-10 pr-3 text-sm" />
+                            <Search class="sa-icon pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                            <input v-model="search" type="search" :placeholder="t('superAdmin.auto.copy073')" class="sa-control w-full py-0 pl-9 pr-3" />
                         </label>
-                        <select v-model="billingCycle" class="rounded-xl border-neutral-300 py-2.5 text-sm text-neutral-700">
+                        <select v-model="billingCycle" class="sa-control px-3 py-0">
                             <option value="">{{ $t('superAdmin.auto.copy060') }}</option>
                             <option value="monthly">{{ $t('superAdmin.auto.copy037') }}</option>
                             <option value="annual">{{ $t('superAdmin.auto.copy068') }}</option>
                         </select>
-                        <select v-model="sortOrder" class="rounded-xl border-neutral-300 py-2.5 text-sm text-neutral-700">
+                        <select v-model="sortOrder" class="sa-control px-3 py-0">
                             <option value="mrr">{{ $t('superAdmin.auto.copy053') }}</option>
                             <option value="name">{{ $t('superAdmin.auto.copy052') }}</option>
                             <option value="attention">{{ $t('superAdmin.auto.copy054') }}</option>
@@ -470,7 +465,7 @@ function statusLabel(status) {
                             v-for="chip in statusChips"
                             :key="chip.key"
                             type="button"
-                            class="rounded-full border px-3 py-1.5 text-xs font-medium transition"
+                            class="inline-flex h-7 items-center rounded-full border px-3 text-[10px] font-semibold transition"
                             :class="statusFilter === chip.key ? 'border-[#123d32] bg-[#123d32] text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50'"
                             @click="statusFilter = chip.key"
                         >
@@ -480,9 +475,9 @@ function statusLabel(status) {
                 </div>
 
                 <div v-if="filteredTenants.length" class="overflow-x-auto">
-                    <table class="w-full min-w-[920px] text-sm">
+                    <table class="w-full min-w-[920px]">
                         <thead>
-                            <tr class="border-b border-neutral-200 bg-neutral-50/70 text-left text-[11px] uppercase tracking-[0.08em] text-neutral-400">
+                            <tr class="sa-table-head text-left">
                                 <th class="px-5 py-3 font-semibold">{{ $t('superAdmin.auto.copy018') }}</th>
                                 <th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy003') }}</th>
                                 <th class="px-4 py-3 font-semibold">{{ $t('superAdmin.auto.copy050') }}</th>
@@ -493,40 +488,40 @@ function statusLabel(status) {
                         </thead>
                         <tbody class="divide-y divide-neutral-100">
                             <tr v-for="tenant in filteredTenants" :key="tenant.id" class="cursor-pointer transition hover:bg-emerald-50/30" @click="selectedTenant = tenant">
-                                <td class="px-5 py-4">
+                                <td class="px-5 py-2.5">
                                     <div class="flex items-center gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e8f3ef] text-xs font-bold text-[#24624f]">{{ initials(tenant.name) }}</span>
+                                        <span class="sa-icon-box bg-[#e8f3ef] text-[11px] font-bold text-[#24624f]">{{ initials(tenant.name) }}</span>
                                         <div class="min-w-0">
                                             <div class="flex items-center gap-2">
-                                                <Link :href="route('super-admin.tenants.show', tenant.id)" class="truncate font-semibold text-neutral-900 no-underline hover:text-emerald-700" @click.stop>{{ tenant.name }}</Link>
+                                                <Link :href="route('super-admin.tenants.show', tenant.id)" class="sa-table-primary truncate no-underline hover:text-emerald-700" @click.stop>{{ tenant.name }}</Link>
                                                 <span v-if="tenant.id === currentTenantId" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{{ $t('superAdmin.auto.copy001') }}</span>
                                             </div>
-                                            <p class="mt-0.5 max-w-[280px] truncate text-xs text-neutral-400">{{ tenant.primary_domain || tenant.slug }} · {{ tenant.timezone }}</p>
+                                            <p class="sa-table-meta max-w-[280px] truncate">{{ tenant.primary_domain || tenant.slug }} · {{ tenant.timezone }}</p>
                                         </div>
                                     </div>
                                 </td>
-                                <td class="px-4 py-4">
-                                    <p class="font-semibold tabular-nums text-neutral-900">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(monthlyMrr(tenant), tenant.billing.currency) }) }}</p>
-                                    <p class="mt-0.5 text-xs text-neutral-500">{{ tenant.billing.billing_cycle === 'annual' ? 'Faturim vjetor' : 'Faturim mujor' }}</p>
+                                <td class="px-4 py-2.5">
+                                    <p class="sa-table-primary tabular-nums">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(monthlyMrr(tenant), tenant.billing.currency) }) }}</p>
+                                    <p class="sa-table-meta">{{ tenant.billing.billing_cycle === 'annual' ? 'Faturim vjetor' : 'Faturim mujor' }}</p>
                                 </td>
-                                <td class="px-4 py-4">
-                                    <p class="font-medium text-neutral-800"><Users class="mr-1 inline h-3.5 w-3.5 text-neutral-400" />{{ t('superAdmin.dynamic.usersCount', { count: tenant.users_count }) }}</p>
-                                    <p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.dynamic.activeModulesCount', { count: enabledCount(tenant) }) }}</p>
+                                <td class="px-4 py-2.5">
+                                    <p class="sa-table-primary"><Users class="mr-1 inline h-3.5 w-3.5 text-neutral-400" />{{ t('superAdmin.dynamic.usersCount', { count: tenant.users_count }) }}</p>
+                                    <p class="sa-table-meta">{{ t('superAdmin.dynamic.activeModulesCount', { count: enabledCount(tenant) }) }}</p>
                                 </td>
-                                <td class="px-4 py-4">
-                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="statusPillClass(tenantHealth(tenant).tone)">
+                                <td class="px-4 py-2.5">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold" :class="statusPillClass(tenantHealth(tenant).tone)">
                                         <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(tenantHealth(tenant).tone)" />
                                         {{ tenantHealth(tenant).label }}
                                     </span>
                                     <p class="mt-1 max-w-[210px] truncate text-[11px] text-neutral-400">{{ tenantHealth(tenant).detail }}</p>
                                 </td>
-                                <td class="px-4 py-4">
-                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="statusPillClass(hotelStatus(tenant).tone)">
+                                <td class="px-4 py-2.5">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold" :class="statusPillClass(hotelStatus(tenant).tone)">
                                         <span class="h-1.5 w-1.5 rounded-full" :class="statusDotClass(hotelStatus(tenant).tone)" />
                                         {{ hotelStatus(tenant).label }}
                                     </span>
                                 </td>
-                                <td class="px-5 py-4" @click.stop>
+                                <td class="px-5 py-2.5" @click.stop>
                                     <div class="flex items-center justify-end gap-2">
                                         <Button
                                             size="sm"
@@ -570,7 +565,7 @@ function statusLabel(status) {
         </div>
 
         <Teleport to="body">
-            <div v-if="selectedTenant" class="fixed inset-0 z-50 bg-neutral-950/40" @click.self="selectedTenant = null">
+            <div v-if="selectedTenant" class="super-admin-shell fixed inset-0 z-50 bg-neutral-950/40" @click.self="selectedTenant = null">
                 <aside class="ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
                     <div class="flex items-start justify-between border-b border-neutral-200 px-6 py-5">
                         <div class="flex min-w-0 items-center gap-3">
@@ -764,7 +759,7 @@ function statusLabel(status) {
         </Teleport>
 
         <Teleport to="body">
-            <div v-if="editingTenant" class="fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeBilling">
+            <div v-if="editingTenant" class="super-admin-shell fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeBilling">
                 <section role="dialog" aria-modal="true" class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
                     <div class="flex items-start justify-between border-b border-neutral-200 bg-white px-5 py-4 sm:px-6">
                         <div class="flex min-w-0 items-center gap-3">
@@ -883,7 +878,7 @@ function statusLabel(status) {
         </Teleport>
 
         <Teleport to="body">
-            <div v-if="configTenant" class="fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeConfig">
+            <div v-if="configTenant" class="super-admin-shell fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="closeConfig">
                 <section role="dialog" aria-modal="true" class="flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
                     <div class="flex items-start justify-between border-b border-neutral-200 bg-white px-5 py-4 sm:px-6">
                         <div class="flex min-w-0 items-center gap-3">

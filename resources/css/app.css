@@ -69,12 +69,108 @@
         --sa-brand-dark: #104c3d;
         --sa-brand-soft: #eff9f5;
         --sa-radius: 14px;
+        --sa-control-radius: 10px;
+        --sa-control-height-sm: 34px;
+        --sa-control-height: 38px;
+        --sa-control-height-lg: 44px;
+        --sa-font-page: 27px;
+        --sa-font-section: 16px;
+        --sa-font-body: 13px;
+        --sa-font-label: 12px;
+        --sa-font-meta: 11px;
+        --sa-font-caption: 10px;
+        --sa-icon: 16px;
+        --sa-icon-large: 18px;
+        --sa-icon-box: 36px;
+        --sa-icon-box-large: 40px;
         --sa-shadow: 0 1px 2px rgba(18, 45, 36, 0.04), 0 8px 24px rgba(18, 45, 36, 0.035);
+        font-size: var(--sa-font-body);
+        line-height: 1.45;
+    }
+
+    .super-admin-shell .lucide {
+        stroke-width: 1.8;
+    }
+
+    .super-admin-shell label {
+        color: #405149;
+        font-size: var(--sa-font-label);
+        font-weight: 600;
+    }
+
+    .super-admin-shell :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']):not([type='file']):not([type='color']), select) {
+        height: var(--sa-control-height);
+        border-color: var(--sa-line);
+        border-radius: var(--sa-control-radius);
+        color: #405149;
+        font-size: var(--sa-font-label);
+    }
+
+    .super-admin-shell textarea {
+        min-height: 76px;
+        border-color: var(--sa-line);
+        border-radius: var(--sa-control-radius);
+        color: #405149;
+        font-size: var(--sa-font-label);
+    }
+
+    .super-admin-shell :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']):not([type='file']):not([type='color']), select, textarea):focus {
+        border-color: #6fb29d;
+        box-shadow: 0 0 0 3px rgba(37, 133, 108, 0.12);
+        outline: none;
+        --tw-ring-color: transparent;
+    }
+
+    .super-admin-shell [data-ui='button'] {
+        min-height: var(--sa-control-height);
+        padding-block: 0;
+        padding-inline: 13px;
+        gap: 7px;
+        border-radius: var(--sa-control-radius);
+        font-size: var(--sa-font-label);
+        font-weight: 700;
+    }
+
+    .super-admin-shell [data-ui='button'][data-size='sm'] {
+        min-height: var(--sa-control-height-sm);
+        padding-inline: 11px;
+        font-size: var(--sa-font-meta);
+    }
+
+    .super-admin-shell [data-ui='button'][data-size='lg'] {
+        min-height: var(--sa-control-height-lg);
+        padding-inline: 16px;
+        font-size: var(--sa-font-body);
+    }
+
+    .super-admin-shell [data-ui='button'] .lucide {
+        width: var(--sa-icon);
+        height: var(--sa-icon);
     }
 
     .sa-page {
         width: min(1480px, 100%);
         margin-inline: auto;
+    }
+
+    .sa-breadcrumb {
+        color: #98a39e;
+        font-size: var(--sa-font-meta);
+    }
+
+    .sa-page-title {
+        margin-top: 8px;
+        color: #111b17;
+        font-size: var(--sa-font-page);
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        line-height: 1.15;
+    }
+
+    .sa-page-subtitle {
+        margin-top: 4px;
+        color: var(--sa-muted);
+        font-size: var(--sa-font-body);
     }
 
     .sa-card {
@@ -95,10 +191,128 @@
         border-bottom: 1px solid var(--sa-line);
     }
 
+    .sa-card-title {
+        color: var(--sa-ink);
+        font-size: var(--sa-font-section);
+        font-weight: 600;
+        line-height: 1.25;
+    }
+
+    .sa-card-subtitle {
+        margin-top: 2px;
+        color: var(--sa-muted);
+        font-size: var(--sa-font-label);
+    }
+
+    .sa-kpi-card {
+        min-height: 140px;
+        padding: 16px;
+    }
+
+    .sa-kpi-label {
+        color: var(--sa-muted);
+        font-size: var(--sa-font-label);
+        font-weight: 600;
+    }
+
+    .sa-kpi-value {
+        margin-top: 12px;
+        color: #111b17;
+        font-size: 29px;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+        line-height: 1;
+    }
+
+    .sa-kpi-meta {
+        margin-top: 12px;
+        color: #929c97;
+        font-size: var(--sa-font-label);
+    }
+
+    .sa-icon-box,
+    .sa-icon-box-lg {
+        display: grid;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: var(--sa-control-radius);
+    }
+
+    .sa-icon-box {
+        width: var(--sa-icon-box);
+        height: var(--sa-icon-box);
+    }
+
+    .sa-icon-box-lg {
+        width: var(--sa-icon-box-large);
+        height: var(--sa-icon-box-large);
+    }
+
+    .sa-icon {
+        width: var(--sa-icon);
+        height: var(--sa-icon);
+    }
+
+    .sa-icon-lg {
+        width: var(--sa-icon-large);
+        height: var(--sa-icon-large);
+    }
+
+    .sa-table-head {
+        height: 44px;
+        border-bottom: 1px solid var(--sa-line);
+        background: rgba(249, 250, 249, 0.72);
+        color: #98a39e;
+        font-size: var(--sa-font-caption);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+
+    .sa-table-primary {
+        color: var(--sa-ink);
+        font-size: var(--sa-font-body);
+        font-weight: 600;
+    }
+
+    .sa-table-meta {
+        margin-top: 2px;
+        color: #929c97;
+        font-size: var(--sa-font-meta);
+    }
+
+    .sa-label {
+        display: block;
+        margin-bottom: 6px;
+        color: #405149;
+        font-size: var(--sa-font-label);
+        font-weight: 600;
+    }
+
+    .sa-help {
+        margin-top: 5px;
+        color: #929c97;
+        font-size: var(--sa-font-meta);
+    }
+
+    .sa-actions > button,
+    .sa-actions > a {
+        min-height: var(--sa-control-height);
+        border-radius: var(--sa-control-radius);
+        padding-block: 0;
+        padding-inline: 13px;
+        font-size: var(--sa-font-label);
+        font-weight: 700;
+    }
+
+    .sa-actions .lucide {
+        width: var(--sa-icon);
+        height: var(--sa-icon);
+    }
+
     .sa-control {
-        height: 38px;
+        height: var(--sa-control-height);
         border: 1px solid var(--sa-line);
-        border-radius: 10px;
+        border-radius: var(--sa-control-radius);
         background: var(--sa-surface);
         color: #405149;
         font-size: 12px;
@@ -112,13 +326,13 @@
 
     .sa-button {
         display: inline-flex;
-        height: 38px;
+        height: var(--sa-control-height);
         align-items: center;
         justify-content: center;
         gap: 7px;
         padding-inline: 13px;
         border: 1px solid var(--sa-line);
-        border-radius: 10px;
+        border-radius: var(--sa-control-radius);
         background: var(--sa-surface);
         color: #405149;
         font-size: 12px;

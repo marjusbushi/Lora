@@ -252,9 +252,9 @@ function exportRows() {
         <div class="sa-page space-y-4">
             <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <div class="text-[11px] text-neutral-400"><span>Control Panel</span><span class="mx-2">/</span><span>{{ t('superAdmin.auto.copy107') }}</span></div>
-                    <h1 class="mt-2 text-[27px] font-semibold leading-tight tracking-[-0.035em] text-neutral-950">{{ t('superAdmin.activity.title') }}</h1>
-                    <p class="mt-1 text-[13px] text-neutral-500">{{ t('superAdmin.activity.subtitle') }}</p>
+                    <div class="sa-breadcrumb"><span>Control Panel</span><span class="mx-2">/</span><span>{{ t('superAdmin.auto.copy107') }}</span></div>
+                    <h1 class="sa-page-title">{{ t('superAdmin.activity.title') }}</h1>
+                    <p class="sa-page-subtitle">{{ t('superAdmin.activity.subtitle') }}</p>
                 </div>
                 <button type="button" class="sa-button self-start sm:self-auto" :disabled="!rows.length" @click="exportRows">
                     <Download class="h-4 w-4" :stroke-width="1.8" /> {{ t('superAdmin.dynamic.exportCsv') }}
@@ -263,7 +263,7 @@ function exportRows() {
 
             <section class="sa-card grid md:grid-cols-[1.35fr_1fr_1fr_1fr]">
                 <div class="flex items-center gap-3 border-b border-[var(--sa-line)] px-4 py-4 md:border-b-0 md:border-r">
-                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-[11px] bg-emerald-50 text-emerald-700"><ShieldCheck class="h-5 w-5" :stroke-width="1.8" /></span>
+                    <span class="sa-icon-box-lg bg-emerald-50 text-emerald-700"><ShieldCheck class="sa-icon-lg" /></span>
                     <div class="min-w-0"><p class="text-sm font-semibold text-neutral-900">{{ t('superAdmin.activity.traceable') }}</p><p class="mt-0.5 text-[11px] leading-4 text-neutral-500">{{ t('superAdmin.activity.immutableSummary') }}</p></div>
                 </div>
                 <div class="border-b border-[var(--sa-line)] px-4 py-4 md:border-b-0 md:border-r">
@@ -285,7 +285,7 @@ function exportRows() {
 
             <section class="sa-card">
                 <div class="sa-card-header">
-                    <div><h2 class="text-base font-semibold text-neutral-900">{{ t('superAdmin.activity.trail') }}</h2><p class="mt-0.5 text-xs text-neutral-500">{{ t('superAdmin.activity.trailHint') }}</p></div>
+                    <div><h2 class="sa-card-title">{{ t('superAdmin.activity.trail') }}</h2><p class="sa-card-subtitle">{{ t('superAdmin.activity.trailHint') }}</p></div>
                     <span class="rounded-full bg-neutral-100 px-2.5 py-1 text-[10px] font-semibold text-neutral-600">{{ t('superAdmin.activity.inView', { count: logs.total }) }}</span>
                 </div>
 
@@ -326,7 +326,7 @@ function exportRows() {
                 <div v-if="rows.length" class="overflow-hidden">
                     <table class="w-full table-fixed border-collapse">
                         <thead>
-                            <tr class="h-10 border-b border-[var(--sa-line)] bg-neutral-50/60 text-left text-[9px] uppercase tracking-[0.12em] text-neutral-400">
+                            <tr class="sa-table-head text-left">
                                 <th class="px-4 font-semibold">{{ t('superAdmin.activity.action') }}</th>
                                 <th class="hidden w-[220px] px-3 font-semibold lg:table-cell">{{ t('superAdmin.activity.hotel') }}</th>
                                 <th class="hidden w-[180px] px-3 font-semibold md:table-cell">{{ t('superAdmin.activity.administrator') }}</th>
@@ -350,10 +350,10 @@ function exportRows() {
                                 >
                                     <td class="px-3 py-2.5 sm:px-4">
                                         <div class="flex min-w-0 items-center gap-3">
-                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-[10px]" :class="iconClass(actionMeta(log.action).tone)"><component :is="actionMeta(log.action).icon" class="h-4 w-4" :stroke-width="1.8" /></span>
+                                            <span class="sa-icon-box" :class="iconClass(actionMeta(log.action).tone)"><component :is="actionMeta(log.action).icon" class="sa-icon" /></span>
                                             <div class="min-w-0">
-                                                <p class="truncate text-xs font-semibold text-neutral-900">{{ actionMeta(log.action).label }}</p>
-                                                <p class="mt-0.5 truncate text-[10px] text-neutral-500">{{ log.summary || log.tenant || t('superAdmin.activity.platform') }}</p>
+                                                <p class="sa-table-primary truncate">{{ actionMeta(log.action).label }}</p>
+                                                <p class="sa-table-meta truncate">{{ log.summary || log.tenant || t('superAdmin.activity.platform') }}</p>
                                                 <p class="mt-1 truncate text-[9px] text-neutral-400 md:hidden">{{ log.actor }}<template v-if="log.tenant"> · {{ log.tenant }}</template></p>
                                             </div>
                                         </div>
@@ -385,7 +385,7 @@ function exportRows() {
         </div>
 
         <Teleport to="body">
-            <div v-if="selectedLog" class="fixed inset-0 z-50 bg-neutral-950/40 backdrop-blur-[1px]" @click.self="selectedLog = null">
+            <div v-if="selectedLog" class="super-admin-shell fixed inset-0 z-50 bg-neutral-950/40 backdrop-blur-[1px]" @click.self="selectedLog = null">
                 <aside role="dialog" aria-modal="true" :aria-label="t('superAdmin.activity.details')" class="ml-auto flex h-full w-full max-w-[520px] flex-col bg-white shadow-2xl">
                     <div class="flex items-start justify-between border-b border-neutral-200 px-5 py-4">
                         <div class="flex items-center gap-3">

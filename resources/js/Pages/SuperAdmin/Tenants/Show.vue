@@ -300,8 +300,8 @@ function toggleStatus() {
     <Head :title="`${tenant.name} — Lora Control Panel`" />
 
     <SuperAdminLayout :title="`${tenant.name} — Lora Control Panel`">
-        <main class="mx-auto max-w-[1320px] space-y-3">
-            <nav class="text-[11px] text-neutral-400">
+        <main class="sa-page max-w-[1320px] space-y-4">
+            <nav class="sa-breadcrumb">
                 <Link href="/super-admin" class="no-underline hover:text-neutral-700">Control Panel</Link>
                 <span class="mx-2">/</span>
                 <Link href="/super-admin/tenants" class="no-underline hover:text-neutral-700">Hotelet</Link>
@@ -311,18 +311,18 @@ function toggleStatus() {
 
             <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div class="flex min-w-0 items-center gap-3">
-                    <span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#e5f5ef] text-sm font-bold text-[#165d4b]">{{ initials(tenant.name) }}</span>
+                    <span class="sa-icon-box-lg bg-[#e5f5ef] text-xs font-bold text-[#165d4b]">{{ initials(tenant.name) }}</span>
                     <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
-                            <h1 class="truncate text-2xl font-semibold tracking-tight text-neutral-950">{{ tenant.name }}</h1>
+                            <h1 class="sa-page-title !mt-0 truncate">{{ tenant.name }}</h1>
                             <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-bold" :class="isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'">
                                 <span class="h-1.5 w-1.5 rounded-full bg-current" />{{ isActive ? 'Aktiv' : 'Pezulluar' }}
                             </span>
                         </div>
-                        <p class="mt-1 truncate text-xs text-neutral-500">{{ tenant.slug }} · {{ tenant.timezone }} · {{ tenant.currency }}</p>
+                        <p class="sa-page-subtitle truncate">{{ tenant.slug }} · {{ tenant.timezone }} · {{ tenant.currency }}</p>
                     </div>
                 </div>
-                <div class="flex flex-wrap gap-2 sm:flex-nowrap">
+                <div class="sa-actions flex flex-wrap gap-2 sm:flex-nowrap">
                     <Button variant="outline" :class="isActive ? '!text-red-600' : '!text-emerald-700'" @click="toggleStatus">
                         {{ isActive ? 'Pezullo' : 'Aktivizo' }}
                     </Button>
@@ -333,7 +333,7 @@ function toggleStatus() {
                 </div>
             </header>
 
-            <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
+            <section class="sa-card">
                 <div class="grid sm:grid-cols-2 xl:grid-cols-[1.35fr_repeat(4,.55fr)]">
                     <div class="flex items-center gap-3 border-b border-neutral-100 p-4 sm:col-span-2 xl:col-span-1 xl:border-b-0">
                         <span class="relative grid h-11 w-11 shrink-0 place-items-center rounded-full" :style="readinessRing">
@@ -359,48 +359,48 @@ function toggleStatus() {
 
             <div class="grid items-start gap-3 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,.72fr)]">
                 <div class="space-y-3">
-                    <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                        <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3.5">
-                            <div><h2 class="text-sm font-semibold text-neutral-900">Gjendja e konfigurimit</h2><p class="mt-0.5 text-[11px] text-neutral-500">Kontrollet që ndikojnë përdorimin real të hotelit.</p></div>
+                    <section class="sa-card">
+                        <div class="sa-card-header">
+                            <div><h2 class="sa-card-title">Gjendja e konfigurimit</h2><p class="sa-card-subtitle">Kontrollet që ndikojnë përdorimin real të hotelit.</p></div>
                             <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">{{ attentionCount }} kërkojnë veprim</span>
                         </div>
                         <div class="divide-y divide-neutral-100">
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><Globe2 class="h-4 w-4" /></span>
-                                <div><strong class="text-xs text-neutral-900">Domain primar</strong><p class="mt-0.5 text-[10px] text-neutral-500">{{ tenant.primary_domain || 'Nuk është konfiguruar' }}</p></div>
+                                <span class="sa-icon-box bg-emerald-50 text-emerald-700"><Globe2 class="sa-icon" /></span>
+                                <div><strong class="sa-table-primary">Domain primar</strong><p class="sa-table-meta">{{ tenant.primary_domain || 'Nuk është konfiguruar' }}</p></div>
                                 <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="tenant.primary_domain ? 'text-emerald-700' : 'text-amber-700'">{{ tenant.primary_domain ? 'Në rregull' : 'Mungon' }}</span><Button size="sm" variant="outline" @click="openConfig('domains')">Menaxho</Button></div>
                             </div>
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><CreditCard class="h-4 w-4" /></span>
-                                <div><strong class="text-xs text-neutral-900">Abonimi dhe modulet</strong><p class="mt-0.5 text-[10px] text-neutral-500">{{ enabledModules.length }} module aktive · rinovim {{ date(tenant.billing.current_period_ends_at) }}</p></div>
+                                <span class="sa-icon-box bg-emerald-50 text-emerald-700"><CreditCard class="sa-icon" /></span>
+                                <div><strong class="sa-table-primary">Abonimi dhe modulet</strong><p class="sa-table-meta">{{ enabledModules.length }} module aktive · rinovim {{ date(tenant.billing.current_period_ends_at) }}</p></div>
                                 <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="billingIsHealthy ? 'text-emerald-700' : 'text-amber-700'">{{ statusLabel(tenant.billing.status) }}</span><Button size="sm" variant="outline" @click="openBilling">Ndrysho</Button></div>
                             </div>
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="grid h-9 w-9 place-items-center rounded-xl" :class="channexConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><Plug class="h-4 w-4" /></span>
-                                <div><strong class="text-xs text-neutral-900">Channex Channel Manager</strong><p class="mt-0.5 text-[10px] text-neutral-500">{{ channexConfigured ? 'Kredencialet dhe Property ID janë ruajtur' : 'Property ID ose API key mungon' }}</p></div>
+                                <span class="sa-icon-box" :class="channexConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><Plug class="sa-icon" /></span>
+                                <div><strong class="sa-table-primary">Channex Channel Manager</strong><p class="sa-table-meta">{{ channexConfigured ? 'Kredencialet dhe Property ID janë ruajtur' : 'Property ID ose API key mungon' }}</p></div>
                                 <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="channexConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ channexConfigured ? 'Aktiv' : 'Mungon' }}</span><Button size="sm" variant="outline" @click="openConfig('channex')">Konfiguro</Button></div>
                             </div>
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="grid h-9 w-9 place-items-center rounded-xl" :class="pokConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><CreditCard class="h-4 w-4" /></span>
-                                <div><strong class="text-xs text-neutral-900">POK Payments</strong><p class="mt-0.5 text-[10px] text-neutral-500">{{ pokConfigured ? 'Pagesat online janë konfiguruar' : 'Pagesat online nuk janë aktivizuar' }}</p></div>
+                                <span class="sa-icon-box" :class="pokConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><CreditCard class="sa-icon" /></span>
+                                <div><strong class="sa-table-primary">POK Payments</strong><p class="sa-table-meta">{{ pokConfigured ? 'Pagesat online janë konfiguruar' : 'Pagesat online nuk janë aktivizuar' }}</p></div>
                                 <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="pokConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ pokConfigured ? 'Aktiv' : 'Mungon' }}</span><Button size="sm" variant="outline" @click="openConfig('pok')">Konfiguro</Button></div>
                             </div>
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="grid h-9 w-9 place-items-center rounded-xl" :class="fatureConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><FileCheck2 class="h-4 w-4" /></span>
-                                <div><strong class="text-xs text-neutral-900">fature.al</strong><p class="mt-0.5 text-[10px] text-neutral-500">{{ fatureConfigured ? `${tenant.integrations.fature_al.environment} · token i ruajtur` : 'Fiskalizimi nuk është konfiguruar' }}</p></div>
+                                <span class="sa-icon-box" :class="fatureConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><FileCheck2 class="sa-icon" /></span>
+                                <div><strong class="sa-table-primary">fature.al</strong><p class="sa-table-meta">{{ fatureConfigured ? `${tenant.integrations.fature_al.environment} · token i ruajtur` : 'Fiskalizimi nuk është konfiguruar' }}</p></div>
                                 <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="fatureConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ fatureConfigured ? tenant.integrations.fature_al.environment : 'Mungon' }}</span><Button size="sm" variant="outline" @click="openConfig('fature')">Menaxho</Button></div>
                             </div>
                         </div>
                     </section>
 
-                    <section id="members" class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                        <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3.5">
-                            <div><h2 class="text-sm font-semibold text-neutral-900">Përdoruesit</h2><p class="mt-0.5 text-[11px] text-neutral-500">Pronari dhe ekipi me akses në këtë hotel.</p></div>
+                    <section id="members" class="sa-card">
+                        <div class="sa-card-header">
+                            <div><h2 class="sa-card-title">Përdoruesit</h2><p class="sa-card-subtitle">Pronari dhe ekipi me akses në këtë hotel.</p></div>
                             <Button size="sm" variant="outline" @click="openMember()"><Plus class="h-4 w-4" /> Shto përdorues</Button>
                         </div>
                         <div class="overflow-x-auto">
                             <table class="w-full min-w-[620px] text-left">
-                                <thead><tr class="bg-neutral-50/70 text-[9px] uppercase tracking-[.08em] text-neutral-400"><th class="px-4 py-2.5 font-bold">Përdoruesi</th><th class="px-4 py-2.5 font-bold">Roli</th><th class="px-4 py-2.5 font-bold">Statusi</th><th class="px-4 py-2.5" /></tr></thead>
+                                <thead><tr class="sa-table-head"><th class="px-4 py-2.5 font-bold">Përdoruesi</th><th class="px-4 py-2.5 font-bold">Roli</th><th class="px-4 py-2.5 font-bold">Statusi</th><th class="px-4 py-2.5" /></tr></thead>
                                 <tbody class="divide-y divide-neutral-100">
                                     <tr v-for="member in members" :key="member.id">
                                         <td class="px-4 py-3"><div class="flex items-center gap-2.5"><span class="grid h-8 w-8 place-items-center rounded-full bg-blue-50 text-[10px] font-bold text-blue-700">{{ initials(member.name) }}</span><div><strong class="block text-xs text-neutral-900">{{ member.name }}</strong><span class="mt-0.5 block text-[10px] text-neutral-500">{{ member.email }}{{ member.is_owner ? ' · pronar' : '' }}</span></div></div></td>
@@ -413,26 +413,26 @@ function toggleStatus() {
                         </div>
                     </section>
 
-                    <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                        <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3.5"><div><h2 class="text-sm font-semibold text-neutral-900">Modulet aktive</h2><p class="mt-0.5 text-[11px] text-neutral-500">Funksionalitetet e përfshira në abonim.</p></div><Button size="sm" variant="outline" @click="openBilling">Menaxho</Button></div>
+                    <section class="sa-card">
+                        <div class="sa-card-header"><div><h2 class="sa-card-title">Modulet aktive</h2><p class="sa-card-subtitle">Funksionalitetet e përfshira në abonim.</p></div><Button size="sm" variant="outline" @click="openBilling">Menaxho</Button></div>
                         <div class="flex flex-wrap gap-2 p-4"><span v-for="module in enabledModules" :key="module.code" class="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[10px] font-semibold text-neutral-600">{{ module.name }}</span></div>
                     </section>
                 </div>
 
                 <aside class="space-y-3">
-                    <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
+                    <section class="sa-card">
                         <div class="bg-gradient-to-br from-emerald-50 to-white p-4"><p class="text-[9px] font-bold uppercase tracking-[.12em] text-neutral-500">Abonimi mujor</p><p class="mt-1 text-3xl font-bold tracking-tight text-neutral-950">{{ money(tenant.mrr_cents) }} <small class="text-[11px] font-medium text-neutral-500">/ muaj</small></p></div>
                         <div class="divide-y divide-neutral-100 px-4 text-[11px]"><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Statusi</span><strong class="text-emerald-700">{{ statusLabel(tenant.billing.status) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Rinovimi</span><strong>{{ date(tenant.billing.current_period_ends_at) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Modulet</span><strong>{{ enabledModules.length }} aktive</strong></div></div>
                         <div class="border-t border-neutral-100 p-3"><Button variant="outline" class="w-full" @click="openBilling"><CreditCard class="h-4 w-4" /> Menaxho abonimin</Button></div>
                     </section>
 
-                    <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                        <div class="flex items-center justify-between border-b border-neutral-200 px-4 py-3.5"><div><h2 class="text-sm font-semibold text-neutral-900">Detaje teknike</h2><p class="mt-0.5 text-[10px] text-neutral-500">Konfigurimi bazë i tenantit.</p></div><Button size="sm" variant="outline" @click="openTenantForm">Ndrysho</Button></div>
+                    <section class="sa-card">
+                        <div class="sa-card-header"><div><h2 class="sa-card-title">Detaje teknike</h2><p class="sa-card-subtitle">Konfigurimi bazë i tenantit.</p></div><Button size="sm" variant="outline" @click="openTenantForm">Ndrysho</Button></div>
                         <div class="divide-y divide-neutral-100 px-4 text-[11px]"><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Tenant ID</span><strong>#{{ tenant.id }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Slug</span><strong class="max-w-[180px] truncate">{{ tenant.slug }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Timezone</span><strong>{{ tenant.timezone }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Monedha</span><strong>{{ tenant.currency }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Krijuar</span><strong>{{ date(tenant.created_at) }}</strong></div></div>
                     </section>
 
-                    <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm shadow-neutral-200/30">
-                        <div class="flex items-center justify-between border-b border-neutral-200 px-4 py-3.5"><div><h2 class="text-sm font-semibold text-neutral-900">Aktiviteti i fundit</h2><p class="mt-0.5 text-[10px] text-neutral-500">Veprimet e rëndësishme.</p></div><Link :href="route('super-admin.activity', { tenant: tenant.id, range: 30 })" class="text-[10px] font-bold text-emerald-700 no-underline">Të gjitha →</Link></div>
+                    <section class="sa-card">
+                        <div class="sa-card-header"><div><h2 class="sa-card-title">Aktiviteti i fundit</h2><p class="sa-card-subtitle">Veprimet e rëndësishme.</p></div><Link :href="route('super-admin.activity', { tenant: tenant.id, range: 30 })" class="text-[11px] font-bold text-emerald-700 no-underline">Të gjitha →</Link></div>
                         <ul class="divide-y divide-neutral-100 px-4"><li v-for="log in activity.slice(0, 4)" :key="log.id" class="grid grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2.5 py-3"><span class="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 text-emerald-700"><LogIn v-if="log.action === 'tenant.switch'" class="h-4 w-4" /><CreditCard v-else-if="log.action === 'tenant.subscription.update'" class="h-4 w-4" /><Check v-else class="h-4 w-4" /></span><div class="min-w-0"><strong class="block truncate text-[11px] text-neutral-800">{{ ACTION_LABELS[log.action] || log.action }}</strong><span class="mt-0.5 block truncate text-[9px] text-neutral-500">{{ log.actor }}</span></div><time class="text-[9px] text-neutral-400">{{ when(log.created_at) }}</time></li></ul>
                     </section>
                 </aside>
@@ -440,7 +440,7 @@ function toggleStatus() {
         </main>
 
         <Teleport to="body">
-            <div v-if="activeDrawer" class="fixed inset-0 z-50 bg-neutral-950/45 backdrop-blur-[2px]" @click.self="closeDrawer">
+            <div v-if="activeDrawer" class="super-admin-shell fixed inset-0 z-50 bg-neutral-950/45 backdrop-blur-[2px]" @click.self="closeDrawer">
                 <aside class="ml-auto flex h-full w-full flex-col bg-white shadow-2xl" :class="activeDrawer === 'billing' ? 'max-w-[920px]' : 'max-w-[760px]'">
                     <header class="flex min-h-[70px] items-center justify-between gap-4 border-b border-neutral-200 px-5 py-3.5">
                         <div class="flex items-center gap-3">
