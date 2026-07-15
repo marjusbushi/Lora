@@ -290,11 +290,11 @@ class DashboardController extends Controller
                 .(isset($props['is_active']) ? ($props['is_active'] ? ' · aktiv' : ' · joaktiv') : ''),
             'tenant.subscription.update' => 'Abonimi u përditësua',
             'tenant.integration.update' => trim(
-                ucfirst((string) ($props['provider'] ?? 'integrim'))
+                ucfirst(str_replace('_', '.', (string) ($props['provider'] ?? 'integrim')))
                 .(isset($props['enabled']) ? ($props['enabled'] ? ' · aktiv' : ' · joaktiv') : '')
                 .(! empty($props['updated_fields']) ? ' · '.implode(', ', (array) $props['updated_fields']) : ''),
             ),
-            'tenant.integration.test' => ucfirst((string) ($props['provider'] ?? 'integrim'))
+            'tenant.integration.test' => ucfirst(str_replace('_', '.', (string) ($props['provider'] ?? 'integrim')))
                 .' · '.(($props['status'] ?? null) === 'success' ? 'lidhje e suksesshme' : 'lidhja dështoi'),
             'tenant.domain.create' => 'Shtoi '.($props['domain'] ?? 'domain'),
             'tenant.domain.delete' => 'Hoqi '.($props['domain'] ?? 'domain'),
