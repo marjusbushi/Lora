@@ -4,7 +4,15 @@ namespace Tests\Feature;
 
 use App\Listeners\BindAiAccessTokenToTenant;
 use App\Mcp\Servers\LoraHotelServer;
+use App\Mcp\Tools\CheckAvailabilityTool;
+use App\Mcp\Tools\CreatePriceProposalTool;
+use App\Mcp\Tools\ExecuteApprovedActionTool;
+use App\Mcp\Tools\GetGuestConversationTool;
 use App\Mcp\Tools\GetHotelContextTool;
+use App\Mcp\Tools\GetPricingCalendarTool;
+use App\Mcp\Tools\GetReservationContextTool;
+use App\Mcp\Tools\PrepareGuestReplyTool;
+use App\Mcp\Tools\SearchReservationsTool;
 use App\Models\AiAccessToken;
 use App\Models\Setting;
 use App\Models\Tenant;
@@ -95,6 +103,28 @@ class LoraAiMcpTest extends TestCase
             'name' => 'Lora test client',
             'revoked' => false,
         ]);
+    }
+
+    public function test_all_mcp_tool_schemas_can_be_serialized(): void
+    {
+        $tools = [
+            GetHotelContextTool::class,
+            SearchReservationsTool::class,
+            GetReservationContextTool::class,
+            CheckAvailabilityTool::class,
+            GetGuestConversationTool::class,
+            GetPricingCalendarTool::class,
+            PrepareGuestReplyTool::class,
+            CreatePriceProposalTool::class,
+            ExecuteApprovedActionTool::class,
+        ];
+
+        foreach ($tools as $tool) {
+            $definition = app($tool)->toArray();
+
+            $this->assertSame('object', $definition['inputSchema']['type']);
+            $this->assertArrayHasKey('properties', $definition['inputSchema']);
+        }
     }
 
     public function test_hotel_admin_can_open_the_lora_ai_page_and_save_tenant_scoped_permissions(): void

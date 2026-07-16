@@ -24,7 +24,7 @@ class GetPricingCalendarTool extends LoraTool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'room_type_id' => $schema->integer()->minimum(1)->required(),
+            'room_type_id' => $schema->integer()->min(1)->required(),
             'date_from' => $schema->string()->description('YYYY-MM-DD')->required(),
             'date_to' => $schema->string()->description('YYYY-MM-DD')->required(),
         ];

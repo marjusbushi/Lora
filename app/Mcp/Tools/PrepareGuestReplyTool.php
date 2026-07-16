@@ -19,9 +19,9 @@ class PrepareGuestReplyTool extends LoraTool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'thread_id' => $schema->integer()->minimum(1)->required(),
-            'body' => $schema->string()->minLength(1)->maxLength(2000)->required(),
-            'idempotency_key' => $schema->string()->minLength(8)->maxLength(120)->required(),
+            'thread_id' => $schema->integer()->min(1)->required(),
+            'body' => $schema->string()->min(1)->max(2000)->required(),
+            'idempotency_key' => $schema->string()->min(8)->max(120)->required(),
         ];
     }
 

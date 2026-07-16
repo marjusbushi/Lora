@@ -19,11 +19,11 @@ class SearchReservationsTool extends LoraTool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'reservation_id' => $schema->integer()->minimum(1),
-            'query' => $schema->string()->maxLength(120)->description('Guest name, email, phone, or channel booking reference.'),
+            'reservation_id' => $schema->integer()->min(1),
+            'query' => $schema->string()->max(120)->description('Guest name, email, phone, or channel booking reference.'),
             'date_from' => $schema->string()->description('Optional YYYY-MM-DD overlap start.'),
             'date_to' => $schema->string()->description('Optional YYYY-MM-DD overlap end.'),
-            'limit' => $schema->integer()->minimum(1)->maximum(20)->default(10),
+            'limit' => $schema->integer()->min(1)->max(20)->default(10),
         ];
     }
 

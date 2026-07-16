@@ -25,7 +25,7 @@ class CheckAvailabilityTool extends LoraTool
         return [
             'check_in' => $schema->string()->description('YYYY-MM-DD')->required(),
             'check_out' => $schema->string()->description('YYYY-MM-DD')->required(),
-            'adults' => $schema->integer()->minimum(1)->maximum(20)->default(1),
+            'adults' => $schema->integer()->min(1)->max(20)->default(1),
         ];
     }
 

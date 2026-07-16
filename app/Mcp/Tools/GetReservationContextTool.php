@@ -19,7 +19,7 @@ class GetReservationContextTool extends LoraTool
 
     public function schema(JsonSchema $schema): array
     {
-        return ['reservation_id' => $schema->integer()->minimum(1)->required()];
+        return ['reservation_id' => $schema->integer()->min(1)->required()];
     }
 
     public function handle(Request $request): Response|ResponseFactory

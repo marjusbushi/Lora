@@ -20,8 +20,8 @@ class GetGuestConversationTool extends LoraTool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'thread_id' => $schema->integer()->minimum(1)->required(),
-            'limit' => $schema->integer()->minimum(1)->maximum(50)->default(30),
+            'thread_id' => $schema->integer()->min(1)->required(),
+            'limit' => $schema->integer()->min(1)->max(50)->default(30),
         ];
     }
 
