@@ -12,6 +12,7 @@ import {
     Download,
     Plus,
     PackagePlus,
+    Pencil,
     ReceiptText,
     Search,
     Sparkles,
@@ -371,6 +372,9 @@ function submitPay() {
                                         <td class="px-4 py-3 text-right whitespace-nowrap font-bold" :class="bill.remaining_base > 0 ? 'text-error-600' : 'text-accent-700'">{{ money(bill.remaining_base, baseCurrency) }}</td>
                                         <td class="px-4 py-3"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-tiny font-bold" :class="statusPill[bill.status]?.cls"><i class="h-1.5 w-1.5 rounded-full bg-current" />{{ statusPill[bill.status]?.text }}</span></td>
                                         <td class="px-5 py-3 text-right"><div class="flex justify-end gap-2">
+                                            <Link v-if="can.manageBills && bill.can_edit" :href="route('finance.bills.edit', bill.id)" class="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-700 no-underline hover:bg-neutral-50">
+                                                <Pencil class="h-3.5 w-3.5" /> {{ $t('admin.finance.billCreate.editAction') }}
+                                            </Link>
                                             <Button v-if="can.manageInventory && bill.items_count > bill.received_items_count" size="sm" variant="success" @click="receiveStock(bill)">{{ $t('inventory.bill.receiveNow') }}</Button>
                                             <Button v-if="can.payBills && bill.status !== 'paid'" size="sm" variant="outline" @click="openPay(bill)">{{ $t('admin.generated.k_1be1a3546eed') }}</Button>
                                         </div></td>

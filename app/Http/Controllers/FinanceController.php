@@ -692,6 +692,7 @@ class FinanceController extends Controller
 
         $priorities = Bill::with('supplier:id,name')
             ->withSum('payments as paid_base', 'amount_base')
+            ->withExists('payments')
             ->where('status', '!=', 'paid')
             ->whereNotNull('due_date')
             ->orderBy('due_date')
@@ -710,6 +711,7 @@ class FinanceController extends Controller
             'summary' => $summary,
             'priorities' => $priorities,
             'bills' => Bill::with('supplier:id,name')->withSum('payments as paid_base', 'amount_base')
+                ->withExists('payments')
                 ->withCount('items')
                 ->withCount(['items as received_items_count' => fn ($query) => $query->whereNotNull('received_at')])
                 ->latest('issue_date')->latest('id')
@@ -730,17 +732,46 @@ class FinanceController extends Controller
     {
         Warehouse::ensureDefault();
 
-        return Inertia::render('Finance/BillCreate', array_merge($this->shared($request), [
-            'suppliers' => Supplier::where('is_active', true)->orderBy('name')
-                ->get(['id', 'name', 'nipt', 'category', 'payment_terms_days']),
-            'categories' => Bill::categories(),
-            'inventoryItems' => InventoryItem::where('is_active', true)->orderBy('name')
-                ->get(['id', 'name', 'sku', 'type', 'unit', 'average_cost']),
-            'warehouses' => Warehouse::where('is_active', true)->orderByDesc('is_default')->orderBy('name')
-                ->get(['id', 'name', 'is_default']),
-            'aiConfigured' => app(GeminiClient::class)->configured(),
-            'openAiImport' => $request->input('import') === 'ai',
-        ]));
+        return Inertia::render('Finance/BillCreate', array_merge(
+            $this->shared($request),
+            $this->billFormOptions($request),
+        ));
+    }
+
+    public function editBill(Request $request, Bill $bill): Response|RedirectResponse
+    {
+        if ($bill->payments()->exists()) {
+            return redirect()->route('finance.bills')
+                ->with('error', 'Fatura nuk mund të ndryshohet sepse ka pagesë të regjistruar.');
+        }
+
+        Warehouse::ensureDefault();
+        $bill->load('items');
+        $stockLocked = $bill->items()->whereHas('movements')->exists();
+
+        return Inertia::render('Finance/BillCreate', array_merge(
+            $this->shared($request),
+            $this->billFormOptions($request, $bill),
+            ['bill' => [
+                'id' => $bill->id,
+                'supplier_id' => $bill->supplier_id,
+                'number' => $bill->number,
+                'category' => $bill->category,
+                'issue_date' => $bill->issue_date->toDateString(),
+                'due_date' => $bill->due_date?->toDateString(),
+                'currency' => $bill->currency,
+                'fx_rate' => $bill->fx_rate ? (float) $bill->fx_rate : null,
+                'total' => (float) $bill->total,
+                'notes' => $bill->notes,
+                'stock_locked' => $stockLocked,
+                'items' => $bill->items->map(fn (BillItem $item) => [
+                    'inventory_item_id' => $item->inventory_item_id,
+                    'warehouse_id' => $item->warehouse_id,
+                    'quantity' => (float) $item->quantity,
+                    'unit_cost' => (float) $item->unit_cost,
+                ])->values(),
+            ]],
+        ));
     }
 
     public function analyzeBillDocument(Request $request, BillDocumentAiExtractor $extractor): JsonResponse
@@ -870,6 +901,184 @@ class FinanceController extends Controller
             : 'Fatura e blerjes u regjistrua.');
     }
 
+    public function updateBill(Request $request, Bill $bill): RedirectResponse
+    {
+        if ($bill->payments()->exists()) {
+            return redirect()->route('finance.bills')
+                ->with('error', 'Fatura nuk mund të ndryshohet sepse ka pagesë të regjistruar.');
+        }
+
+        $stockLocked = $bill->items()->whereHas('movements')->exists();
+        $baseCurrency = BaseCurrency::code();
+        $rules = [
+            'supplier_id' => ['required', 'integer', TenantRule::exists('suppliers')],
+            'number' => ['nullable', 'string', 'max:60'],
+            'category' => ['required', 'string', 'max:60'],
+            'issue_date' => ['required', 'date'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ];
+
+        if (! $stockLocked) {
+            $rules += [
+                'currency' => ['required', Rule::in(config('lora.tenant_currencies', ['EUR', 'ALL']))],
+                'fx_rate' => ['nullable', 'numeric', 'min:0.000001'],
+                'total' => ['required', 'numeric', 'min:0.01', 'max:9999999'],
+                'receive_stock' => ['nullable', 'boolean'],
+                'items' => ['nullable', 'array', 'max:50'],
+                'items.*.inventory_item_id' => ['nullable', 'integer', TenantRule::exists('inventory_items')],
+                'items.*.new_item' => ['nullable', 'array'],
+                'items.*.new_item.name' => ['nullable', 'string', 'max:150'],
+                'items.*.new_item.sku' => ['nullable', 'string', 'max:60'],
+                'items.*.new_item.barcode' => ['nullable', 'string', 'max:80'],
+                'items.*.new_item.category' => ['nullable', 'string', 'max:80'],
+                'items.*.new_item.type' => ['nullable', Rule::in(['product', 'ingredient', 'consumable', 'service'])],
+                'items.*.new_item.unit' => ['nullable', Rule::in(['piece', 'kg', 'liter', 'pack'])],
+                'items.*.warehouse_id' => ['nullable', 'integer', TenantRule::exists('warehouses')],
+                'items.*.quantity' => ['required', 'numeric', 'min:0.0001', 'max:9999999'],
+                'items.*.unit_cost' => ['required', 'numeric', 'min:0', 'max:9999999'],
+            ];
+        }
+
+        $data = $request->validate($rules);
+        $data['number'] = trim((string) ($data['number'] ?? '')) ?: null;
+        if ($data['number'] && Bill::where('supplier_id', $data['supplier_id'])
+            ->where('id', '!=', $bill->id)
+            ->whereRaw('LOWER(number) = ?', [mb_strtolower($data['number'])])
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'number' => 'Kjo faturë ekziston tashmë për furnitorin e zgjedhur.',
+            ]);
+        }
+
+        if ($stockLocked) {
+            DB::transaction(function () use ($bill, $data) {
+                $lockedBill = Bill::query()->lockForUpdate()->findOrFail($bill->id);
+                if ($lockedBill->payments()->exists()) {
+                    throw ValidationException::withMessages([
+                        'bill' => 'Fatura mori një pagesë ndërkohë dhe nuk mund të ndryshohet.',
+                    ]);
+                }
+
+                $lockedBill->update($data);
+                $lockedBill->load('supplier');
+                foreach ($lockedBill->items()->get() as $line) {
+                    $line->movements()->where('type', 'purchase')->update([
+                        'notes' => 'Bill '.($lockedBill->number ?: '#'.$lockedBill->id)
+                            .' · '.($lockedBill->supplier?->name ?? ''),
+                        'occurred_at' => $lockedBill->issue_date->startOfDay(),
+                    ]);
+                }
+            });
+
+            return redirect()->route('finance.bills')->with('success', 'Të dhënat e faturës u përditësuan. Rreshtat mbetën të pandryshuar sepse stoku është pranuar.');
+        }
+
+        if ($data['currency'] !== $baseCurrency && empty($data['fx_rate'])) {
+            throw ValidationException::withMessages([
+                'fx_rate' => "Vendos kursin për {$data['currency']} ndaj {$baseCurrency}.",
+            ]);
+        }
+
+        $lines = collect($data['items'] ?? [])->values();
+        if ($lines->isNotEmpty()) {
+            foreach ($lines as $index => $line) {
+                if (! empty($line['inventory_item_id'])) {
+                    continue;
+                }
+                if (! $request->user()->can('manage_inventory')) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.inventory_item_id" => 'Nuk ke leje të krijosh artikuj të rinj. Zgjidh një artikull ekzistues.',
+                    ]);
+                }
+                if (trim((string) data_get($line, 'new_item.name')) === '') {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.inventory_item_id" => 'Zgjidh një artikull ekzistues ose plotëso artikullin e ri.',
+                    ]);
+                }
+            }
+
+            $data['total'] = round((float) $lines->sum(fn ($line) => (float) $line['quantity'] * (float) $line['unit_cost']), 2);
+            if ($data['total'] < 0.01) {
+                throw ValidationException::withMessages(['total' => 'Totali i artikujve duhet të jetë më i madh se zero.']);
+            }
+        }
+
+        DB::transaction(function () use ($bill, $data, $lines, $request) {
+            $lockedBill = Bill::query()->lockForUpdate()->findOrFail($bill->id);
+            if ($lockedBill->payments()->exists()) {
+                throw ValidationException::withMessages([
+                    'bill' => 'Fatura mori një pagesë ndërkohë dhe nuk mund të ndryshohet.',
+                ]);
+            }
+            if ($lockedBill->items()->whereHas('movements')->exists()) {
+                throw ValidationException::withMessages([
+                    'items' => 'Stoku u pranua ndërkohë. Rifresko faqen para se të vazhdosh.',
+                ]);
+            }
+
+            $lockedBill->update(collect($data)->except(['items', 'receive_stock'])->all() + ['status' => 'open']);
+            $lockedBill->items()->delete();
+
+            foreach ($lines as $index => $lineData) {
+                $item = ! empty($lineData['inventory_item_id'])
+                    ? InventoryItem::findOrFail($lineData['inventory_item_id'])
+                    : $this->resolveOrCreateImportedItem($lineData);
+                $stockable = $item->type !== 'service';
+                if ($stockable && empty($lineData['warehouse_id'])) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.warehouse_id" => 'Zgjidh magazinën ku do të hyjë stoku.',
+                    ]);
+                }
+
+                $line = BillItem::create([
+                    'bill_id' => $lockedBill->id,
+                    'inventory_item_id' => $item->id,
+                    'warehouse_id' => $lineData['warehouse_id'] ?? null,
+                    'description' => $item->name,
+                    'quantity' => $lineData['quantity'],
+                    'unit' => $item->unit,
+                    'unit_cost' => $lineData['unit_cost'],
+                    'line_total' => round((float) $lineData['quantity'] * (float) $lineData['unit_cost'], 2),
+                    'received_at' => $stockable ? null : now(),
+                ]);
+
+                if (($data['receive_stock'] ?? false) && $stockable) {
+                    $this->inventoryLedger->receiveBillItem($line, $request->user()->id);
+                }
+            }
+        });
+
+        return redirect()->route('finance.bills')->with('success', 'Fatura u përditësua.');
+    }
+
+    private function billFormOptions(Request $request, ?Bill $bill = null): array
+    {
+        $itemIds = $bill?->items->pluck('inventory_item_id')->filter()->values()->all() ?? [];
+        $warehouseIds = $bill?->items->pluck('warehouse_id')->filter()->values()->all() ?? [];
+
+        return [
+            'suppliers' => Supplier::query()
+                ->where(fn (Builder $query) => $query->where('is_active', true)
+                    ->when($bill, fn (Builder $q) => $q->orWhere('id', $bill->supplier_id)))
+                ->orderBy('name')
+                ->get(['id', 'name', 'nipt', 'category', 'payment_terms_days']),
+            'categories' => Bill::categories(),
+            'inventoryItems' => InventoryItem::query()
+                ->where(fn (Builder $query) => $query->where('is_active', true)
+                    ->when($itemIds !== [], fn (Builder $q) => $q->orWhereIn('id', $itemIds)))
+                ->orderBy('name')
+                ->get(['id', 'name', 'sku', 'type', 'unit', 'average_cost']),
+            'warehouses' => Warehouse::query()
+                ->where(fn (Builder $query) => $query->where('is_active', true)
+                    ->when($warehouseIds !== [], fn (Builder $q) => $q->orWhereIn('id', $warehouseIds)))
+                ->orderByDesc('is_default')->orderBy('name')
+                ->get(['id', 'name', 'is_default']),
+            'aiConfigured' => app(GeminiClient::class)->configured(),
+            'openAiImport' => ! $bill && $request->input('import') === 'ai',
+        ];
+    }
+
     /** Resolve once more at confirmation time so two imports cannot create the same product. */
     private function resolveOrCreateImportedItem(array $lineData): InventoryItem
     {
@@ -933,7 +1142,8 @@ class FinanceController extends Controller
     public function receiveBill(Request $request, Bill $bill): RedirectResponse
     {
         DB::transaction(function () use ($bill, $request) {
-            $pending = $bill->items()->with('item')->whereNull('received_at')->get();
+            $lockedBill = Bill::query()->lockForUpdate()->findOrFail($bill->id);
+            $pending = $lockedBill->items()->with('item')->whereNull('received_at')->get();
             foreach ($pending as $line) {
                 if ($line->item?->type !== 'service') {
                     $this->inventoryLedger->receiveBillItem($line, $request->user()->id);
@@ -979,34 +1189,42 @@ class FinanceController extends Controller
             abort(403);
         }
 
-        if ($account['currency'] !== $baseCurrency && strtoupper($bill->currency) !== $account['currency']) {
-            return back()->with('error', "Kjo llogari mban vetëm {$account['currency']} — fatura është në {$bill->currency}.");
-        }
+        $error = DB::transaction(function () use ($data, $bill, $account, $request, $baseCurrency): ?string {
+            $lockedBill = Bill::query()->lockForUpdate()->findOrFail($bill->id);
+            if ($account['currency'] !== $baseCurrency && strtoupper($lockedBill->currency) !== $account['currency']) {
+                return "Kjo llogari mban vetëm {$account['currency']} — fatura është në {$lockedBill->currency}.";
+            }
 
-        // Payment rides the BILL's currency + frozen fx, so remainder math is exact.
-        $amountBase = strtoupper($bill->currency) === $baseCurrency
-            ? round((float) $data['amount'], 2)
-            : round((float) $data['amount'] / (float) $bill->fx_rate, 2);
-        if ($amountBase > $bill->remainingBase() + 0.01) {
-            return back()->with('error', 'Shuma e kalon mbetjen e faturës ('.number_format($bill->remainingBase(), 2).' '.$baseCurrency.' mbetje).');
-        }
+            // Payment rides the locked bill's currency + frozen fx, so an edit
+            // cannot change its value while this settlement is being recorded.
+            $amountBase = strtoupper($lockedBill->currency) === $baseCurrency
+                ? round((float) $data['amount'], 2)
+                : round((float) $data['amount'] / (float) $lockedBill->fx_rate, 2);
+            $remainingBase = $lockedBill->remainingBase();
+            if ($amountBase > $remainingBase + 0.01) {
+                return 'Shuma e kalon mbetjen e faturës ('.number_format($remainingBase, 2).' '.$baseCurrency.' mbetje).';
+            }
 
-        DB::transaction(function () use ($data, $bill, $account, $request, $baseCurrency) {
             FinancePayment::create([
                 'direction' => 'out',
                 'account_id' => $account['id'],
                 'amount' => $data['amount'],
-                'currency' => $bill->currency,
-                'fx_rate' => strtoupper($bill->currency) === $baseCurrency ? null : $bill->fx_rate,
+                'currency' => $lockedBill->currency,
+                'fx_rate' => strtoupper($lockedBill->currency) === $baseCurrency ? null : $lockedBill->fx_rate,
                 'method' => $data['method'],
                 'source' => 'manual',
-                'bill_id' => $bill->id,
-                'description' => 'Pagesë bill '.($bill->number ?: '#'.$bill->id).' — '.($bill->supplier?->name ?? ''),
+                'bill_id' => $lockedBill->id,
+                'description' => 'Pagesë bill '.($lockedBill->number ?: '#'.$lockedBill->id).' — '.($lockedBill->supplier?->name ?? ''),
                 'paid_at' => now(),
                 'created_by' => $request->user()->id,
             ]);
-            $bill->refreshStatus();
+            $lockedBill->refreshStatus();
+
+            return null;
         });
+        if ($error) {
+            return back()->with('error', $error);
+        }
 
         return back()->with('success', 'Pagesa e faturës u regjistrua.');
     }
@@ -1142,6 +1360,9 @@ class FinanceController extends Controller
         $paidBase = array_key_exists('paid_base', $b->getAttributes())
             ? round((float) $b->paid_base, 2)
             : $b->paidBase();
+        $hasPayments = array_key_exists('payments_exists', $b->getAttributes())
+            ? (bool) $b->payments_exists
+            : $b->payments()->exists();
 
         return [
             'id' => $b->id,
@@ -1164,6 +1385,7 @@ class FinanceController extends Controller
             'notes' => $b->notes,
             'items_count' => (int) ($b->items_count ?? 0),
             'received_items_count' => (int) ($b->received_items_count ?? 0),
+            'can_edit' => ! $hasPayments,
         ];
     }
 

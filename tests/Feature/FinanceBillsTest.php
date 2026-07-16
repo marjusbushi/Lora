@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Bill;
+use App\Models\BillItem;
 use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
 use App\Models\InventoryItem;
@@ -10,6 +11,7 @@ use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\InventoryLedger;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -225,6 +227,141 @@ class FinanceBillsTest extends TestCase
                 ->where('aiConfigured', false)
                 ->where('openAiImport', false)
                 ->where('can.manageBills', true));
+    }
+
+    public function test_unpaid_bill_opens_in_the_shared_form_and_can_be_updated(): void
+    {
+        $this->withoutVite();
+        $admin = $this->role('admin');
+        $supplier = $this->supplier();
+        $warehouse = Warehouse::ensureDefault();
+        $item = InventoryItem::create([
+            'name' => 'Peshqir', 'sku' => 'PESH-EDIT', 'type' => 'consumable',
+            'unit' => 'piece', 'average_cost' => 4, 'is_active' => true,
+        ]);
+        $bill = Bill::create([
+            'supplier_id' => $supplier->id, 'number' => 'EDIT-1', 'category' => 'Të tjera',
+            'issue_date' => '2026-07-16', 'due_date' => '2026-07-30',
+            'currency' => 'EUR', 'total' => 8, 'status' => 'open',
+        ]);
+        BillItem::create([
+            'bill_id' => $bill->id, 'inventory_item_id' => $item->id, 'warehouse_id' => $warehouse->id,
+            'description' => $item->name, 'quantity' => 2, 'unit' => 'piece', 'unit_cost' => 4, 'line_total' => 8,
+        ]);
+
+        $this->actingAs($admin)->get(route('finance.bills.edit', $bill))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Finance/BillCreate')
+                ->where('bill.id', $bill->id)
+                ->where('bill.stock_locked', false)
+                ->where('bill.items.0.inventory_item_id', $item->id));
+
+        $this->actingAs($admin)->put(route('finance.bills.update', $bill), [
+            'supplier_id' => $supplier->id,
+            'number' => 'EDIT-2',
+            'category' => 'Mirëmbajtje',
+            'issue_date' => '2026-07-17',
+            'due_date' => '2026-07-31',
+            'currency' => 'EUR',
+            'total' => 1,
+            'notes' => 'Korrigjuar',
+            'receive_stock' => false,
+            'items' => [[
+                'inventory_item_id' => $item->id,
+                'warehouse_id' => $warehouse->id,
+                'quantity' => 3,
+                'unit_cost' => 5,
+            ]],
+        ])->assertRedirect(route('finance.bills'))->assertSessionHasNoErrors();
+
+        $bill->refresh();
+        $this->assertSame('EDIT-2', $bill->number);
+        $this->assertSame('Mirëmbajtje', $bill->category);
+        $this->assertSame(15.0, (float) $bill->total);
+        $this->assertSame(3.0, (float) $bill->items()->firstOrFail()->quantity);
+        $this->assertSame(0.0, $item->fresh()->stock($warehouse->id));
+    }
+
+    public function test_bill_with_a_payment_cannot_be_opened_or_updated(): void
+    {
+        $this->withoutVite();
+        $admin = $this->role('admin');
+        $supplier = $this->supplier();
+        $bill = $this->lekBill($supplier);
+        FinanceAccount::ensureDefaults();
+        FinancePayment::create([
+            'direction' => 'out',
+            'account_id' => FinanceAccount::firstOrFail()->id,
+            'amount' => 98.7,
+            'currency' => 'ALL',
+            'fx_rate' => 98.7,
+            'method' => 'cash',
+            'source' => 'manual',
+            'bill_id' => $bill->id,
+            'description' => 'Pagesë prove',
+            'paid_at' => now(),
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)->get(route('finance.bills.edit', $bill))
+            ->assertRedirect(route('finance.bills'))
+            ->assertSessionHas('error');
+
+        $this->actingAs($admin)->put(route('finance.bills.update', $bill), [
+            'supplier_id' => $supplier->id,
+            'number' => 'NUK-NDRYSHON',
+            'category' => 'Të tjera',
+            'issue_date' => '2026-07-16',
+        ])->assertRedirect(route('finance.bills'))->assertSessionHas('error');
+
+        $this->assertNull($bill->fresh()->number);
+    }
+
+    public function test_received_stock_locks_bill_lines_but_keeps_header_editable(): void
+    {
+        $this->withoutVite();
+        $admin = $this->role('admin');
+        $supplier = $this->supplier();
+        $warehouse = Warehouse::ensureDefault();
+        $item = InventoryItem::create([
+            'name' => 'Shampo', 'sku' => 'SHAMPO-EDIT', 'type' => 'consumable',
+            'unit' => 'piece', 'average_cost' => 2, 'is_active' => true,
+        ]);
+        $bill = Bill::create([
+            'supplier_id' => $supplier->id, 'number' => 'STOCK-1', 'category' => 'Të tjera',
+            'issue_date' => '2026-07-16', 'currency' => 'EUR', 'total' => 12, 'status' => 'open',
+        ]);
+        $line = BillItem::create([
+            'bill_id' => $bill->id, 'inventory_item_id' => $item->id, 'warehouse_id' => $warehouse->id,
+            'description' => $item->name, 'quantity' => 6, 'unit' => 'piece', 'unit_cost' => 2, 'line_total' => 12,
+        ]);
+        app(InventoryLedger::class)->receiveBillItem($line, $admin->id);
+
+        $this->actingAs($admin)->get(route('finance.bills.edit', $bill))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('bill.stock_locked', true));
+
+        $this->actingAs($admin)->put(route('finance.bills.update', $bill), [
+            'supplier_id' => $supplier->id,
+            'number' => 'STOCK-2',
+            'category' => 'Mirëmbajtje',
+            'issue_date' => '2026-07-17',
+            'due_date' => '2026-07-31',
+            'notes' => 'Vetëm koka e faturës',
+            'currency' => 'ALL',
+            'fx_rate' => 100,
+            'total' => 999,
+            'items' => [],
+        ])->assertRedirect(route('finance.bills'))->assertSessionHasNoErrors();
+
+        $bill->refresh();
+        $this->assertSame('STOCK-2', $bill->number);
+        $this->assertSame('Mirëmbajtje', $bill->category);
+        $this->assertSame('EUR', $bill->currency);
+        $this->assertSame(12.0, (float) $bill->total);
+        $this->assertSame(6.0, $item->fresh()->stock($warehouse->id));
+        $this->assertSame(6.0, (float) $bill->items()->firstOrFail()->quantity);
     }
 
     public function test_ai_reads_and_matches_a_bill_without_creating_anything_before_confirmation(): void
