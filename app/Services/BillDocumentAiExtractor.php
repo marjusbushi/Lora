@@ -73,25 +73,28 @@ class BillDocumentAiExtractor
                     'due_date' => ['type' => 'string'],
                     'currency' => ['type' => 'string', 'enum' => config('lora.tenant_currencies', ['EUR', 'ALL'])],
                     'category' => ['type' => 'string', 'enum' => $categories],
-                    'subtotal' => ['type' => 'number', 'minimum' => 0],
-                    'tax_total' => ['type' => 'number', 'minimum' => 0],
-                    'discount_total' => ['type' => 'number', 'minimum' => 0],
-                    'grand_total' => ['type' => 'number', 'minimum' => 0],
-                    'confidence' => ['type' => 'integer', 'minimum' => 0, 'maximum' => 100],
+                    // Keep the provider schema deliberately simple. Gemini rejects deeply
+                    // nested invoice schemas when numeric and array constraints create too
+                    // many serving states. normalizeAndMatch() remains the source of truth
+                    // for limits, ranges and the 50-line cap before any data can be saved.
+                    'subtotal' => ['type' => 'number'],
+                    'tax_total' => ['type' => 'number'],
+                    'discount_total' => ['type' => 'number'],
+                    'grand_total' => ['type' => 'number'],
+                    'confidence' => ['type' => 'integer'],
                     'line_items' => [
                         'type' => 'array',
-                        'maxItems' => 50,
                         'items' => [
                             'type' => 'object',
                             'properties' => [
                                 'description' => ['type' => 'string'],
                                 'sku' => ['type' => 'string'],
                                 'barcode' => ['type' => 'string'],
-                                'quantity' => ['type' => 'number', 'minimum' => 0.0001],
+                                'quantity' => ['type' => 'number'],
                                 'unit' => ['type' => 'string', 'enum' => ['piece', 'kg', 'liter', 'pack']],
                                 'item_type' => ['type' => 'string', 'enum' => ['product', 'ingredient', 'consumable', 'service']],
-                                'line_total' => ['type' => 'number', 'minimum' => 0],
-                                'confidence' => ['type' => 'integer', 'minimum' => 0, 'maximum' => 100],
+                                'line_total' => ['type' => 'number'],
+                                'confidence' => ['type' => 'integer'],
                             ],
                             'required' => ['description', 'sku', 'barcode', 'quantity', 'unit', 'item_type', 'line_total', 'confidence'],
                         ],

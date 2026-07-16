@@ -298,8 +298,16 @@ class FinanceBillsTest extends TestCase
         $this->assertDatabaseCount('bills', 0);
         $this->assertDatabaseCount('inventory_items', 1);
 
-        Http::assertSent(fn ($request) => $request->hasHeader('x-goog-api-key', 'secret-test-key')
-            && ! str_contains($request->url(), 'secret-test-key'));
+        Http::assertSent(function ($request) {
+            $schema = $request->data()['tools'][0]['function_declarations'][0]['parameters'] ?? [];
+            $encodedSchema = json_encode($schema);
+
+            return $request->hasHeader('x-goog-api-key', 'secret-test-key')
+                && ! str_contains($request->url(), 'secret-test-key')
+                && ! str_contains($encodedSchema, '"minimum"')
+                && ! str_contains($encodedSchema, '"maximum"')
+                && ! str_contains($encodedSchema, '"maxItems"');
+        });
     }
 
     public function test_confirming_an_ai_bill_creates_missing_items_and_reuses_existing_ones(): void
