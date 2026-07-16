@@ -2,13 +2,16 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
-use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class FatureAlClient
 {
-    public function __construct(private readonly FatureAlConfiguration $configuration) {}
+    public function __construct(
+        private readonly FatureAlConfiguration $configuration,
+        private readonly FatureAlRequestFactory $requests,
+    ) {}
 
     /**
      * Read-only authentication check. It never creates or changes a fiscal record.
@@ -21,7 +24,7 @@ class FatureAlClient
             throw new RuntimeException('Integrimi fature.al nuk është aktiv ose token-i mungon.');
         }
 
-        $response = Http::acceptJson()
+        $response = $this->request()
             ->withToken($this->configuration->get('api_token'))
             ->timeout(12)
             ->connectTimeout(5)
@@ -75,7 +78,7 @@ class FatureAlClient
             throw new RuntimeException('internalId mungon nga fatura fiskale.');
         }
 
-        $response = Http::acceptJson()
+        $response = $this->request()
             ->withToken($this->configuration->get('api_token'))
             ->timeout(30)
             ->connectTimeout(5)
@@ -134,7 +137,7 @@ class FatureAlClient
             throw new RuntimeException('internalId mungon nga fatura fiskale.');
         }
 
-        $response = Http::acceptJson()
+        $response = $this->request()
             ->withToken($this->configuration->get('api_token'))
             ->timeout(12)
             ->connectTimeout(5)
@@ -190,5 +193,10 @@ class FatureAlClient
             : '';
 
         return $fallback.' (HTTP '.$response->status().').'.$detail;
+    }
+
+    private function request(): PendingRequest
+    {
+        return $this->requests->make();
     }
 }

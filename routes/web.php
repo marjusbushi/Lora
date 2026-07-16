@@ -28,6 +28,7 @@ use App\Http\Controllers\SuperAdmin\BillingInvoiceController as SuperAdminBillin
 use App\Http\Controllers\SuperAdmin\BillingPaymentAttemptController as SuperAdminBillingPaymentAttemptController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentController as SuperAdminBillingPaymentController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
+use App\Http\Controllers\SuperAdmin\FatureAlOnboardingController as SuperAdminFatureAlOnboardingController;
 use App\Http\Controllers\SuperAdmin\OnboardingController as SuperAdminOnboardingController;
 use App\Http\Controllers\SuperAdmin\ProfileController as SuperAdminProfileController;
 use App\Http\Controllers\SuperAdmin\ProviderEventController as SuperAdminProviderEventController;
@@ -117,6 +118,14 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
         Route::get('/activity', [SuperAdminDashboardController::class, 'activity'])->name('activity');
         Route::get('/onboarding', [SuperAdminOnboardingController::class, 'index'])->name('onboarding.index');
         Route::get('/onboarding/{tenant}', [SuperAdminOnboardingController::class, 'show'])->name('onboarding.show');
+        Route::get('/onboarding/{tenant}/fiscalization', [SuperAdminFatureAlOnboardingController::class, 'show'])->name('onboarding.fiscalization.show');
+        Route::post('/onboarding/{tenant}/fiscalization/register', [SuperAdminFatureAlOnboardingController::class, 'register'])->middleware('throttle:30,1')->name('onboarding.fiscalization.register');
+        Route::post('/onboarding/{tenant}/fiscalization/certificate', [SuperAdminFatureAlOnboardingController::class, 'certificate'])->middleware('throttle:30,1')->name('onboarding.fiscalization.certificate');
+        Route::post('/onboarding/{tenant}/fiscalization/branch', [SuperAdminFatureAlOnboardingController::class, 'branch'])->middleware('throttle:30,1')->name('onboarding.fiscalization.branch');
+        Route::post('/onboarding/{tenant}/fiscalization/device', [SuperAdminFatureAlOnboardingController::class, 'device'])->middleware('throttle:30,1')->name('onboarding.fiscalization.device');
+        Route::post('/onboarding/{tenant}/fiscalization/user', [SuperAdminFatureAlOnboardingController::class, 'user'])->middleware('throttle:30,1')->name('onboarding.fiscalization.user');
+        Route::post('/onboarding/{tenant}/fiscalization/bank-account', [SuperAdminFatureAlOnboardingController::class, 'bankAccount'])->middleware('throttle:30,1')->name('onboarding.fiscalization.bank-account');
+        Route::post('/onboarding/{tenant}/fiscalization/verify', [SuperAdminFatureAlOnboardingController::class, 'verify'])->middleware('throttle:10,1')->name('onboarding.fiscalization.verify');
         Route::patch('/onboarding/{tenant}', [SuperAdminOnboardingController::class, 'update'])->name('onboarding.update');
         Route::patch('/onboarding/{tenant}/steps/{step}', [SuperAdminOnboardingController::class, 'updateStep'])->name('onboarding.steps.update');
         Route::patch('/onboarding/{tenant}/steps/{step}/tasks/{task}', [SuperAdminOnboardingController::class, 'updateTask'])->name('onboarding.tasks.update');

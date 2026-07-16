@@ -10,6 +10,7 @@ use App\Services\TenantRoleService;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -102,6 +103,108 @@ class FatureAlIntegrationTest extends TestCase
                 'environment' => 'sandbox',
             ])
             ->assertSessionHasErrors('api_token');
+    }
+
+    public function test_super_admin_can_complete_fature_al_onboarding_wizard_with_identifiable_user_agent(): void
+    {
+        config([
+            'services.fature_al.onboarding_token' => 'partner-onboarding-token',
+            'services.fature_al.app_name' => 'LoraPMS',
+            'services.fature_al.build_version' => 'test-build',
+        ]);
+        $tenant = Tenant::factory()->create(['name' => 'Hotel Wizard', 'currency' => 'EUR']);
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://demo.fature.al/api/v1/register' => Http::response([
+                'status' => true,
+                'data' => [
+                    'user' => ['token' => 'tenant-fiscal-token', 'id' => 701],
+                    'branch' => ['id' => 801, 'name' => 'Hotel Wizard'],
+                ],
+            ]),
+            'https://demo.fature.al/api/v1/on-boarding/certificate' => Http::response([
+                'status' => true, 'data' => ['cert' => ['expiresAt' => '2027-07-16']],
+            ]),
+            'https://demo.fature.al/api/v1/on-boarding/branch/801' => Http::response([
+                'status' => true, 'data' => ['branch' => ['id' => 801, 'name' => 'Hotel Wizard', 'businessUnitCode' => 'BU001']],
+            ]),
+            'https://demo.fature.al/api/v1/on-boarding/fiscal-device' => Http::response([
+                'status' => true, 'data' => ['device' => ['fiscalTcrCode' => 'TCR-001']],
+            ]),
+            'https://demo.fature.al/api/v1/on-boarding/user/701' => Http::response([
+                'status' => true, 'data' => ['user' => ['id' => 701, 'name' => 'Operator', 'operatorCode' => 'OP001']],
+            ]),
+            'https://demo.fature.al/api/v1/on-boarding/bank-account' => Http::response([
+                'status' => true, 'data' => ['bankAccount' => ['id' => 901, 'iban' => 'AL47212110090000000235698741']],
+            ]),
+            'https://demo.fature.al/api/v1/account' => Http::response([
+                'status' => true,
+                'data' => [
+                    'company' => 'Hotel Wizard', 'nipt' => 'L62221018T',
+                    'branch' => ['name' => 'Hotel Wizard'], 'vatConfigs' => ['issuerInVat' => true],
+                ],
+            ]),
+        ]);
+
+        $this->actingAs($this->superAdmin)
+            ->post(route('super-admin.onboarding.fiscalization.register', $tenant), [
+                'environment' => 'sandbox', 'nuis' => 'L62221018T', 'name' => 'Hotel Wizard',
+                'address' => 'Tirane', 'administrator' => 'Admin Hotel', 'phone' => '0690000000',
+                'email' => 'fiscal@example.test', 'issuer_in_vat' => true,
+                'last_non_cash_einvoice_number' => null, 'uses_cash' => true,
+            ])->assertSessionHasNoErrors();
+
+        $this->post(route('super-admin.onboarding.fiscalization.certificate', $tenant), [
+            'certificate' => UploadedFile::fake()->create('hotel.p12', 10, 'application/x-pkcs12'),
+            'password' => 'certificate-secret',
+        ])->assertSessionHasNoErrors();
+        $this->post(route('super-admin.onboarding.fiscalization.branch', $tenant), [
+            'name' => 'Hotel Wizard', 'business_unit_code' => 'BU001',
+            'administrator' => 'Admin Hotel', 'address' => 'Tirane',
+        ])->assertSessionHasNoErrors();
+        $this->post(route('super-admin.onboarding.fiscalization.device', $tenant), [
+            'name' => 'Main TCR', 'from_date' => '2026-07-16', 'to_date' => null,
+        ])->assertSessionHasNoErrors();
+        $this->post(route('super-admin.onboarding.fiscalization.user', $tenant), [
+            'name' => 'Operator', 'operator_code' => 'OP001',
+        ])->assertSessionHasNoErrors();
+        $this->post(route('super-admin.onboarding.fiscalization.bank-account', $tenant), [
+            'name' => 'Banka', 'holder' => 'Hotel Wizard', 'iban' => 'AL47212110090000000235698741',
+            'swift' => 'AAAAALTR', 'currency' => 'EUR', 'notes' => null,
+        ])->assertSessionHasNoErrors();
+        $this->post(route('super-admin.onboarding.fiscalization.verify', $tenant))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $integration = TenantIntegration::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)->where('provider', 'fature_al')->firstOrFail();
+        $this->assertTrue($integration->enabled);
+        $this->assertSame('tenant-fiscal-token', $integration->credentials['api_token']);
+        $this->assertSame('TCR-001', $integration->configuration['onboarding']['fiscal_tcr_code']);
+        $this->assertSame('success', $integration->configuration['last_test_status']);
+        $this->assertTrue((bool) data_get($tenant->onboarding()->firstOrFail()->steps, 'integrations.tasks.fature_al.completed'));
+
+        $page = $this->get(route('super-admin.onboarding.fiscalization.show', $tenant));
+        $page->assertOk()->assertInertia(fn (Assert $view) => $view
+            ->component('SuperAdmin/Onboarding/FatureAl')
+            ->where('fiscalization.status', 'ready')
+            ->where('fiscalization.progress', 100)
+            ->where('fiscalization.has_api_token', true));
+        $this->assertStringNotContainsString('tenant-fiscal-token', $page->getContent());
+
+        $raw = (string) DB::table('tenant_integrations')->where('id', $integration->id)->value('credentials');
+        $this->assertStringNotContainsString('tenant-fiscal-token', $raw);
+        $this->assertStringNotContainsString('certificate-secret', json_encode($integration->configuration));
+
+        Http::assertSent(fn (Request $request) => $request->hasHeader('User-Agent', 'LoraPMS/test-build'));
+        $this->assertTrue(Http::recorded()->every(
+            fn (array $exchange) => $exchange[0]->hasHeader('User-Agent', 'LoraPMS/test-build'),
+        ));
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://demo.fature.al/api/v1/register'
+            && $request->hasHeader('Authorization', 'Bearer partner-onboarding-token'));
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://demo.fature.al/api/v1/account'
+            && $request->hasHeader('Authorization', 'Bearer tenant-fiscal-token'));
     }
 
     public function test_connection_check_is_read_only_and_records_success(): void

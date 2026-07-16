@@ -38,6 +38,13 @@ function openTask(task) {
     if (!task.action) return;
     openingTask.value = task.key;
 
+    if (task.action.type === 'fiscal_onboarding') {
+        router.get(`/super-admin/onboarding/${props.tenant.id}/fiscalization`, {}, {
+            onFinish: () => { openingTask.value = null; },
+        });
+        return;
+    }
+
     if (task.action.type === 'control') {
         router.get(`/super-admin/tenants/${props.tenant.id}`, { config: task.action.tab }, {
             onFinish: () => { openingTask.value = null; },
