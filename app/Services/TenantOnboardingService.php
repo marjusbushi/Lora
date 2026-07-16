@@ -187,13 +187,19 @@ class TenantOnboardingService
             return '/dashboard';
         }
 
+        $logicalDestination = str_starts_with($destination, '/pms/')
+            ? substr($destination, 4)
+            : $destination;
+
         $allowed = collect(config('onboarding.steps'))
             ->flatMap(fn (array $step) => $step['tasks'] ?? [])
             ->pluck('action')
             ->filter(fn ($action) => is_array($action) && ($action['type'] ?? null) === 'tenant')
             ->pluck('path');
 
-        return $allowed->containsStrict($destination) ? $destination : '/dashboard';
+        return $allowed->containsStrict($logicalDestination)
+            ? '/pms'.$logicalDestination
+            : '/dashboard';
     }
 
     private function mergeDefinitions(array $steps, Tenant $tenant): array
