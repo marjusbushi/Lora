@@ -99,6 +99,7 @@ const paymentLabel = computed(() => {
     if (method === 'BANKNOTE') return translate('invoicePrint.cash');
     if (method === 'CARD') return translate('invoicePrint.card');
     const methods = [...new Set(props.payments.map((payment) => payment.method))];
+    if (methods.length === 0) return translate('invoicePrint.unpaid');
     return methods.length === 1 ? ({
         cash: translate('invoicePrint.cash'),
         card: translate('invoicePrint.card'),
@@ -111,7 +112,7 @@ const paymentLabel = computed(() => {
         <div class="invoice-accent" />
         <header class="invoice-header">
             <div>
-                <p class="invoice-kicker">{{ isFiscalized ? $t('invoicePrint.fiscalInvoice') : $t('invoicePrint.invoice') }}</p>
+                <p class="invoice-kicker">{{ isFiscalized ? $t('invoicePrint.fiscalInvoice') : $t('invoicePrint.proforma') }}</p>
                 <h1>{{ meta.hotel_name || 'Hotel' }}</h1>
                 <p v-if="meta.legal_name && meta.legal_name !== meta.hotel_name">{{ meta.legal_name }}</p>
                 <p v-if="meta.address">{{ meta.address }}</p>
@@ -119,8 +120,8 @@ const paymentLabel = computed(() => {
                 <p v-if="meta.email">{{ meta.email }}</p>
             </div>
             <div class="invoice-number">
-                <span>{{ $t('invoicePrint.invoiceNumber') }}</span>
-                <strong>{{ fiscalDocument?.fiscal_number || `HOTEL-${reservation.id}` }}</strong>
+                <span>{{ isFiscalized ? $t('invoicePrint.invoiceNumber') : $t('invoicePrint.proformaNumber') }}</span>
+                <strong>{{ fiscalDocument?.fiscal_number || `PROFORMA-${reservation.id}` }}</strong>
                 <span>{{ dateTime(fiscalDocument?.fiscalized_at || new Date()) }}</span>
             </div>
         </header>

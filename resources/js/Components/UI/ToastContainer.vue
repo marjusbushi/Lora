@@ -19,7 +19,7 @@ defineExpose({ add, success: (msg) => add({ variant: 'success', message: msg }),
 
 <template>
     <Teleport to="body">
-        <div class="fixed bottom-4 right-4 z-[60] flex flex-col-reverse gap-2 max-w-sm w-full pointer-events-none">
+        <div class="fixed bottom-4 right-4 z-[120] flex flex-col-reverse gap-2 max-w-sm w-full pointer-events-none">
             <div v-for="toast in toasts" :key="toast.id" class="pointer-events-auto">
                 <Toast
                     :variant="toast.variant"

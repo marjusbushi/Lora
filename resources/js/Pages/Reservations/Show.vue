@@ -1,6 +1,6 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import { router, usePage, useForm, Link } from '@inertiajs/vue3';
 import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -141,6 +141,18 @@ function printInvoice() {
 
 const fiscalDocument = computed(() => props.fiscalization?.document || null);
 const fiscalized = computed(() => fiscalDocument.value?.status === 'fiscalized');
+const invoiceActionLabel = computed(() => (
+    fiscalized.value
+        ? translate('reservationShow.invoice')
+        : translate('reservationShow.proforma')
+));
+const invoiceModalTitle = computed(() => {
+    if (checkoutMode.value) return translate('admin.generated.k_d0677fc34bd1');
+
+    return fiscalized.value
+        ? translate('reservationShow.fiscalInvoice')
+        : translate('reservationShow.proforma');
+});
 const vatSummaryLabel = computed(() => {
     if (props.folio.vatStatus === 'not_registered') return translate('invoicePrint.withoutVat');
     if (props.folio.vatStatus === 'registered') {
@@ -168,6 +180,93 @@ function fiscalizeInvoice() {
         onFinish: () => { fiscalizing.value = false; },
     });
 }
+
+const moreMenuOpen = ref(false);
+const moreMenuTrigger = ref(null);
+const moreMenuPanel = ref(null);
+const moreMenuStyle = ref({});
+const MORE_MENU_WIDTH = 208;
+
+function positionMoreMenu() {
+    if (!moreMenuTrigger.value) return;
+
+    const trigger = moreMenuTrigger.value.getBoundingClientRect();
+    const panelHeight = moreMenuPanel.value?.getBoundingClientRect().height ?? 0;
+    const left = Math.max(8, Math.min(
+        trigger.right - MORE_MENU_WIDTH,
+        window.innerWidth - MORE_MENU_WIDTH - 8,
+    ));
+    const spaceBelow = window.innerHeight - trigger.bottom - 8;
+    const spaceAbove = trigger.top - 8;
+
+    moreMenuStyle.value = panelHeight > spaceBelow && spaceAbove > spaceBelow
+        ? {
+            left: `${left}px`,
+            bottom: `${window.innerHeight - trigger.top + 6}px`,
+            width: `${MORE_MENU_WIDTH}px`,
+            maxHeight: `${spaceAbove}px`,
+        }
+        : {
+            left: `${left}px`,
+            top: `${trigger.bottom + 6}px`,
+            width: `${MORE_MENU_WIDTH}px`,
+            maxHeight: `${spaceBelow}px`,
+        };
+}
+
+function closeMoreMenu(restoreFocus = true) {
+    if (!moreMenuOpen.value) return;
+    moreMenuOpen.value = false;
+    window.removeEventListener('scroll', closeMoreMenuOnPageScroll, true);
+    window.removeEventListener('resize', closeMoreMenu);
+    document.removeEventListener('keydown', closeMoreMenuOnEscape);
+
+    if (restoreFocus) nextTick(() => moreMenuTrigger.value?.focus());
+}
+
+function closeMoreMenuOnPageScroll(event) {
+    if (moreMenuPanel.value?.contains(event.target)) return;
+    closeMoreMenu(false);
+}
+
+function closeMoreMenuOnEscape(event) {
+    if (event.key === 'Escape') closeMoreMenu();
+}
+
+function toggleMoreMenu() {
+    if (moreMenuOpen.value) {
+        closeMoreMenu();
+        return;
+    }
+
+    const trigger = moreMenuTrigger.value?.getBoundingClientRect();
+    if (trigger) {
+        const left = Math.max(8, Math.min(
+            trigger.right - MORE_MENU_WIDTH,
+            window.innerWidth - MORE_MENU_WIDTH - 8,
+        ));
+        moreMenuStyle.value = {
+            left: `${left}px`,
+            top: `${trigger.bottom + 6}px`,
+            width: `${MORE_MENU_WIDTH}px`,
+        };
+    }
+    moreMenuOpen.value = true;
+    window.addEventListener('scroll', closeMoreMenuOnPageScroll, true);
+    window.addEventListener('resize', closeMoreMenu);
+    document.addEventListener('keydown', closeMoreMenuOnEscape);
+    nextTick(() => {
+        positionMoreMenu();
+        moreMenuPanel.value?.querySelector('[role="menuitem"]:not(:disabled)')?.focus();
+    });
+}
+
+function runMoreMenuAction(action) {
+    closeMoreMenu(false);
+    action();
+}
+
+onBeforeUnmount(() => closeMoreMenu(false));
 
 const lineForm = useForm({ type: 'extra', description: '', amount: '', charge_date: '' });
 const newInventoryReference = () => globalThis.crypto?.randomUUID?.()
@@ -335,6 +434,7 @@ async function submitPay() {
 // "Faturë" just views/prints the bill. "Check-out" opens the SAME invoice in checkout mode,
 // where you settle the outstanding (cash/card) and only THEN does the guest leave.
 function openInvoice() {
+    closeMoreMenu();
     checkoutMode.value = false;
     showInvoice.value = true;
 }
@@ -385,24 +485,39 @@ function settleAndCheckout(method) {
             <span class="font-medium text-neutral-600">#{{ reservation.id }}</span>
         </div>
 
-        <div class="relative z-40 mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div class="relative mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
                 <h1 class="text-3xl font-semibold tracking-tight text-neutral-950">{{ $t('reservationShow.reservation') }} #{{ reservation.id }}</h1>
                 <p class="mt-2 text-sm text-neutral-500">{{ $t('reservationShow.activeStay') }} · {{ formatDate(reservation.check_in_date) }} – {{ formatDate(reservation.check_out_date) }}</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-                <Button variant="outline" @click="openInvoice"><FileText class="h-4 w-4" /> {{ $t('reservationShow.invoice') }}</Button>
-                <details class="group relative z-50">
-                    <summary class="flex cursor-pointer list-none items-center gap-2 rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-50">
-                        {{ $t('reservationShow.more') }} <ChevronDown class="h-4 w-4 transition group-open:rotate-180" />
-                    </summary>
-                    <div class="absolute right-0 z-[60] mt-2 w-52 overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
-                        <button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="openMinibarModal"><PackageOpen class="h-4 w-4" />Shto minibar</button>
-                        <button v-if="canAddCharge" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="openLineModal"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</button>
-                        <button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="openPaymentModal"><CreditCard class="h-4 w-4" />{{ $t('reservationShow.recordPayment') }}</button>
-                        <button v-if="canUpdate && isCheckedIn" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" :disabled="requestingCleaning" @click="requestCleaning"><RefreshCcw class="h-4 w-4" />{{ $t('reservationShow.requestCleaning') }}</button>
-                    </div>
-                </details>
+                <Button variant="outline" @click="openInvoice"><FileText class="h-4 w-4" /> {{ invoiceActionLabel }}</Button>
+                <button
+                    ref="moreMenuTrigger"
+                    type="button"
+                    class="flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+                    :aria-expanded="moreMenuOpen"
+                    aria-haspopup="menu"
+                    @click.stop="toggleMoreMenu"
+                >
+                    {{ $t('reservationShow.more') }} <ChevronDown class="h-4 w-4 transition" :class="moreMenuOpen && 'rotate-180'" />
+                </button>
+                <Teleport to="body">
+                    <template v-if="moreMenuOpen">
+                        <button type="button" tabindex="-1" class="fixed inset-0 z-[70] cursor-default" :aria-label="$t('reservationShow.closeMenu')" @click="closeMoreMenu" />
+                        <div
+                            ref="moreMenuPanel"
+                            class="fixed z-[80] overflow-y-auto rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl"
+                            :style="moreMenuStyle"
+                            role="menu"
+                        >
+                            <button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openMinibarModal)"><PackageOpen class="h-4 w-4" />Shto minibar</button>
+                            <button v-if="canAddCharge" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openLineModal)"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</button>
+                            <button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openPaymentModal)"><CreditCard class="h-4 w-4" />{{ $t('reservationShow.recordPayment') }}</button>
+                            <button v-if="canUpdate && isCheckedIn" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="requestingCleaning" @click="runMoreMenuAction(requestCleaning)"><RefreshCcw class="h-4 w-4" />{{ $t('reservationShow.requestCleaning') }}</button>
+                        </div>
+                    </template>
+                </Teleport>
                 <Button v-if="canUpdate && isCheckedIn" variant="primary" :disabled="hasOpenOrders" @click="openCheckout">
                     {{ $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" />
                 </Button>
@@ -769,7 +884,7 @@ function settleAndCheckout(method) {
         </Modal>
 
         <!-- Invoice (Fature) modal — also the settle-then-checkout flow -->
-        <Modal :show="showInvoice" :title="checkoutMode ? $t('admin.generated.k_d0677fc34bd1') : $t('admin.generated.k_9b8aa645dbf0')" max-width="4xl" @close="showInvoice = false">
+        <Modal :show="showInvoice" :title="invoiceModalTitle" max-width="4xl" @close="showInvoice = false">
             <div class="overflow-x-auto rounded-xl bg-neutral-100 py-4">
                 <HotelInvoice
                     :reservation="reservation"
@@ -813,12 +928,7 @@ function settleAndCheckout(method) {
                         <p v-else-if="!['cash', 'card'].includes(fiscalization.payment_method)" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalSinglePayment') }}</p>
                         <template v-else>
                             <p v-if="fiscalDocument?.last_error" class="mt-3 text-sm text-error-700">{{ fiscalDocument.last_error }}</p>
-                            <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
-                                <p class="text-xs text-neutral-600">{{ $t('reservationShow.fiscalPayment') }}: <span class="font-semibold text-neutral-900">{{ fiscalPaymentLabel }}</span> · {{ money(folio.gross) }}</p>
-                                <Button variant="success" size="sm" :loading="fiscalizing" :disabled="!fiscalization.can_issue" @click="fiscalizeInvoice">
-                                    <ShieldCheck class="h-4 w-4" /> {{ fiscalDocument?.status === 'failed' ? $t('reservationShow.fiscalRetryButton') : $t('reservationShow.fiscalizeButton') }}
-                                </Button>
-                            </div>
+                            <p class="mt-3 text-xs text-neutral-600">{{ $t('reservationShow.fiscalPayment') }}: <span class="font-semibold text-neutral-900">{{ fiscalPaymentLabel }}</span> · {{ money(folio.gross) }}</p>
                         </template>
                     </div>
                 </div>
@@ -851,8 +961,17 @@ function settleAndCheckout(method) {
                     </template>
                 </template>
                 <template v-else>
-                    <Button variant="outline" @click="showInvoice = false">{{ $t('admin.generated.k_0eccb38cb085') }}</Button>
-                    <Button variant="primary" @click="printInvoice">{{ $t('admin.generated.k_e8eea0bd73c4') }}</Button>
+                    <Button variant="outline" @click="showInvoice = false">{{ $t('reservationShow.cancel') }}</Button>
+                    <Button
+                        v-if="!fiscalized"
+                        variant="success"
+                        :loading="fiscalizing"
+                        :disabled="!fiscalization.can_issue"
+                        @click="fiscalizeInvoice"
+                    >
+                        <ShieldCheck class="h-4 w-4" /> {{ fiscalDocument?.status === 'failed' ? $t('reservationShow.fiscalRetryButton') : $t('reservationShow.fiscalizeButton') }}
+                    </Button>
+                    <Button variant="primary" @click="printInvoice">{{ $t('reservationShow.print') }}</Button>
                 </template>
             </template>
         </Modal>

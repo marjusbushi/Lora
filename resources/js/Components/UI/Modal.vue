@@ -108,7 +108,7 @@ onUnmounted(() => {
             leave-from-class="opacity-100"
             leave-to-class="opacity-0"
         >
-            <div v-if="show" class="fixed inset-0 z-50 overflow-y-auto">
+            <div v-if="show" class="fixed inset-0 z-[100] overflow-y-auto">
                 <!-- Overlay -->
                 <div
                     class="fixed inset-0 bg-neutral-900/50"
