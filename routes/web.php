@@ -134,6 +134,7 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
         Route::patch('/tenants/{tenant}/domains/{domain}/primary', [SuperAdminTenantController::class, 'makePrimaryDomain'])
             ->scopeBindings()->name('tenants.domains.primary');
         Route::get('/billing/invoices', [SuperAdminBillingInvoiceController::class, 'index'])->name('billing.invoices.index');
+        Route::get('/billing/bills/{invoice}', [SuperAdminBillingInvoiceController::class, 'bill'])->name('billing.bills.show');
         Route::get('/billing/invoices/{invoice}', [SuperAdminBillingInvoiceController::class, 'show'])->name('billing.invoices.show');
         Route::post('/billing/invoices', [SuperAdminBillingInvoiceController::class, 'store'])->name('billing.invoices.store');
         Route::patch('/billing/invoices/{invoice}/publish', [SuperAdminBillingInvoiceController::class, 'publish'])->name('billing.invoices.publish');

@@ -102,6 +102,36 @@ class BillingInvoiceController extends Controller
         ]);
     }
 
+    public function bill(BillingInvoice $invoice): Response
+    {
+        $invoice->load([
+            'tenant:id,name,currency',
+            'subscription:id,tenant_id,status,billing_cycle,next_billing_at,current_period_ends_at',
+            'lines',
+            'payments' => fn ($query) => $query->latest('paid_at'),
+        ]);
+
+        return Inertia::render('SuperAdmin/Billing/BillShow', [
+            'bill' => [
+                'number' => str_replace('INV-', 'BILL-', $invoice->number),
+                'invoice' => $this->invoiceData($invoice),
+                'subscription' => $invoice->subscription ? [
+                    'id' => $invoice->subscription->id,
+                    'status' => $invoice->subscription->status,
+                    'billing_cycle' => $invoice->subscription->billing_cycle,
+                    'next_billing_at' => $invoice->subscription->next_billing_at?->toIso8601String(),
+                ] : null,
+                'payments' => $invoice->payments->map(fn ($payment) => [
+                    'id' => $payment->id,
+                    'number' => $payment->number,
+                    'status' => $payment->status,
+                    'amount_cents' => $payment->amount_cents,
+                    'paid_at' => $payment->paid_at?->toIso8601String(),
+                ]),
+            ],
+        ]);
+    }
+
     public function store(Request $request, PlatformBillingService $billing, TenantContext $context): RedirectResponse
     {
         $data = $request->validate([
