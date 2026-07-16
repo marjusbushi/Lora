@@ -32,11 +32,16 @@ const props = defineProps({
     aiConfigured: Boolean,
     openAiImport: Boolean,
     bill: { type: Object, default: null },
+    readOnly: { type: Boolean, default: false },
 });
 const { t } = useI18n();
 const BillAiImportModal = defineAsyncComponent(() => import('./Components/BillAiImportModal.vue'));
 const isEditing = computed(() => Boolean(props.bill?.id));
 const stockLocked = computed(() => Boolean(props.bill?.stock_locked));
+const formLocked = computed(() => props.readOnly || stockLocked.value);
+const pageTitleKey = computed(() => props.readOnly ? 'admin.finance.billCreate.viewTitle' : (isEditing.value ? 'admin.finance.billCreate.editTitle' : 'admin.finance.billCreate.title'));
+const breadcrumbKey = computed(() => props.readOnly ? 'admin.finance.billCreate.breadcrumbView' : (isEditing.value ? 'admin.finance.billCreate.breadcrumbEdit' : 'admin.finance.billCreate.breadcrumbNew'));
+const statusKey = computed(() => props.readOnly ? 'admin.finance.billCreate.viewStatus' : (isEditing.value ? 'admin.finance.billCreate.editingStatus' : 'admin.finance.billCreate.newStatus'));
 const showAiImport = ref(!props.bill && props.openAiImport);
 const importSummary = ref(null);
 
@@ -175,11 +180,11 @@ function applyItemDefaults(line) {
 }
 
 function addLine() {
-    if (!stockLocked.value && form.items.length < 50) form.items.push(emptyLine());
+    if (!formLocked.value && form.items.length < 50) form.items.push(emptyLine());
 }
 
 function removeLine(index) {
-    if (!stockLocked.value) form.items.splice(index, 1);
+    if (!formLocked.value) form.items.splice(index, 1);
 }
 
 async function applyAiImport(result) {
@@ -211,6 +216,8 @@ async function applyAiImport(result) {
 }
 
 function submit() {
+    if (props.readOnly) return;
+
     if (isEditing.value) {
         form.put(route('finance.bills.update', props.bill.id), { preserveScroll: true });
         return;
@@ -223,15 +230,15 @@ function submit() {
 <template>
     <AppLayout>
         <div class="mx-auto max-w-[1400px] space-y-5 pb-8">
-            <PageHeader :title="$t(isEditing ? 'admin.finance.billCreate.editTitle' : 'admin.finance.billCreate.title')" :breadcrumbs="[{ label: $t('admin.sidebar.finance') }, { label: $t('admin.sidebar.bills'), href: route('finance.bills') }, { label: $t(isEditing ? 'admin.finance.billCreate.breadcrumbEdit' : 'admin.finance.billCreate.breadcrumbNew') }]">
+            <PageHeader :title="$t(pageTitleKey)" :breadcrumbs="[{ label: $t('admin.sidebar.finance') }, { label: $t('admin.sidebar.bills'), href: route('finance.bills') }, { label: $t(breadcrumbKey) }]">
                 <template #actions>
                     <Link :href="route('finance.bills')" class="inline-flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-4 py-2 text-body-sm font-medium text-neutral-700 no-underline hover:bg-neutral-50">
-                        <ArrowLeft class="h-4 w-4" /> {{ $t('admin.finance.billCreate.cancel') }}
+                        <ArrowLeft class="h-4 w-4" /> {{ $t(readOnly ? 'admin.finance.billCreate.back' : 'admin.finance.billCreate.cancel') }}
                     </Link>
-                    <Button v-if="!stockLocked" variant="outline" @click="showAiImport = true">
+                    <Button v-if="!formLocked" variant="outline" @click="showAiImport = true">
                         <Sparkles class="h-4 w-4" /> {{ $t('admin.finance.billAiImport.button') }}
                     </Button>
-                    <Button :loading="form.processing" :disabled="!canSubmit" @click="submit">
+                    <Button v-if="!readOnly" :loading="form.processing" :disabled="!canSubmit" @click="submit">
                         <CheckCircle2 class="h-4 w-4" /> {{ $t(isEditing ? 'admin.finance.billCreate.saveChanges' : 'admin.finance.billCreate.save') }}
                     </Button>
                 </template>
@@ -244,7 +251,7 @@ function submit() {
                 </ul>
             </div>
 
-            <div v-if="stockLocked" class="flex items-start gap-2 rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-body-sm text-warning-800">
+            <div v-if="stockLocked && !readOnly" class="flex items-start gap-2 rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-body-sm text-warning-800">
                 <Info class="mt-0.5 h-4 w-4 shrink-0" />
                 <span><strong class="block">{{ $t('admin.finance.billCreate.stockLockedTitle') }}</strong><span class="mt-0.5 block text-tiny">{{ $t('admin.finance.billCreate.stockLockedBody') }}</span></span>
             </div>
@@ -262,7 +269,7 @@ function submit() {
                             <h1 class="mt-1 text-h2 font-bold text-primary-900">{{ $t('admin.finance.billCreate.purchaseInvoice') }}</h1>
                         </div>
                         <span class="inline-flex items-center gap-1.5 rounded-full bg-info-50 px-3 py-1.5 text-tiny font-bold text-info-700">
-                            <FilePenLine class="h-3.5 w-3.5" /> {{ $t(isEditing ? 'admin.finance.billCreate.editingStatus' : 'admin.finance.billCreate.newStatus') }}
+                            <FilePenLine class="h-3.5 w-3.5" /> {{ $t(statusKey) }}
                         </span>
                     </div>
 
@@ -270,11 +277,11 @@ function submit() {
                         <div>
                             <div class="mb-1 flex items-center justify-between gap-3">
                                 <label class="text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.supplier') }}</label>
-                                <Link v-if="can.manageSuppliers" :href="route('finance.suppliers')" class="inline-flex items-center gap-1 text-tiny font-bold text-accent-700 no-underline hover:text-accent-800">
+                                <Link v-if="!readOnly && can.manageSuppliers" :href="route('finance.suppliers')" class="inline-flex items-center gap-1 text-tiny font-bold text-accent-700 no-underline hover:text-accent-800">
                                     <Plus class="h-3.5 w-3.5" /> {{ $t('admin.finance.billCreate.newSupplier') }}
                                 </Link>
                             </div>
-                            <select v-model="form.supplier_id" class="w-full rounded-lg border-neutral-200 px-3 py-2.5 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                            <select v-model="form.supplier_id" :disabled="readOnly" class="w-full rounded-lg border-neutral-200 px-3 py-2.5 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-600 focus:border-accent-500 focus:ring-accent-500">
                                 <option :value="null" disabled>{{ $t('admin.finance.billCreate.selectSupplier') }}</option>
                                 <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}<template v-if="supplier.nipt"> · {{ supplier.nipt }}</template></option>
                             </select>
@@ -287,35 +294,35 @@ function submit() {
 
                         <div class="grid gap-3 sm:grid-cols-2">
                             <div>
-                                <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>{{ $t('admin.finance.billCreate.invoiceNumberShort') }}</span><small class="font-normal text-neutral-400">{{ $t('admin.finance.billCreate.optional') }}</small></label>
-                                <TextInput v-model="form.number" class="w-full" :placeholder="$t('admin.finance.billCreate.numberPlaceholder')" />
+                                <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>{{ $t('admin.finance.billCreate.invoiceNumberShort') }}</span><small v-if="!readOnly" class="font-normal text-neutral-400">{{ $t('admin.finance.billCreate.autoNumberHint') }}</small></label>
+                                <TextInput v-model="form.number" :disabled="readOnly" class="w-full" :placeholder="$t('admin.finance.billCreate.numberPlaceholder')" />
                                 <p v-if="form.errors.number" class="mt-1 text-tiny text-error-600">{{ form.errors.number }}</p>
                             </div>
                             <div>
                                 <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.issueDate') }}</label>
-                                <TextInput v-model="form.issue_date" type="date" class="w-full" />
+                                <TextInput v-model="form.issue_date" :disabled="readOnly" type="date" class="w-full" />
                                 <p v-if="form.errors.issue_date" class="mt-1 text-tiny text-error-600">{{ form.errors.issue_date }}</p>
                             </div>
                             <div>
                                 <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.dueDate') }}</label>
-                                <TextInput v-model="form.due_date" type="date" class="w-full" />
+                                <TextInput v-model="form.due_date" :disabled="readOnly" type="date" class="w-full" />
                                 <p v-if="form.errors.due_date" class="mt-1 text-tiny text-error-600">{{ form.errors.due_date }}</p>
                             </div>
                             <div>
                                 <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.currency') }}</label>
-                                <select v-model="form.currency" :disabled="stockLocked" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-500 focus:border-accent-500 focus:ring-accent-500">
+                                <select v-model="form.currency" :disabled="formLocked" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-500 focus:border-accent-500 focus:ring-accent-500">
                                     <option v-for="currency in currencies" :key="currency" :value="currency">{{ currency }}</option>
                                 </select>
                             </div>
                             <div :class="form.currency === baseCurrency ? 'sm:col-span-2' : ''">
                                 <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.category') }}</label>
-                                <select v-model="form.category" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                                <select v-model="form.category" :disabled="readOnly" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-500 focus:border-accent-500 focus:ring-accent-500">
                                     <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
                                 </select>
                             </div>
                             <div v-if="form.currency !== baseCurrency">
                                 <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>{{ $t('admin.finance.billCreate.exchangeRate') }}</span><small class="font-normal text-neutral-400">{{ $t('admin.finance.billCreate.rateHelp', { base: baseCurrency, currency: form.currency }) }}</small></label>
-                                <TextInput v-model="form.fx_rate" :disabled="stockLocked" type="number" min="0.000001" step="0.000001" class="w-full" :placeholder="$t('admin.finance.billCreate.ratePlaceholder')" />
+                                <TextInput v-model="form.fx_rate" :disabled="formLocked" type="number" min="0.000001" step="0.000001" class="w-full" :placeholder="$t('admin.finance.billCreate.ratePlaceholder')" />
                                 <p v-if="form.errors.fx_rate" class="mt-1 text-tiny text-error-600">{{ form.errors.fx_rate }}</p>
                             </div>
                         </div>
@@ -329,10 +336,10 @@ function submit() {
                             <p class="mt-0.5 text-tiny text-neutral-400">{{ $t('admin.finance.billCreate.linesSubtitle') }}</p>
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            <Link v-if="!stockLocked && can.manageInventory && !inventoryItems.length" :href="route('inventory.items')" class="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-body-sm font-medium text-neutral-700 no-underline hover:bg-neutral-50">
+                            <Link v-if="!formLocked && can.manageInventory && !inventoryItems.length" :href="route('inventory.items')" class="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-body-sm font-medium text-neutral-700 no-underline hover:bg-neutral-50">
                                 {{ $t('admin.finance.billCreate.newItem') }}
                             </Link>
-                            <Button v-if="!stockLocked" variant="outline" size="sm" :disabled="form.items.length >= 50" @click="addLine"><Plus class="h-4 w-4" /> {{ $t('admin.finance.billCreate.addLine') }}</Button>
+                            <Button v-if="!formLocked" variant="outline" size="sm" :disabled="form.items.length >= 50" @click="addLine"><Plus class="h-4 w-4" /> {{ $t('admin.finance.billCreate.addLine') }}</Button>
                         </div>
                     </div>
 
@@ -351,7 +358,7 @@ function submit() {
                             <tbody class="divide-y divide-neutral-100">
                                 <tr v-for="(line, index) in form.items" :key="index" class="align-top">
                                     <td class="px-7 py-3.5">
-                                        <select :value="lineSelectionValue(line)" :disabled="stockLocked" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-500 focus:border-accent-500 focus:ring-accent-500" @change="changeLineItem(line, $event)">
+                                        <select :value="lineSelectionValue(line)" :disabled="formLocked" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-500 focus:border-accent-500 focus:ring-accent-500" @change="changeLineItem(line, $event)">
                                             <option value="" disabled>{{ $t('admin.finance.billCreate.selectItem') }}</option>
                                             <option v-for="item in inventoryItems" :key="item.id" :value="String(item.id)">{{ item.name }} · {{ item.sku }}</option>
                                             <option v-if="can.manageInventory" value="__new__">＋ {{ $t('admin.finance.billAiImport.createNewItem') }}</option>
@@ -380,7 +387,7 @@ function submit() {
                                         <p v-if="form.errors[`items.${index}.new_item.name`]" class="mt-1 text-tiny text-error-600">{{ form.errors[`items.${index}.new_item.name`] }}</p>
                                     </td>
                                     <td class="px-3 py-3.5">
-                                        <select v-if="lineItemType(line) !== 'service'" v-model="line.warehouse_id" :disabled="stockLocked" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-500 focus:border-accent-500 focus:ring-accent-500">
+                                        <select v-if="lineItemType(line) !== 'service'" v-model="line.warehouse_id" :disabled="formLocked" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-500 focus:border-accent-500 focus:ring-accent-500">
                                             <option :value="null" disabled>{{ $t('admin.finance.billCreate.selectWarehouse') }}</option>
                                             <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
                                         </select>
@@ -388,16 +395,16 @@ function submit() {
                                         <p v-if="form.errors[`items.${index}.warehouse_id`]" class="mt-1 text-tiny text-error-600">{{ form.errors[`items.${index}.warehouse_id`] }}</p>
                                     </td>
                                     <td class="px-3 py-3.5">
-                                        <TextInput v-model="line.quantity" :disabled="stockLocked" type="number" min="0.0001" step="0.0001" class="w-full" />
+                                        <TextInput v-model="line.quantity" :disabled="formLocked" type="number" min="0.0001" step="0.0001" class="w-full" />
                                         <p v-if="form.errors[`items.${index}.quantity`]" class="mt-1 text-tiny text-error-600">{{ form.errors[`items.${index}.quantity`] }}</p>
                                     </td>
                                     <td class="px-3 py-3.5">
-                                        <TextInput v-model="line.unit_cost" :disabled="stockLocked" type="number" min="0" step="0.01" class="w-full" />
+                                        <TextInput v-model="line.unit_cost" :disabled="formLocked" type="number" min="0" step="0.01" class="w-full" />
                                         <p v-if="form.errors[`items.${index}.unit_cost`]" class="mt-1 text-tiny text-error-600">{{ form.errors[`items.${index}.unit_cost`] }}</p>
                                     </td>
                                     <td class="px-3 py-4 text-right text-body-sm font-bold tabular-nums text-primary-900">{{ money(lineTotal(line), form.currency) }}</td>
                                     <td class="px-3 py-3.5 text-right">
-                                        <button v-if="!stockLocked" type="button" class="rounded-md p-2 text-neutral-400 hover:bg-error-50 hover:text-error-600" :aria-label="$t('admin.finance.billCreate.removeLine')" @click="removeLine(index)"><Trash2 class="h-4 w-4" /></button>
+                                        <button v-if="!formLocked" type="button" class="rounded-md p-2 text-neutral-400 hover:bg-error-50 hover:text-error-600" :aria-label="$t('admin.finance.billCreate.removeLine')" @click="removeLine(index)"><Trash2 class="h-4 w-4" /></button>
                                     </td>
                                 </tr>
                             </tbody>
@@ -410,10 +417,10 @@ function submit() {
                         <p class="mt-1 text-tiny text-neutral-400">{{ $t(isEditing ? 'admin.finance.billCreate.legacyTotalHint' : 'admin.finance.billCreate.emptyBody') }}</p>
                         <div v-if="isEditing" class="mx-auto mt-4 max-w-xs text-left">
                             <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.manualTotal') }}</label>
-                            <TextInput v-model="form.total" :disabled="stockLocked" type="number" min="0.01" step="0.01" class="w-full" />
+                            <TextInput v-model="form.total" :disabled="formLocked" type="number" min="0.01" step="0.01" class="w-full" />
                             <p v-if="form.errors.total" class="mt-1 text-tiny text-error-600">{{ form.errors.total }}</p>
                         </div>
-                        <Button v-if="!stockLocked" class="mt-4" variant="outline" size="sm" @click="addLine"><Plus class="h-4 w-4" /> {{ $t('admin.finance.billCreate.addLine') }}</Button>
+                        <Button v-if="!formLocked" class="mt-4" variant="outline" size="sm" @click="addLine"><Plus class="h-4 w-4" /> {{ $t('admin.finance.billCreate.addLine') }}</Button>
                     </div>
                 </section>
 
@@ -421,10 +428,10 @@ function submit() {
                     <div class="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr),360px]">
                         <div>
                             <label class="mb-1 flex items-center justify-between text-body-sm font-semibold text-primary-900"><span>{{ $t('admin.finance.billCreate.notes') }}</span><small class="font-normal text-neutral-400">{{ $t('admin.finance.billCreate.optionalPlural') }}</small></label>
-                            <textarea v-model="form.notes" rows="3" maxlength="500" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('admin.finance.billCreate.notesPlaceholder')" />
+                            <textarea v-model="form.notes" :disabled="readOnly" rows="3" maxlength="500" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-600 placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('admin.finance.billCreate.notesPlaceholder')" />
                             <div class="mt-1 flex justify-between text-tiny text-neutral-400"><span>{{ form.errors.notes }}</span><span>{{ form.notes.length }}/500</span></div>
 
-                            <label v-if="!stockLocked" class="mt-5 flex cursor-pointer items-start gap-3 border-t border-neutral-100 pt-4">
+                            <label v-if="!formLocked" class="mt-5 flex cursor-pointer items-start gap-3 border-t border-neutral-100 pt-4">
                                 <input v-model="form.receive_stock" type="checkbox" class="mt-0.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500" />
                                 <span><strong class="block text-body-sm text-primary-900">{{ $t('admin.finance.billCreate.receiveStock') }}</strong><small class="mt-0.5 block text-tiny text-neutral-400">{{ $t('admin.finance.billCreate.receiveStockHint', { count: stockableLines }) }}</small></span>
                             </label>
@@ -442,7 +449,7 @@ function submit() {
         </div>
 
         <BillAiImportModal
-            v-if="!stockLocked"
+            v-if="!formLocked"
             :show="showAiImport"
             :ai-configured="aiConfigured"
             :can-create-items="can.manageInventory"

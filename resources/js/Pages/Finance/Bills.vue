@@ -357,7 +357,10 @@ function submitPay() {
                                     <tr v-for="bill in bills.data" :key="bill.id" class="border-t border-neutral-100 transition hover:bg-neutral-50/60">
                                         <td class="px-5 py-3">
                                             <Link :href="route('finance.suppliers', { supplier_id: bill.supplier_id })" class="block font-bold text-primary-900 no-underline hover:text-accent-700 hover:underline">{{ bill.supplier }}</Link>
-                                            <span class="mt-0.5 block text-tiny text-neutral-400">{{ bill.number || '#' + bill.id }} · {{ formatDate(bill.issue_date) }}</span>
+                                            <span class="mt-0.5 block text-tiny text-neutral-400">
+                                                <Link :href="can.manageBills && bill.can_edit ? route('finance.bills.edit', bill.id) : route('finance.bills.show', bill.id)" class="font-bold text-accent-700 no-underline hover:text-accent-800 hover:underline">{{ bill.display_number }}</Link>
+                                                · {{ formatDate(bill.issue_date) }}
+                                            </span>
                                             <span v-if="bill.items_count" class="mt-1 inline-flex items-center gap-1 rounded-full bg-info-50 px-2 py-0.5 text-tiny font-semibold text-info-700"><PackagePlus class="h-3 w-3" /> {{ bill.received_items_count }}/{{ bill.items_count }} stok</span>
                                         </td>
                                         <td class="px-4 py-3"><span class="rounded-md bg-neutral-100 px-2 py-1 text-tiny font-bold text-neutral-500">{{ bill.category }}</span></td>
@@ -371,12 +374,14 @@ function submitPay() {
                                         </td>
                                         <td class="px-4 py-3 text-right whitespace-nowrap font-bold" :class="bill.remaining_base > 0 ? 'text-error-600' : 'text-accent-700'">{{ money(bill.remaining_base, baseCurrency) }}</td>
                                         <td class="px-4 py-3"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-tiny font-bold" :class="statusPill[bill.status]?.cls"><i class="h-1.5 w-1.5 rounded-full bg-current" />{{ statusPill[bill.status]?.text }}</span></td>
-                                        <td class="px-5 py-3 text-right"><div class="flex justify-end gap-2">
-                                            <Link v-if="can.manageBills && bill.can_edit" :href="route('finance.bills.edit', bill.id)" class="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-700 no-underline hover:bg-neutral-50">
+                                        <td class="px-5 py-3 text-right"><div class="flex items-center justify-end gap-1.5">
+                                            <Link v-if="can.manageBills && bill.can_edit" :href="route('finance.bills.edit', bill.id)" class="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-neutral-200 bg-white px-2.5 text-tiny font-semibold text-neutral-600 no-underline transition hover:border-neutral-300 hover:bg-neutral-50 hover:text-primary-900">
                                                 <Pencil class="h-3.5 w-3.5" /> {{ $t('admin.finance.billCreate.editAction') }}
                                             </Link>
                                             <Button v-if="can.manageInventory && bill.items_count > bill.received_items_count" size="sm" variant="success" @click="receiveStock(bill)">{{ $t('inventory.bill.receiveNow') }}</Button>
-                                            <Button v-if="can.payBills && bill.status !== 'paid'" size="sm" variant="outline" @click="openPay(bill)">{{ $t('admin.generated.k_1be1a3546eed') }}</Button>
+                                            <button v-if="can.payBills && bill.status !== 'paid'" type="button" class="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-accent-200 bg-accent-50 px-2.5 text-tiny font-bold text-accent-800 transition hover:border-accent-300 hover:bg-accent-100" @click="openPay(bill)">
+                                                <CircleDollarSign class="h-3.5 w-3.5" /> {{ $t('admin.generated.k_1be1a3546eed') }}
+                                            </button>
                                         </div></td>
                                     </tr>
                                     <tr v-if="!bills.data.length">

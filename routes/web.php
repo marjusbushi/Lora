@@ -332,6 +332,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/bills/create', [FinanceController::class, 'createBill'])->middleware('permission:manage_bills')->name('finance.bills.create');
         Route::get('/bills', [FinanceController::class, 'bills'])->name('finance.bills');
         Route::get('/bills/{bill}/edit', [FinanceController::class, 'editBill'])->middleware('permission:manage_bills')->name('finance.bills.edit');
+        Route::get('/bills/{bill}', [FinanceController::class, 'showBill'])->name('finance.bills.show');
         Route::post('/bills/import-ai/analyze', [FinanceController::class, 'analyzeBillDocument'])->middleware('permission:manage_bills')->name('finance.bills.import-ai.analyze');
         Route::post('/bills', [FinanceController::class, 'storeBill'])->middleware('permission:manage_bills')->name('finance.bills.store');
         Route::put('/bills/{bill}', [FinanceController::class, 'updateBill'])->middleware('permission:manage_bills')->name('finance.bills.update');

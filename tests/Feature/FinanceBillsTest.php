@@ -198,6 +198,7 @@ class FinanceBillsTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Finance/Bills')
+                ->where('bills.data.0.display_number', sprintf('BL-2026-%06d', $bill->id))
                 ->where('bills.data.0.remaining_base', 100)
                 ->where('byCategory.Ushqim & Pije', 100)
                 ->where('summary.open_total', 100)
@@ -283,7 +284,7 @@ class FinanceBillsTest extends TestCase
         $this->assertSame(0.0, $item->fresh()->stock($warehouse->id));
     }
 
-    public function test_bill_with_a_payment_cannot_be_opened_or_updated(): void
+    public function test_bill_with_a_payment_is_read_only_and_cannot_be_updated(): void
     {
         $this->withoutVite();
         $admin = $this->role('admin');
@@ -307,6 +308,14 @@ class FinanceBillsTest extends TestCase
         $this->actingAs($admin)->get(route('finance.bills.edit', $bill))
             ->assertRedirect(route('finance.bills'))
             ->assertSessionHas('error');
+
+        $this->actingAs($admin)->get(route('finance.bills.show', $bill))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Finance/BillCreate')
+                ->where('readOnly', true)
+                ->where('bill.id', $bill->id)
+                ->where('bill.number', sprintf('BL-2026-%06d', $bill->id)));
 
         $this->actingAs($admin)->put(route('finance.bills.update', $bill), [
             'supplier_id' => $supplier->id,
@@ -559,6 +568,37 @@ class FinanceBillsTest extends TestCase
             ->assertSessionHasErrors('number');
 
         $this->assertDatabaseCount('bills', 1);
+        $this->assertSame('INV-777', Bill::firstOrFail()->number);
+    }
+
+    public function test_bill_number_is_generated_when_left_blank_and_can_still_be_changed(): void
+    {
+        $manager = $this->role('manager');
+        $supplier = $this->supplier();
+
+        $this->actingAs($manager)->post(route('finance.bills.store'), [
+            'supplier_id' => $supplier->id,
+            'number' => '',
+            'category' => 'Të tjera',
+            'issue_date' => '2026-07-16',
+            'currency' => 'EUR',
+            'total' => 10,
+        ])->assertRedirect(route('finance.bills'))->assertSessionHasNoErrors();
+
+        $bill = Bill::firstOrFail();
+        $this->assertSame(sprintf('BL-2026-%06d', $bill->id), $bill->number);
+
+        $this->actingAs($manager)->put(route('finance.bills.update', $bill), [
+            'supplier_id' => $supplier->id,
+            'number' => 'FURNITOR-2026-88',
+            'category' => 'Të tjera',
+            'issue_date' => '2026-07-16',
+            'currency' => 'EUR',
+            'total' => 10,
+            'items' => [],
+        ])->assertRedirect(route('finance.bills'))->assertSessionHasNoErrors();
+
+        $this->assertSame('FURNITOR-2026-88', $bill->fresh()->number);
     }
 
     public function test_bills_page_filters_overdue_rows_by_supplier_and_category(): void
