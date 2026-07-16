@@ -125,6 +125,11 @@ class Tenant extends Model
         return $this->hasMany(ProviderEvent::class);
     }
 
+    public function onboarding(): HasOne
+    {
+        return $this->hasOne(TenantOnboarding::class);
+    }
+
     public function scopeActive($query)
     {
         return $query->where('status', 'active');
