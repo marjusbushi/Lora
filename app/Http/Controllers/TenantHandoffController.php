@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\TenantHandoff;
+use App\Services\TenantOnboardingService;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -12,7 +13,12 @@ use Symfony\Component\HttpFoundation\Response;
 
 class TenantHandoffController extends Controller
 {
-    public function __invoke(Request $request, TenantHandoff $handoff, TenantContext $context): Response
+    public function __invoke(
+        Request $request,
+        TenantHandoff $handoff,
+        TenantContext $context,
+        TenantOnboardingService $onboarding,
+    ): Response
     {
         $tenant = $context->tenant();
         if (! $tenant) {
@@ -46,7 +52,9 @@ class TenantHandoffController extends Controller
             'handoff' => true,
         ]);
 
-        return redirect()->route('dashboard')->withHeaders([
+        $destination = $onboarding->tenantDestination($request->query('redirect'));
+
+        return redirect()->to($destination)->withHeaders([
             'Cache-Control' => 'no-store, max-age=0',
             'Referrer-Policy' => 'no-referrer',
         ]);

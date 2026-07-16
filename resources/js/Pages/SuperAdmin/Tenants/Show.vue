@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import Button from '@/Components/UI/Button.vue';
@@ -28,6 +28,7 @@ const props = defineProps({
     currencyOptions: Array,
     timezoneGroups: Object,
     roleOptions: Array,
+    initialConfigTab: String,
 });
 
 const activeDrawer = ref(null);
@@ -244,6 +245,10 @@ function openConfig(tab = 'domains') {
     fatureForm.clearErrors();
     activeDrawer.value = 'config';
 }
+
+onMounted(() => {
+    if (props.initialConfigTab) openConfig(props.initialConfigTab);
+});
 
 function addDomain() {
     domainForm.post(route('super-admin.tenants.domains.store', props.tenant.id), {

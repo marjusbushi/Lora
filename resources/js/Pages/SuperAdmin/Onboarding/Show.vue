@@ -1,13 +1,14 @@
 <script setup>
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
-import { CalendarDays, Check, CheckCircle2, ChevronRight, Download, FileText, Hotel, LoaderCircle, Rocket, Save, Trash2, Upload, UserRound, X } from 'lucide-vue-next';
+import { Check, CheckCircle2, Download, ExternalLink, FileText, LoaderCircle, Rocket, Save, Trash2, Upload, UserRound, X } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps({ tenant: Object, onboarding: Object, documents: Array, staff: Array });
 const activeStepKey = ref(props.onboarding.steps.find((step) => step.status !== 'done')?.key || props.onboarding.steps[0]?.key);
 const activeStep = computed(() => props.onboarding.steps.find((step) => step.key === activeStepKey.value) || props.onboarding.steps[0]);
 const busyTask = ref(null);
+const openingTask = ref(null);
 const showSettings = ref(false);
 const showUpload = ref(false);
 const fileInput = ref(null);
@@ -33,6 +34,21 @@ function toggleTask(task) {
     busyTask.value = task.key;
     router.patch(`/super-admin/onboarding/${props.tenant.id}/steps/${activeStepKey.value}/tasks/${task.key}`, { completed: !task.completed }, { preserveScroll: true, onFinish: () => { busyTask.value = null; } });
 }
+function openTask(task) {
+    if (!task.action) return;
+    openingTask.value = task.key;
+
+    if (task.action.type === 'control') {
+        router.get(`/super-admin/tenants/${props.tenant.id}`, { config: task.action.tab }, {
+            onFinish: () => { openingTask.value = null; },
+        });
+        return;
+    }
+
+    router.post(`/super-admin/tenants/${props.tenant.id}/switch`, { redirect: task.action.path }, {
+        onFinish: () => { openingTask.value = null; },
+    });
+}
 function saveMaster() { masterForm.patch(`/super-admin/onboarding/${props.tenant.id}`, { preserveScroll: true, onSuccess: () => { showSettings.value = false; } }); }
 function saveStep() { stepForm.patch(`/super-admin/onboarding/${props.tenant.id}/steps/${activeStepKey.value}`, { preserveScroll: true }); }
 function upload() {
@@ -54,7 +70,7 @@ function activate() { if (window.confirm('Ta përfundojmë onboarding-un dhe ta 
             </header>
 
             <section class="sa-card mb-3 grid overflow-hidden lg:grid-cols-[1.3fr_repeat(3,.6fr)]">
-                <div class="flex items-center gap-3 p-4"><span class="relative grid h-[50px] w-[50px] shrink-0 place-items-center rounded-full" :style="progressStyle"><span class="absolute inset-[6px] rounded-full bg-white"/><strong class="relative text-[11px]">{{ onboarding.progress }}%</strong></span><div><strong class="block text-sm">{{ onboarding.steps.filter((step) => step.status === 'done').length }} nga 8 hapa të përfunduar</strong><span class="mt-1 block text-[11px] text-neutral-500">Përditësuar {{ new Date().toLocaleDateString('sq-AL') }}</span></div></div>
+                <div class="flex items-center gap-3 p-4"><span class="relative grid h-[50px] w-[50px] shrink-0 place-items-center rounded-full" :style="progressStyle"><span class="absolute inset-[6px] rounded-full bg-white"/><strong class="relative text-[11px]">{{ onboarding.progress }}%</strong></span><div><strong class="block text-sm">{{ onboarding.steps.filter((step) => step.status === 'done').length }} nga {{ onboarding.steps.length }} hapa të përfunduar</strong><span class="mt-1 block text-[11px] text-neutral-500">Përditësuar {{ new Date().toLocaleDateString('sq-AL') }}</span></div></div>
                 <div class="border-t border-neutral-200 p-4 lg:border-l lg:border-t-0"><span class="text-[10px] text-neutral-500">Përgjegjësi</span><strong class="mt-1.5 block text-xs">{{ onboarding.assignee?.name || 'Pa caktuar' }}</strong></div>
                 <div class="border-t border-neutral-200 p-4 lg:border-l lg:border-t-0"><span class="text-[10px] text-neutral-500">Afati</span><strong class="mt-1.5 block text-xs">{{ onboarding.due_date || 'Pa afat' }}</strong></div>
                 <div class="border-t border-neutral-200 p-4 lg:border-l lg:border-t-0"><span class="text-[10px] text-neutral-500">Monedha / timezone</span><strong class="mt-1.5 block text-xs">{{ tenant.currency }} · {{ tenant.timezone }}</strong></div>
@@ -67,8 +83,8 @@ function activate() { if (window.confirm('Ta përfundojmë onboarding-un dhe ta 
 
                 <div class="grid gap-3 xl:grid-cols-[minmax(0,1fr)_275px]">
                     <div class="space-y-3">
-                        <section class="sa-card"><div class="border-b border-neutral-200 p-4"><p class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.08em] text-emerald-700"><CheckCircle2 class="h-4 w-4" />Hapi {{ onboarding.steps.findIndex((step) => step.key === activeStepKey) + 1 }} nga 8</p><h2 class="mt-2 text-lg font-semibold">{{ activeStep.title }}</h2><p class="mt-1 text-[11px] text-neutral-500">{{ activeStep.description }}</p></div><div class="divide-y divide-neutral-100">
-                            <div v-for="task in activeStep.tasks" :key="task.key" class="grid min-h-[64px] grid-cols-[34px_1fr_auto] items-center gap-3 px-4 py-2.5"><button class="grid h-[30px] w-[30px] place-items-center rounded-lg border" :class="task.completed ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-neutral-300 text-transparent hover:border-emerald-400'" :disabled="busyTask === task.key" @click="toggleTask(task)"><LoaderCircle v-if="busyTask === task.key" class="h-4 w-4 animate-spin text-emerald-700" /><Check v-else class="h-4 w-4" /></button><div><strong class="block text-[11.5px]">{{ task.title }}</strong><span class="mt-0.5 block text-[10px] text-neutral-500">{{ task.description }}</span></div><button class="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[10px] font-bold" :class="task.completed ? 'text-emerald-700' : 'text-neutral-600'" @click="toggleTask(task)">{{ task.completed ? 'Rihap' : 'Përfundo' }}</button></div>
+                        <section class="sa-card"><div class="border-b border-neutral-200 p-4"><p class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.08em] text-emerald-700"><CheckCircle2 class="h-4 w-4" />Hapi {{ onboarding.steps.findIndex((step) => step.key === activeStepKey) + 1 }} nga {{ onboarding.steps.length }}</p><h2 class="mt-2 text-lg font-semibold">{{ activeStep.title }}</h2><p class="mt-1 text-[11px] text-neutral-500">{{ activeStep.description }}</p></div><div class="divide-y divide-neutral-100">
+                            <div v-for="task in activeStep.tasks" :key="task.key" class="grid min-h-[64px] grid-cols-[34px_1fr_auto] items-center gap-3 px-4 py-2.5"><button class="grid h-[30px] w-[30px] place-items-center rounded-lg border" :class="task.completed ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-neutral-300 text-transparent hover:border-emerald-400'" :disabled="busyTask === task.key" @click="toggleTask(task)"><LoaderCircle v-if="busyTask === task.key" class="h-4 w-4 animate-spin text-emerald-700" /><Check v-else class="h-4 w-4" /></button><div><strong class="block text-[11.5px]">{{ task.title }}</strong><span class="mt-0.5 block text-[10px] text-neutral-500">{{ task.description }}</span></div><div class="flex items-center gap-1.5"><button type="button" class="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[10px] font-bold text-neutral-600 hover:border-emerald-200 hover:text-emerald-700" :disabled="openingTask === task.key" @click="openTask(task)"><LoaderCircle v-if="openingTask === task.key" class="h-3 w-3 animate-spin" /><ExternalLink v-else class="h-3 w-3" />Hap</button><button type="button" class="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[10px] font-bold" :class="task.completed ? 'text-emerald-700' : 'text-neutral-600'" @click="toggleTask(task)">{{ task.completed ? 'Rihap' : 'Përfundo' }}</button></div></div>
                         </div></section>
 
                         <section class="sa-card"><div class="sa-card-header"><div><h2 class="sa-card-title">Shënimet e hapit</h2><p class="sa-card-subtitle">Vetëm për stafin e Lora PMS.</p></div></div><form class="space-y-3 p-4" @submit.prevent="saveStep"><div class="grid gap-3 sm:grid-cols-3"><label>Statusi<select v-model="stepForm.status" class="mt-1 w-full"><option value="in_progress">Në proces</option><option value="waiting_client">Në pritje të klientit</option><option value="pending">Pa filluar</option></select></label><label>Përgjegjësi<select v-model="stepForm.assigned_to" class="mt-1 w-full"><option :value="null">Përdor përgjegjësin kryesor</option><option v-for="person in staff" :key="person.id" :value="person.id">{{ person.name }}</option></select></label><label>Afati<input v-model="stepForm.due_date" type="date" class="mt-1 w-full"></label></div><label class="block">Shënime<textarea v-model="stepForm.notes" class="mt-1 w-full" placeholder="Vendimet, pyetjet ose çfarë presim nga klienti..." /></label><div class="flex justify-end"><button class="sa-button sa-button-primary" :disabled="stepForm.processing"><Save class="h-4 w-4" />Ruaj hapin</button></div></form></section>

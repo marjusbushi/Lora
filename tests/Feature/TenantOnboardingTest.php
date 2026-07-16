@@ -8,6 +8,7 @@ use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
 use App\Services\ChannexConfiguration;
+use App\Services\TenantOnboardingService;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
@@ -77,6 +78,37 @@ class TenantOnboardingTest extends TestCase
                 ->has('currencyOptions', 10)
                 ->where('timezoneGroups.Europe', fn ($timezones) => collect($timezones)
                     ->contains('value', 'Europe/Tirane')));
+    }
+
+    public function test_every_onboarding_task_has_a_destination_and_exchange_api_is_included(): void
+    {
+        $tenant = Tenant::query()->sole();
+
+        $this->actingAs($this->superAdmin)
+            ->get(route('super-admin.onboarding.show', $tenant))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('SuperAdmin/Onboarding/Show')
+                ->where('onboarding.steps.6.tasks.3.key', 'exchange_rates')
+                ->where('onboarding.steps.6.tasks.3.action.path', '/settings?tab=currencies'));
+
+        $tasks = collect(config('onboarding.steps'))->flatMap(fn (array $step) => $step['tasks']);
+        $this->assertTrue($tasks->every(fn (array $task) => isset($task['action']['type'])));
+    }
+
+    public function test_existing_onboarding_records_receive_new_tasks_from_the_catalog(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $service = app(TenantOnboardingService::class);
+        $onboarding = $service->findOrCreate($tenant);
+        $steps = $onboarding->steps;
+        unset($steps['integrations']['tasks']['exchange_rates']);
+        $onboarding->forceFill(['steps' => $steps])->save();
+
+        $synced = $service->findOrCreate($tenant);
+
+        $this->assertArrayHasKey('exchange_rates', $synced->steps['integrations']['tasks']);
+        $this->assertFalse($synced->steps['integrations']['tasks']['exchange_rates']['completed']);
     }
 
     public function test_tenant_creation_rejects_a_currency_outside_the_supported_list(): void

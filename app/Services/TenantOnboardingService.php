@@ -20,8 +20,10 @@ class TenantOnboardingService
             ],
         );
 
-        return $onboarding->wasRecentlyCreated
-            ? $this->saveSteps($onboarding, $onboarding->steps)
+        $steps = $this->mergeDefinitions($onboarding->steps, $tenant);
+
+        return $onboarding->wasRecentlyCreated || $steps !== $onboarding->steps
+            ? $this->saveSteps($onboarding, $steps)
             : $onboarding;
     }
 
@@ -177,6 +179,41 @@ class TenantOnboardingService
             ] : null,
             'steps' => $steps,
         ];
+    }
+
+    public function tenantDestination(?string $destination): string
+    {
+        if (! is_string($destination) || $destination === '') {
+            return '/dashboard';
+        }
+
+        $allowed = collect(config('onboarding.steps'))
+            ->flatMap(fn (array $step) => $step['tasks'] ?? [])
+            ->pluck('action')
+            ->filter(fn ($action) => is_array($action) && ($action['type'] ?? null) === 'tenant')
+            ->pluck('path');
+
+        return $allowed->containsStrict($destination) ? $destination : '/dashboard';
+    }
+
+    private function mergeDefinitions(array $steps, Tenant $tenant): array
+    {
+        $defaults = $this->defaultSteps($tenant);
+
+        foreach ($defaults as $stepKey => $defaultStep) {
+            if (! isset($steps[$stepKey]) || ! is_array($steps[$stepKey])) {
+                $steps[$stepKey] = $defaultStep;
+                continue;
+            }
+
+            foreach ($defaultStep['tasks'] as $taskKey => $defaultTask) {
+                if (! isset($steps[$stepKey]['tasks'][$taskKey])) {
+                    $steps[$stepKey]['tasks'][$taskKey] = $defaultTask;
+                }
+            }
+        }
+
+        return $this->normalizeSteps($steps);
     }
 
     private function normalizeSteps(array $steps): array

@@ -147,6 +147,9 @@ class TenantController extends Controller
             'currencyOptions' => config('lora.tenant_currencies'),
             'timezoneGroups' => $this->timezoneGroups(),
             'roleOptions' => array_keys(TenantRoleService::definitions()),
+            'initialConfigTab' => in_array(request()->query('config'), ['domains', 'channex', 'pok', 'fature'], true)
+                ? request()->query('config')
+                : null,
         ]);
     }
 
@@ -508,7 +511,12 @@ class TenantController extends Controller
         return back()->with('success', "Abonimi i {$tenant->name} u përditësua.");
     }
 
-    public function switch(Request $request, Tenant $tenant, TenantHandoff $handoff): RedirectResponse|SymfonyResponse
+    public function switch(
+        Request $request,
+        Tenant $tenant,
+        TenantHandoff $handoff,
+        TenantOnboardingService $onboarding,
+    ): RedirectResponse|SymfonyResponse
     {
         abort_unless($tenant->status === 'active', 422, 'Ky hotel nuk eshte aktiv.');
 
@@ -524,7 +532,8 @@ class TenantController extends Controller
 
         $token = $handoff->issue($request->user(), $tenant, $targetHost);
 
-        $handoffUrl = $this->tenantHandoffUrl($dashboardUrl, $token);
+        $destination = $onboarding->tenantDestination($request->string('redirect')->toString());
+        $handoffUrl = $this->tenantHandoffUrl($dashboardUrl, $token, $destination);
         $headers = [
             'Cache-Control' => 'no-store, max-age=0',
             'Referrer-Policy' => 'no-referrer',
@@ -854,7 +863,7 @@ class TenantController extends Controller
         return ($local ? 'http://' : 'https://').$domain.'/dashboard';
     }
 
-    private function tenantHandoffUrl(string $dashboardUrl, string $token): string
+    private function tenantHandoffUrl(string $dashboardUrl, string $token, string $destination = '/dashboard'): string
     {
         $scheme = parse_url($dashboardUrl, PHP_URL_SCHEME);
         $host = parse_url($dashboardUrl, PHP_URL_HOST);
@@ -862,6 +871,10 @@ class TenantController extends Controller
 
         $origin = $scheme.'://'.$host.($port ? ':'.$port : '');
 
-        return $origin.'/tenant-handoff?token='.rawurlencode($token);
+        $url = $origin.'/tenant-handoff?token='.rawurlencode($token);
+
+        return $destination === '/dashboard'
+            ? $url
+            : $url.'&redirect='.rawurlencode($destination);
     }
 }

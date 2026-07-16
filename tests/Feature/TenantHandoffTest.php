@@ -91,6 +91,20 @@ class TenantHandoffTest extends TestCase
         $this->assertAuthenticatedAs($this->superAdmin);
     }
 
+    public function test_handoff_redirects_only_to_an_onboarding_destination(): void
+    {
+        $token = app(TenantHandoff::class)->issue($this->superAdmin, $this->tenant, 'hotel-a.lorapms.test');
+
+        $this->get('http://hotel-a.lorapms.test/tenant-handoff?token='.$token.'&redirect='.urlencode('/settings?tab=currencies'))
+            ->assertRedirect('http://hotel-a.lorapms.test/settings?tab=currencies');
+
+        $this->post('http://hotel-a.lorapms.test/logout');
+        $token = app(TenantHandoff::class)->issue($this->superAdmin, $this->tenant, 'hotel-a.lorapms.test');
+
+        $this->get('http://hotel-a.lorapms.test/tenant-handoff?token='.$token.'&redirect='.urlencode('https://evil.example'))
+            ->assertRedirect('http://hotel-a.lorapms.test/dashboard');
+    }
+
     public function test_expired_or_malformed_handoff_is_rejected(): void
     {
         $token = app(TenantHandoff::class)->issue($this->superAdmin, $this->tenant, 'hotel-a.lorapms.test');

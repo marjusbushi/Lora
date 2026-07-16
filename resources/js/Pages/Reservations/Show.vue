@@ -385,18 +385,18 @@ function settleAndCheckout(method) {
             <span class="font-medium text-neutral-600">#{{ reservation.id }}</span>
         </div>
 
-        <div class="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div class="relative z-40 mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
                 <h1 class="text-3xl font-semibold tracking-tight text-neutral-950">{{ $t('reservationShow.reservation') }} #{{ reservation.id }}</h1>
                 <p class="mt-2 text-sm text-neutral-500">{{ $t('reservationShow.activeStay') }} · {{ formatDate(reservation.check_in_date) }} – {{ formatDate(reservation.check_out_date) }}</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 <Button variant="outline" @click="openInvoice"><FileText class="h-4 w-4" /> {{ $t('reservationShow.invoice') }}</Button>
-                <details class="group relative">
+                <details class="group relative z-50">
                     <summary class="flex cursor-pointer list-none items-center gap-2 rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-50">
                         {{ $t('reservationShow.more') }} <ChevronDown class="h-4 w-4 transition group-open:rotate-180" />
                     </summary>
-                    <div class="absolute right-0 z-30 mt-2 w-52 overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
+                    <div class="absolute right-0 z-[60] mt-2 w-52 overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
                         <button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="openMinibarModal"><PackageOpen class="h-4 w-4" />Shto minibar</button>
                         <button v-if="canAddCharge" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="openLineModal"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</button>
                         <button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="openPaymentModal"><CreditCard class="h-4 w-4" />{{ $t('reservationShow.recordPayment') }}</button>
