@@ -194,10 +194,34 @@ class FinanceController extends Controller
             return array_merge($this->paymentRow($p), ['delta' => $delta, 'balance' => $running]);
         })->reverse()->values();
 
+        $visibleAccountIds = $accounts->where('is_active', true)->pluck('id');
+        $todayNet = FinancePayment::query()
+            ->whereDate('paid_at', today())
+            ->get()
+            ->sum(function (FinancePayment $payment) use ($visibleAccountIds) {
+                $amount = (float) $payment->amount_base;
+                $net = 0.0;
+
+                if ($visibleAccountIds->contains($payment->account_id)) {
+                    $net += match ($payment->direction) {
+                        'in' => $amount,
+                        'out', 'transfer' => -$amount,
+                        default => 0.0,
+                    };
+                }
+
+                if ($payment->direction === 'transfer' && $visibleAccountIds->contains($payment->counter_account_id)) {
+                    $net += $amount;
+                }
+
+                return $net;
+            });
+
         return Inertia::render('Finance/Accounts', array_merge($this->shared($request), [
             'accounts' => $accounts,
             'selectedId' => $selectedId,
             'ledger' => $ledger,
+            'todayNet' => round($todayNet, 2),
             'currencies' => config('lora.tenant_currencies', ['EUR', 'ALL']),
         ]));
     }
