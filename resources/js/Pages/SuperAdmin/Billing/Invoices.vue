@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
-import BillingWorkspaceNav from '@/Components/SuperAdmin/BillingWorkspaceNav.vue';
+import BillingPageHeader from '@/Components/SuperAdmin/BillingPageHeader.vue';
 import { CircleAlert, Clock3, FilePlus2, ReceiptText, X } from 'lucide-vue-next';
 
 const props = defineProps({ invoices: Object, tenants: Array, stats: Object, filters: Object });
@@ -68,50 +68,42 @@ function voidInvoice(invoice) {
 
 <template>
     <SuperAdminLayout title="Faturat — Lora Control Panel">
-        <div class="mx-auto max-w-7xl space-y-6">
-            <BillingWorkspaceNav />
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Financa e Lora / Faturat</p>
-                    <h1 class="mt-2 text-3xl font-semibold tracking-tight text-neutral-950">Faturat</h1>
-                    <p class="mt-2 text-sm text-neutral-500">Dokumentet e faturimit të abonimeve dhe moduleve të platformës.</p>
-                </div>
-                <button class="inline-flex items-center justify-center gap-2 rounded-xl bg-[#16875d] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#116f4c]" @click="createOpen = true">
-                    <FilePlus2 class="h-4 w-4" /> Krijo faturë
-                </button>
-            </div>
+        <main class="sa-page max-w-[1320px] space-y-4">
+            <BillingPageHeader title="Faturat" subtitle="Dokumentet e abonimeve dhe moduleve të platformës.">
+                <template #actions><button type="button" class="sa-button sa-button-primary" @click="createOpen = true"><FilePlus2 /> Krijo faturë</button></template>
+            </BillingPageHeader>
 
-            <section class="grid gap-4 md:grid-cols-3">
-                <article v-for="card in cards" :key="card.label" class="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+            <section class="grid gap-3 md:grid-cols-3">
+                <article v-for="card in cards" :key="card.label" class="sa-card sa-kpi-card">
                     <div class="flex items-start justify-between gap-4">
-                        <div><p class="text-sm font-medium text-neutral-500">{{ card.label }}</p><p class="mt-3 text-3xl font-semibold tracking-tight text-neutral-950">{{ card.value }}</p><p class="mt-2 text-xs text-neutral-400">{{ card.detail }}</p></div>
-                        <span class="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-50 text-emerald-700"><component :is="card.icon" class="h-5 w-5" /></span>
+                        <div><p class="sa-kpi-label">{{ card.label }}</p><p class="sa-kpi-value">{{ card.value }}</p><p class="sa-kpi-meta">{{ card.detail }}</p></div>
+                        <span class="sa-icon-box bg-emerald-50 text-emerald-700"><component :is="card.icon" class="sa-icon" /></span>
                     </div>
                 </article>
             </section>
 
-            <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-                <div class="flex flex-col gap-4 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
-                    <div><h2 class="font-semibold text-neutral-900">Lista e faturave</h2><p class="mt-1 text-xs text-neutral-500">Kliko numrin për detajet dhe line items.</p></div>
-                    <div class="flex flex-wrap gap-2"><label class="text-xs font-medium text-neutral-600">Hoteli
-                        <select :value="filters.tenant_id || ''" class="mt-1 block rounded-xl border-neutral-300 text-sm" @change="filter('tenant_id', $event.target.value)"><option value="">Të gjithë</option><option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">{{ tenant.name }}</option></select>
-                    </label><label class="text-xs font-medium text-neutral-600">Statusi
-                        <select :value="filters.status" class="mt-1 block rounded-xl border-neutral-300 text-sm" @change="filter('status', $event.target.value)">
+            <section class="sa-card">
+                <div class="sa-card-header flex-col items-stretch sm:flex-row sm:items-end">
+                    <div><h2 class="sa-card-title">Lista e faturave</h2><p class="sa-card-subtitle">Kliko numrin për të hapur dokumentin.</p></div>
+                    <div class="flex flex-wrap gap-2"><label>Hoteli
+                        <select :value="filters.tenant_id || ''" class="sa-control mt-1 block min-w-[160px]" @change="filter('tenant_id', $event.target.value)"><option value="">Të gjithë</option><option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">{{ tenant.name }}</option></select>
+                    </label><label>Statusi
+                        <select :value="filters.status" class="sa-control mt-1 block min-w-[130px]" @change="filter('status', $event.target.value)">
                             <option value="">Të gjitha</option><option value="draft">Draft</option><option value="open">Open</option><option value="paid">Paguar</option><option value="overdue">Vonuar</option><option value="void">Anuluar</option>
                         </select>
                     </label></div>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-neutral-200 text-sm">
-                        <thead class="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500"><tr><th class="px-5 py-3 font-semibold">Fatura</th><th class="px-5 py-3 font-semibold">Hoteli</th><th class="px-5 py-3 font-semibold">Periudha</th><th class="px-5 py-3 font-semibold">Afati</th><th class="px-5 py-3 font-semibold">Statusi</th><th class="px-5 py-3 text-right font-semibold">Totali</th></tr></thead>
+                    <table class="min-w-full text-left">
+                        <thead><tr class="sa-table-head"><th class="px-4 py-2.5 font-bold">Fatura</th><th class="px-4 py-2.5 font-bold">Hoteli</th><th class="px-4 py-2.5 font-bold">Periudha</th><th class="px-4 py-2.5 font-bold">Afati</th><th class="px-4 py-2.5 font-bold">Statusi</th><th class="px-4 py-2.5 text-right font-bold">Totali</th></tr></thead>
                         <tbody class="divide-y divide-neutral-100">
                             <tr v-for="invoice in invoices.data" :key="invoice.id" class="hover:bg-neutral-50/70">
-                                <td class="px-5 py-4"><Link :href="`/super-admin/billing/invoices/${invoice.id}`" class="font-semibold text-emerald-700 no-underline hover:text-emerald-800">{{ invoice.number }}</Link><button class="mt-1 block text-[11px] text-neutral-400 hover:text-neutral-700" @click="selected = invoice">Shiko shpejt</button></td>
-                                <td class="px-5 py-4"><Link :href="`/super-admin/tenants/${invoice.tenant.id}`" class="font-medium text-neutral-900 no-underline hover:text-emerald-700">{{ invoice.tenant.name }}</Link><p class="mt-1 text-[11px] text-neutral-400">{{ invoice.subscription_id ? `Abonimi #${invoice.subscription_id}` : 'Pa abonim' }}</p></td>
-                                <td class="whitespace-nowrap px-5 py-4 text-neutral-500">{{ date(invoice.period_starts_on) }} – {{ date(invoice.period_ends_on) }}</td>
-                                <td class="whitespace-nowrap px-5 py-4 text-neutral-500">{{ date(invoice.due_on) }}</td>
-                                <td class="px-5 py-4"><span class="rounded-full px-2.5 py-1 text-xs font-medium" :class="statusClass(invoice.status)">{{ statusLabel(invoice.status) }}</span></td>
-                                <td class="whitespace-nowrap px-5 py-4 text-right font-semibold text-neutral-900">{{ money(invoice.total_cents, invoice.currency) }}</td>
+                                <td class="px-4 py-3"><Link :href="`/super-admin/billing/invoices/${invoice.id}`" class="sa-table-primary text-emerald-700 no-underline hover:text-emerald-800">{{ invoice.number }}</Link><button class="sa-table-meta block hover:text-neutral-700" @click="selected = invoice">Shiko shpejt</button></td>
+                                <td class="px-4 py-3"><Link :href="`/super-admin/tenants/${invoice.tenant.id}`" class="sa-table-primary no-underline hover:text-emerald-700">{{ invoice.tenant.name }}</Link><p class="sa-table-meta">{{ invoice.subscription_id ? `Abonimi #${invoice.subscription_id}` : 'Pa abonim' }}</p></td>
+                                <td class="whitespace-nowrap px-4 py-3 text-xs text-neutral-500">{{ date(invoice.period_starts_on) }} – {{ date(invoice.period_ends_on) }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-xs text-neutral-500">{{ date(invoice.due_on) }}</td>
+                                <td class="px-4 py-3"><span class="rounded-full px-2 py-1 text-[10px] font-bold" :class="statusClass(invoice.status)">{{ statusLabel(invoice.status) }}</span></td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold text-neutral-900">{{ money(invoice.total_cents, invoice.currency) }}</td>
                             </tr>
                             <tr v-if="!invoices.data.length"><td colspan="6" class="px-5 py-12 text-center text-neutral-500">Nuk ka ende fatura.</td></tr>
                         </tbody>
@@ -121,7 +113,7 @@ function voidInvoice(invoice) {
                     <Link v-for="link in invoices.links" :key="link.label" :href="link.url || '#'" class="rounded-lg px-3 py-1.5 text-xs no-underline" :class="link.active ? 'bg-[#16875d] text-white' : 'text-neutral-500 hover:bg-neutral-100'" v-html="link.label" />
                 </div>
             </section>
-        </div>
+        </main>
 
         <Teleport to="body">
             <div v-if="createOpen" class="fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/50 p-0 sm:items-center sm:p-6" @click.self="createOpen = false">
