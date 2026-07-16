@@ -1,28 +1,28 @@
-import { defineConfig } from 'vite';
-import laravel from 'laravel-vite-plugin';
-import vue from '@vitejs/plugin-vue';
-import { execFileSync } from 'node:child_process';
+import { defineConfig } from "vite";
+import laravel from "laravel-vite-plugin";
+import vue from "@vitejs/plugin-vue";
+import { execFileSync } from "node:child_process";
 
 const buildId = (() => {
     const configuredId = process.env.VITE_BUILD_ID || process.env.GITHUB_SHA;
 
     if (configuredId) {
-        return configuredId.slice(0, 12).replace(/[^a-zA-Z0-9_-]/g, '');
+        return configuredId.slice(0, 12).replace(/[^a-zA-Z0-9_-]/g, "");
     }
 
     try {
-        return execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], {
-            encoding: 'utf8',
+        return execFileSync("git", ["rev-parse", "--short=12", "HEAD"], {
+            encoding: "utf8",
         }).trim();
     } catch {
-        return 'local';
+        return "local";
     }
 })();
 
 export default defineConfig({
     plugins: [
         laravel({
-            input: 'resources/js/app.js',
+            input: ["resources/css/app.css", "resources/js/app.js"],
             refresh: true,
         }),
         vue({
@@ -38,11 +38,18 @@ export default defineConfig({
     // don't exist in the browser (undefined → the SDK throws → its generic "GENERAL_ERROR").
     // Define them so the SDK runs inside our Vite/Vue page the same as on POK's own page.
     define: {
-        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
-        global: 'globalThis',
+        "process.env.NODE_ENV": JSON.stringify(
+            process.env.NODE_ENV || "production",
+        ),
+        global: "globalThis",
     },
     optimizeDeps: {
-        include: ['@nebula-ltd/pok-payments-js', 'react', 'react-dom', 'react-dom/client'],
+        include: [
+            "@nebula-ltd/pok-payments-js",
+            "react",
+            "react-dom",
+            "react-dom/client",
+        ],
     },
     build: {
         // A chunk's content hash can stay unchanged even when only an imported
