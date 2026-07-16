@@ -14,6 +14,8 @@ use App\Mcp\Tools\GetReservationContextTool;
 use App\Mcp\Tools\PrepareGuestReplyTool;
 use App\Mcp\Tools\SearchReservationsTool;
 use App\Models\AiAccessToken;
+use App\Models\Room;
+use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\Tenant;
 use App\Models\User;
@@ -90,6 +92,42 @@ class LoraAiMcpTest extends TestCase
             ->assertStructuredContent(fn ($json) => $json
                 ->has('count')
                 ->has('reservations'));
+    }
+
+    public function test_super_admin_can_check_room_availability_for_the_bound_hotel(): void
+    {
+        $tenant = Tenant::query()->sole();
+        app(TenantContext::class)->set($tenant);
+        $superAdmin = User::factory()->create([
+            'current_tenant_id' => $tenant->id,
+            'is_super_admin' => true,
+        ]);
+        $roomType = RoomType::query()->create([
+            'name' => 'Deluxe Demo',
+            'base_price' => 80,
+            'max_occupancy' => 2,
+            'amenities' => ['WiFi'],
+        ]);
+        Room::query()->create([
+            'room_type_id' => $roomType->id,
+            'room_number' => '101',
+            'floor' => 1,
+            'status' => 'available',
+        ]);
+
+        LoraHotelServer::actingAs($superAdmin, 'api')
+            ->tool(CheckAvailabilityTool::class, [
+                'check_in' => '2026-07-16',
+                'check_out' => '2026-07-17',
+                'adults' => 1,
+            ])
+            ->assertOk()
+            ->assertStructuredContent(fn ($json) => $json
+                ->where('currency', 'EUR')
+                ->where('room_types.0.name', 'Deluxe Demo')
+                ->where('room_types.0.available', 1)
+                ->where('room_types.0.stay_total', 80.0)
+                ->etc());
     }
 
     public function test_unbound_mcp_request_is_rejected_before_a_tool_can_run(): void

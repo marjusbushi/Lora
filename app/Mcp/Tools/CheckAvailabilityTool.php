@@ -44,9 +44,9 @@ class CheckAvailabilityTool extends LoraTool
 
         $types = RoomType::withCount(['rooms' => fn ($q) => $q->where('status', '!=', 'maintenance')])
             ->where('max_occupancy', '>=', $data['adults'] ?? 1)->orderBy('name')->get();
-        $booked = Reservation::query()->whereNotIn('status', ['cancelled', 'checked_out'])
-            ->whereDate('check_in_date', '<', $data['check_out'])
-            ->whereDate('check_out_date', '>', $data['check_in'])
+        $booked = Reservation::query()->whereNotIn('reservations.status', ['cancelled', 'checked_out'])
+            ->whereDate('reservations.check_in_date', '<', $data['check_out'])
+            ->whereDate('reservations.check_out_date', '>', $data['check_in'])
             ->join('rooms', 'reservations.room_id', '=', 'rooms.id')
             ->selectRaw('rooms.room_type_id, count(distinct reservations.room_id) as booked')
             ->groupBy('rooms.room_type_id')->pluck('booked', 'rooms.room_type_id');
