@@ -47,7 +47,7 @@ jobs:
 
             chown "$site_user:$site_group" storage/oauth-private.key storage/oauth-public.key
             chmod 0600 storage/oauth-private.key
-            chmod 0644 storage/oauth-public.key
+            chmod 0600 storage/oauth-public.key
 
             run_artisan config:cache
             run_artisan route:cache
