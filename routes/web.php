@@ -27,6 +27,7 @@ use App\Http\Controllers\SuperAdmin\BillingInvoiceController as SuperAdminBillin
 use App\Http\Controllers\SuperAdmin\BillingPaymentAttemptController as SuperAdminBillingPaymentAttemptController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentController as SuperAdminBillingPaymentController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
+use App\Http\Controllers\SuperAdmin\OnboardingController as SuperAdminOnboardingController;
 use App\Http\Controllers\SuperAdmin\ProfileController as SuperAdminProfileController;
 use App\Http\Controllers\SuperAdmin\ProviderEventController as SuperAdminProviderEventController;
 use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantController;
@@ -113,6 +114,15 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
     ->group(function () {
         Route::get('/', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/activity', [SuperAdminDashboardController::class, 'activity'])->name('activity');
+        Route::get('/onboarding', [SuperAdminOnboardingController::class, 'index'])->name('onboarding.index');
+        Route::get('/onboarding/{tenant}', [SuperAdminOnboardingController::class, 'show'])->name('onboarding.show');
+        Route::patch('/onboarding/{tenant}', [SuperAdminOnboardingController::class, 'update'])->name('onboarding.update');
+        Route::patch('/onboarding/{tenant}/steps/{step}', [SuperAdminOnboardingController::class, 'updateStep'])->name('onboarding.steps.update');
+        Route::patch('/onboarding/{tenant}/steps/{step}/tasks/{task}', [SuperAdminOnboardingController::class, 'updateTask'])->name('onboarding.tasks.update');
+        Route::post('/onboarding/{tenant}/documents', [SuperAdminOnboardingController::class, 'storeDocument'])->name('onboarding.documents.store');
+        Route::get('/onboarding/{tenant}/documents/{document}', [SuperAdminOnboardingController::class, 'downloadDocument'])->name('onboarding.documents.download');
+        Route::delete('/onboarding/{tenant}/documents/{document}', [SuperAdminOnboardingController::class, 'destroyDocument'])->name('onboarding.documents.destroy');
+        Route::post('/onboarding/{tenant}/activate', [SuperAdminOnboardingController::class, 'activate'])->name('onboarding.activate');
         Route::get('/profile', [SuperAdminProfileController::class, 'edit'])->name('profile.edit');
         Route::patch('/profile', [SuperAdminProfileController::class, 'update'])->name('profile.update');
         Route::get('/tenants', [SuperAdminTenantController::class, 'index'])->name('tenants.index');

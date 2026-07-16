@@ -7,6 +7,7 @@ import {
     FileText,
     LayoutDashboard,
     ListChecks,
+    ListTodo,
     LogOut,
     Menu,
     PanelLeftClose,
@@ -39,6 +40,7 @@ watch(sidebarCollapsed, (collapsed) => {
 const navigation = [
     { label: t('superAdmin.compact.overview'), href: '/super-admin', match: '/super-admin', exact: true, icon: LayoutDashboard, group: t('superAdmin.compact.platform') },
     { label: t('superAdmin.compact.subscriptions'), href: '/super-admin/tenants', match: '/super-admin/tenants', icon: Repeat2, group: t('superAdmin.compact.platform') },
+    { label: 'Onboarding', href: '/super-admin/onboarding', match: '/super-admin/onboarding', icon: ListTodo, group: t('superAdmin.compact.platform') },
     { label: t('superAdmin.compact.activity'), href: '/super-admin/activity', match: '/super-admin/activity', icon: ListChecks, group: t('superAdmin.compact.platform') },
     { label: t('superAdmin.compact.invoices'), href: '/super-admin/billing/invoices', match: '/super-admin/billing/invoices', icon: FileText, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.payments'), href: '/super-admin/billing/payments', match: '/super-admin/billing/payments', icon: CreditCard, group: t('superAdmin.compact.loraFinance') },

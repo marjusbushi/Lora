@@ -354,6 +354,7 @@ function toggleStatus() {
                 <a href="#members" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">Përdoruesit</a>
                 <button type="button" class="h-11 shrink-0 border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 hover:text-neutral-800" @click="openBilling">Abonimi</button>
                 <button type="button" class="h-11 shrink-0 border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 hover:text-neutral-800" @click="openConfig('domains')">Konfigurimi</button>
+                <Link :href="route('super-admin.onboarding.show', tenant.id)" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">Onboarding</Link>
                 <Link :href="route('super-admin.activity', { tenant: tenant.id, range: 30 })" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">Aktiviteti</Link>
             </div>
 

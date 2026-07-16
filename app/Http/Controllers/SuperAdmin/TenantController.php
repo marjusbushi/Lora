@@ -14,6 +14,7 @@ use App\Services\BaseCurrency;
 use App\Services\FatureAlClient;
 use App\Services\TenantBillingService;
 use App\Services\TenantHandoff;
+use App\Services\TenantOnboardingService;
 use App\Services\TenantRoleService;
 use App\Tenancy\TenantContext;
 use DateTimeImmutable;
@@ -307,6 +308,7 @@ class TenantController extends Controller
         Request $request,
         TenantRoleService $tenantRoles,
         TenantBillingService $billing,
+        TenantOnboardingService $onboarding,
         TenantContext $context,
     ): RedirectResponse {
         $data = $request->validate([
@@ -325,7 +327,7 @@ class TenantController extends Controller
             return back()->withErrors(['primary_domain' => 'Ky domain perdoret nga nje hotel tjeter.']);
         }
 
-        $tenant = DB::transaction(function () use ($data, $domain, $request, $tenantRoles, $billing) {
+        $tenant = DB::transaction(function () use ($data, $domain, $request, $tenantRoles, $billing, $onboarding) {
             $tenant = Tenant::create([
                 'uuid' => (string) Str::uuid(),
                 'name' => $data['name'],
@@ -419,6 +421,8 @@ class TenantController extends Controller
                     fn () => $owner->unsetRelation('roles')->assignRole('admin'),
                 );
             }
+
+            $onboarding->findOrCreate($tenant);
 
             return $tenant;
         });
