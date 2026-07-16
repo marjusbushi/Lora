@@ -69,7 +69,7 @@ function voidInvoice(invoice) {
 <template>
     <SuperAdminLayout title="Faturat — Lora Control Panel">
         <main class="sa-page max-w-[1320px] space-y-4">
-            <BillingPageHeader title="Faturat" subtitle="Dokumentet e abonimeve dhe moduleve të platformës.">
+            <BillingPageHeader title="Faturat">
                 <template #actions><button type="button" class="sa-button sa-button-primary" @click="createOpen = true"><FilePlus2 /> Krijo faturë</button></template>
             </BillingPageHeader>
 
@@ -84,7 +84,7 @@ function voidInvoice(invoice) {
 
             <section class="sa-card">
                 <div class="sa-card-header flex-col items-stretch sm:flex-row sm:items-end">
-                    <div><h2 class="sa-card-title">Lista e faturave</h2><p class="sa-card-subtitle">Kliko numrin për të hapur dokumentin.</p></div>
+                    <div><h2 class="sa-card-title">Lista e faturave</h2></div>
                     <div class="flex flex-wrap gap-2"><label>Hoteli
                         <select :value="filters.tenant_id || ''" class="sa-control mt-1 block min-w-[160px]" @change="filter('tenant_id', $event.target.value)"><option value="">Të gjithë</option><option v-for="tenant in tenants" :key="tenant.id" :value="tenant.id">{{ tenant.name }}</option></select>
                     </label><label>Statusi
