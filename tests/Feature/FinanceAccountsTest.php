@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\FinanceAccount;
+use App\Models\FinancePayment;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -118,6 +119,38 @@ class FinanceAccountsTest extends TestCase
 
         // Its ledger stays reachable directly too.
         $this->actingAs($admin)->get(route('finance.accounts', ['account_id' => $extra->id]))->assertOk();
+    }
+
+    public function test_accounts_page_converts_today_totals_and_does_not_count_internal_transfers(): void
+    {
+        $this->withoutVite();
+        $admin = $this->role('admin');
+        FinanceAccount::ensureDefaults();
+        $cash = FinanceAccount::where('type', 'cash')->firstOrFail();
+        $bank = FinanceAccount::where('type', 'bank')->firstOrFail();
+
+        foreach ([
+            ['direction' => 'in', 'account_id' => $cash->id, 'amount' => 100, 'paid_at' => now()],
+            ['direction' => 'out', 'account_id' => $cash->id, 'amount' => 30, 'paid_at' => now()],
+            ['direction' => 'transfer', 'account_id' => $cash->id, 'counter_account_id' => $bank->id, 'amount' => 20, 'paid_at' => now()],
+            ['direction' => 'in', 'account_id' => $cash->id, 'amount' => 9870, 'currency' => 'ALL', 'fx_rate' => 98.7, 'paid_at' => now()],
+            ['direction' => 'in', 'account_id' => $cash->id, 'amount' => 500, 'paid_at' => now()->subDay()],
+        ] as $movement) {
+            FinancePayment::create(array_merge([
+                'currency' => 'EUR',
+                'method' => 'cash',
+                'source' => 'manual',
+                'description' => 'Lëvizje testi',
+            ], $movement));
+        }
+
+        $this->actingAs($admin)->get(route('finance.accounts'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Finance/Accounts')
+                ->where('todayNet', 170)
+                ->where('ledger.0.delta', 100)
+                ->where('ledger.0.balance', 650));
     }
 
     public function test_bad_currency_or_type_is_rejected(): void

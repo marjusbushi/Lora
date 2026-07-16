@@ -172,9 +172,11 @@ class FinanceController extends Controller
         $accounts = $this->manageableAccounts($request);
         $selectedId = (int) $request->input('account_id') ?: ($accounts->first()['id'] ?? null);
         // Never leak a hidden (bank) ledger through a hand-typed account_id.
-        if (! $accounts->firstWhere('id', $selectedId)) {
+        $selectedAccount = $accounts->firstWhere('id', $selectedId);
+        if (! $selectedAccount) {
             abort(403);
         }
+        $selectedUsesBaseCurrency = strtoupper((string) $selectedAccount['currency']) === BaseCurrency::code();
 
         // Ledger with a running balance, computed oldest-first then shown newest-first.
         $rows = FinancePayment::with($this->paymentRelations())
@@ -182,22 +184,47 @@ class FinanceController extends Controller
             ->orderBy('paid_at')->orderBy('id')
             ->get();
         $running = 0.0;
-        $ledger = $rows->map(function (FinancePayment $p) use (&$running, $selectedId) {
+        $ledger = $rows->map(function (FinancePayment $p) use (&$running, $selectedId, $selectedUsesBaseCurrency) {
+            $amount = $selectedUsesBaseCurrency ? (float) $p->amount_base : (float) $p->amount;
             $delta = match (true) {
-                $p->direction === 'in' && $p->account_id === $selectedId => (float) $p->amount,
-                $p->direction === 'out' && $p->account_id === $selectedId => -(float) $p->amount,
-                $p->direction === 'transfer' && $p->account_id === $selectedId => -(float) $p->amount,
-                default => (float) $p->amount, // transfer INTO this account
+                $p->direction === 'in' && $p->account_id === $selectedId => $amount,
+                $p->direction === 'out' && $p->account_id === $selectedId => -$amount,
+                $p->direction === 'transfer' && $p->account_id === $selectedId => -$amount,
+                default => $amount, // transfer INTO this account
             };
             $running = round($running + $delta, 2);
 
             return array_merge($this->paymentRow($p), ['delta' => $delta, 'balance' => $running]);
         })->reverse()->values();
 
+        $visibleAccountIds = $accounts->where('is_active', true)->pluck('id');
+        $todayNet = FinancePayment::query()
+            ->whereDate('paid_at', today())
+            ->get()
+            ->sum(function (FinancePayment $payment) use ($visibleAccountIds) {
+                $amount = (float) $payment->amount_base;
+                $net = 0.0;
+
+                if ($visibleAccountIds->contains($payment->account_id)) {
+                    $net += match ($payment->direction) {
+                        'in' => $amount,
+                        'out', 'transfer' => -$amount,
+                        default => 0.0,
+                    };
+                }
+
+                if ($payment->direction === 'transfer' && $visibleAccountIds->contains($payment->counter_account_id)) {
+                    $net += $amount;
+                }
+
+                return $net;
+            });
+
         return Inertia::render('Finance/Accounts', array_merge($this->shared($request), [
             'accounts' => $accounts,
             'selectedId' => $selectedId,
             'ledger' => $ledger,
+            'todayNet' => round($todayNet, 2),
             'currencies' => config('lora.tenant_currencies', ['EUR', 'ALL']),
         ]));
     }
