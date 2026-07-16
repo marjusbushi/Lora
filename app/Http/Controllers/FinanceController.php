@@ -1142,7 +1142,8 @@ class FinanceController extends Controller
     public function receiveBill(Request $request, Bill $bill): RedirectResponse
     {
         DB::transaction(function () use ($bill, $request) {
-            $pending = $bill->items()->with('item')->whereNull('received_at')->get();
+            $lockedBill = Bill::query()->lockForUpdate()->findOrFail($bill->id);
+            $pending = $lockedBill->items()->with('item')->whereNull('received_at')->get();
             foreach ($pending as $line) {
                 if ($line->item?->type !== 'service') {
                     $this->inventoryLedger->receiveBillItem($line, $request->user()->id);
@@ -1188,34 +1189,42 @@ class FinanceController extends Controller
             abort(403);
         }
 
-        if ($account['currency'] !== $baseCurrency && strtoupper($bill->currency) !== $account['currency']) {
-            return back()->with('error', "Kjo llogari mban vetëm {$account['currency']} — fatura është në {$bill->currency}.");
-        }
+        $error = DB::transaction(function () use ($data, $bill, $account, $request, $baseCurrency): ?string {
+            $lockedBill = Bill::query()->lockForUpdate()->findOrFail($bill->id);
+            if ($account['currency'] !== $baseCurrency && strtoupper($lockedBill->currency) !== $account['currency']) {
+                return "Kjo llogari mban vetëm {$account['currency']} — fatura është në {$lockedBill->currency}.";
+            }
 
-        // Payment rides the BILL's currency + frozen fx, so remainder math is exact.
-        $amountBase = strtoupper($bill->currency) === $baseCurrency
-            ? round((float) $data['amount'], 2)
-            : round((float) $data['amount'] / (float) $bill->fx_rate, 2);
-        if ($amountBase > $bill->remainingBase() + 0.01) {
-            return back()->with('error', 'Shuma e kalon mbetjen e faturës ('.number_format($bill->remainingBase(), 2).' '.$baseCurrency.' mbetje).');
-        }
+            // Payment rides the locked bill's currency + frozen fx, so an edit
+            // cannot change its value while this settlement is being recorded.
+            $amountBase = strtoupper($lockedBill->currency) === $baseCurrency
+                ? round((float) $data['amount'], 2)
+                : round((float) $data['amount'] / (float) $lockedBill->fx_rate, 2);
+            $remainingBase = $lockedBill->remainingBase();
+            if ($amountBase > $remainingBase + 0.01) {
+                return 'Shuma e kalon mbetjen e faturës ('.number_format($remainingBase, 2).' '.$baseCurrency.' mbetje).';
+            }
 
-        DB::transaction(function () use ($data, $bill, $account, $request, $baseCurrency) {
             FinancePayment::create([
                 'direction' => 'out',
                 'account_id' => $account['id'],
                 'amount' => $data['amount'],
-                'currency' => $bill->currency,
-                'fx_rate' => strtoupper($bill->currency) === $baseCurrency ? null : $bill->fx_rate,
+                'currency' => $lockedBill->currency,
+                'fx_rate' => strtoupper($lockedBill->currency) === $baseCurrency ? null : $lockedBill->fx_rate,
                 'method' => $data['method'],
                 'source' => 'manual',
-                'bill_id' => $bill->id,
-                'description' => 'Pagesë bill '.($bill->number ?: '#'.$bill->id).' — '.($bill->supplier?->name ?? ''),
+                'bill_id' => $lockedBill->id,
+                'description' => 'Pagesë bill '.($lockedBill->number ?: '#'.$lockedBill->id).' — '.($lockedBill->supplier?->name ?? ''),
                 'paid_at' => now(),
                 'created_by' => $request->user()->id,
             ]);
-            $bill->refreshStatus();
+            $lockedBill->refreshStatus();
+
+            return null;
         });
+        if ($error) {
+            return back()->with('error', $error);
+        }
 
         return back()->with('success', 'Pagesa e faturës u regjistrua.');
     }
