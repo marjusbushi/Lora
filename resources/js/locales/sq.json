@@ -473,6 +473,63 @@
         "linesSubtitle": "Artikujt dhe shërbimet e blera.",
         "actions": "Veprime",
         "subtotal": "Nëntotali"
+      },
+      "billAiImport": {
+        "button": "Import me AI",
+        "title": "Lexo faturën me AI",
+        "notConfiguredTitle": "Asistenti AI nuk është konfiguruar",
+        "notConfiguredBody": "Shto çelësin Gemini te Cilësimet → Asistenti AI dhe provo sërish.",
+        "chooseDocument": "Zgjidh ose tërhiq faturën këtu",
+        "fileHelp": "PDF, JPG, PNG ose WEBP · maksimumi 10 MB",
+        "stepReadTitle": "1. AI lexon faturën",
+        "stepReadBody": "Furnitorin, datat, totalet dhe artikujt.",
+        "stepMatchTitle": "2. Kontrollon katalogun",
+        "stepMatchBody": "Lidh artikujt ekzistues pa krijuar dublime.",
+        "stepReviewTitle": "3. Ti konfirmon",
+        "stepReviewBody": "Asgjë nuk ruhet pa kontrollin tënd.",
+        "supplier": "Furnitori",
+        "document": "Dokumenti",
+        "total": "Totali",
+        "matched": "U gjet në sistem",
+        "selectManually": "Zgjidhe manualisht",
+        "confidence": "Besueshmëria e leximit: {value}%",
+        "costAdjustment": "TVSH-ja ose zbritja e dokumentit u shpërnda proporcionalisht te artikujt. Kontrollo kostot para ruajtjes.",
+        "totalMismatch": "Shuma e artikujve ndryshon nga totali i faturës me {amount}. Korrigjo kostot para ruajtjes.",
+        "possibleDuplicate": "Kujdes: fatura nr. {number} ekziston tashmë për këtë furnitor. Sistemi nuk do ta ruajë dy herë.",
+        "itemsFound": "{count} artikuj të lexuar",
+        "existing": "ekzistues",
+        "new": "të rinj",
+        "willCreate": "Do të krijohet i ri",
+        "noItemPermission": "Fatura ka artikuj të rinj, por llogaria jote nuk ka leje për krijimin e inventarit.",
+        "cancel": "Anulo",
+        "readWithAi": "Lexo me AI",
+        "useData": "Përdor këto të dhëna",
+        "importedTitle": "Të dhënat u vendosën nga AI.",
+        "importedBody": "Kontrollo furnitorin, artikujt, kostot dhe magazinën para se të ruash.",
+        "createNewItem": "Krijo artikull të ri",
+        "newItemLabel": "Artikull i ri",
+        "createdAfterSave": "Krijohet vetëm pas ruajtjes",
+        "itemName": "Emri i artikullit",
+        "skuOptional": "SKU (opsionale)",
+        "units": {
+          "piece": "copë",
+          "kg": "kg",
+          "liter": "litër",
+          "pack": "paketë"
+        },
+        "types": {
+          "product": "Produkt",
+          "ingredient": "Përbërës",
+          "consumable": "Material harxhues",
+          "service": "Shërbim"
+        },
+        "errors": {
+          "ai_not_configured": "Asistenti AI nuk është konfiguruar.",
+          "unsupported_file": "AI lexon vetëm PDF, JPG, PNG ose WEBP.",
+          "file_too_large": "Skedari është mbi 10 MB.",
+          "no_readable_lines": "AI nuk gjeti artikuj të lexueshëm në këtë faturë.",
+          "analysis_failed": "Fatura nuk u lexua. Provo sërish me një foto ose PDF më të qartë."
+        }
       }
     },
     "profile": {

@@ -473,6 +473,63 @@
         "linesSubtitle": "Purchased items and services.",
         "actions": "Actions",
         "subtotal": "Subtotal"
+      },
+      "billAiImport": {
+        "button": "Import with AI",
+        "title": "Read bill with AI",
+        "notConfiguredTitle": "The AI assistant is not configured",
+        "notConfiguredBody": "Add the Gemini key under Settings → AI Assistant and try again.",
+        "chooseDocument": "Choose or drop the bill here",
+        "fileHelp": "PDF, JPG, PNG or WEBP · up to 10 MB",
+        "stepReadTitle": "1. AI reads the bill",
+        "stepReadBody": "Supplier, dates, totals and line items.",
+        "stepMatchTitle": "2. It checks the catalog",
+        "stepMatchBody": "Matches existing items without creating duplicates.",
+        "stepReviewTitle": "3. You confirm",
+        "stepReviewBody": "Nothing is saved without your review.",
+        "supplier": "Supplier",
+        "document": "Document",
+        "total": "Total",
+        "matched": "Found in the system",
+        "selectManually": "Select manually",
+        "confidence": "Reading confidence: {value}%",
+        "costAdjustment": "Document-level tax or discount was allocated proportionally across the items. Review the costs before saving.",
+        "totalMismatch": "The item sum differs from the bill total by {amount}. Correct the costs before saving.",
+        "possibleDuplicate": "Warning: bill no. {number} already exists for this supplier. The system will not save it twice.",
+        "itemsFound": "{count} items read",
+        "existing": "existing",
+        "new": "new",
+        "willCreate": "Will be created",
+        "noItemPermission": "This bill contains new items, but your account cannot create inventory items.",
+        "cancel": "Cancel",
+        "readWithAi": "Read with AI",
+        "useData": "Use these details",
+        "importedTitle": "The AI details were applied.",
+        "importedBody": "Review the supplier, items, costs and warehouse before saving.",
+        "createNewItem": "Create a new item",
+        "newItemLabel": "New item",
+        "createdAfterSave": "Created only after saving",
+        "itemName": "Item name",
+        "skuOptional": "SKU (optional)",
+        "units": {
+          "piece": "piece",
+          "kg": "kg",
+          "liter": "liter",
+          "pack": "pack"
+        },
+        "types": {
+          "product": "Product",
+          "ingredient": "Ingredient",
+          "consumable": "Consumable",
+          "service": "Service"
+        },
+        "errors": {
+          "ai_not_configured": "The AI assistant is not configured.",
+          "unsupported_file": "AI can only read PDF, JPG, PNG or WEBP files.",
+          "file_too_large": "The file is larger than 10 MB.",
+          "no_readable_lines": "AI could not find readable line items in this bill.",
+          "analysis_failed": "The bill could not be read. Try again with a clearer image or PDF."
+        }
       }
     },
     "profile": {

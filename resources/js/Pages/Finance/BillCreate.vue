@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Link, useForm } from '@inertiajs/vue3';
 import {
@@ -9,6 +9,7 @@ import {
     Info,
     PackagePlus,
     Plus,
+    Sparkles,
     Trash2,
 } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -28,8 +29,13 @@ const props = defineProps({
     currencies: { type: Array, default: () => ['EUR', 'ALL'] },
     currencyRates: { type: Object, default: () => ({}) },
     can: Object,
+    aiConfigured: Boolean,
+    openAiImport: Boolean,
 });
 const { t } = useI18n();
+const BillAiImportModal = defineAsyncComponent(() => import('./Components/BillAiImportModal.vue'));
+const showAiImport = ref(props.openAiImport);
+const importSummary = ref(null);
 
 function localDateString(date = new Date()) {
     const year = date.getFullYear();
@@ -46,6 +52,8 @@ function emptyLine() {
         warehouse_id: defaultWarehouseId.value,
         quantity: 1,
         unit_cost: null,
+        new_item: null,
+        suggested_name: '',
     };
 }
 
@@ -71,7 +79,7 @@ const totalBase = computed(() => {
     const rate = Number(form.fx_rate || 0);
     return rate > 0 ? invoiceTotal.value / rate : 0;
 });
-const stockableLines = computed(() => form.items.filter((line) => selectedItem(line)?.type !== 'service' && line.inventory_item_id).length);
+const stockableLines = computed(() => form.items.filter((line) => lineItemType(line) !== 'service' && (line.inventory_item_id || line.new_item?.name)).length);
 const errorMessages = computed(() => [...new Set(Object.values(form.errors))]);
 
 const canSubmit = computed(() => {
@@ -80,10 +88,11 @@ const canSubmit = computed(() => {
 
     return form.items.every((line) => {
         const item = selectedItem(line);
-        return item
+        const validItem = item || (props.can.manageInventory && line.new_item?.name?.trim());
+        return validItem
             && Number(line.quantity) > 0
             && Number(line.unit_cost) >= 0
-            && (item.type === 'service' || Boolean(line.warehouse_id));
+            && (lineItemType(line) === 'service' || Boolean(line.warehouse_id));
     });
 });
 
@@ -116,6 +125,41 @@ function selectedItem(line) {
     return props.inventoryItems.find((item) => item.id === Number(line.inventory_item_id));
 }
 
+function lineItemType(line) {
+    return selectedItem(line)?.type || line.new_item?.type || 'product';
+}
+
+function lineSelectionValue(line) {
+    if (line.inventory_item_id) return String(line.inventory_item_id);
+    if (line.new_item) return '__new__';
+    return '';
+}
+
+function changeLineItem(line, event) {
+    const value = event.target.value;
+    if (value === '__new__') {
+        line.inventory_item_id = null;
+        line.new_item ||= {
+            name: line.suggested_name || '',
+            sku: '',
+            barcode: '',
+            category: form.category,
+            type: 'product',
+            unit: 'piece',
+        };
+        line.warehouse_id ||= defaultWarehouseId.value;
+        return;
+    }
+
+    line.new_item = null;
+    line.inventory_item_id = value ? Number(value) : null;
+    applyItemDefaults(line);
+}
+
+function applyNewItemType(line) {
+    line.warehouse_id = line.new_item?.type === 'service' ? null : (line.warehouse_id || defaultWarehouseId.value);
+}
+
 function applyItemDefaults(line) {
     const item = selectedItem(line);
     if (!item) return;
@@ -131,6 +175,34 @@ function removeLine(index) {
     form.items.splice(index, 1);
 }
 
+async function applyAiImport(result) {
+    form.supplier_id = result.supplier?.match?.id || null;
+    form.number = result.invoice?.number || '';
+    form.category = props.categories.includes(result.invoice?.category) ? result.invoice.category : (props.categories[0] || form.category);
+    form.issue_date = result.invoice?.issue_date || localDateString();
+    form.currency = props.currencies.includes(result.invoice?.currency) ? result.invoice.currency : props.baseCurrency;
+    form.items = (result.items || []).map((item) => ({
+        inventory_item_id: item.match?.id || null,
+        warehouse_id: item.item_type === 'service' ? null : defaultWarehouseId.value,
+        quantity: item.quantity,
+        unit_cost: item.unit_cost,
+        suggested_name: item.description,
+        new_item: item.match ? null : {
+            name: item.description,
+            sku: item.sku || '',
+            barcode: item.barcode || '',
+            category: item.category || form.category,
+            type: item.item_type || 'product',
+            unit: item.unit || 'piece',
+        },
+    }));
+    await nextTick();
+    form.due_date = result.invoice?.due_date || form.due_date;
+    importSummary.value = result.summary;
+    showAiImport.value = false;
+    form.clearErrors();
+}
+
 function submit() {
     form.post(route('finance.bills.store'), { preserveScroll: true });
 }
@@ -144,6 +216,9 @@ function submit() {
                     <Link :href="route('finance.bills')" class="inline-flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-4 py-2 text-body-sm font-medium text-neutral-700 no-underline hover:bg-neutral-50">
                         <ArrowLeft class="h-4 w-4" /> {{ $t('admin.finance.billCreate.cancel') }}
                     </Link>
+                    <Button variant="outline" @click="showAiImport = true">
+                        <Sparkles class="h-4 w-4" /> {{ $t('admin.finance.billAiImport.button') }}
+                    </Button>
                     <Button :loading="form.processing" :disabled="!canSubmit" @click="submit">
                         <CheckCircle2 class="h-4 w-4" /> {{ $t('admin.finance.billCreate.save') }}
                     </Button>
@@ -155,6 +230,11 @@ function submit() {
                 <ul class="mt-1 list-disc pl-5">
                     <li v-for="message in errorMessages" :key="message">{{ message }}</li>
                 </ul>
+            </div>
+
+            <div v-if="importSummary" class="flex flex-col gap-3 rounded-lg border border-accent-200 bg-accent-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <span class="flex items-start gap-2 text-body-sm text-accent-800"><Sparkles class="mt-0.5 h-4 w-4 shrink-0" /><span><b>{{ $t('admin.finance.billAiImport.importedTitle') }}</b><span class="mt-0.5 block text-tiny">{{ $t('admin.finance.billAiImport.importedBody') }}</span></span></span>
+                <span class="shrink-0 text-tiny font-bold text-accent-700">{{ importSummary.matched_items }} {{ $t('admin.finance.billAiImport.existing') }} · {{ importSummary.new_items }} {{ $t('admin.finance.billAiImport.new') }}</span>
             </div>
 
             <Card :padding="false" class="overflow-hidden">
@@ -235,7 +315,7 @@ function submit() {
                             <Link v-if="can.manageInventory && !inventoryItems.length" :href="route('inventory.items')" class="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-body-sm font-medium text-neutral-700 no-underline hover:bg-neutral-50">
                                 {{ $t('admin.finance.billCreate.newItem') }}
                             </Link>
-                            <Button variant="outline" size="sm" :disabled="!inventoryItems.length || form.items.length >= 50" @click="addLine"><Plus class="h-4 w-4" /> {{ $t('admin.finance.billCreate.addLine') }}</Button>
+                            <Button variant="outline" size="sm" :disabled="form.items.length >= 50" @click="addLine"><Plus class="h-4 w-4" /> {{ $t('admin.finance.billCreate.addLine') }}</Button>
                         </div>
                     </div>
 
@@ -254,15 +334,36 @@ function submit() {
                             <tbody class="divide-y divide-neutral-100">
                                 <tr v-for="(line, index) in form.items" :key="index" class="align-top">
                                     <td class="px-7 py-3.5">
-                                        <select v-model="line.inventory_item_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="applyItemDefaults(line)">
-                                            <option :value="null" disabled>{{ $t('admin.finance.billCreate.selectItem') }}</option>
-                                            <option v-for="item in inventoryItems" :key="item.id" :value="item.id">{{ item.name }} · {{ item.sku }}</option>
+                                        <select :value="lineSelectionValue(line)" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="changeLineItem(line, $event)">
+                                            <option value="" disabled>{{ $t('admin.finance.billCreate.selectItem') }}</option>
+                                            <option v-for="item in inventoryItems" :key="item.id" :value="String(item.id)">{{ item.name }} · {{ item.sku }}</option>
+                                            <option v-if="can.manageInventory" value="__new__">＋ {{ $t('admin.finance.billAiImport.createNewItem') }}</option>
                                         </select>
                                         <p v-if="selectedItem(line)" class="mt-1 text-tiny text-neutral-400">{{ selectedItem(line).type === 'service' ? $t('admin.finance.billCreate.service') : $t('admin.finance.billCreate.stockItem') }} · {{ selectedItem(line).unit }}</p>
+                                        <div v-else-if="line.new_item" class="mt-2 space-y-2 rounded-lg border border-warning-200 bg-warning-50/60 p-2.5">
+                                            <div class="flex items-center justify-between gap-2"><span class="text-tiny font-bold text-warning-800">{{ $t('admin.finance.billAiImport.newItemLabel') }}</span><span class="text-tiny text-warning-700">{{ $t('admin.finance.billAiImport.createdAfterSave') }}</span></div>
+                                            <TextInput v-model="line.new_item.name" class="w-full" :placeholder="$t('admin.finance.billAiImport.itemName')" />
+                                            <div class="grid grid-cols-2 gap-2">
+                                                <TextInput v-model="line.new_item.sku" class="w-full" :placeholder="$t('admin.finance.billAiImport.skuOptional')" />
+                                                <select v-model="line.new_item.unit" class="w-full rounded-lg border-neutral-200 px-2 py-2 text-tiny focus:border-accent-500 focus:ring-accent-500">
+                                                    <option value="piece">{{ $t('admin.finance.billAiImport.units.piece') }}</option>
+                                                    <option value="kg">{{ $t('admin.finance.billAiImport.units.kg') }}</option>
+                                                    <option value="liter">{{ $t('admin.finance.billAiImport.units.liter') }}</option>
+                                                    <option value="pack">{{ $t('admin.finance.billAiImport.units.pack') }}</option>
+                                                </select>
+                                            </div>
+                                            <select v-model="line.new_item.type" class="w-full rounded-lg border-neutral-200 px-2 py-2 text-tiny focus:border-accent-500 focus:ring-accent-500" @change="applyNewItemType(line)">
+                                                <option value="product">{{ $t('admin.finance.billAiImport.types.product') }}</option>
+                                                <option value="ingredient">{{ $t('admin.finance.billAiImport.types.ingredient') }}</option>
+                                                <option value="consumable">{{ $t('admin.finance.billAiImport.types.consumable') }}</option>
+                                                <option value="service">{{ $t('admin.finance.billAiImport.types.service') }}</option>
+                                            </select>
+                                        </div>
                                         <p v-if="form.errors[`items.${index}.inventory_item_id`]" class="mt-1 text-tiny text-error-600">{{ form.errors[`items.${index}.inventory_item_id`] }}</p>
+                                        <p v-if="form.errors[`items.${index}.new_item.name`]" class="mt-1 text-tiny text-error-600">{{ form.errors[`items.${index}.new_item.name`] }}</p>
                                     </td>
                                     <td class="px-3 py-3.5">
-                                        <select v-if="selectedItem(line)?.type !== 'service'" v-model="line.warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                                        <select v-if="lineItemType(line) !== 'service'" v-model="line.warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
                                             <option :value="null" disabled>{{ $t('admin.finance.billCreate.selectWarehouse') }}</option>
                                             <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
                                         </select>
@@ -290,7 +391,7 @@ function submit() {
                         <span class="mx-auto grid h-11 w-11 place-items-center rounded-full bg-neutral-100 text-neutral-500"><PackagePlus class="h-5 w-5" /></span>
                         <strong class="mt-3 block text-body-sm text-primary-900">{{ $t('admin.finance.billCreate.emptyTitle') }}</strong>
                         <p class="mt-1 text-tiny text-neutral-400">{{ $t('admin.finance.billCreate.emptyBody') }}</p>
-                        <Button class="mt-4" variant="outline" size="sm" :disabled="!inventoryItems.length" @click="addLine"><Plus class="h-4 w-4" /> {{ $t('admin.finance.billCreate.addLine') }}</Button>
+                        <Button class="mt-4" variant="outline" size="sm" @click="addLine"><Plus class="h-4 w-4" /> {{ $t('admin.finance.billCreate.addLine') }}</Button>
                     </div>
                 </section>
 
@@ -317,5 +418,14 @@ function submit() {
                 </section>
             </Card>
         </div>
+
+        <BillAiImportModal
+            :show="showAiImport"
+            :ai-configured="aiConfigured"
+            :can-create-items="can.manageInventory"
+            :base-currency="baseCurrency"
+            @close="showAiImport = false"
+            @apply="applyAiImport"
+        />
     </AppLayout>
 </template>

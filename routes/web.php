@@ -330,6 +330,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         // Phase 2: Blerjet (Bills) + Furnitorët
         Route::get('/bills/create', [FinanceController::class, 'createBill'])->middleware('permission:manage_bills')->name('finance.bills.create');
         Route::get('/bills', [FinanceController::class, 'bills'])->name('finance.bills');
+        Route::post('/bills/import-ai/analyze', [FinanceController::class, 'analyzeBillDocument'])->middleware('permission:manage_bills')->name('finance.bills.import-ai.analyze');
         Route::post('/bills', [FinanceController::class, 'storeBill'])->middleware('permission:manage_bills')->name('finance.bills.store');
         Route::post('/bills/{bill}/receive', [FinanceController::class, 'receiveBill'])->middleware('permission:manage_inventory')->name('finance.bills.receive');
         Route::post('/bills/categories', [FinanceController::class, 'storeBillCategory'])->middleware('permission:manage_bills')->name('finance.bill-categories.store');

@@ -5,12 +5,16 @@ namespace Tests\Feature;
 use App\Models\Bill;
 use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
+use App\Models\InventoryItem;
 use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Models\Warehouse;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class FinanceBillsTest extends TestCase
@@ -133,6 +137,10 @@ class FinanceBillsTest extends TestCase
             'issue_date' => '2026-07-10', 'currency' => 'EUR', 'total' => 50,
         ])->assertForbidden();
 
+        $this->actingAs($rec)->post(route('finance.bills.import-ai.analyze'), [
+            'document' => UploadedFile::fake()->createWithContent('fatura.pdf', '%PDF-1.4'),
+        ])->assertForbidden();
+
         $bill = $this->lekBill($supplier);
         FinanceAccount::ensureDefaults();
         $this->actingAs($rec)->post(route('finance.bills.pay', $bill), [
@@ -214,7 +222,198 @@ class FinanceBillsTest extends TestCase
                 ->has('categories')
                 ->has('inventoryItems', 0)
                 ->has('warehouses', 1)
+                ->where('aiConfigured', false)
+                ->where('openAiImport', false)
                 ->where('can.manageBills', true));
+    }
+
+    public function test_ai_reads_and_matches_a_bill_without_creating_anything_before_confirmation(): void
+    {
+        $manager = $this->role('manager');
+        $supplier = $this->supplier('EKO Market');
+        InventoryItem::create([
+            'name' => 'Ujë 0.5 L',
+            'sku' => 'UJE-05',
+            'type' => 'product',
+            'unit' => 'piece',
+            'average_cost' => 0.3,
+            'is_active' => true,
+        ]);
+
+        config()->set('services.gemini.key', 'secret-test-key');
+        config()->set('services.gemini.model', 'gemini-test-model');
+        config()->set('services.gemini.base_url', 'https://generativelanguage.googleapis.com/v1beta');
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'functionCall' => [
+                            'name' => 'submit_purchase_invoice',
+                            'args' => [
+                                'supplier_name' => 'EKO Market',
+                                'supplier_tax_id' => '',
+                                'invoice_number' => 'INV-204',
+                                'issue_date' => '2026-07-16',
+                                'due_date' => '2026-07-30',
+                                'currency' => 'EUR',
+                                'category' => 'Ushqim & Pije',
+                                'subtotal' => 16.67,
+                                'tax_total' => 3.33,
+                                'discount_total' => 0,
+                                'grand_total' => 20,
+                                'confidence' => 96,
+                                'line_items' => [
+                                    [
+                                        'description' => 'Ujë 0.5 L', 'sku' => 'UJE-05', 'barcode' => '',
+                                        'quantity' => 10, 'unit' => 'piece', 'item_type' => 'product',
+                                        'line_total' => 5, 'confidence' => 99,
+                                    ],
+                                    [
+                                        'description' => 'Detergjent hoteli', 'sku' => '', 'barcode' => '',
+                                        'quantity' => 3, 'unit' => 'liter', 'item_type' => 'consumable',
+                                        'line_total' => 11.67, 'confidence' => 94,
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ]]],
+                ]],
+            ]),
+        ]);
+
+        $response = $this->actingAs($manager)->post(route('finance.bills.import-ai.analyze'), [
+            'document' => UploadedFile::fake()->createWithContent('fatura.pdf', '%PDF-1.4 invoice test'),
+        ], ['Accept' => 'application/json']);
+
+        $response->assertOk()
+            ->assertJsonPath('supplier.match.id', $supplier->id)
+            ->assertJsonPath('invoice.number', 'INV-204')
+            ->assertJsonPath('invoice.grand_total', 20)
+            ->assertJsonPath('invoice.line_costs_adjusted', true)
+            ->assertJsonPath('items.0.match.name', 'Ujë 0.5 L')
+            ->assertJsonPath('items.1.match', null)
+            ->assertJsonPath('summary.matched_items', 1)
+            ->assertJsonPath('summary.new_items', 1);
+
+        $this->assertDatabaseCount('bills', 0);
+        $this->assertDatabaseCount('inventory_items', 1);
+
+        Http::assertSent(fn ($request) => $request->hasHeader('x-goog-api-key', 'secret-test-key')
+            && ! str_contains($request->url(), 'secret-test-key'));
+    }
+
+    public function test_confirming_an_ai_bill_creates_missing_items_and_reuses_existing_ones(): void
+    {
+        $manager = $this->role('manager');
+        $supplier = $this->supplier();
+        Warehouse::ensureDefault();
+        $warehouse = Warehouse::firstOrFail();
+        $existing = InventoryItem::create([
+            'name' => 'Ujë 0.5 L', 'sku' => 'UJE-05', 'type' => 'product', 'unit' => 'piece',
+            'average_cost' => 0.3, 'is_active' => true,
+        ]);
+
+        $this->actingAs($manager)->post(route('finance.bills.store'), [
+            'supplier_id' => $supplier->id,
+            'number' => 'AI-204',
+            'category' => 'Ushqim & Pije',
+            'issue_date' => '2026-07-16',
+            'currency' => 'EUR',
+            'total' => 20,
+            'receive_stock' => false,
+            'items' => [
+                [
+                    'inventory_item_id' => $existing->id,
+                    'warehouse_id' => $warehouse->id,
+                    'quantity' => 10,
+                    'unit_cost' => 0.6,
+                ],
+                [
+                    'inventory_item_id' => null,
+                    'warehouse_id' => $warehouse->id,
+                    'quantity' => 2,
+                    'unit_cost' => 7,
+                    'new_item' => [
+                        'name' => 'Detergjent hoteli',
+                        'sku' => '',
+                        'barcode' => '',
+                        'category' => 'Ushqim & Pije',
+                        'type' => 'consumable',
+                        'unit' => 'liter',
+                    ],
+                ],
+            ],
+        ])->assertRedirect(route('finance.bills'))->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('bills', 1);
+        $this->assertDatabaseCount('bill_items', 2);
+        $this->assertDatabaseCount('inventory_items', 2);
+        $this->assertDatabaseHas('inventory_items', [
+            'name' => 'Detergjent hoteli',
+            'type' => 'consumable',
+            'unit' => 'liter',
+            'is_active' => true,
+        ]);
+        $this->assertSame(20.0, (float) Bill::firstOrFail()->total);
+    }
+
+    public function test_ai_import_rechecks_duplicates_when_the_bill_is_confirmed(): void
+    {
+        $manager = $this->role('manager');
+        $supplier = $this->supplier();
+        Warehouse::ensureDefault();
+        $warehouse = Warehouse::firstOrFail();
+        $existing = InventoryItem::create([
+            'name' => 'Peshqir Banje', 'sku' => 'PESH-01', 'type' => 'product', 'unit' => 'piece',
+            'average_cost' => 4, 'is_active' => true,
+        ]);
+
+        $this->actingAs($manager)->post(route('finance.bills.store'), [
+            'supplier_id' => $supplier->id,
+            'category' => 'Të tjera',
+            'issue_date' => '2026-07-16',
+            'currency' => 'EUR',
+            'total' => 10,
+            'items' => [[
+                'inventory_item_id' => null,
+                'warehouse_id' => $warehouse->id,
+                'quantity' => 2,
+                'unit_cost' => 5,
+                'new_item' => [
+                    'name' => '  PESHQIR-BANJE ',
+                    'type' => 'product',
+                    'unit' => 'piece',
+                ],
+            ]],
+        ])->assertRedirect(route('finance.bills'))->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('inventory_items', 1);
+        $this->assertDatabaseHas('bill_items', ['inventory_item_id' => $existing->id]);
+    }
+
+    public function test_same_supplier_invoice_number_cannot_be_saved_twice(): void
+    {
+        $manager = $this->role('manager');
+        $supplier = $this->supplier();
+        $payload = [
+            'supplier_id' => $supplier->id,
+            'number' => 'INV-777',
+            'category' => 'Të tjera',
+            'issue_date' => '2026-07-16',
+            'currency' => 'EUR',
+            'total' => 10,
+        ];
+
+        $this->actingAs($manager)->post(route('finance.bills.store'), $payload)
+            ->assertRedirect(route('finance.bills'))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($manager)->from(route('finance.bills.create'))
+            ->post(route('finance.bills.store'), $payload + ['number' => 'inv-777'])
+            ->assertRedirect(route('finance.bills.create'))
+            ->assertSessionHasErrors('number');
+
+        $this->assertDatabaseCount('bills', 1);
     }
 
     public function test_bills_page_filters_overdue_rows_by_supplier_and_category(): void

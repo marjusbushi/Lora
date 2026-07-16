@@ -15,14 +15,18 @@ use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\Warehouse;
 use App\Services\BaseCurrency;
+use App\Services\BillDocumentAiExtractor;
 use App\Services\CurrencyRates;
+use App\Services\GeminiClient;
 use App\Services\InventoryLedger;
 use App\Tenancy\TenantRule;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -543,7 +547,32 @@ class FinanceController extends Controller
                 ->get(['id', 'name', 'sku', 'type', 'unit', 'average_cost']),
             'warehouses' => Warehouse::where('is_active', true)->orderByDesc('is_default')->orderBy('name')
                 ->get(['id', 'name', 'is_default']),
+            'aiConfigured' => app(GeminiClient::class)->configured(),
+            'openAiImport' => $request->input('import') === 'ai',
         ]));
+    }
+
+    public function analyzeBillDocument(Request $request, BillDocumentAiExtractor $extractor): JsonResponse
+    {
+        $data = $request->validate([
+            'document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+        ]);
+
+        try {
+            return response()->json($extractor->extract($data['document']));
+        } catch (\RuntimeException $exception) {
+            $known = ['ai_not_configured', 'unsupported_file', 'file_too_large', 'no_readable_lines'];
+            $code = in_array($exception->getMessage(), $known, true) ? $exception->getMessage() : 'analysis_failed';
+            if ($code === 'analysis_failed') {
+                report($exception);
+            }
+
+            return response()->json(['error_code' => $code], 422);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json(['error_code' => 'analysis_failed'], 422);
+        }
     }
 
     public function storeBill(Request $request): RedirectResponse
@@ -561,7 +590,14 @@ class FinanceController extends Controller
             'notes' => ['nullable', 'string', 'max:500'],
             'receive_stock' => ['nullable', 'boolean'],
             'items' => ['nullable', 'array', 'max:50'],
-            'items.*.inventory_item_id' => ['required', 'integer', TenantRule::exists('inventory_items')->where('is_active', true)],
+            'items.*.inventory_item_id' => ['nullable', 'integer', TenantRule::exists('inventory_items')->where('is_active', true)],
+            'items.*.new_item' => ['nullable', 'array'],
+            'items.*.new_item.name' => ['nullable', 'string', 'max:150'],
+            'items.*.new_item.sku' => ['nullable', 'string', 'max:60'],
+            'items.*.new_item.barcode' => ['nullable', 'string', 'max:80'],
+            'items.*.new_item.category' => ['nullable', 'string', 'max:80'],
+            'items.*.new_item.type' => ['nullable', Rule::in(['product', 'ingredient', 'consumable', 'service'])],
+            'items.*.new_item.unit' => ['nullable', Rule::in(['piece', 'kg', 'liter', 'pack'])],
             'items.*.warehouse_id' => ['nullable', 'integer', TenantRule::exists('warehouses')->where('is_active', true)],
             'items.*.quantity' => ['required', 'numeric', 'min:0.0001', 'max:9999999'],
             'items.*.unit_cost' => ['required', 'numeric', 'min:0', 'max:9999999'],
@@ -573,8 +609,33 @@ class FinanceController extends Controller
             ]);
         }
 
+        $data['number'] = trim((string) ($data['number'] ?? '')) ?: null;
+        if ($data['number'] && Bill::where('supplier_id', $data['supplier_id'])
+            ->whereRaw('LOWER(number) = ?', [mb_strtolower($data['number'])])
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'number' => 'Kjo faturë ekziston tashmë për furnitorin e zgjedhur.',
+            ]);
+        }
+
         $lines = collect($data['items'] ?? [])->values();
         if ($lines->isNotEmpty()) {
+            foreach ($lines as $index => $line) {
+                if (! empty($line['inventory_item_id'])) {
+                    continue;
+                }
+                if (! $request->user()->can('manage_inventory')) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.inventory_item_id" => 'Nuk ke leje të krijosh artikuj të rinj. Zgjidh një artikull ekzistues.',
+                    ]);
+                }
+                if (trim((string) data_get($line, 'new_item.name')) === '') {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.inventory_item_id" => 'Zgjidh një artikull ekzistues ose plotëso artikullin e ri.',
+                    ]);
+                }
+            }
+
             $data['total'] = round((float) $lines->sum(fn ($line) => (float) $line['quantity'] * (float) $line['unit_cost']), 2);
             if ($data['total'] < 0.01) {
                 throw ValidationException::withMessages(['total' => 'Totali i artikujve duhet të jetë më i madh se zero.']);
@@ -585,7 +646,9 @@ class FinanceController extends Controller
             $bill = Bill::create(collect($data)->except(['items', 'receive_stock'])->all() + ['status' => 'open']);
 
             foreach ($lines as $index => $lineData) {
-                $item = InventoryItem::findOrFail($lineData['inventory_item_id']);
+                $item = ! empty($lineData['inventory_item_id'])
+                    ? InventoryItem::findOrFail($lineData['inventory_item_id'])
+                    : $this->resolveOrCreateImportedItem($lineData);
                 $stockable = $item->type !== 'service';
                 if ($stockable && empty($lineData['warehouse_id'])) {
                     throw ValidationException::withMessages([
@@ -614,6 +677,66 @@ class FinanceController extends Controller
         return redirect()->route('finance.bills')->with('success', $lines->isNotEmpty()
             ? 'Fatura dhe rreshtat e inventarit u regjistruan.'
             : 'Fatura e blerjes u regjistrua.');
+    }
+
+    /** Resolve once more at confirmation time so two imports cannot create the same product. */
+    private function resolveOrCreateImportedItem(array $lineData): InventoryItem
+    {
+        $new = $lineData['new_item'] ?? [];
+        $name = trim((string) ($new['name'] ?? ''));
+        $sku = Str::upper(trim((string) ($new['sku'] ?? '')));
+        $barcode = trim((string) ($new['barcode'] ?? ''));
+
+        $items = InventoryItem::query()->lockForUpdate()->get();
+        $code = fn (mixed $value) => Str::upper((string) preg_replace('/[^A-Za-z0-9]+/', '', (string) $value));
+        $normalize = fn (mixed $value) => trim((string) preg_replace(
+            '/[^a-z0-9]+/',
+            ' ',
+            Str::lower(Str::ascii(trim((string) $value))),
+        ));
+
+        $existing = $items->first(function (InventoryItem $item) use ($sku, $barcode, $name, $code, $normalize) {
+            return ($barcode !== '' && $code($item->barcode) === $code($barcode))
+                || ($sku !== '' && $code($item->sku) === $code($sku))
+                || $normalize($item->name) === $normalize($name);
+        });
+        if ($existing) {
+            if (! $existing->is_active) {
+                throw ValidationException::withMessages(['items' => "Artikulli {$existing->name} ekziston, por është joaktiv. Aktivizoje para importit."]);
+            }
+
+            return $existing;
+        }
+
+        return InventoryItem::create([
+            'name' => $name,
+            'sku' => $this->availableImportedSku($sku !== '' ? $sku : $name),
+            'barcode' => $barcode !== '' ? $barcode : null,
+            'category' => trim((string) ($new['category'] ?? '')) ?: null,
+            'type' => $new['type'] ?? 'product',
+            'unit' => $new['unit'] ?? 'piece',
+            'average_cost' => (float) ($lineData['unit_cost'] ?? 0),
+            'selling_price' => null,
+            'sell_in_pos' => false,
+            'sell_in_rooms' => false,
+            'minimum_stock' => 0,
+            'is_active' => true,
+        ]);
+    }
+
+    private function availableImportedSku(string $source): string
+    {
+        $base = Str::upper(Str::ascii($source));
+        $base = trim((string) preg_replace('/[^A-Z0-9]+/', '-', $base), '-');
+        $base = Str::limit($base !== '' ? $base : 'IMPORT', 48, '');
+        $candidate = $base;
+        $suffix = 1;
+
+        while (InventoryItem::where('sku', $candidate)->exists()) {
+            $candidate = Str::limit($base, 52, '').'-'.$suffix++;
+        }
+
+        return $candidate;
     }
 
     public function receiveBill(Request $request, Bill $bill): RedirectResponse

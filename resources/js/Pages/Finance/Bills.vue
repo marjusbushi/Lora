@@ -14,6 +14,7 @@ import {
     PackagePlus,
     ReceiptText,
     Search,
+    Sparkles,
     Users,
 } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -246,6 +247,13 @@ function submitPay() {
                     class="inline-flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-3.5 py-2 text-body-sm font-semibold text-neutral-700 no-underline shadow-sm hover:border-neutral-300 hover:bg-neutral-50"
                 >
                     <Users class="h-4 w-4" /> {{ $t('admin.sidebar.suppliers') }}
+                </Link>
+                <Link
+                    v-if="can.manageBills"
+                    :href="route('finance.bills.create', { import: 'ai' })"
+                    class="inline-flex items-center gap-2 rounded-md border border-accent-200 bg-accent-50 px-3.5 py-2 text-body-sm font-semibold text-accent-800 no-underline shadow-sm hover:border-accent-300 hover:bg-accent-100"
+                >
+                    <Sparkles class="h-4 w-4" /> {{ $t('admin.finance.billAiImport.button') }}
                 </Link>
                 <Link
                     v-if="can.manageBills"
