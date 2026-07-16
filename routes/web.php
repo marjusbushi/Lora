@@ -9,6 +9,7 @@ use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\GuestController;
 use App\Http\Controllers\GuestMergeController;
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\LoraAiController;
 use App\Http\Controllers\MaintenanceController;
 use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\NotificationController;
@@ -169,6 +170,12 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    Route::middleware('permission:view_settings')->group(function () {
+        Route::get('/lora-ai', [LoraAiController::class, 'index'])->name('lora-ai.index');
+        Route::put('/lora-ai', [LoraAiController::class, 'update'])->name('lora-ai.update');
+        Route::delete('/lora-ai/connection', [LoraAiController::class, 'disconnect'])->name('lora-ai.disconnect');
+    });
 
     Route::redirect('/maintenance-design', '/pms/maintenance')->name('maintenance.design');
 

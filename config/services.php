@@ -2,6 +2,10 @@
 
 return [
 
+    'openai' => [
+        'chatgpt_connect_url' => env('CHATGPT_CONNECT_URL', 'https://chatgpt.com/'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

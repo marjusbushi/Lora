@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="sq">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lora AI & ChatGPT — Mockup</title>
+  <style>
+    :root {
+      --ink:#17211d; --muted:#6b7771; --line:#dfe6e2; --canvas:#f5f7f6; --surface:#fff;
+      --brand-900:#104c3d; --brand-700:#1d765f; --brand-600:#25856c; --brand-100:#ddf3eb; --brand-50:#eff9f5;
+      --blue-700:#2468bd; --blue-100:#dceaff; --blue-50:#f2f7ff;
+      --amber-700:#9b5b0b; --amber-100:#f8e2b9; --amber-50:#fff8e9;
+      --red-700:#b63b3b; --red-50:#fff2f2; --radius:14px;
+      --shadow:0 1px 2px rgba(18,45,36,.04),0 8px 24px rgba(18,45,36,.035);
+    }
+    *{box-sizing:border-box}
+    html,body{min-height:100%}
+    body{margin:0;color:var(--ink);background:var(--canvas);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
+    button,input{font:inherit} button{cursor:pointer} svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+    .shell{min-height:100vh;display:grid;grid-template-columns:228px minmax(0,1fr);transition:.2s}
+    .shell.collapsed{grid-template-columns:76px minmax(0,1fr)}
+    .sidebar{position:sticky;top:0;height:100vh;overflow:hidden;display:flex;flex-direction:column;background:#fff;border-right:1px solid var(--line)}
+    .brand{height:70px;display:flex;align-items:center;gap:11px;padding:0 18px;color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}
+    .brand:hover{background:var(--brand-50)}
+    .brand-mark{flex:0 0 38px;height:38px;display:grid;place-items:center;border-radius:11px;color:var(--brand-700);background:var(--brand-100)}
+    .brand-copy{min-width:130px;white-space:nowrap}.brand-copy strong{display:block;font-size:15px}.brand-copy span{display:block;margin-top:5px;color:#8b9691;font-size:10px;font-weight:800;letter-spacing:.17em}
+    .nav{padding:18px 12px;display:grid;gap:5px}.nav-label{padding:9px 10px 5px;color:#98a39e;font-size:10px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}
+    .nav-item{height:42px;display:flex;align-items:center;gap:11px;padding:0 12px;color:#64726c;text-decoration:none;border-radius:10px;white-space:nowrap}.nav-item:hover{color:var(--ink);background:#f5f7f6}.nav-item.active{color:var(--brand-900);background:var(--brand-50);box-shadow:inset 0 0 0 1px var(--brand-100);font-weight:750}
+    .nav-icon{flex:0 0 28px;display:grid;place-items:center}.nav-text{transition:.12s}.nav-pill{margin-left:auto;padding:3px 7px;border-radius:99px;color:var(--brand-700);background:var(--brand-100);font-size:9px;font-weight:800}
+    .sidebar-foot{margin-top:auto;padding:14px 12px;border-top:1px solid var(--line)}.collapse{width:100%;border:0;background:transparent}.collapse .nav-icon{transition:.2s}
+    .collapsed .brand-copy,.collapsed .nav-text{width:0;min-width:0;margin:0;overflow:hidden;opacity:0}.collapsed .nav-label,.collapsed .nav-pill{display:none}.collapsed .brand{justify-content:center;padding:0}.collapsed .nav-item{width:50px;margin:auto;padding:0;justify-content:center;gap:0}.collapsed .nav-icon{width:28px;margin:0}.collapsed .collapse .nav-icon{transform:rotate(180deg)}
+    .workspace{min-width:0}.topbar{position:sticky;top:0;z-index:20;height:70px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:rgba(255,255,255,.94);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}
+    .context-label{color:var(--brand-700);font-size:10px;font-weight:850;letter-spacing:.18em;text-transform:uppercase}.context-note{margin-top:4px;color:var(--muted);font-size:12px}
+    .account{position:relative}.avatar-button{display:flex;align-items:center;gap:10px;padding:5px 6px 5px 10px;border:1px solid transparent;border-radius:12px;background:transparent;text-align:right}.avatar-button:hover{border-color:var(--line);background:#fff}.account-name strong{display:block;font-size:12px}.account-name span{display:block;margin-top:2px;color:var(--muted);font-size:10px}.avatar{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;color:var(--brand-900);background:var(--brand-100);font-weight:850}
+    .profile-menu{position:absolute;top:52px;right:0;width:200px;padding:6px;border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:0 18px 50px rgba(18,45,36,.14)}.profile-menu[hidden]{display:none}.profile-menu a{height:38px;display:flex;align-items:center;gap:9px;padding:0 10px;color:#405149;text-decoration:none;border-radius:8px;font-size:12px;font-weight:700}.profile-menu a:hover{background:var(--brand-50)}
+    main{width:min(1260px,calc(100% - 48px));margin:0 auto;padding:22px 0 44px}.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:17px}.breadcrumb{margin-bottom:6px;color:#93a09a;font-size:11px}h1{margin:0;font-size:27px;line-height:1.18;letter-spacing:-.035em}.subtitle{margin:5px 0 0;color:var(--muted);font-size:13px}.mockup-badge{padding:7px 10px;border:1px dashed #bdd0c7;border-radius:9px;color:var(--brand-700);background:rgba(255,255,255,.6);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+    .status-strip{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:12px;padding:14px 16px;border:1px solid #cfdcd6;border-radius:var(--radius);background:#fff;box-shadow:var(--shadow)}.status-lead{display:flex;align-items:center;gap:12px}.chatgpt-logo{width:38px;height:38px;display:grid;place-items:center;flex:0 0 auto;border-radius:11px;color:#fff;background:#17211d;font-weight:850;font-size:13px}.status-copy strong{display:block;font-size:13px}.status-copy span{display:block;margin-top:3px;color:var(--muted);font-size:11px}.status-actions{display:flex;align-items:center;gap:8px}.status-dot{display:inline-flex;align-items:center;gap:6px;margin-right:5px;color:#7b8781;font-size:11px;font-weight:750}.status-dot:before{content:"";width:7px;height:7px;border-radius:50%;background:#9da7a2}.connected .status-dot{color:var(--brand-700)}.connected .status-dot:before{background:var(--brand-600)}
+    .button{height:38px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 13px;border:1px solid var(--line);border-radius:10px;color:#405149;background:#fff;font-weight:750;font-size:12px;text-decoration:none}.button:hover{border-color:#cbd7d1;background:#fbfcfc}.button.primary{color:#fff;border-color:var(--brand-700);background:var(--brand-700)}.button.primary:hover{background:var(--brand-900)}.button.small{height:34px;padding:0 11px;font-size:11px}.button.blue{color:#fff;border-color:var(--blue-700);background:var(--blue-700)}
+    .layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,.7fr);gap:12px}.stack{display:grid;align-content:start;gap:12px}.card{overflow:hidden;border:1px solid var(--line);border-radius:var(--radius);background:#fff;box-shadow:var(--shadow)}.card-head{min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 16px;border-bottom:1px solid var(--line)}.card-title{margin:0;font-size:14px;font-weight:820}.card-copy{margin:3px 0 0;color:var(--muted);font-size:11px}.card-body{padding:16px}
+    .tabs{display:flex;gap:4px;padding:4px;border:1px solid var(--line);border-radius:10px;background:#f7f9f8}.tab{height:31px;padding:0 11px;border:0;border-radius:7px;color:#68756f;background:transparent;font-size:11px;font-weight:750}.tab.active{color:var(--brand-900);background:#fff;box-shadow:0 1px 3px rgba(20,40,32,.1)}
+    .panel[hidden]{display:none}.module-list{display:grid;gap:10px}.module{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:12px;align-items:start;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fff}.module:hover{border-color:#cddad4}.module-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:11px;color:var(--brand-700);background:var(--brand-50)}.module-icon.blue{color:var(--blue-700);background:var(--blue-50)}.module-title{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:820}.tag{padding:3px 7px;border-radius:99px;color:var(--brand-700);background:var(--brand-100);font-size:9px;font-weight:850;text-transform:uppercase}.tag.blue{color:var(--blue-700);background:var(--blue-100)}.module p{margin:5px 0 9px;color:var(--muted);font-size:11px;line-height:1.5}.scope-list{display:flex;flex-wrap:wrap;gap:6px}.scope{padding:5px 7px;border:1px solid #e4eae7;border-radius:7px;color:#59665f;background:#fafcfb;font-size:9.5px;font-weight:700}
+    .switch{position:relative;width:36px;height:21px;display:inline-block}.switch input{opacity:0;width:0;height:0}.slider{position:absolute;inset:0;border-radius:99px;background:#d7dfdb;transition:.2s}.slider:before{content:"";position:absolute;width:15px;height:15px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.17);transition:.2s}.switch input:checked+.slider{background:var(--brand-600)}.switch input:checked+.slider:before{transform:translateX(15px)}
+    .mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.mode{position:relative;padding:12px;border:1px solid var(--line);border-radius:11px;background:#fff}.mode.selected{border-color:#8ec5b1;background:var(--brand-50);box-shadow:inset 0 0 0 1px #b9dfd1}.mode-recommended{position:absolute;top:8px;right:8px;padding:3px 5px;border-radius:5px;color:var(--brand-700);background:var(--brand-100);font-size:8px;font-weight:850}.mode strong{display:block;font-size:11px}.mode p{margin:5px 0 0;color:var(--muted);font-size:9.5px;line-height:1.45}.mode.locked{opacity:.58}
+    .rule-list{display:grid;gap:0;margin-top:14px;border-top:1px solid var(--line)}.rule{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;min-height:56px;border-bottom:1px solid #edf1ef}.rule strong{display:block;font-size:11px}.rule span{display:block;margin-top:3px;color:var(--muted);font-size:9.5px}
+    .access-intro{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px;padding:13px;border:1px solid #cfe5dc;border-radius:11px;background:linear-gradient(90deg,var(--brand-50),#fff)}.access-intro strong{display:block;font-size:11.5px}.access-intro p{margin:4px 0 0;color:var(--muted);font-size:9.5px;line-height:1.45}.live-badge{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--brand-700);font-size:9px;font-weight:850;text-transform:uppercase}.live-badge:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--brand-600);box-shadow:0 0 0 4px rgba(37,133,108,.12)}
+    .identity-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:12px}.identity-card{padding:12px;border:1px solid var(--line);border-radius:11px;background:#fff}.identity-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.identity-title{display:flex;align-items:center;gap:8px}.identity-icon{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;color:var(--brand-700);background:var(--brand-50)}.identity-icon.blue{color:var(--blue-700);background:var(--blue-50)}.identity-title strong{font-size:10.5px}.identity-card p{margin:8px 0 9px;color:var(--muted);font-size:9.5px;line-height:1.45}.boundary{padding:7px 8px;border-radius:8px;color:#4d5c55;background:#f5f7f6;font-size:9px;font-weight:700}.boundary b{color:var(--ink)}
+    .data-title{display:flex;align-items:center;justify-content:space-between;margin:2px 0 8px}.data-title strong{font-size:11px}.data-title span{color:var(--muted);font-size:9px}.data-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.data-card{min-height:88px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}.data-card-top{display:flex;align-items:center;justify-content:space-between;gap:6px}.data-card strong{font-size:10px}.data-card p{margin:6px 0 0;color:var(--muted);font-size:8.7px;line-height:1.45}.source-ok{width:18px;height:18px;display:grid;place-items:center;border-radius:6px;color:var(--brand-700);background:var(--brand-100);font-size:9px;font-weight:900}.context-flow{display:grid;grid-template-columns:1fr 24px 1fr 24px 1fr;align-items:center;margin-top:12px;padding:11px;border:1px dashed #c8d6d0;border-radius:10px;background:#fafcfb}.flow-node{padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:center}.flow-node strong{display:block;font-size:9px}.flow-node span{display:block;margin-top:3px;color:var(--muted);font-size:8px}.flow-arrow{color:var(--brand-700);text-align:center;font-weight:900}.protected-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding:10px;border:1px solid var(--amber-100);border-radius:9px;background:var(--amber-50)}.protected-row div strong{display:block;color:#714a14;font-size:9.5px}.protected-row div span{display:block;margin-top:3px;color:#8a631f;font-size:8.5px}.protected-row b{white-space:nowrap;color:var(--amber-700);font-size:8.5px;text-transform:uppercase}
+    .demo{background:#f9fbfa}.demo-window{overflow:hidden;border:1px solid var(--line);border-radius:12px;background:#fff}.demo-top{height:42px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid var(--line)}.demo-brand{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:800}.mini-logo{width:25px;height:25px;display:grid;place-items:center;border-radius:8px;color:#fff;background:#17211d;font-size:8px}.demo-status{display:inline-flex;align-items:center;gap:5px;color:var(--brand-700);font-size:9px;font-weight:800}.demo-status:before{content:"";width:5px;height:5px;border-radius:50%;background:var(--brand-600)}.demo-chat{min-height:330px;padding:14px;background:#fbfcfc}.bubble{max-width:88%;margin-bottom:10px;padding:9px 11px;border-radius:11px;font-size:10.5px;line-height:1.45}.bubble.user{margin-left:auto;color:#fff;background:var(--brand-700);border-bottom-right-radius:3px}.bubble.ai{border:1px solid var(--line);background:#fff;border-bottom-left-radius:3px}.bubble.ai strong{display:block;margin-bottom:4px}.insight{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:7px 0}.insight div{padding:7px;border-radius:7px;background:var(--brand-50)}.insight span{display:block;color:var(--muted);font-size:8px}.insight b{display:block;margin-top:2px;color:var(--brand-900);font-size:10px}.prompt-row{display:flex;gap:5px;margin-top:10px}.prompt-chip{padding:6px 7px;border:1px solid var(--line);border-radius:8px;color:#53615a;background:#fff;font-size:8.5px;font-weight:700}.demo-input{height:42px;display:flex;align-items:center;justify-content:space-between;padding:0 9px 0 12px;border-top:1px solid var(--line);color:#9aa39f;font-size:9.5px}.send{width:27px;height:27px;display:grid;place-items:center;border:0;border-radius:8px;color:#fff;background:var(--brand-700)}.send svg{width:13px;height:13px}
+    .guest-message{padding:12px;border:1px solid var(--line);border-radius:11px;background:#fff}.guest-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.guest-person{display:flex;align-items:center;gap:8px}.guest-avatar{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;color:var(--blue-700);background:var(--blue-100);font-size:10px;font-weight:850}.guest-person strong{display:block;font-size:10.5px}.guest-person span{display:block;margin-top:2px;color:var(--muted);font-size:8.5px}.guest-time{color:#929d98;font-size:8.5px}.guest-question{margin:10px 0 0;padding:9px;border-radius:8px;background:#f5f7f6;font-size:10px;line-height:1.5}.ai-draft{margin-top:8px;padding:10px;border:1px solid #cfe5dc;border-radius:9px;background:var(--brand-50)}.ai-draft-label{display:flex;align-items:center;justify-content:space-between;color:var(--brand-700);font-size:8.5px;font-weight:850;text-transform:uppercase}.ai-draft p{margin:6px 0 8px;color:#35463e;font-size:10px;line-height:1.5}.draft-actions{display:flex;gap:6px}
+    .steps{display:grid;gap:0}.step{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:12px 0;border-bottom:1px solid #edf1ef}.step:last-child{border-bottom:0}.step-num{width:26px;height:26px;display:grid;place-items:center;border-radius:8px;color:var(--brand-700);background:var(--brand-50);font-size:10px;font-weight:850}.step strong{display:block;font-size:11px}.step span{display:block;margin-top:4px;color:var(--muted);font-size:9.5px;line-height:1.45}
+    .security-note{padding:12px;border:1px solid var(--amber-100);border-radius:11px;color:#714a14;background:var(--amber-50)}.security-note strong{display:flex;align-items:center;gap:7px;font-size:10.5px}.security-note p{margin:6px 0 0;font-size:9.5px;line-height:1.5}
+    dialog{width:min(560px,calc(100% - 32px));padding:0;border:0;border-radius:16px;color:var(--ink);box-shadow:0 24px 80px rgba(10,30,22,.28)}dialog::backdrop{background:rgba(16,33,27,.52);backdrop-filter:blur(2px)}.modal-head{display:flex;align-items:center;justify-content:space-between;padding:17px 19px;border-bottom:1px solid var(--line)}.modal-head h2{margin:0;font-size:16px}.close{width:32px;height:32px;border:0;border-radius:8px;color:#6d7973;background:transparent}.close:hover{background:#f2f5f3}.modal-body{padding:18px 19px}.connect-brand{display:flex;align-items:center;gap:12px;margin-bottom:15px}.connect-brand .chatgpt-logo{width:42px;height:42px}.connect-brand strong{display:block;font-size:13px}.connect-brand span{display:block;margin-top:3px;color:var(--muted);font-size:10.5px}.permission-list{display:grid;gap:8px}.permission{display:grid;grid-template-columns:31px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px}.permission-icon{width:31px;height:31px;display:grid;place-items:center;border-radius:8px;color:var(--brand-700);background:var(--brand-50)}.permission strong{display:block;font-size:10.5px}.permission span{display:block;margin-top:3px;color:var(--muted);font-size:9px}.permission b{color:var(--brand-700);font-size:8.5px;text-transform:uppercase}.tenant-note{margin-top:12px;padding:10px;border-radius:9px;color:#53615a;background:#f4f7f5;font-size:9.5px;line-height:1.5}.modal-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:13px 19px;border-top:1px solid var(--line);background:#fafbfb}
+    .toast{position:fixed;right:22px;bottom:22px;z-index:50;display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid #bcdccd;border-radius:11px;color:var(--brand-900);background:#fff;box-shadow:0 16px 45px rgba(18,45,36,.18);font-size:11px;font-weight:750}.toast[hidden]{display:none}.toast-check{width:24px;height:24px;display:grid;place-items:center;border-radius:7px;color:var(--brand-700);background:var(--brand-100)}
+    @media(max-width:1050px){.shell{grid-template-columns:76px minmax(0,1fr)}.brand-copy,.nav-text,.nav-label,.nav-pill{display:none}.nav-item{width:50px;margin:auto;padding:0;justify-content:center}.layout{grid-template-columns:1fr}}
+    @media(max-width:760px){.shell{grid-template-columns:1fr}.sidebar{display:none}.topbar{padding:0 15px}.account-name{display:none}main{width:calc(100% - 28px)}.page-head,.status-strip,.access-intro{align-items:flex-start;flex-direction:column}.status-actions{width:100%;justify-content:space-between}.mode-grid,.identity-grid,.data-grid{grid-template-columns:1fr}.module{grid-template-columns:40px minmax(0,1fr)}.module>.switch{grid-column:2}.layout{grid-template-columns:1fr}.context-flow{grid-template-columns:1fr}.flow-arrow{transform:rotate(90deg)}}
+  </style>
+</head>
+<body>
+<div class="shell" id="shell">
+  <aside class="sidebar">
+    <a class="brand" href="#" aria-label="Hap faqen publike të Lora PMS">
+      <span class="brand-mark"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+      <span class="brand-copy"><strong>Lora PMS</strong><span>HOTEL RIVIERA</span></span>
+    </a>
+    <nav class="nav">
+      <div class="nav-label">Hoteli</div>
+      <a class="nav-item" href="#"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span class="nav-text">Përmbledhje</span></a>
+      <a class="nav-item" href="#"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></span><span class="nav-text">Rezervimet</span></a>
+      <a class="nav-item" href="#"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/></svg></span><span class="nav-text">Mesazhet</span><span class="nav-pill">8</span></a>
+      <div class="nav-label">Të ardhurat</div>
+      <a class="nav-item" href="#"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 16 4-5 4 3 5-7"/></svg></span><span class="nav-text">Çmimet</span></a>
+      <a class="nav-item active" href="#"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m12 3-1.4 3.6L7 8l3.6 1.4L12 13l1.4-3.6L17 8l-3.6-1.4L12 3Z"/><path d="m19 14-.8 2.2L16 17l2.2.8L19 20l.8-2.2L22 17l-2.2-.8L19 14Z"/><path d="m5 13-.8 2.2L2 16l2.2.8L5 19l.8-2.2L8 16l-2.2-.8L5 13Z"/></svg></span><span class="nav-text">Lora AI</span><span class="nav-pill">E re</span></a>
+      <a class="nav-item" href="#"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 17v-5M12 17V7M17 17v-8"/></svg></span><span class="nav-text">Raportet</span></a>
+      <div class="nav-label">Konfigurimi</div>
+      <a class="nav-item" href="#"><span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1-2.8 2.8-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.6v.2h-4V21A1.8 1.8 0 0 0 8.8 19.4a1.8 1.8 0 0 0-2 .4l-.1.1-2.8-2.8.1-.1a1.8 1.8 0 0 0 .4-2A1.8 1.8 0 0 0 2.8 14h-.2v-4h.2A1.8 1.8 0 0 0 4.4 8.8a1.8 1.8 0 0 0-.4-2l-.1-.1 2.8-2.8.1.1a1.8 1.8 0 0 0 2 .4A1.8 1.8 0 0 0 10 2.8v-.2h4v.2a1.8 1.8 0 0 0 1.1 1.6 1.8 1.8 0 0 0 2-.4l.1-.1 2.8 2.8-.1.1a1.8 1.8 0 0 0-.4 2A1.8 1.8 0 0 0 21.2 10h.2v4h-.2a1.8 1.8 0 0 0-1.8 1Z"/></svg></span><span class="nav-text">Settings</span></a>
+    </nav>
+    <div class="sidebar-foot"><button class="nav-item collapse" id="collapse"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></span><span class="nav-text">Mbyll</span></button></div>
+  </aside>
+
+  <section class="workspace">
+    <header class="topbar">
+      <div><div class="context-label">HOTEL DEMO RIVIERA</div><div class="context-note">Lora AI · integrimet dhe automatizimet</div></div>
+      <div class="account">
+        <button class="avatar-button" id="avatarButton" aria-expanded="false"><span class="account-name"><strong>Marjus Bushi</strong><span>Administrator</span></span><span class="avatar">M</span></button>
+        <div class="profile-menu" id="profileMenu" hidden><a href="#">Profili im</a><a href="#">Ndrysho hotelin</a><a href="#">Dil</a></div>
+      </div>
+    </header>
+
+    <main>
+      <div class="page-head">
+        <div><div class="breadcrumb">Paneli / Lora AI / Integrimet</div><h1>Lora AI &amp; ChatGPT</h1><p class="subtitle">Menaxho çmimet dhe përgjigju mysafirëve me kontrollin e stafit.</p></div>
+        <span class="mockup-badge">Mockup · të dhëna shembull</span>
+      </div>
+
+      <section class="status-strip" id="connectionStrip">
+        <div class="status-lead"><div class="chatgpt-logo">AI</div><div class="status-copy"><strong>ChatGPT nuk është lidhur ende</strong><span>Lidhe një herë dhe përdor të njëjtin hotel direkt nga ChatGPT.</span></div></div>
+        <div class="status-actions"><span class="status-dot">I palidhur</span><button class="button primary" id="openConnect">Lidhu me ChatGPT <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+      </section>
+
+      <div class="layout">
+        <div class="stack">
+          <section class="card">
+            <div class="card-head">
+              <div><h2 class="card-title">Çfarë di dhe çfarë mund të bëjë asistenti</h2><p class="card-copy">Akses real-time, i kufizuar nga hoteli, roli dhe biseda aktive.</p></div>
+              <div class="tabs"><button class="tab" data-panel="modules">Modulet</button><button class="tab active" data-panel="data-access">Të dhënat</button><button class="tab" data-panel="rules">Rregullat</button></div>
+            </div>
+            <div class="card-body panel" id="modules" hidden>
+              <div class="module-list">
+                <article class="module">
+                  <div class="module-icon"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 16 4-5 4 3 5-7"/></svg></div>
+                  <div><div class="module-title">Çmime Inteligjente <span class="tag">Read-only</span></div><p>Lexon kalendarin, kapacitetin, rezervimet e agreguara dhe shpjegon ose propozon çmime.</p><div class="scope-list"><span class="scope">Lexo disponueshmërinë</span><span class="scope">Analizo kërkesën</span><span class="scope">Propozo çmime</span><span class="scope">Pa aplikim automatik</span></div></div>
+                  <label class="switch" title="Aktiv"><input type="checkbox" checked><span class="slider"></span></label>
+                </article>
+                <article class="module">
+                  <div class="module-icon blue"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 9h8M8 13h5"/></svg></div>
+                  <div><div class="module-title">Mesazhet e mysafirëve <span class="tag blue">Hybrid</span></div><p>Lexon bisedën dhe rezervimin, harton përgjigjen dhe dërgon automatikisht vetëm pyetjet standarde.</p><div class="scope-list"><span class="scope">Lexo bisedat</span><span class="scope">Lexo rezervimin</span><span class="scope">Përgjigju FAQ</span><span class="scope">Eskalo veprimet sensitive</span></div></div>
+                  <label class="switch" title="Aktiv"><input type="checkbox" checked><span class="slider"></span></label>
+                </article>
+              </div>
+
+              <div class="mode-grid">
+                <article class="mode"><strong>1. Vetëm sugjerime</strong><p>AI harton përgjigjen; stafi dërgon çdo mesazh.</p></article>
+                <article class="mode selected"><span class="mode-recommended">Rekomanduar</span><strong>2. Hybrid</strong><p>FAQ automatike; ndryshimet dhe pagesat me aprovim.</p></article>
+                <article class="mode locked"><strong>3. Autopilot i plotë</strong><p>Të gjitha përgjigjet automatike. Aktivizohet më vonë.</p></article>
+              </div>
+            </div>
+            <div class="card-body panel" id="data-access">
+              <div class="access-intro">
+                <div><strong>Kontekst i plotë operacional, vetëm kur nevojitet</strong><p>Asistenti nuk kopjon databazën në chat. Ai kërkon informacionin më të fundit nga Lora PMS për çdo pyetje.</p></div>
+                <span class="live-badge">Real-time</span>
+              </div>
+
+              <div class="identity-grid">
+                <article class="identity-card">
+                  <div class="identity-head"><div class="identity-title"><span class="identity-icon blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><strong>Chat-i i mysafirit</strong></div><span class="tag blue">I kufizuar</span></div>
+                  <p>Njeh bisedën, profilin dhe rezervimin e personit që po shkruan, bashkë me informacionin publik të hotelit.</p>
+                  <div class="boundary"><b>Sheh:</b> vetëm rezervimin e vet · nuk sheh mysafirë të tjerë</div>
+                </article>
+                <article class="identity-card">
+                  <div class="identity-head"><div class="identity-title"><span class="identity-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M19 8v6M16 11h6"/></svg></span><strong>ChatGPT i stafit</strong></div><span class="tag">Sipas rolit</span></div>
+                  <p>Kërkon rezervime, dhoma, çmime dhe biseda në të gjithë hotelin, vetëm brenda lejeve të përdoruesit.</p>
+                  <div class="boundary"><b>Sheh:</b> hotelin aktiv · recepsion, menaxher ose finance</div>
+                </article>
+              </div>
+
+              <div class="data-title"><strong>Burimet që asistenti njeh</strong><span>6 burime të lidhura</span></div>
+              <div class="data-grid">
+                <article class="data-card"><div class="data-card-top"><strong>Rezervimet</strong><span class="source-ok">✓</span></div><p>Datat, statusi, kanali, personat, kërkesat dhe historiku.</p></article>
+                <article class="data-card"><div class="data-card-top"><strong>Mysafirët</strong><span class="source-ok">✓</span></div><p>Profili, gjuha, preferencat dhe bisedat e lidhura.</p></article>
+                <article class="data-card"><div class="data-card-top"><strong>Dhomat</strong><span class="source-ok">✓</span></div><p>Tipi, kapaciteti, pajisjet, statusi dhe disponueshmëria.</p></article>
+                <article class="data-card"><div class="data-card-top"><strong>Çmimet</strong><span class="source-ok">✓</span></div><p>Tarifat ditore, ofertat, kufijtë dhe politikat e anulimit.</p></article>
+                <article class="data-card"><div class="data-card-top"><strong>Pagesat</strong><span class="source-ok">✓</span></div><p>Totali, pagesat dhe detyrimi; asnjë e dhënë karte.</p></article>
+                <article class="data-card"><div class="data-card-top"><strong>Hoteli</strong><span class="source-ok">✓</span></div><p>Check-in/out, shërbimet, parkimi, Wi-Fi dhe rregullat.</p></article>
+              </div>
+
+              <div class="context-flow">
+                <div class="flow-node"><strong>Mesazhi i mysafirit</strong><span>Elona · chat #C-908</span></div><span class="flow-arrow">→</span>
+                <div class="flow-node"><strong>Rezervimi i lidhur</strong><span>#R-2048 · 18–22 Gusht</span></div><span class="flow-arrow">→</span>
+                <div class="flow-node"><strong>Përgjigje me kontekst</strong><span>Dhoma, çmimi dhe politikat</span></div>
+              </div>
+
+              <div class="protected-row"><div><strong>Veprime të mbrojtura</strong><span>Anulim, ndryshim rezervimi, pagesë, rimbursim ose aplikim çmimesh.</span></div><b>Kërko aprovim</b></div>
+            </div>
+            <div class="card-body panel" id="rules" hidden>
+              <div class="security-note"><strong>Rregulli kryesor</strong><p>Asistenti nuk mund të anulojë rezervime, të bëjë rimbursime, të ndryshojë çmime apo të dërgojë kërkesa pagese pa konfirmim të stafit.</p></div>
+              <div class="rule-list">
+                <div class="rule"><div><strong>Përgjigju automatikisht pyetjeve standarde</strong><span>Check-in/out, parkim, Wi-Fi, mëngjes, adresë dhe shërbime.</span></div><label class="switch"><input type="checkbox" checked><span class="slider"></span></label></div>
+                <div class="rule"><div><strong>Kërko aprovim për ndryshime rezervimi</strong><span>Data, dhoma, numri i personave dhe shërbime me pagesë.</span></div><label class="switch"><input type="checkbox" checked disabled><span class="slider"></span></label></div>
+                <div class="rule"><div><strong>Fshih të dhënat personale nga analiza e çmimeve</strong><span>Çmimet përdorin statistika, jo emra, email apo dokumente.</span></div><label class="switch"><input type="checkbox" checked disabled><span class="slider"></span></label></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><div><h2 class="card-title">Pamje e funksionimit</h2><p class="card-copy">Shembull i përgjigjes ndaj një mysafiri në chat-in e Lora PMS.</p></div><span class="tag blue">Demo</span></div>
+            <div class="card-body demo">
+              <article class="guest-message">
+                <div class="guest-head"><div class="guest-person"><span class="guest-avatar">EK</span><div><strong>Elona Kola</strong><span>Rezervimi #R-2048 · 18–22 Gusht</span></div></div><span class="guest-time">Para 2 min</span></div>
+                <div class="guest-question">Përshëndetje, a mund ta bëjmë check-in në orën 11:00 dhe a keni parkim?</div>
+                <div class="ai-draft"><div class="ai-draft-label"><span>✦ Përgjigje nga Lora AI</span><span>FAQ · e sigurt</span></div><p>Përshëndetje Elona! Parkimi është falas për mysafirët. Check-in standard fillon në 14:00; kërkesën për 11:00 e kemi shënuar dhe hoteli do ta konfirmojë sipas disponueshmërisë atë mëngjes.</p><div class="draft-actions"><button class="button primary small" id="sendReply">Dërgo përgjigjen</button><button class="button small">Ndrysho</button></div></div>
+              </article>
+            </div>
+          </section>
+        </div>
+
+        <aside class="stack">
+          <section class="card">
+            <div class="card-head"><div><h2 class="card-title">Pamje në ChatGPT</h2><p class="card-copy">Asistenti përdor vetëm hotelin e lidhur.</p></div></div>
+            <div class="card-body demo">
+              <div class="demo-window">
+                <div class="demo-top"><div class="demo-brand"><span class="mini-logo">AI</span>Lora PMS</div><span class="demo-status">Hotel Riviera</span></div>
+                <div class="demo-chat">
+                  <div class="bubble user">Si duket java 18–24 gusht?</div>
+                  <div class="bubble ai"><strong>Okupimi është 71%.</strong>Fundjava po ecën më shpejt se pritshmëria. Sugjeroj rritje vetëm për 21–23 gusht.
+                    <div class="insight"><div><span>Okupimi</span><b>71%</b></div><div><span>Dhoma bosh</span><b>18</b></div><div><span>Pickup 7d</span><b>+14</b></div></div>
+                    Mund ta përgatis propozimin pa e aplikuar.
+                  </div>
+                  <div class="prompt-row"><button class="prompt-chip">Përgatit propozimin</button><button class="prompt-chip">Shpjego arsyen</button></div>
+                </div>
+                <div class="demo-input"><span>Pyet Lora PMS...</span><button class="send"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><div><h2 class="card-title">Lidhja e shpejtë</h2><p class="card-copy">Një herë për çdo përdorues.</p></div></div>
+            <div class="card-body steps">
+              <div class="step"><span class="step-num">1</span><div><strong>Kliko “Lidhu me ChatGPT”</strong><span>Hapet autorizimi i sigurt i Lora PMS.</span></div></div>
+              <div class="step"><span class="step-num">2</span><div><strong>Zgjidh hotelin dhe lejet</strong><span>Tenant-i dhe roli merren nga llogaria, jo nga chat-i.</span></div></div>
+              <div class="step"><span class="step-num">3</span><div><strong>Përdor Lora nga ChatGPT</strong><span>Çmimet, kalendari dhe mesazhet sipas lejeve.</span></div></div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </section>
+</div>
+
+<dialog id="connectDialog">
+  <div class="modal-head"><h2>Lidh Lora PMS me ChatGPT</h2><button class="close" id="closeDialog" aria-label="Mbyll"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+  <div class="modal-body">
+    <div class="connect-brand"><div class="chatgpt-logo">AI</div><div><strong>ChatGPT po kërkon akses te Hotel Demo Riviera</strong><span>Autorizimi vlen vetëm për llogarinë dhe hotelin tënd.</span></div></div>
+    <div class="permission-list">
+      <div class="permission"><span class="permission-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></span><div><strong>Lexo rezervimet, mysafirët dhe dhomat</strong><span>Kontekst real-time sipas hotelit, rolit dhe bisedës.</span></div><b>Lejo</b></div>
+      <div class="permission"><span class="permission-icon"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 17v-5M12 17V7M17 17v-8"/></svg></span><div><strong>Lexo çmimet, pagesat dhe politikat</strong><span>Pa të dhëna karte dhe pa veprime financiare automatike.</span></div><b>Lejo</b></div>
+      <div class="permission"><span class="permission-icon"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 16 4-5 4 3 5-7"/></svg></span><div><strong>Analizo dhe propozo çmime</strong><span>Nuk mund t'i aplikojë pa konfirmim.</span></div><b>Lejo</b></div>
+      <div class="permission"><span class="permission-icon"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/></svg></span><div><strong>Lexo dhe përgjigju mesazheve</strong><span>FAQ automatike; veprimet sensitive me aprovim.</span></div><b>Lejo</b></div>
+    </div>
+    <div class="tenant-note"><strong>Izolim multi-tenant:</strong> ChatGPT nuk zgjedh dot një tenant tjetër. Hotel ID, përdoruesi dhe roli merren nga tokeni i sigurt i Lora PMS.</div>
+  </div>
+  <div class="modal-foot"><button class="button" id="cancelDialog">Anulo</button><button class="button primary" id="confirmConnect">Autorizo dhe lidhu</button></div>
+</dialog>
+
+<div class="toast" id="toast" hidden><span class="toast-check">✓</span><span id="toastText">Veprimi u krye.</span></div>
+
+<script>
+  const shell=document.getElementById('shell');
+  document.getElementById('collapse').addEventListener('click',()=>shell.classList.toggle('collapsed'));
+  const avatarButton=document.getElementById('avatarButton'),profileMenu=document.getElementById('profileMenu');
+  avatarButton.addEventListener('click',()=>{profileMenu.hidden=!profileMenu.hidden;avatarButton.setAttribute('aria-expanded',String(!profileMenu.hidden))});
+  document.addEventListener('click',e=>{if(!e.target.closest('.account')){profileMenu.hidden=true;avatarButton.setAttribute('aria-expanded','false')}});
+  document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');
+    document.querySelectorAll('.panel').forEach(p=>p.hidden=p.id!==tab.dataset.panel);
+  }));
+  const dialog=document.getElementById('connectDialog');
+  document.getElementById('openConnect').addEventListener('click',()=>dialog.showModal());
+  ['closeDialog','cancelDialog'].forEach(id=>document.getElementById(id).addEventListener('click',()=>dialog.close()));
+  function toast(message){const el=document.getElementById('toast');document.getElementById('toastText').textContent=message;el.hidden=false;clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>el.hidden=true,2600)}
+  document.getElementById('confirmConnect').addEventListener('click',()=>{
+    dialog.close();const strip=document.getElementById('connectionStrip');strip.classList.add('connected');
+    strip.querySelector('.status-copy strong').textContent='ChatGPT është lidhur me Hotel Demo Riviera';
+    strip.querySelector('.status-copy span').textContent='Lejet mund të ndryshohen ose të revokohen në çdo moment.';
+    strip.querySelector('.status-dot').textContent='I lidhur';
+    document.getElementById('openConnect').innerHTML='Hap në ChatGPT <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+    toast('ChatGPT u lidh me sukses.');
+  });
+  document.getElementById('sendReply').addEventListener('click',()=>toast('Përgjigjja u dërgua te Elona Kola.'));
+</script>
+</body>
+</html>

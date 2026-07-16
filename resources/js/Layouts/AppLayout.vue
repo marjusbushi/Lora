@@ -137,11 +137,13 @@ const icons = {
     pricing: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.94 6.94a.75.75 0 00-1.06-1.06A5.733 5.733 0 006.2 9.25H5.5a.75.75 0 000 1.5h.531a5.78 5.78 0 000 .5H5.5a.75.75 0 000 1.5h.7a5.733 5.733 0 001.68 3.37.75.75 0 101.06-1.06A4.235 4.235 0 017.733 13H10.5a.75.75 0 000-1.5H7.531a4.282 4.282 0 010-.5H10.5a.75.75 0 000-1.5H7.733a4.235 4.235 0 011.207-2.06z" clip-rule="evenodd" /></svg>',
     tenants: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zM5 7.5A1.5 1.5 0 016.5 6h1A1.5 1.5 0 019 7.5v1A1.5 1.5 0 017.5 10h-1A1.5 1.5 0 015 8.5v-1zm6.25-.75a.75.75 0 000 1.5h3.5a.75.75 0 000-1.5h-3.5zm0 3a.75.75 0 000 1.5h3.5a.75.75 0 000-1.5h-3.5zM5.75 13a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5z" clip-rule="evenodd" /></svg>',
     inventory: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path d="M2.25 5.5 10 1.625 17.75 5.5 10 9.375 2.25 5.5Z"/><path d="m2 7.25 7.25 3.625v7.25L2 14.5V7.25Zm8.75 3.625L18 7.25v7.25l-7.25 3.625v-7.25Z"/></svg>',
+    ai: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path d="M10.75 2.75a.75.75 0 00-1.5 0v.64A5.5 5.5 0 004.5 8.83v3.92A2.25 2.25 0 006.75 15h6.5a2.25 2.25 0 002.25-2.25V8.83a5.5 5.5 0 00-4.75-5.44v-.64zM7.5 9a1 1 0 110 2 1 1 0 010-2zm5 0a1 1 0 110 2 1 1 0 010-2zM7 17.25a.75.75 0 01.75-.75h4.5a.75.75 0 010 1.5h-4.5a.75.75 0 01-.75-.75z"/></svg>',
 };
 
 // All possible nav items with permission requirements
 const allNavItems = computed(() => [
     { label: t('admin.sidebar.dashboard'), href: '/dashboard', routeName: 'dashboard', icon: icons.dashboard, permission: null },
+    { label: 'Lora AI', href: '/pms/lora-ai', match: '/pms/lora-ai', icon: icons.ai, permission: 'view_settings' },
     { label: t('admin.sidebar.rooms'), href: '/pms/rooms', icon: icons.rooms, permission: 'view_rooms' },
     { label: t('admin.sidebar.reservations'), href: '/pms/reservations', match: '/pms/reservations', icon: icons.reservations, permission: 'view_reservations' },
     { label: t('admin.sidebar.messages'), href: '/pms/messages', match: '/pms/messages', icon: icons.messages, permission: 'view_reservations', module: 'channel_manager' },
