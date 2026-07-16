@@ -6,9 +6,13 @@ use App\Models\Bill;
 use App\Models\BillItem;
 use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
+use App\Models\FiscalDocument;
+use App\Models\FolioItem;
 use App\Models\InventoryItem;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\PosFiscalDocument;
+use App\Models\PosOrder;
 use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Setting;
@@ -19,6 +23,7 @@ use App\Services\BillDocumentAiExtractor;
 use App\Services\CurrencyRates;
 use App\Services\GeminiClient;
 use App\Services\InventoryLedger;
+use App\Services\VatConfiguration;
 use App\Tenancy\TenantRule;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -41,7 +46,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class FinanceController extends Controller
 {
-    public function __construct(private readonly InventoryLedger $inventoryLedger) {}
+    public function __construct(
+        private readonly InventoryLedger $inventoryLedger,
+        private readonly VatConfiguration $vatConfiguration,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -164,6 +172,162 @@ class FinanceController extends Controller
             'alerts' => $alerts,
             'latest' => $this->paymentRows(FinancePayment::with($this->paymentRelations())
                 ->latest('paid_at')->latest('id')->limit(8)->get()),
+        ]));
+    }
+
+    /**
+     * Unified sales-invoice register. Hotel stays and direct POS sales remain
+     * separate source records, but share one tenant-scoped operational view.
+     * Room-charge POS orders stay inside the hotel folio to avoid duplicates.
+     */
+    public function invoices(Request $request): Response
+    {
+        $filters = $this->salesInvoiceFilters($request);
+
+        $hotelFeed = Reservation::query()
+            ->leftJoin('guests', function ($join) {
+                $join->on('guests.id', '=', 'reservations.guest_id')
+                    ->on('guests.tenant_id', '=', 'reservations.tenant_id');
+            })
+            ->where('reservations.status', 'checked_out')
+            ->select([
+                DB::raw("'hotel' as source"),
+                'reservations.id as record_id',
+                'reservations.updated_at as issued_at',
+                'reservations.total_amount as base_total',
+                DB::raw('NULL as payment_method'),
+                'guests.first_name as client_first',
+                'guests.last_name as client_last',
+            ])
+            ->selectSub(
+                FolioItem::query()
+                    ->selectRaw("COALESCE(SUM(CASE WHEN type = 'discount' THEN -amount WHEN type = 'room' THEN 0 ELSE amount END), 0)")
+                    ->whereColumn('folio_items.reservation_id', 'reservations.id'),
+                'extras_total'
+            )
+            ->selectSub(
+                FiscalDocument::query()->select('status')
+                    ->whereColumn('fiscal_documents.reservation_id', 'reservations.id')
+                    ->latest('fiscal_documents.id')->limit(1),
+                'fiscal_status'
+            )
+            ->selectSub(
+                FiscalDocument::query()->select('fiscal_number')
+                    ->whereColumn('fiscal_documents.reservation_id', 'reservations.id')
+                    ->latest('fiscal_documents.id')->limit(1),
+                'fiscal_number'
+            );
+
+        $posFeed = PosOrder::query()
+            ->where('pos_orders.status', 'completed')
+            ->whereIn('pos_orders.payment_method', ['cash', 'card'])
+            ->select([
+                DB::raw("'pos' as source"),
+                'pos_orders.id as record_id',
+                DB::raw('COALESCE(pos_orders.paid_at, pos_orders.updated_at) as issued_at'),
+                'pos_orders.total_amount as base_total',
+                'pos_orders.payment_method',
+                DB::raw('NULL as client_first'),
+                DB::raw('NULL as client_last'),
+                DB::raw('0 as extras_total'),
+            ])
+            ->selectSub(
+                PosFiscalDocument::query()->select('status')
+                    ->whereColumn('pos_fiscal_documents.pos_order_id', 'pos_orders.id')
+                    ->latest('pos_fiscal_documents.id')->limit(1),
+                'fiscal_status'
+            )
+            ->selectSub(
+                PosFiscalDocument::query()->select('fiscal_number')
+                    ->whereColumn('pos_fiscal_documents.pos_order_id', 'pos_orders.id')
+                    ->latest('pos_fiscal_documents.id')->limit(1),
+                'fiscal_number'
+            );
+
+        $feed = match ($filters['source']) {
+            'hotel' => $hotelFeed,
+            'pos' => $posFeed,
+            default => $hotelFeed->unionAll($posFeed),
+        };
+
+        $filtered = DB::query()->fromSub($feed, 'sales_invoice_feed');
+        if ($filters['date_from']) {
+            $filtered->whereDate('issued_at', '>=', $filters['date_from']);
+        }
+        if ($filters['date_to']) {
+            $filtered->whereDate('issued_at', '<=', $filters['date_to']);
+        }
+        if ($filters['query'] !== '') {
+            $like = '%'.$filters['query'].'%';
+            $filtered->where(function ($query) use ($like) {
+                $query->where('fiscal_number', 'like', $like)
+                    ->orWhere('client_first', 'like', $like)
+                    ->orWhere('client_last', 'like', $like)
+                    ->orWhere('record_id', 'like', $like);
+            });
+        }
+
+        $summaryRow = (clone $filtered)
+            ->selectRaw('COUNT(*) as total_count')
+            ->selectRaw('COALESCE(SUM(base_total + extras_total), 0) as total_value')
+            ->selectRaw("COALESCE(SUM(CASE WHEN fiscal_status = 'fiscalized' THEN 1 ELSE 0 END), 0) as fiscalized_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN fiscal_status = 'failed' THEN 1 ELSE 0 END), 0) as failed_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN source = 'hotel' THEN 1 ELSE 0 END), 0) as hotel_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN source = 'pos' THEN 1 ELSE 0 END), 0) as pos_count")
+            ->first();
+
+        if ($filters['status'] === 'fiscalized') {
+            $filtered->where('fiscal_status', FiscalDocument::STATUS_FISCALIZED);
+        } elseif ($filters['status'] === 'failed') {
+            $filtered->where('fiscal_status', FiscalDocument::STATUS_FAILED);
+        } elseif ($filters['status'] === 'not_fiscalized') {
+            $filtered->where(function ($query) {
+                $query->whereNull('fiscal_status')
+                    ->orWhere('fiscal_status', '!=', FiscalDocument::STATUS_FISCALIZED);
+            });
+        }
+
+        $paginator = $filtered
+            ->orderByDesc('issued_at')
+            ->orderByDesc('record_id')
+            ->paginate($filters['per_page'])
+            ->withQueryString();
+
+        $hotelIds = $paginator->getCollection()->where('source', 'hotel')->pluck('record_id');
+        $posIds = $paginator->getCollection()->where('source', 'pos')->pluck('record_id');
+        $reservations = Reservation::with([
+            'guest:id,first_name,last_name,email,document_type,document_number',
+            'room.roomType:id,name',
+            'folioItems',
+            'payments' => fn ($query) => $query->notVoided()->latest('id'),
+            'fiscalDocuments' => fn ($query) => $query->latest('id'),
+        ])->whereIn('id', $hotelIds)->get()->keyBy('id');
+        $orders = PosOrder::with([
+            'items.menuItem:id,name',
+            'createdBy:id,name',
+            'fiscalDocument',
+        ])->whereIn('id', $posIds)->get()->keyBy('id');
+
+        $paginator->setCollection($paginator->getCollection()->map(function ($row) use ($request, $reservations, $orders) {
+            if ($row->source === 'hotel') {
+                return $this->hotelInvoiceRow($reservations->get((int) $row->record_id), $request);
+            }
+
+            return $this->posInvoiceRow($orders->get((int) $row->record_id), $request);
+        })->filter()->values());
+
+        return Inertia::render('Finance/Invoices', array_merge($this->shared($request), [
+            'invoices' => $paginator,
+            'filters' => $filters,
+            'summary' => [
+                'total_count' => (int) ($summaryRow->total_count ?? 0),
+                'total_value' => round((float) ($summaryRow->total_value ?? 0), 2),
+                'fiscalized_count' => (int) ($summaryRow->fiscalized_count ?? 0),
+                'failed_count' => (int) ($summaryRow->failed_count ?? 0),
+                'not_fiscalized_count' => max(0, (int) ($summaryRow->total_count ?? 0) - (int) ($summaryRow->fiscalized_count ?? 0)),
+                'hotel_count' => (int) ($summaryRow->hotel_count ?? 0),
+                'pos_count' => (int) ($summaryRow->pos_count ?? 0),
+            ],
         ]));
     }
 
@@ -1144,6 +1308,207 @@ class FinanceController extends Controller
         }
 
         return round((($current - $previous) / abs($previous)) * 100, 1);
+    }
+
+    /** @return array{source:?string,status:?string,query:string,date_from:?string,date_to:?string,per_page:int} */
+    protected function salesInvoiceFilters(Request $request): array
+    {
+        $parseDate = static function ($value): ?string {
+            if (! is_string($value) || $value === '') {
+                return null;
+            }
+
+            try {
+                $date = CarbonImmutable::createFromFormat('!Y-m-d', $value);
+
+                return $date && $date->format('Y-m-d') === $value ? $value : null;
+            } catch (\Throwable) {
+                return null;
+            }
+        };
+
+        return [
+            'source' => in_array($request->input('source'), ['hotel', 'pos'], true) ? $request->input('source') : null,
+            'status' => in_array($request->input('status'), ['fiscalized', 'not_fiscalized', 'failed'], true) ? $request->input('status') : null,
+            'query' => mb_substr(trim((string) $request->input('query', '')), 0, 100),
+            'date_from' => $parseDate($request->input('date_from')),
+            'date_to' => $parseDate($request->input('date_to')),
+            'per_page' => in_array($request->integer('per_page'), [10, 20, 30, 50], true) ? $request->integer('per_page') : 20,
+        ];
+    }
+
+    protected function hotelInvoiceRow(?Reservation $reservation, Request $request): ?array
+    {
+        if (! $reservation) {
+            return null;
+        }
+
+        /** @var FiscalDocument|null $document */
+        $document = $reservation->fiscalDocuments->first();
+        $payload = is_array($document?->invoice_payload) ? $document->invoice_payload : [];
+        $folioItems = $reservation->folioItems->whereNotIn('type', ['discount', 'room']);
+        $discount = $document
+            ? (float) ($payload['invoice_discount_value'] ?? 0)
+            : (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
+        $lines = ! empty($payload['lines'])
+            ? $this->normalizeSalesInvoiceLines($payload['lines'])
+            : $this->hotelInvoiceLines($reservation, $folioItems);
+        $calculatedTotal = round((float) collect($lines)->sum('total') - $discount, 2);
+        $status = $document?->status ?: 'pending';
+        $paymentMethods = $reservation->payments->pluck('method')->unique()->values();
+        $paymentMethod = $document?->payment_method ?: match (true) {
+            $paymentMethods->count() > 1 => 'mixed',
+            $paymentMethods->count() === 1 => (string) $paymentMethods->first(),
+            default => null,
+        };
+
+        return [
+            'key' => 'hotel:'.$reservation->id,
+            'id' => $reservation->id,
+            'source' => 'hotel',
+            'number' => $document?->fiscal_number ?: 'HOTEL-'.$reservation->id,
+            'reference' => 'Rezervimi #'.$reservation->id,
+            'issued_at' => ($document?->fiscalized_at ?: $reservation->updated_at)?->toIso8601String(),
+            'client' => trim((string) $reservation->guest?->full_name) ?: 'Klient hoteli',
+            'client_email' => $reservation->guest?->email,
+            'room' => $reservation->room ? trim('Dhoma '.$reservation->room->room_number.' · '.($reservation->room->roomType?->name ?? '')) : null,
+            'stay' => [
+                'check_in' => $reservation->check_in_date?->toDateString(),
+                'check_out' => $reservation->check_out_date?->toDateString(),
+                'nights' => max(1, (int) $reservation->nights),
+            ],
+            'status' => $status,
+            'payment_method' => strtolower((string) $paymentMethod),
+            'currency' => $document?->currency ?: BaseCurrency::code(),
+            'exchange_rate' => $document?->exchange_rate !== null ? (float) $document->exchange_rate : BaseCurrency::rate('ALL'),
+            'subtotal' => round((float) collect($lines)->sum('total'), 2),
+            'discount' => round($discount, 2),
+            'total' => $document ? (float) $document->total : $calculatedTotal,
+            'tax_total' => round((float) collect($lines)->sum('tax_amount'), 2),
+            'lines' => $lines,
+            'fiscal' => $this->salesFiscalMeta($document),
+            'detail_href' => $request->user()->can('view_reservations') ? route('reservations.show', $reservation) : null,
+            'fiscalize_href' => $status !== FiscalDocument::STATUS_FISCALIZED && $request->user()->can('update_reservations')
+                ? route('reservations.fiscalize', $reservation)
+                : null,
+        ];
+    }
+
+    protected function posInvoiceRow(?PosOrder $order, Request $request): ?array
+    {
+        if (! $order) {
+            return null;
+        }
+
+        $document = $order->fiscalDocument;
+        $payload = is_array($document?->invoice_payload) ? $document->invoice_payload : [];
+        $lines = ! empty($payload['lines'])
+            ? $this->normalizeSalesInvoiceLines($payload['lines'])
+            : $this->normalizeSalesInvoiceLines($order->items->map(fn ($item) => [
+                'product_name' => $item->menuItem?->name ?: 'Artikull POS',
+                'quantity' => (int) $item->quantity,
+                'price' => (float) $item->unit_price,
+                'total' => (float) $item->total_price,
+                'unit' => 'copë',
+                'vat' => $this->vatConfiguration->productRate(),
+            ])->all());
+        $status = $document?->status ?: 'pending';
+
+        return [
+            'key' => 'pos:'.$order->id,
+            'id' => $order->id,
+            'source' => 'pos',
+            'number' => $document?->fiscal_number ?: 'POS-'.$order->id,
+            'reference' => 'Porosia POS #'.$order->id,
+            'issued_at' => ($document?->fiscalized_at ?: $order->paid_at ?: $order->updated_at)?->toIso8601String(),
+            'client' => 'Klient POS',
+            'client_email' => null,
+            'room' => null,
+            'stay' => null,
+            'status' => $status,
+            'payment_method' => strtolower((string) ($document?->payment_method ?: $order->payment_method)),
+            'currency' => $document?->currency ?: BaseCurrency::code(),
+            'exchange_rate' => $document?->exchange_rate !== null ? (float) $document->exchange_rate : BaseCurrency::rate('ALL'),
+            'subtotal' => round((float) collect($lines)->sum('total'), 2),
+            'discount' => 0.0,
+            'total' => $document ? (float) $document->total : (float) $order->total_amount,
+            'tax_total' => round((float) collect($lines)->sum('tax_amount'), 2),
+            'lines' => $lines,
+            'operator' => $order->createdBy?->name,
+            'fiscal' => $this->salesFiscalMeta($document),
+            'detail_href' => $request->user()->can('view_pos_orders') ? route('pos.index', ['order_id' => $order->id]) : null,
+            'fiscalize_href' => $status !== PosFiscalDocument::STATUS_FISCALIZED && $request->user()->can('update_pos_orders')
+                ? route('pos.fiscalize', $order)
+                : null,
+        ];
+    }
+
+    protected function hotelInvoiceLines(Reservation $reservation, $folioItems): array
+    {
+        $nights = max(1, (int) $reservation->nights);
+        $roomTotal = round((float) $reservation->total_amount, 2);
+        $lines = [[
+            'name' => 'Akomodim'.($reservation->room ? ' · Dhoma '.$reservation->room->room_number : ''),
+            'quantity' => $nights,
+            'unit' => 'natë',
+            'unit_price' => round($roomTotal / $nights, 2),
+            'vat_rate' => $this->vatConfiguration->accommodationRate(),
+            'total' => $roomTotal,
+        ]];
+
+        foreach ($folioItems as $item) {
+            $quantity = max(0.0001, (float) ($item->inventory_quantity ?: 1));
+            $total = round((float) $item->amount, 2);
+            $lines[] = [
+                'name' => $item->description ?: 'Shërbim hoteli',
+                'quantity' => $quantity,
+                'unit' => $item->inventory_quantity ? 'copë' : 'shërbim',
+                'unit_price' => $item->unit_price !== null ? (float) $item->unit_price : round($total / $quantity, 2),
+                'vat_rate' => $item->vat_rate !== null ? (float) $item->vat_rate : $this->vatConfiguration->productRate(),
+                'total' => $total,
+            ];
+        }
+
+        return $this->normalizeSalesInvoiceLines($lines);
+    }
+
+    /** @param iterable<int, array<string, mixed>> $lines */
+    protected function normalizeSalesInvoiceLines(iterable $lines): array
+    {
+        return collect($lines)->map(function ($line) {
+            $quantity = max(0.0001, (float) ($line['quantity'] ?? 1));
+            $total = round((float) ($line['total'] ?? (($line['price'] ?? $line['unit_price'] ?? 0) * $quantity)), 2);
+            $vatRate = max(0, (float) ($line['vat'] ?? $line['vat_rate'] ?? 0));
+
+            return [
+                'name' => (string) ($line['product_name'] ?? $line['name'] ?? $line['description'] ?? 'Artikull'),
+                'quantity' => $quantity,
+                'unit' => (string) ($line['unit'] ?? 'copë'),
+                'unit_price' => round((float) ($line['price'] ?? $line['unit_price'] ?? ($total / $quantity)), 2),
+                'vat_rate' => $vatRate,
+                'tax_amount' => $vatRate > 0 ? round($total - ($total / (1 + $vatRate / 100)), 2) : 0.0,
+                'total' => $total,
+            ];
+        })->values()->all();
+    }
+
+    protected function salesFiscalMeta(FiscalDocument|PosFiscalDocument|null $document): ?array
+    {
+        if (! $document) {
+            return null;
+        }
+
+        return [
+            'number' => $document->fiscal_number,
+            'internal_id' => $document->internal_id,
+            'iic' => $document->iic,
+            'fic' => $document->fic,
+            'environment' => $document->environment,
+            'fiscalized_at' => $document->fiscalized_at?->toIso8601String(),
+            'verify_url' => $document->verify_url,
+            'pdf_url' => $document->pdf_url,
+            'last_error' => $document->last_error,
+        ];
     }
 
     protected function shared(Request $request): array

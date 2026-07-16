@@ -326,6 +326,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/payments/export', [FinanceController::class, 'exportPayments'])->name('finance.payments.export');
         Route::post('/payments', [FinanceController::class, 'storePayment'])->middleware('permission:create_payment')->name('finance.payments.store');
         Route::post('/transfers', [FinanceController::class, 'storeTransfer'])->middleware('permission:manage_transfers')->name('finance.transfers.store');
+        Route::get('/invoices', [FinanceController::class, 'invoices'])->name('finance.invoices');
 
         // Phase 2: Blerjet (Bills) + Furnitorët
         Route::get('/bills/create', [FinanceController::class, 'createBill'])->middleware('permission:manage_bills')->name('finance.bills.create');

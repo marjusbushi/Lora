@@ -160,6 +160,7 @@ const allNavItems = computed(() => [
             { label: t('admin.sidebar.financeDashboard'), href: '/pms/finance' },
             { label: t('admin.sidebar.cashAndBank'), href: '/pms/finance/accounts' },
             { label: t('admin.sidebar.payments'), href: '/pms/finance/payments' },
+            { label: t('admin.sidebar.salesInvoices'), href: '/pms/finance/invoices' },
             { label: t('admin.sidebar.bills'), href: '/pms/finance/bills' },
             { label: t('admin.sidebar.suppliers'), href: '/pms/finance/suppliers' },
         ],

@@ -51,6 +51,9 @@ class PosController extends Controller
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
+        if ($request->integer('order_id')) {
+            $query->whereKey($request->integer('order_id'));
+        }
 
         // Active checked-in reservations for room charge
         $activeReservations = Reservation::where('status', 'checked_in')
@@ -153,7 +156,7 @@ class PosController extends Controller
             'orders' => $orders,
             'menu' => $menu,
             'activeReservations' => $activeReservations,
-            'filters' => $request->only('status'),
+            'filters' => $request->only('status', 'order_id'),
             'currentShift' => $currentShift,
             'canOpenShift' => $request->user()->can('open_pos_shift'),
             'canCloseShift' => $request->user()->can('close_pos_shift'),
