@@ -121,7 +121,7 @@ class FinanceAccountsTest extends TestCase
         $this->actingAs($admin)->get(route('finance.accounts', ['account_id' => $extra->id]))->assertOk();
     }
 
-    public function test_accounts_page_reports_today_net_without_counting_internal_transfers(): void
+    public function test_accounts_page_converts_today_totals_and_does_not_count_internal_transfers(): void
     {
         $this->withoutVite();
         $admin = $this->role('admin');
@@ -133,6 +133,7 @@ class FinanceAccountsTest extends TestCase
             ['direction' => 'in', 'account_id' => $cash->id, 'amount' => 100, 'paid_at' => now()],
             ['direction' => 'out', 'account_id' => $cash->id, 'amount' => 30, 'paid_at' => now()],
             ['direction' => 'transfer', 'account_id' => $cash->id, 'counter_account_id' => $bank->id, 'amount' => 20, 'paid_at' => now()],
+            ['direction' => 'in', 'account_id' => $cash->id, 'amount' => 9870, 'currency' => 'ALL', 'fx_rate' => 98.7, 'paid_at' => now()],
             ['direction' => 'in', 'account_id' => $cash->id, 'amount' => 500, 'paid_at' => now()->subDay()],
         ] as $movement) {
             FinancePayment::create(array_merge([
@@ -147,7 +148,9 @@ class FinanceAccountsTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Finance/Accounts')
-                ->where('todayNet', 70));
+                ->where('todayNet', 170)
+                ->where('ledger.0.delta', 100)
+                ->where('ledger.0.balance', 650));
     }
 
     public function test_bad_currency_or_type_is_rejected(): void
