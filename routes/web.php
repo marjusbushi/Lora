@@ -313,6 +313,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     // arkëtim; only pay_bills/manage_transfers roles can move money out).
     Route::prefix('finance')->middleware(['module:finance', 'permission:view_finance'])->group(function () {
         Route::get('/', [FinanceController::class, 'index'])->name('finance.index');
+        Route::get('/accounts-design', fn () => Inertia::render('Finance/AccountsDesign'))->name('finance.accounts.design');
         Route::get('/accounts', [FinanceController::class, 'accounts'])->name('finance.accounts');
         Route::post('/accounts', [FinanceController::class, 'storeAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.store');
         Route::put('/accounts/{account}/toggle', [FinanceController::class, 'toggleAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.toggle');
