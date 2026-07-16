@@ -36,6 +36,14 @@ jobs:
 
             if [ -z "$app_dir" ] || [ ! -d "$app_dir/.git" ]; then
               echo "The staging application directory could not be identified." >&2
+              echo "Laravel entrypoint candidates:" >&2
+              find / -type f -name artisan -print 2>/dev/null | head -20 >&2
+              echo "Nginx server names and document roots:" >&2
+              nginx -T 2>/dev/null \
+                | grep -E '^[[:space:]]*(server_name|root)[[:space:]]' \
+                | head -80 >&2 || true
+              echo "Running containers:" >&2
+              docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null >&2 || true
               exit 1
             fi
 
