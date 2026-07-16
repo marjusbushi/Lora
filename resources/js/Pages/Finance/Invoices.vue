@@ -44,10 +44,10 @@ const fiscalizing = ref(null);
 let searchTimer;
 
 const statusFilters = computed(() => [
-    { value: '', label: translate('admin.finance.salesInvoices.allInvoices'), count: props.summary.total_count },
-    { value: 'fiscalized', label: translate('admin.finance.salesInvoices.fiscalized'), count: props.summary.fiscalized_count },
-    { value: 'not_fiscalized', label: translate('admin.finance.salesInvoices.notFiscalized'), count: props.summary.not_fiscalized_count },
-    { value: 'failed', label: translate('admin.finance.salesInvoices.failed'), count: props.summary.failed_count },
+    { value: '', label: translate('admin.finance.salesInvoices.allInvoices'), count: props.summary.status_counts.all },
+    { value: 'fiscalized', label: translate('admin.finance.salesInvoices.fiscalized'), count: props.summary.status_counts.fiscalized },
+    { value: 'not_fiscalized', label: translate('admin.finance.salesInvoices.notFiscalized'), count: props.summary.status_counts.not_fiscalized },
+    { value: 'failed', label: translate('admin.finance.salesInvoices.failed'), count: props.summary.status_counts.failed },
 ]);
 
 const activeFilterCount = computed(() => [

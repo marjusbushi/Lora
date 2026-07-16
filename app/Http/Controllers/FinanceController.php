@@ -193,7 +193,7 @@ class FinanceController extends Controller
             ->select([
                 DB::raw("'hotel' as source"),
                 'reservations.id as record_id',
-                'reservations.updated_at as issued_at',
+                'reservations.updated_at as operational_at',
                 'reservations.total_amount as base_total',
                 DB::raw('NULL as payment_method'),
                 'guests.first_name as client_first',
@@ -204,6 +204,12 @@ class FinanceController extends Controller
                     ->selectRaw("COALESCE(SUM(CASE WHEN type = 'discount' THEN -amount WHEN type = 'room' THEN 0 ELSE amount END), 0)")
                     ->whereColumn('folio_items.reservation_id', 'reservations.id'),
                 'extras_total'
+            )
+            ->selectSub(
+                FiscalDocument::query()->select('fiscalized_at')
+                    ->whereColumn('fiscal_documents.reservation_id', 'reservations.id')
+                    ->latest('fiscal_documents.id')->limit(1),
+                'fiscalized_at'
             )
             ->selectSub(
                 FiscalDocument::query()->select('status')
@@ -224,13 +230,19 @@ class FinanceController extends Controller
             ->select([
                 DB::raw("'pos' as source"),
                 'pos_orders.id as record_id',
-                DB::raw('COALESCE(pos_orders.paid_at, pos_orders.updated_at) as issued_at'),
+                DB::raw('COALESCE(pos_orders.paid_at, pos_orders.updated_at) as operational_at'),
                 'pos_orders.total_amount as base_total',
                 'pos_orders.payment_method',
                 DB::raw('NULL as client_first'),
                 DB::raw('NULL as client_last'),
                 DB::raw('0 as extras_total'),
             ])
+            ->selectSub(
+                PosFiscalDocument::query()->select('fiscalized_at')
+                    ->whereColumn('pos_fiscal_documents.pos_order_id', 'pos_orders.id')
+                    ->latest('pos_fiscal_documents.id')->limit(1),
+                'fiscalized_at'
+            )
             ->selectSub(
                 PosFiscalDocument::query()->select('status')
                     ->whereColumn('pos_fiscal_documents.pos_order_id', 'pos_orders.id')
@@ -250,7 +262,10 @@ class FinanceController extends Controller
             default => $hotelFeed->unionAll($posFeed),
         };
 
-        $filtered = DB::query()->fromSub($feed, 'sales_invoice_feed');
+        $datedFeed = DB::query()->fromSub($feed, 'sales_invoice_sources')
+            ->select('*')
+            ->selectRaw('COALESCE(fiscalized_at, operational_at) as issued_at');
+        $filtered = DB::query()->fromSub($datedFeed, 'sales_invoice_feed');
         if ($filters['date_from']) {
             $filtered->whereDate('issued_at', '>=', $filters['date_from']);
         }
@@ -267,13 +282,10 @@ class FinanceController extends Controller
             });
         }
 
-        $summaryRow = (clone $filtered)
+        $statusCounts = (clone $filtered)
             ->selectRaw('COUNT(*) as total_count')
-            ->selectRaw('COALESCE(SUM(base_total + extras_total), 0) as total_value')
             ->selectRaw("COALESCE(SUM(CASE WHEN fiscal_status = 'fiscalized' THEN 1 ELSE 0 END), 0) as fiscalized_count")
             ->selectRaw("COALESCE(SUM(CASE WHEN fiscal_status = 'failed' THEN 1 ELSE 0 END), 0) as failed_count")
-            ->selectRaw("COALESCE(SUM(CASE WHEN source = 'hotel' THEN 1 ELSE 0 END), 0) as hotel_count")
-            ->selectRaw("COALESCE(SUM(CASE WHEN source = 'pos' THEN 1 ELSE 0 END), 0) as pos_count")
             ->first();
 
         if ($filters['status'] === 'fiscalized') {
@@ -286,6 +298,15 @@ class FinanceController extends Controller
                     ->orWhere('fiscal_status', '!=', FiscalDocument::STATUS_FISCALIZED);
             });
         }
+
+        $summaryRow = (clone $filtered)
+            ->selectRaw('COUNT(*) as total_count')
+            ->selectRaw('COALESCE(SUM(base_total + extras_total), 0) as total_value')
+            ->selectRaw("COALESCE(SUM(CASE WHEN fiscal_status = 'fiscalized' THEN 1 ELSE 0 END), 0) as fiscalized_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN fiscal_status = 'failed' THEN 1 ELSE 0 END), 0) as failed_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN source = 'hotel' THEN 1 ELSE 0 END), 0) as hotel_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN source = 'pos' THEN 1 ELSE 0 END), 0) as pos_count")
+            ->first();
 
         $paginator = $filtered
             ->orderByDesc('issued_at')
@@ -327,6 +348,12 @@ class FinanceController extends Controller
                 'not_fiscalized_count' => max(0, (int) ($summaryRow->total_count ?? 0) - (int) ($summaryRow->fiscalized_count ?? 0)),
                 'hotel_count' => (int) ($summaryRow->hotel_count ?? 0),
                 'pos_count' => (int) ($summaryRow->pos_count ?? 0),
+                'status_counts' => [
+                    'all' => (int) ($statusCounts->total_count ?? 0),
+                    'fiscalized' => (int) ($statusCounts->fiscalized_count ?? 0),
+                    'not_fiscalized' => max(0, (int) ($statusCounts->total_count ?? 0) - (int) ($statusCounts->fiscalized_count ?? 0)),
+                    'failed' => (int) ($statusCounts->failed_count ?? 0),
+                ],
             ],
         ]));
     }

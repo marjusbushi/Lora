@@ -8,6 +8,7 @@ use App\Models\Guest;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Payment;
+use App\Models\PosFiscalDocument;
 use App\Models\PosOrder;
 use App\Models\PosOrderItem;
 use App\Models\Reservation;
@@ -54,6 +55,9 @@ class FinanceSalesInvoicesTest extends TestCase
                 ->where('summary.hotel_count', 1)
                 ->where('summary.pos_count', 1)
                 ->where('summary.total_value', 108)
+                ->where('summary.status_counts.all', 2)
+                ->where('summary.status_counts.fiscalized', 1)
+                ->where('summary.status_counts.not_fiscalized', 1)
                 ->where('invoices.total', 2)
                 ->where('invoices.data', function ($rows) use ($reservation, $order) {
                     $rows = collect($rows)->keyBy('key');
@@ -85,11 +89,16 @@ class FinanceSalesInvoicesTest extends TestCase
         $this->actingAs($this->admin)->get(route('finance.invoices', ['status' => 'fiscalized']))
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('invoices.total', 1)
+                ->where('summary.total_count', 1)
+                ->where('summary.total_value', 105)
+                ->where('summary.status_counts.all', 2)
                 ->where('invoices.data.0.key', 'hotel:'.$reservation->id));
 
         $this->actingAs($this->admin)->get(route('finance.invoices', ['status' => 'not_fiscalized']))
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('invoices.total', 1)
+                ->where('summary.total_count', 1)
+                ->where('summary.total_value', 3)
                 ->where('invoices.data.0.key', 'pos:'.$order->id));
     }
 
@@ -112,6 +121,46 @@ class FinanceSalesInvoicesTest extends TestCase
                 ->where('invoices.total', 1)
                 ->where('invoices.data.0.key', 'hotel:'.$reservation->id)
                 ->where('invoices.data.0.client', 'Elira Demo'));
+    }
+
+    public function test_date_filter_uses_the_same_fiscalized_date_shown_in_the_register(): void
+    {
+        $order = $this->paidPosOrder();
+        $order->forceFill(['paid_at' => '2026-07-10 10:00:00'])->save();
+        PosFiscalDocument::create([
+            'pos_order_id' => $order->id,
+            'provider' => 'fature_al',
+            'environment' => 'sandbox',
+            'document_type' => 'cash_invoice',
+            'internal_id' => 'LORA-T'.$order->tenant_id.'-POS-'.$order->id,
+            'payment_method' => 'BANKNOTE',
+            'currency' => 'EUR',
+            'total' => 3,
+            'vat_rate' => 20,
+            'invoice_payload' => [
+                'lines' => [
+                    ['product_name' => 'Espresso', 'quantity' => 2, 'unit' => 'copë', 'price' => 1.5, 'total' => 3, 'vat' => 20],
+                ],
+            ],
+            'request_hash' => str_repeat('b', 64),
+            'status' => PosFiscalDocument::STATUS_FISCALIZED,
+            'fiscal_number' => 'TEST-POS-DATE',
+            'fiscalized_at' => '2026-07-15 12:30:00',
+        ]);
+
+        $this->withoutVite();
+        $this->actingAs($this->admin)->get(route('finance.invoices', [
+            'date_from' => '2026-07-15',
+            'date_to' => '2026-07-15',
+        ]))->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('invoices.total', 1)
+            ->where('invoices.data.0.key', 'pos:'.$order->id)
+            ->where('invoices.data.0.issued_at', fn ($value) => str_starts_with($value, '2026-07-15')));
+
+        $this->actingAs($this->admin)->get(route('finance.invoices', [
+            'date_from' => '2026-07-10',
+            'date_to' => '2026-07-10',
+        ]))->assertInertia(fn (AssertableInertia $page) => $page->where('invoices.total', 0));
     }
 
     private function hotelStay(?User $user = null, string $guestName = 'Elira Demo'): Reservation
