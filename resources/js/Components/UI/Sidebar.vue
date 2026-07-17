@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 
@@ -29,7 +29,6 @@ const toggleLabel = computed(() => {
     return props.collapsed ? t('sidebar.openMenu') : t('sidebar.closeMenu');
 });
 
-const navigationRef = ref(null);
 const openGroupKey = ref(null);
 
 function childActive(item) {
@@ -44,17 +43,9 @@ function groupOpen(item) {
     return openGroupKey.value === groupKey(item);
 }
 
-async function revealGroup(key) {
-    await nextTick();
-    const group = Array.from(navigationRef.value?.querySelectorAll('[data-sidebar-group]') || [])
-        .find((element) => element.dataset.sidebarGroup === key);
-    group?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-}
-
 function toggleGroup(item) {
     const key = groupKey(item);
     openGroupKey.value = groupOpen(item) ? null : key;
-    if (openGroupKey.value) revealGroup(key);
 }
 
 function isActive(item) {
@@ -80,21 +71,12 @@ function isCurrentChild(child, group) {
     return matchingChildren[0] === child;
 }
 
-async function revealActiveItem() {
-    await nextTick();
-    navigationRef.value
-        ?.querySelector('[data-sidebar-active="true"]')
-        ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-}
-
 function syncActiveGroup() {
     const activeGroup = props.items.find((item) => item.children && childActive(item));
     openGroupKey.value = activeGroup ? groupKey(activeGroup) : null;
-    revealActiveItem();
 }
 
-watch(() => page.url, syncActiveGroup, { immediate: true, flush: 'post' });
-onMounted(revealActiveItem);
+watch(() => page.url, syncActiveGroup, { immediate: true });
 </script>
 
 <template>
@@ -115,7 +97,7 @@ onMounted(revealActiveItem);
         </div>
 
         <!-- Navigation -->
-        <nav ref="navigationRef" class="sidebar-navigation flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-3">
+        <nav scroll-region class="sidebar-navigation flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-3">
             <template v-for="item in items" :key="item.href || item.label">
                 <!-- Group with children: accordion (e.g. Financa) -->
                 <div v-if="item.children" class="min-w-0" :data-sidebar-group="groupKey(item)">
@@ -144,10 +126,11 @@ onMounted(revealActiveItem);
                             :key="child.href"
                             :href="child.href"
                             :data-sidebar-active="isCurrentChild(child, item) ? 'true' : undefined"
+                            :aria-current="isCurrentChild(child, item) ? 'page' : undefined"
                             :class="[
                                 'relative flex items-center rounded-md py-2 pl-11 pr-3 text-body-sm leading-5 no-underline transition-colors duration-150',
                                 isCurrentChild(child, item)
-                                    ? 'text-accent-400 font-medium'
+                                    ? 'bg-primary-800/70 text-accent-300 font-medium'
                                     : 'text-neutral-500 hover:bg-primary-800/60 hover:text-neutral-200',
                             ]"
                         >
@@ -169,6 +152,7 @@ onMounted(revealActiveItem);
                     ]"
                     :title="collapsed ? item.label : undefined"
                     :data-sidebar-active="isActive(item) ? 'true' : undefined"
+                    :aria-current="isActive(item) ? 'page' : undefined"
                 >
                     <!-- Icon placeholder — accepts SVG string or slot -->
                     <span class="h-5 w-5 shrink-0 flex items-center justify-center" v-html="item.icon" />
