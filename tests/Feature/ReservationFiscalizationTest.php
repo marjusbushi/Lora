@@ -182,6 +182,38 @@ class ReservationFiscalizationTest extends TestCase
             && ! array_key_exists('client', $request->data()));
     }
 
+    public function test_passport_alpha2_nationality_is_normalized_for_cash_invoice(): void
+    {
+        $reservation = $this->checkedOutStay('cash');
+        $reservation->guest()->update([
+            'document_type' => 'passport',
+            'document_number' => 'w2534542',
+            'nationality' => 'AL',
+        ]);
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://demo.fature.al/api/v1/invoice/cash' => Http::response($this->successResponse()),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('reservations.fiscalize', $reservation))
+            ->assertSessionHasNoErrors();
+
+        Http::assertSent(function ($request): bool {
+            $client = $request->data()['client'] ?? null;
+
+            return $client === [
+                'name' => 'Test Guest',
+                'id' => [
+                    'type' => 'PASS',
+                    'id' => 'w2534542',
+                ],
+                'country' => 'ALB',
+            ];
+        });
+    }
+
     public function test_non_vat_hotel_sends_zero_vat_for_accommodation_and_products(): void
     {
         Setting::set('financial.vat_status', 'not_registered');

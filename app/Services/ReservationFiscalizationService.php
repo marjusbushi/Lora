@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\FiscalDocument;
 use App\Models\Reservation;
+use App\Support\IsoCountryCode;
 use App\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -253,7 +254,7 @@ class ReservationFiscalizationService
     {
         $guest = $reservation->guest;
         $documentNumber = trim((string) $guest?->document_number);
-        $nationality = strtoupper(trim((string) $guest?->nationality));
+        $nationality = IsoCountryCode::alpha3($guest?->nationality);
         $documentType = match ($guest?->document_type) {
             'passport' => 'PASS',
             'id_card' => 'ID',
@@ -267,7 +268,7 @@ class ReservationFiscalizationService
         // Fature.al accepts a retail cash invoice without client identity.
         // A passport without an ISO-3 country is incomplete fiscal identity
         // and has caused the sandbox endpoint to fail with a provider 500.
-        if ($documentType === 'PASS' && ! preg_match('/^[A-Z]{3}$/', $nationality)) {
+        if ($documentType === 'PASS' && $nationality === null) {
             return null;
         }
 
@@ -279,7 +280,7 @@ class ReservationFiscalizationService
             ],
         ];
 
-        if (preg_match('/^[A-Z]{3}$/', $nationality)) {
+        if ($nationality !== null) {
             $client['country'] = $nationality;
         }
 
