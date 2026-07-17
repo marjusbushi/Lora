@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 
@@ -29,7 +29,23 @@ const toggleLabel = computed(() => {
     return props.collapsed ? t('sidebar.openMenu') : t('sidebar.closeMenu');
 });
 
+const navigationRef = ref(null);
 const openGroupKey = ref(null);
+const sidebarScrollKey = 'pms-sidebar-scroll-top';
+
+function rememberNavigationPosition() {
+    if (typeof window === 'undefined' || !navigationRef.value) return;
+    window.sessionStorage.setItem(sidebarScrollKey, String(navigationRef.value.scrollTop));
+}
+
+async function restoreNavigationPosition() {
+    if (typeof window === 'undefined') return;
+    await nextTick();
+    const savedPosition = Number(window.sessionStorage.getItem(sidebarScrollKey));
+    if (navigationRef.value && Number.isFinite(savedPosition)) {
+        navigationRef.value.scrollTop = savedPosition;
+    }
+}
 
 function childActive(item) {
     return (item.children || []).some((c) => isActive(c));
@@ -77,6 +93,7 @@ function syncActiveGroup() {
 }
 
 watch(() => page.url, syncActiveGroup, { immediate: true });
+onMounted(restoreNavigationPosition);
 </script>
 
 <template>
@@ -97,7 +114,7 @@ watch(() => page.url, syncActiveGroup, { immediate: true });
         </div>
 
         <!-- Navigation -->
-        <nav scroll-region class="sidebar-navigation flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-3">
+        <nav ref="navigationRef" class="sidebar-navigation flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-3" @scroll.passive="rememberNavigationPosition">
             <template v-for="item in items" :key="item.href || item.label">
                 <!-- Group with children: accordion (e.g. Financa) -->
                 <div v-if="item.children" class="min-w-0" :data-sidebar-group="groupKey(item)">
@@ -114,7 +131,7 @@ watch(() => page.url, syncActiveGroup, { immediate: true });
                         ]"
                         :title="collapsed ? item.label : undefined"
                         :data-sidebar-active="collapsed && childActive(item) ? 'true' : undefined"
-                        @click="!collapsed && toggleGroup(item)"
+                        @click="collapsed ? rememberNavigationPosition() : toggleGroup(item)"
                     >
                         <span class="h-5 w-5 shrink-0 flex items-center justify-center" v-html="item.icon" />
                         <span v-if="!collapsed" class="whitespace-nowrap flex-1 text-left">{{ item.label }}</span>
@@ -127,6 +144,7 @@ watch(() => page.url, syncActiveGroup, { immediate: true });
                             :href="child.href"
                             :data-sidebar-active="isCurrentChild(child, item) ? 'true' : undefined"
                             :aria-current="isCurrentChild(child, item) ? 'page' : undefined"
+                            @click="rememberNavigationPosition"
                             :class="[
                                 'relative flex items-center rounded-md py-2 pl-11 pr-3 text-body-sm leading-5 no-underline transition-colors duration-150',
                                 isCurrentChild(child, item)
@@ -153,6 +171,7 @@ watch(() => page.url, syncActiveGroup, { immediate: true });
                     :title="collapsed ? item.label : undefined"
                     :data-sidebar-active="isActive(item) ? 'true' : undefined"
                     :aria-current="isActive(item) ? 'page' : undefined"
+                    @click="rememberNavigationPosition"
                 >
                     <!-- Icon placeholder — accepts SVG string or slot -->
                     <span class="h-5 w-5 shrink-0 flex items-center justify-center" v-html="item.icon" />
