@@ -30,7 +30,7 @@ const props = defineProps({
 
 const toasts = ref(null);
 const showPayModal = ref(false);
-const showOrdersPanel = ref(false);
+const showOrdersPanel = ref(Boolean(props.filters?.order_id));
 const selectedOrder = ref(null);
 const showReceipt = ref(false);
 const receiptOrder = ref(null);

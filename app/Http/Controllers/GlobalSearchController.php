@@ -106,9 +106,9 @@ class GlobalSearchController extends Controller
             ->latest('check_in_date')->limit(5)->get()
             ->map(fn (Reservation $reservation) => $this->result(
                 'reservation',
-                'Rezervimi #'.$reservation->id.' · '.($reservation->guest?->full_name ?: 'Pa emër'),
+                __('global_search.reservation', ['id' => $reservation->id]).' · '.($reservation->guest?->full_name ?: __('global_search.unnamed')),
                 implode(' · ', array_filter([
-                    $reservation->room?->room_number ? 'Dhoma '.$reservation->room->room_number : null,
+                    $reservation->room?->room_number ? __('global_search.room', ['number' => $reservation->room->room_number]) : null,
                     $reservation->check_in_date?->format('d.m.Y').' – '.$reservation->check_out_date?->format('d.m.Y'),
                     $reservation->status,
                 ])),
@@ -146,8 +146,8 @@ class GlobalSearchController extends Controller
                 ->orWhereHas('roomType', fn ($type) => $type->where('name', 'like', $like));
         })->orderBy('room_number')->limit(5)->get()->map(fn (Room $room) => $this->result(
             'room',
-            'Dhoma '.$room->room_number,
-            implode(' · ', array_filter([$room->roomType?->name, 'Kati '.$room->floor, $room->status])),
+            __('global_search.room', ['number' => $room->room_number]),
+            implode(' · ', array_filter([$room->roomType?->name, __('global_search.floor', ['number' => $room->floor]), $room->status])),
             route('rooms.index', ['room_id' => $room->id], false),
         ));
     }
@@ -166,7 +166,7 @@ class GlobalSearchController extends Controller
                     ->orWhereHas('fiscalDocuments', fn ($document) => $document->where('fiscal_number', 'like', $like));
             })->latest('updated_at')->limit(4)->get()->map(fn (Reservation $invoice) => $this->result(
                 'invoice',
-                'Faturë hoteli #'.$invoice->id,
+                __('global_search.hotel_invoice', ['id' => $invoice->id]),
                 implode(' · ', array_filter([$invoice->guest?->full_name, number_format((float) $invoice->total_amount, 2), $invoice->fiscalDocuments->first()?->fiscal_number])),
                 route('finance.invoices', ['source' => 'hotel', 'query' => $invoice->id], false),
             ));
@@ -180,7 +180,7 @@ class GlobalSearchController extends Controller
                 ->orWhereHas('supplier', fn ($supplier) => $supplier->where('name', 'like', $like));
         })->latest('issue_date')->limit(3)->get()->map(fn (Bill $bill) => $this->result(
             'bill',
-            'Faturë hyrëse '.($bill->number ?: '#'.$bill->id),
+            __('global_search.incoming_bill', ['number' => $bill->number ?: '#'.$bill->id]),
             implode(' · ', array_filter([$bill->supplier?->name, number_format((float) $bill->total, 2).' '.$bill->currency, $bill->status])),
             route('finance.bills.show', $bill, false),
         ));
@@ -202,7 +202,7 @@ class GlobalSearchController extends Controller
 
         $payments = $payments->latest('paid_at')->limit(3)->get()->map(fn (FinancePayment $payment) => $this->result(
             'payment',
-            'Pagesa #'.$payment->id,
+            __('global_search.payment', ['id' => $payment->id]),
             implode(' · ', array_filter([number_format((float) $payment->amount, 2).' '.$payment->currency, $payment->method, $payment->description])),
             route('finance.payments', ['payment_id' => $payment->id], false),
         ));
@@ -221,7 +221,7 @@ class GlobalSearchController extends Controller
                 ->orWhereHas('room', fn ($room) => $room->where('room_number', 'like', $like));
         })->latest('id')->limit(5)->get()->map(fn (CleaningTask $task) => $this->result(
             'housekeeping',
-            'Pastrimi #'.$task->id.' · Dhoma '.($task->room?->room_number ?: '—'),
+            __('global_search.cleaning', ['id' => $task->id]).' · '.__('global_search.room', ['number' => $task->room?->room_number ?: '—']),
             implode(' · ', array_filter([$task->type, $task->status, $task->priority])),
             route('housekeeping.clean', $task, false),
         ));
@@ -239,7 +239,7 @@ class GlobalSearchController extends Controller
         })->latest('id')->limit(5)->get()->map(fn (MaintenanceIssue $issue) => $this->result(
             'maintenance',
             $issue->title,
-            implode(' · ', array_filter([$issue->room?->room_number ? 'Dhoma '.$issue->room->room_number : null, $issue->status, $issue->priority])),
+            implode(' · ', array_filter([$issue->room?->room_number ? __('global_search.room', ['number' => $issue->room->room_number]) : null, $issue->status, $issue->priority])),
             route('maintenance.index', ['issue_id' => $issue->id], false),
         ));
     }
@@ -254,8 +254,8 @@ class GlobalSearchController extends Controller
                 ->orWhereHas('items.menuItem', fn ($item) => $item->where('name', 'like', $like));
         })->latest('id')->limit(5)->get()->map(fn (PosOrder $order) => $this->result(
             'pos',
-            'Porosia POS #'.$order->id,
-            implode(' · ', array_filter([$order->table_number ? 'Tavolina '.$order->table_number : null, number_format((float) $order->total_amount, 2), $order->status])),
+            __('global_search.pos_order', ['id' => $order->id]),
+            implode(' · ', array_filter([$order->table_number ? __('global_search.table', ['number' => $order->table_number]) : null, number_format((float) $order->total_amount, 2), $order->status])),
             route('pos.index', ['order_id' => $order->id], false),
         ));
     }
@@ -271,7 +271,7 @@ class GlobalSearchController extends Controller
         })->orderBy('name')->limit(5)->get()->map(fn (InventoryItem $item) => $this->result(
             'inventory',
             $item->name,
-            implode(' · ', array_filter([$item->sku ? 'SKU '.$item->sku : null, $item->category, 'Stok '.number_format($item->stock(), 2).' '.$item->unit])),
+            implode(' · ', array_filter([$item->sku ? 'SKU '.$item->sku : null, $item->category, __('global_search.stock', ['quantity' => number_format($item->stock(), 2), 'unit' => $item->unit])])),
             route('inventory.items', ['item_id' => $item->id, 'status' => $item->is_active ? 'active' : 'inactive'], false),
         ));
     }

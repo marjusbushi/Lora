@@ -47,6 +47,7 @@ class GlobalSearchTest extends TestCase
             ->assertJsonFragment(['key' => 'reservations'])
             ->assertJsonFragment(['key' => 'guests'])
             ->assertJsonFragment(['key' => 'rooms'])
+            ->assertJsonFragment(['title' => 'Room A-404'])
             ->assertJsonFragment(['title' => 'Aurora Test']);
     }
 
