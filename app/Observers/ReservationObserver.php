@@ -29,7 +29,7 @@ class ReservationObserver
         ]);
 
         $to = Setting::get('hotel.email');
-        if (! $to) {
+        if (! $to || ! Setting::get('notifications.email_new_reservations', true)) {
             return;
         }
 

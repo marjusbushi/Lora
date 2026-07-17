@@ -52,6 +52,17 @@ class NotificationTest extends TestCase
         Mail::assertNothingSent();
     }
 
+    public function test_new_reservation_email_can_be_disabled_in_settings(): void
+    {
+        Mail::fake();
+        Setting::set('hotel.email', 'hotel@example.com');
+        Setting::set('notifications.email_new_reservations', false, 'boolean');
+
+        $this->makeReservation();
+
+        Mail::assertNothingSent();
+    }
+
     public function test_booking_survives_a_mail_failure(): void
     {
         Setting::set('hotel.email', 'hotel@example.com');
