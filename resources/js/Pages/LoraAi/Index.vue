@@ -48,24 +48,24 @@ const actions = {
             />
 
             <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-                <div class="grid gap-6 bg-gradient-to-r from-accent-800 via-accent-700 to-accent-600 p-6 text-white lg:grid-cols-[1fr_auto] lg:items-center">
+                <div class="grid gap-6 bg-white p-6 text-neutral-900 lg:grid-cols-[1fr_auto] lg:items-center">
                     <div class="flex items-start gap-4">
-                        <div class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/15"><Bot class="h-6 w-6" /></div>
+                        <div class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-accent-50 text-accent-700"><Bot class="h-6 w-6" /></div>
                         <div>
                             <div class="mb-1 flex items-center gap-2">
                                 <h2 class="text-xl font-semibold">ChatGPT për {{ connection.hotel }}</h2>
-                                <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="connection.connected ? 'bg-emerald-300/20 text-emerald-100' : 'bg-white/15 text-white/80'">
+                                <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="connection.connected ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-600'">
                                     {{ connection.connected ? 'I lidhur' : 'Pa lidhur' }}
                                 </span>
                             </div>
-                            <p class="max-w-2xl text-sm leading-6 text-white/75">Pyet për rezervimet, dhomat, disponueshmërinë, çmimet dhe bisedat me mysafirët. Çdo lidhje izolohet vetëm te ky hotel.</p>
+                            <p class="max-w-2xl text-sm leading-6 text-neutral-500">Pyet për rezervimet, dhomat, disponueshmërinë, çmimet dhe bisedat me mysafirët. Çdo lidhje izolohet vetëm te ky hotel.</p>
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-lg border border-white/25 px-4 text-sm font-semibold hover:bg-white/10" @click="copyEndpoint">
+                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-lg border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-700 hover:bg-neutral-50" @click="copyEndpoint">
                             <Check v-if="copied" class="h-4 w-4" /><Copy v-else class="h-4 w-4" />{{ copied ? 'U kopjua' : 'Kopjo MCP URL' }}
                         </button>
-                        <a :href="connection.chatgptUrl" target="_blank" rel="noopener" class="inline-flex h-10 items-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-primary-800 hover:bg-primary-50">
+                        <a :href="connection.chatgptUrl" target="_blank" rel="noopener" class="inline-flex h-10 items-center gap-2 rounded-lg bg-accent-700 px-4 text-sm font-semibold text-white hover:bg-accent-800">
                             Hap ChatGPT <ExternalLink class="h-4 w-4" />
                         </a>
                     </div>
