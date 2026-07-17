@@ -38,8 +38,9 @@ use App\Http\Controllers\TenantUserInvitationController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebsiteController;
 use App\Http\Middleware\AuthenticateSignedTenantInvitation;
+use App\Models\Setting;
+use App\Tenancy\TenantContext;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -103,11 +104,11 @@ Route::middleware([
     });
 
 // PWA manifest — dynamic so the installed app carries the hotel's own name
-// (same cached branding the <title> uses). display:standalone is what removes
+// (same tenant branding the <title> uses). display:standalone is what removes
 // the browser URL bar when the site is added to a phone's home screen.
 Route::get('/manifest.webmanifest', function () {
-    $brand = Cache::get('app.settings', []);
-    $name = $brand['hotel_name'] ?? 'Villa Mucho';
+    $tenant = app(TenantContext::class)->tenant();
+    $name = (string) (Setting::get('hotel.name') ?: $tenant?->name ?: 'Hotel');
 
     return response()->json([
         'name' => $name,
@@ -121,8 +122,9 @@ Route::get('/manifest.webmanifest', function () {
             ['src' => '/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
             ['src' => '/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
         ],
-    ], 200, ['Content-Type' => 'application/manifest+json'])->setCache(['public' => true, 'max_age' => 3600]);
-})->name('pwa.manifest');
+    ], 200, ['Content-Type' => 'application/manifest+json'])
+        ->setCache(['private' => true, 'max_age' => 3600]);
+})->middleware('hotel_host')->name('pwa.manifest');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified', 'hotel_host', 'dedicated_control_redirect'])->name('dashboard');

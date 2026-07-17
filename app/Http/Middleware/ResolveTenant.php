@@ -124,6 +124,7 @@ class ResolveTenant
         if ($request->routeIs(
             'website.*',
             'channex.webhook',
+            'pwa.manifest',
             'tenant-handoff.consume',
             'tenant-invitations.*',
         )) {
