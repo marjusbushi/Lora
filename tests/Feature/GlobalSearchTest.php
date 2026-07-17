@@ -6,6 +6,8 @@ use App\Models\CleaningTask;
 use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
 use App\Models\Guest;
+use App\Models\PosFiscalDocument;
+use App\Models\PosOrder;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
@@ -219,6 +221,45 @@ class GlobalSearchTest extends TestCase
             ->assertOk()
             ->assertJsonFragment(['href' => "/pms/housekeeping/{$ownTaskId}/clean"])
             ->assertJsonMissing(['href' => "/pms/housekeeping/{$otherTaskId}/clean"]);
+    }
+
+    public function test_finance_search_finds_pos_invoices_by_fiscal_number(): void
+    {
+        [$tenant, $admin] = $this->adminForDefaultHotel();
+
+        $orderId = app(TenantContext::class)->run($tenant, function () use ($admin) {
+            $order = PosOrder::create([
+                'status' => 'completed',
+                'payment_method' => 'card',
+                'total_amount' => 42,
+                'created_by' => $admin->id,
+                'paid_at' => now(),
+            ]);
+            PosFiscalDocument::create([
+                'pos_order_id' => $order->id,
+                'provider' => 'fature_al',
+                'environment' => 'sandbox',
+                'document_type' => 'cash_invoice',
+                'internal_id' => 'SEARCH-POS-'.$order->id,
+                'payment_method' => 'CARD',
+                'currency' => 'EUR',
+                'total' => 42,
+                'vat_rate' => 20,
+                'invoice_payload' => [],
+                'request_hash' => str_repeat('a', 64),
+                'status' => PosFiscalDocument::STATUS_FISCALIZED,
+                'fiscal_number' => 'POS-FISCAL-SEARCH-42',
+                'fiscalized_at' => now(),
+            ]);
+
+            return $order->id;
+        });
+
+        $this->actingAs($admin)
+            ->getJson('http://localhost/pms/global-search?q=POS-FISCAL-SEARCH&locale=en')
+            ->assertOk()
+            ->assertJsonFragment(['title' => "POS invoice #{$orderId}"])
+            ->assertJsonFragment(['href' => "/pms/finance/invoices?source=pos&record_id={$orderId}"]);
     }
 
     private function adminForDefaultHotel(): array

@@ -6,6 +6,7 @@ return [
     'room' => 'Dhoma :number',
     'floor' => 'Kati :number',
     'hotel_invoice' => 'Faturë hoteli #:id',
+    'pos_invoice' => 'Faturë POS #:id',
     'incoming_bill' => 'Faturë hyrëse :number',
     'payment' => 'Pagesa #:id',
     'cleaning' => 'Pastrimi #:id',

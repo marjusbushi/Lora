@@ -172,6 +172,21 @@ class GlobalSearchController extends Controller
                 route('finance.invoices', ['source' => 'hotel', 'record_id' => $invoice->id], false),
             ));
 
+        $posInvoices = PosOrder::query()->with('fiscalDocument:id,pos_order_id,fiscal_number')
+            ->where('status', 'completed')
+            ->whereIn('payment_method', ['cash', 'card'])
+            ->where(function ($query) use ($term, $like) {
+                if (ctype_digit($term)) {
+                    $query->orWhereKey((int) $term);
+                }
+                $query->orWhereHas('fiscalDocument', fn ($document) => $document->where('fiscal_number', 'like', $like));
+            })->latest('updated_at')->limit(4)->get()->map(fn (PosOrder $invoice) => $this->result(
+                'invoice',
+                __('global_search.pos_invoice', ['id' => $invoice->id]),
+                implode(' · ', array_filter([number_format((float) $invoice->total_amount, 2), $invoice->payment_method, $invoice->fiscalDocument?->fiscal_number])),
+                route('finance.invoices', ['source' => 'pos', 'record_id' => $invoice->id], false),
+            ));
+
         $bills = Bill::query()->with('supplier:id,name')->where(function ($query) use ($term, $like) {
             if (ctype_digit($term)) {
                 $query->orWhereKey((int) $term);
@@ -208,7 +223,7 @@ class GlobalSearchController extends Controller
             route('finance.payments', ['payment_id' => $payment->id], false),
         ));
 
-        return $invoices->concat($bills)->concat($payments)->take(7);
+        return $invoices->concat($posInvoices)->concat($bills)->concat($payments)->take(7);
     }
 
     private function housekeeping(User $user, string $term, string $like): Collection
