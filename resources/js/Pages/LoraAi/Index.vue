@@ -1,8 +1,9 @@
 <script setup>
-import { Head, router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
+import SettingsSidebar from '@/Components/SettingsSidebar.vue';
 import {
     Bot, CalendarDays, Check, Copy, ExternalLink, MessageSquareText,
     PackageSearch, Search, ShieldCheck, Sparkles, SprayCan, UtensilsCrossed,
@@ -20,6 +21,10 @@ const props = defineProps({
 const copied = ref(false);
 const promptCopied = ref('');
 const form = useForm({ ...props.aiSettings });
+const isAdmin = computed(() => usePage().props.auth.user?.role === 'admin');
+const breadcrumbs = computed(() => isAdmin.value
+    ? [{ label: 'Paneli', href: '/dashboard' }, { label: 'Cilësimet', href: '/pms/settings' }, { label: 'Lora AI' }]
+    : [{ label: 'Paneli', href: '/dashboard' }, { label: 'Lora AI' }]);
 
 const quickPrompts = [
     'Më jep përmbledhjen operative të sotme.',
@@ -64,10 +69,14 @@ const actions = {
         <div class="mx-auto w-full max-w-[1440px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
             <PageHeader
                 title="Lora AI"
-                subtitle="Kërkim universal, analizë operative dhe rekomandime çmimesh me leje të kontrolluara."
-                :breadcrumbs="[{ label: 'Paneli', href: '/dashboard' }, { label: 'Lora AI' }]"
+                subtitle="Lidhja me ChatGPT, kërkimi universal dhe lejet e kontrolluara."
+                :breadcrumbs="breadcrumbs"
             />
 
+            <div class="flex flex-col gap-6 lg:flex-row">
+                <SettingsSidebar v-if="isAdmin" active-item="lora-ai" />
+
+                <div class="min-w-0 flex-1 space-y-5">
             <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
                 <div class="grid gap-6 bg-white p-6 text-neutral-900 lg:grid-cols-[1fr_auto] lg:items-center">
                     <div class="flex items-start gap-4">
@@ -219,6 +228,8 @@ const actions = {
                         <p v-else class="mt-3 text-sm text-neutral-500">Nuk ka ende veprime të ekzekutuara nga AI.</p>
                     </section>
                 </aside>
+            </div>
+                </div>
             </div>
         </div>
     </AppLayout>

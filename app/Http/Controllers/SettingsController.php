@@ -266,6 +266,30 @@ class SettingsController extends Controller
         return back()->with('success', 'Informacionet e hotelit u ruajten.');
     }
 
+    public function updateBookingPolicies(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'check_in_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
+            'check_out_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
+        ]);
+
+        Setting::set('hotel.check_in_time', $data['check_in_time']);
+        Setting::set('hotel.check_out_time', $data['check_out_time']);
+
+        return back()->with('success', 'Politikat e rezervimeve u ruajtën.');
+    }
+
+    public function updateNotifications(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'email_new_reservations' => ['required', 'boolean'],
+        ]);
+
+        Setting::set('notifications.email_new_reservations', $data['email_new_reservations'], 'boolean');
+
+        return back()->with('success', 'Njoftimet u ruajtën.');
+    }
+
     // --- Website (public site media + links) ---
     public function updateWebsite(Request $request): RedirectResponse
     {

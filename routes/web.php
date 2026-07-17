@@ -439,6 +439,8 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
 
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
         Route::put('/settings/hotel', [SettingsController::class, 'updateHotel'])->name('settings.hotel');
+        Route::put('/settings/booking-policies', [SettingsController::class, 'updateBookingPolicies'])->name('settings.booking-policies');
+        Route::put('/settings/notifications', [SettingsController::class, 'updateNotifications'])->name('settings.notifications');
         Route::post('/settings/website', [SettingsController::class, 'updateWebsite'])->name('settings.website');
         Route::post('/settings/about', [SettingsController::class, 'updateAbout'])->name('settings.about');
         Route::put('/settings/financial', [SettingsController::class, 'updateFinancial'])->name('settings.financial');

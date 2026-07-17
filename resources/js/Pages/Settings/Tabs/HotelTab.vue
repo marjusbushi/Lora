@@ -81,15 +81,9 @@ function submit() {
                 <TextInput v-model="form.address" :placeholder="$t('admin.generated.k_5ad72e9b0edd')" :error="form.errors.address" />
             </FormGroup>
 
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="max-w-sm">
                 <FormGroup :label="$t('admin.generated.k_98e81c9f9021')" :error="form.errors.timezone" required>
                     <Select v-model="form.timezone" :options="timezoneOptions" :error="form.errors.timezone" />
-                </FormGroup>
-                <FormGroup :label="$t('admin.generated.k_2fe20af65929')" :error="form.errors.check_in_time" required>
-                    <TextInput type="time" v-model="form.check_in_time" :error="form.errors.check_in_time" />
-                </FormGroup>
-                <FormGroup :label="$t('admin.generated.k_3bb65cac3540')" :error="form.errors.check_out_time" required>
-                    <TextInput type="time" v-model="form.check_out_time" :error="form.errors.check_out_time" />
                 </FormGroup>
             </div>
 

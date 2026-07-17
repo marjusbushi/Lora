@@ -10,6 +10,7 @@ import { computed, ref } from 'vue';
 import AboutTab from './Tabs/AboutTab.vue';
 import AiTab from './Tabs/AiTab.vue';
 import AmenitiesTab from './Tabs/AmenitiesTab.vue';
+import BookingPoliciesTab from './Tabs/BookingPoliciesTab.vue';
 import CurrenciesTab from './Tabs/CurrenciesTab.vue';
 import FinancialTab from './Tabs/FinancialTab.vue';
 import FloorsTab from './Tabs/FloorsTab.vue';
@@ -18,8 +19,10 @@ import HousekeepingTab from './Tabs/HousekeepingTab.vue';
 import IntegrationsTab from './Tabs/IntegrationsTab.vue';
 import MarketRatesTab from './Tabs/MarketRatesTab.vue';
 import MenuTab from './Tabs/MenuTab.vue';
+import NotificationsTab from './Tabs/NotificationsTab.vue';
 import PricingProgramsTab from './Tabs/PricingProgramsTab.vue';
 import RoomTypesTab from './Tabs/RoomTypesTab.vue';
+import SecurityTab from './Tabs/SecurityTab.vue';
 import WebsiteTab from './Tabs/WebsiteTab.vue';
 
 const props = defineProps({
@@ -41,24 +44,32 @@ const modules = computed(() => usePage().props.modules || {});
 
 const allTabs = [
     { id: 'hotel', labelSq: 'Të dhënat e hotelit', labelEn: 'Hotel information', group: 'hotel' },
+    { id: 'room-types', labelSq: 'Tipet e dhomave', labelEn: 'Room types', group: 'hotel' },
+    { id: 'floors', labelSq: 'Katet', labelEn: 'Floors', group: 'hotel' },
+    { id: 'amenities', labelSq: 'Pajisjet', labelEn: 'Amenities', group: 'hotel' },
     { id: 'website', labelSq: 'Faqja Web', labelEn: 'Website', group: 'hotel' },
     { id: 'about', labelSq: 'Rreth Nesh', labelEn: 'About page', group: 'hotel' },
-    { id: 'room-types', labelSq: 'Tipet e dhomave', labelEn: 'Room types', group: 'hotel' },
-    { id: 'amenities', labelSq: 'Pajisjet', labelEn: 'Amenities', group: 'hotel' },
-    { id: 'floors', labelSq: 'Katet', labelEn: 'Floors', group: 'hotel' },
+    { id: 'booking-policies', labelSq: 'Rezervimet & politikat', labelEn: 'Reservations & policies', group: 'operations' },
+    { id: 'pricing-programs', labelSq: 'Çmimet & OTA', labelEn: 'Pricing & OTA', group: 'operations' },
+    { id: 'market-rates', labelSq: 'Çmimet e tregut', labelEn: 'Market rates', group: 'operations' },
     { id: 'menu', labelSq: 'Menuja POS', labelEn: 'POS menu', group: 'operations', module: 'pos' },
     { id: 'housekeeping', labelSq: 'Housekeeping', labelEn: 'Housekeeping', group: 'operations', module: 'housekeeping' },
     { id: 'financial', labelSq: 'Financa', labelEn: 'Finance', group: 'operations' },
     { id: 'currencies', labelSq: 'Monedhat', labelEn: 'Currencies', group: 'operations', module: 'finance' },
-    { id: 'pricing-programs', labelSq: 'Çmimet & OTA', labelEn: 'Pricing & OTA', group: 'operations' },
-    { id: 'market-rates', labelSq: 'Çmimet e tregut', labelEn: 'Market rates', group: 'operations' },
-    { id: 'integrations', labelSq: 'Integrimet', labelEn: 'Integrations', group: 'system' },
-    { id: 'ai', labelSq: 'Asistenti AI', labelEn: 'AI assistant', group: 'system' },
+    { id: 'integrations', labelSq: 'Integrimet', labelEn: 'Integrations', group: 'automation' },
+    { id: 'ai', labelSq: 'Asistenti AI', labelEn: 'AI assistant', group: 'automation' },
+    { id: 'channel-manager', labelSq: 'Channel Manager', labelEn: 'Channel Manager', group: 'automation', module: 'channel_manager' },
+    { id: 'users', labelSq: 'Përdoruesit & rolet', labelEn: 'Users & roles', group: 'system' },
+    { id: 'notifications', labelSq: 'Njoftimet', labelEn: 'Notifications', group: 'system' },
+    { id: 'security', labelSq: 'Siguria', labelEn: 'Security', group: 'system' },
+    { id: 'history', labelSq: 'Auditimi', labelEn: 'Audit', group: 'system' },
 ];
 
 const requestedTab = new URLSearchParams(usePage().url.split('?')[1] || '').get('tab');
-const validTabs = [...allTabs.map((tab) => tab.id), 'users', 'history'];
+const validTabs = allTabs.map((tab) => tab.id);
 const activeTab = ref(validTabs.includes(requestedTab) ? requestedTab : 'hotel');
+const generalIntegrations = computed(() => props.integrations.filter((item) => item.id !== 'channex'));
+const channelManagerIntegrations = computed(() => props.integrations.filter((item) => item.id === 'channex'));
 
 function selectTab(tab) {
     activeTab.value = tab;
@@ -84,6 +95,7 @@ function selectTab(tab) {
                 <HotelTab v-if="activeTab === 'hotel'" :settings="settings.hotel || {}" :toasts="toasts" />
                 <WebsiteTab v-else-if="activeTab === 'website'" :settings="settings.hotel || {}" :toasts="toasts" />
                 <AboutTab v-else-if="activeTab === 'about'" :settings="settings.about || {}" :toasts="toasts" />
+                <BookingPoliciesTab v-else-if="activeTab === 'booking-policies'" :settings="settings.hotel || {}" :toasts="toasts" />
                 <RoomTypesTab v-else-if="activeTab === 'room-types'" :room-types="roomTypes" :amenities="amenities" :toasts="toasts" />
                 <AmenitiesTab v-else-if="activeTab === 'amenities'" :amenities="amenities" :toasts="toasts" />
                 <FloorsTab v-else-if="activeTab === 'floors'" :floors="floors" :toasts="toasts" />
@@ -93,9 +105,12 @@ function selectTab(tab) {
                 <CurrenciesTab v-else-if="activeTab === 'currencies'" :settings="settings.currencies || {}" :toasts="toasts" />
                 <PricingProgramsTab v-else-if="activeTab === 'pricing-programs'" :settings="settings.pricing_programs || {}" :financial="settings.financial || {}" :toasts="toasts" />
                 <MarketRatesTab v-else-if="activeTab === 'market-rates'" :settings="settings.market_rates || {}" :toasts="toasts" />
-                <IntegrationsTab v-else-if="activeTab === 'integrations'" :integrations="integrations" :toasts="toasts" @select-tab="selectTab" />
+                <IntegrationsTab v-else-if="activeTab === 'integrations'" :integrations="generalIntegrations" :toasts="toasts" @select-tab="selectTab" />
                 <AiTab v-else-if="activeTab === 'ai'" :settings="settings.ai || {}" :toasts="toasts" />
+                <IntegrationsTab v-else-if="activeTab === 'channel-manager'" :integrations="channelManagerIntegrations" :toasts="toasts" @select-tab="selectTab" />
                 <UsersPage v-else-if="activeTab === 'users'" v-bind="userManagement" embedded />
+                <NotificationsTab v-else-if="activeTab === 'notifications'" :settings="settings.notifications || {}" :hotel-email="settings.hotel?.email || ''" :toasts="toasts" />
+                <SecurityTab v-else-if="activeTab === 'security'" />
                 <AuditLogsPage v-else-if="activeTab === 'history'" v-bind="auditHistory" embedded />
             </div>
         </div>

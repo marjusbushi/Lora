@@ -9,24 +9,30 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['select']);
-const { locale, t } = useI18n();
+const { locale } = useI18n();
 const modules = computed(() => usePage().props.modules || {});
 
 const allTabs = [
     { id: 'hotel', labelSq: 'Të dhënat e hotelit', labelEn: 'Hotel information', group: 'hotel' },
+    { id: 'room-types', labelSq: 'Tipet e dhomave', labelEn: 'Room types', group: 'hotel' },
+    { id: 'floors', labelSq: 'Katet', labelEn: 'Floors', group: 'hotel' },
+    { id: 'amenities', labelSq: 'Pajisjet', labelEn: 'Amenities', group: 'hotel' },
     { id: 'website', labelSq: 'Faqja Web', labelEn: 'Website', group: 'hotel' },
     { id: 'about', labelSq: 'Rreth Nesh', labelEn: 'About page', group: 'hotel' },
-    { id: 'room-types', labelSq: 'Tipet e dhomave', labelEn: 'Room types', group: 'hotel' },
-    { id: 'amenities', labelSq: 'Pajisjet', labelEn: 'Amenities', group: 'hotel' },
-    { id: 'floors', labelSq: 'Katet', labelEn: 'Floors', group: 'hotel' },
+    { id: 'booking-policies', labelSq: 'Rezervimet & politikat', labelEn: 'Reservations & policies', group: 'operations' },
+    { id: 'pricing-programs', labelSq: 'Çmimet & OTA', labelEn: 'Pricing & OTA', group: 'operations' },
+    { id: 'market-rates', labelSq: 'Çmimet e tregut', labelEn: 'Market rates', group: 'operations' },
     { id: 'menu', labelSq: 'Menuja POS', labelEn: 'POS menu', group: 'operations', module: 'pos' },
     { id: 'housekeeping', labelSq: 'Housekeeping', labelEn: 'Housekeeping', group: 'operations', module: 'housekeeping' },
     { id: 'financial', labelSq: 'Financa', labelEn: 'Finance', group: 'operations' },
     { id: 'currencies', labelSq: 'Monedhat', labelEn: 'Currencies', group: 'operations', module: 'finance' },
-    { id: 'pricing-programs', labelSq: 'Çmimet & OTA', labelEn: 'Pricing & OTA', group: 'operations' },
-    { id: 'market-rates', labelSq: 'Çmimet e tregut', labelEn: 'Market rates', group: 'operations' },
-    { id: 'integrations', labelSq: 'Integrimet', labelEn: 'Integrations', group: 'system' },
-    { id: 'ai', labelSq: 'Asistenti AI', labelEn: 'AI assistant', group: 'system' },
+    { id: 'integrations', labelSq: 'Integrimet', labelEn: 'Integrations', group: 'automation' },
+    { id: 'lora-ai', labelSq: 'Konfigurimi i Lora AI', labelEn: 'Lora AI configuration', group: 'automation', href: '/pms/lora-ai' },
+    { id: 'channel-manager', labelSq: 'Channel Manager', labelEn: 'Channel Manager', group: 'automation', module: 'channel_manager' },
+    { id: 'users', labelSq: 'Përdoruesit & rolet', labelEn: 'Users & roles', group: 'system' },
+    { id: 'notifications', labelSq: 'Njoftimet', labelEn: 'Notifications', group: 'system' },
+    { id: 'security', labelSq: 'Siguria', labelEn: 'Security', group: 'system' },
+    { id: 'history', labelSq: 'Auditimi', labelEn: 'Audit', group: 'system' },
 ];
 
 const tabs = computed(() => allTabs
@@ -36,13 +42,9 @@ const tabs = computed(() => allTabs
 const groups = computed(() => [
     { id: 'hotel', label: locale.value === 'sq' ? 'Hoteli' : 'Hotel' },
     { id: 'operations', label: locale.value === 'sq' ? 'Operacionet' : 'Operations' },
+    { id: 'automation', label: locale.value === 'sq' ? 'Automatizimi' : 'Automation' },
     { id: 'system', label: locale.value === 'sq' ? 'Sistemi' : 'System' },
 ].map((group) => ({ ...group, tabs: tabs.value.filter((tab) => tab.group === group.id) })));
-
-const administrationLinks = computed(() => [
-    { id: 'users', label: t('admin.users.title'), href: route('users.index') },
-    { id: 'history', label: t('accountCenter.auditHistory'), href: route('audit-logs.index') },
-]);
 
 const itemClass = (id) => [
     'block w-full rounded-lg px-3 py-2.5 text-left text-body-sm no-underline transition-colors duration-150',
@@ -60,7 +62,7 @@ const itemClass = (id) => [
 
                 <template v-for="tab in group.tabs" :key="tab.id">
                     <button
-                        v-if="interactive"
+                        v-if="interactive && !tab.href"
                         type="button"
                         :class="itemClass(tab.id)"
                         :aria-pressed="activeItem === tab.id"
@@ -70,30 +72,11 @@ const itemClass = (id) => [
                     </button>
                     <Link
                         v-else
-                        :href="route('settings.index', { tab: tab.id })"
+                        :href="tab.href || route('settings.index', { tab: tab.id })"
                         :class="itemClass(tab.id)"
+                        :aria-current="activeItem === tab.id ? 'page' : undefined"
                     >
                         {{ tab.label }}
-                    </Link>
-                </template>
-
-                <template v-for="item in group.id === 'system' ? administrationLinks : []" :key="item.id">
-                    <button
-                        v-if="interactive"
-                        type="button"
-                        :class="itemClass(item.id)"
-                        :aria-pressed="activeItem === item.id"
-                        @click="emit('select', item.id)"
-                    >
-                        {{ item.label }}
-                    </button>
-                    <Link
-                        v-else
-                        :href="item.href"
-                        :class="itemClass(item.id)"
-                        :aria-current="activeItem === item.id ? 'page' : undefined"
-                    >
-                        {{ item.label }}
                     </Link>
                 </template>
             </div>

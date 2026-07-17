@@ -143,7 +143,7 @@ const icons = {
 // All possible nav items with permission requirements
 const allNavItems = computed(() => [
     { label: t('admin.sidebar.dashboard'), href: '/dashboard', routeName: 'dashboard', icon: icons.dashboard, permission: null },
-    { label: 'Lora AI', href: '/pms/lora-ai', match: '/pms/lora-ai', icon: icons.ai, permission: 'view_settings' },
+    { label: 'Lora AI', href: '/pms/lora-ai', match: '/pms/lora-ai', icon: icons.ai, permission: 'view_settings', nonAdminOnly: true },
     { label: t('admin.sidebar.reservations'), href: '/pms/reservations', match: '/pms/reservations', icon: icons.reservations, permission: 'view_reservations' },
     { label: t('admin.sidebar.rooms'), href: '/pms/rooms', icon: icons.rooms, permission: 'view_rooms' },
     { label: t('admin.sidebar.guests'), href: '/pms/guests', icon: icons.guests, permission: 'view_guests' },
@@ -187,6 +187,7 @@ const navItems = computed(() =>
         (!item.permission || can(item.permission))
         && hasModule(item.module)
         && (!item.role || page.props.auth.user?.role === item.role)
+        && (!item.nonAdminOnly || page.props.auth.user?.role !== 'admin')
     )
 );
 </script>
