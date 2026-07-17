@@ -45,9 +45,7 @@ class ReservationFiscalizationService
         $invoice = null;
 
         if ($payloadChanged) {
-            if ($existing->status !== FiscalDocument::STATUS_FAILED
-                || $existing->remote_id
-                || $existing->fiscal_number) {
+            if (! $this->canMigratePayload($existing)) {
                 throw ValidationException::withMessages([
                     'fiscalization' => 'Fatura ka ndryshuar pas tentativës së parë. Kontrolloje përpara riprovimit.',
                 ]);
@@ -97,6 +95,21 @@ class ReservationFiscalizationService
         }
 
         return $this->complete($document, $reservation, $invoice);
+    }
+
+    private function canMigratePayload(FiscalDocument $document): bool
+    {
+        if ($document->remote_id || $document->fiscal_number) {
+            return false;
+        }
+
+        if ($document->status === FiscalDocument::STATUS_FAILED) {
+            return true;
+        }
+
+        return $document->status === FiscalDocument::STATUS_PROCESSING
+            && (! $document->attempted_at
+                || $document->attempted_at->lte(now()->subMinutes(5)));
     }
 
     /** @param array<string, mixed> $invoice */
@@ -249,9 +262,9 @@ class ReservationFiscalizationService
         Reservation $reservation,
         array $payload,
         string $requestHash,
-        bool $allowFailedPayloadUpdate = false,
+        bool $allowPayloadUpdate = false,
     ): FiscalDocument {
-        return DB::transaction(function () use ($reservation, $payload, $requestHash, $allowFailedPayloadUpdate) {
+        return DB::transaction(function () use ($reservation, $payload, $requestHash, $allowPayloadUpdate) {
             $document = FiscalDocument::query()
                 ->where('reservation_id', $reservation->id)
                 ->where('provider', self::PROVIDER)
@@ -272,10 +285,7 @@ class ReservationFiscalizationService
 
             if ($document
                 && ! hash_equals($document->request_hash, $requestHash)
-                && ! ($allowFailedPayloadUpdate
-                    && $document->status === FiscalDocument::STATUS_FAILED
-                    && ! $document->remote_id
-                    && ! $document->fiscal_number)) {
+                && ! ($allowPayloadUpdate && $this->canMigratePayload($document))) {
                 throw ValidationException::withMessages([
                     'fiscalization' => 'Fatura ka ndryshuar pas tentativës së parë. Kontrolloje përpara riprovimit.',
                 ]);
