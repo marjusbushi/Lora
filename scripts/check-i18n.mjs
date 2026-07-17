@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { baseCompile as compileMessage } from '@intlify/message-compiler';
 import { baseParse } from '@vue/compiler-dom';
 import { parse as parseSfc } from '@vue/compiler-sfc';
 
@@ -30,6 +31,18 @@ const errors = [];
 
 for (const key of en.keys()) if (!sq.has(key)) errors.push(`Missing SQ translation: ${key}`);
 for (const key of sq.keys()) if (!en.has(key)) errors.push(`Missing EN translation: ${key}`);
+
+for (const [locale, messages] of [['EN', en], ['SQ', sq]]) {
+    for (const [key, message] of messages) {
+        if (typeof message !== 'string') continue;
+
+        try {
+            compileMessage(message, { onError: (error) => { throw error; } });
+        } catch (error) {
+            errors.push(`Invalid ${locale} translation "${key}": ${error.message}`);
+        }
+    }
+}
 
 const files = walk(path.join(ROOT, 'resources/js'));
 for (const file of files) {
