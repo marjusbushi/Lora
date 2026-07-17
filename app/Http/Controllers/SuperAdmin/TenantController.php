@@ -10,6 +10,7 @@ use App\Models\Tenant;
 use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
+use App\Services\AiOAuthGrantManager;
 use App\Services\BaseCurrency;
 use App\Services\FatureAlClient;
 use App\Services\TenantBillingService;
@@ -197,14 +198,18 @@ class TenantController extends Controller
         return back()->with('success', "Të dhënat e {$tenant->name} u përditësuan.");
     }
 
-    public function storeMember(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
-    {
+    public function storeMember(
+        Request $request,
+        Tenant $tenant,
+        TenantContext $context,
+        AiOAuthGrantManager $grants,
+    ): RedirectResponse {
         $data = $this->validateMember($request);
         $email = Str::lower(trim($data['email']));
         $member = User::withoutGlobalScopes()->withTrashed()->where('email', $email)->first();
         $existing = (bool) $member;
 
-        DB::transaction(function () use (&$member, $existing, $tenant, $data, $email, $context) {
+        DB::transaction(function () use (&$member, $existing, $tenant, $data, $email, $context, $grants) {
             if (! $member) {
                 $member = User::create([
                     'name' => trim($data['name']),
@@ -229,6 +234,10 @@ class TenantController extends Controller
                 $member->id => ['is_owner' => false, 'is_active' => (bool) $data['is_active']],
             ]);
 
+            if (! $data['is_active']) {
+                $grants->disconnectTenant($member->id, $tenant->id);
+            }
+
             if (! $member->current_tenant_id) {
                 $member->forceFill(['current_tenant_id' => $tenant->id])->save();
             }
@@ -251,6 +260,7 @@ class TenantController extends Controller
         Tenant $tenant,
         int $member,
         TenantContext $context,
+        AiOAuthGrantManager $grants,
     ): RedirectResponse {
         $pivot = DB::table('tenant_user')
             ->where('tenant_id', $tenant->id)
@@ -281,7 +291,7 @@ class TenantController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($tenant, $user, $data, $context) {
+        DB::transaction(function () use ($tenant, $user, $data, $context, $grants) {
             $user->forceFill([
                 'name' => trim($data['name']),
                 'email' => Str::lower(trim($data['email'])),
@@ -291,6 +301,10 @@ class TenantController extends Controller
                 ->where('tenant_id', $tenant->id)
                 ->where('user_id', $user->id)
                 ->update(['is_active' => (bool) $data['is_active'], 'updated_at' => now()]);
+
+            if (! $data['is_active']) {
+                $grants->disconnectTenant($user->id, $tenant->id);
+            }
 
             if ($data['is_active'] && $user->trashed()) {
                 $user->restore();
@@ -516,8 +530,7 @@ class TenantController extends Controller
         Tenant $tenant,
         TenantHandoff $handoff,
         TenantOnboardingService $onboarding,
-    ): RedirectResponse|SymfonyResponse
-    {
+    ): RedirectResponse|SymfonyResponse {
         abort_unless($tenant->status === 'active', 422, 'Ky hotel nuk eshte aktiv.');
 
         $dashboardUrl = $this->tenantDashboardUrl($tenant);
@@ -546,8 +559,12 @@ class TenantController extends Controller
         return redirect()->away($handoffUrl)->withHeaders($headers);
     }
 
-    public function updateStatus(Request $request, Tenant $tenant, TenantContext $context): RedirectResponse
-    {
+    public function updateStatus(
+        Request $request,
+        Tenant $tenant,
+        TenantContext $context,
+        AiOAuthGrantManager $grants,
+    ): RedirectResponse {
         $data = $request->validate([
             'status' => ['required', Rule::in(['active', 'suspended'])],
         ]);
@@ -555,7 +572,13 @@ class TenantController extends Controller
         // A suspended hotel is locked out everywhere: ResolveTenant only ever
         // resolves an ACTIVE tenant, so its domains 404 and it cannot be
         // switched into — no session/data is exposed while suspended.
-        $tenant->forceFill(['status' => $data['status']])->save();
+        DB::transaction(function () use ($tenant, $data, $grants): void {
+            $tenant->forceFill(['status' => $data['status']])->save();
+
+            if ($data['status'] === 'suspended') {
+                $grants->disconnectAllForTenant($tenant->id);
+            }
+        });
 
         $context->run($tenant, fn () => AuditLog::record('tenant.status', $tenant, [
             'status' => $data['status'],
@@ -844,7 +867,11 @@ class TenantController extends Controller
         $value = Str::lower(trim($domain));
         $host = parse_url(str_contains($value, '://') ? $value : 'https://'.$value, PHP_URL_HOST);
 
-        return is_string($host) && $host !== '' ? $host : null;
+        if (! is_string($host) || $host === '') {
+            return null;
+        }
+
+        return Str::startsWith($host, 'www.') ? Str::after($host, 'www.') : $host;
     }
 
     private function tenantDashboardUrl(Tenant $tenant): string

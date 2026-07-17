@@ -113,13 +113,85 @@ jobs:
       - name: Verify MySQL migrations
         run: php artisan migrate:fresh --force
 
+  mysql-tenancy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.0.46
+        env:
+          MYSQL_DATABASE: testing_tenancy
+          MYSQL_USER: lora
+          MYSQL_PASSWORD: lora
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ulora -plora"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:4Cq6c8e+3Yi8oFv3NgTQ8zrThm3nZI2uv8Y4OUYHiRw=
+      APP_URL: http://localhost
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: testing_tenancy
+      DB_USERNAME: lora
+      DB_PASSWORD: lora
+      DB_CACHE_CONNECTION: mysql
+      SESSION_CONNECTION: mysql
+      DB_QUEUE_CONNECTION: mysql
+      CACHE_STORE: database
+      SESSION_DRIVER: database
+      QUEUE_CONNECTION: database
+      MAIL_MAILER: array
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_mysql
+          coverage: none
+
+      - name: Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Enable application-owned trigger DDL
+        run: mysql -h 127.0.0.1 -P 3306 -uroot -proot -e 'SET GLOBAL log_bin_trust_function_creators = 1'
+
+      - name: Test tenancy on production-like MySQL
+        run: |
+          php artisan test --compact \
+            tests/Feature/TenantDatabaseIntegrityTest.php \
+            tests/Feature/TenantIntegrityCommandTest.php \
+            tests/Feature/TenantDomainRoutingTest.php \
+            tests/Feature/TenantHandoffTest.php \
+            tests/Feature/TenantIsolationTest.php \
+            tests/Feature/TenantMutationIsolationTest.php \
+            tests/Feature/TenantInfrastructureIsolationTest.php \
+            tests/Feature/TenantAccessControlTest.php \
+            tests/Feature/TenantUserInvitationTest.php \
+            tests/Feature/LoraAiMcpTest.php \
+            tests/Feature/GuestMessagingTest.php \
+            tests/Feature/ChannexBookingImportTest.php \
+            tests/Feature/ControlPanelIsolationTest.php
+
   mysql-upgrade:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     services:
       mysql:
-        image: mysql:8.4
+        image: mysql:8.0.46
         env:
           MYSQL_DATABASE: testing_upgrade
           MYSQL_ROOT_PASSWORD: root

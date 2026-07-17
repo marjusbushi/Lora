@@ -19,6 +19,7 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Supplier;
 use App\Models\Tenant;
+use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -306,6 +307,11 @@ class TenantMutationIsolationTest extends TestCase
         $this->admin->tenants()->syncWithoutDetaching([
             $this->foreign->id => ['is_owner' => false, 'is_active' => true],
         ]);
+        TenantDomain::query()->create([
+            'tenant_id' => $this->foreign->id,
+            'domain' => 'foreign-hotel.test',
+            'is_primary' => true,
+        ]);
         $context->clear();
 
         // Session pinned to HOME → full admin payload.
@@ -316,10 +322,11 @@ class TenantMutationIsolationTest extends TestCase
                 ->where('tenant.id', $this->home->id)
                 ->where('auth.user.role', 'admin'));
 
-        // Session switched to FOREIGN (a real membership) → NO admin role there.
+        // FOREIGN's registered host wins over the stale HOME session. The same
+        // person has no admin role or permissions in that hotel.
         $this->actingAs($this->admin)
-            ->withSession(['tenant_id' => $this->foreign->id])
-            ->get(route('dashboard'))
+            ->withSession(['tenant_id' => $this->home->id])
+            ->get('https://foreign-hotel.test/dashboard')
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('tenant.id', $this->foreign->id)
                 ->where('auth.user.role', null)

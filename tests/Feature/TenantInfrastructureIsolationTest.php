@@ -104,6 +104,41 @@ class TenantInfrastructureIsolationTest extends TestCase
         }
     }
 
+    public function test_database_queue_round_trip_preserves_and_restores_tenant_context(): void
+    {
+        config(['queue.default' => 'database']);
+
+        $context = app(TenantContext::class);
+        $tenant = Tenant::query()->sole();
+        $context->set($tenant);
+
+        PushRoomTypeAri::dispatch(321, '2026-08-01', '2026-08-03');
+        $context->clear();
+
+        $queued = app('queue')->connection('database')->pop('default');
+        $this->assertNotNull($queued);
+
+        $payload = $queued->payload();
+        $restored = unserialize($payload['data']['command']);
+
+        $this->assertInstanceOf(PushRoomTypeAri::class, $restored);
+        $this->assertSame($tenant->id, $restored->tenantId);
+        $this->assertSame('2026-08-01', $restored->from);
+
+        $executed = false;
+        $restored->middleware()[0]->handle($restored, function (PushRoomTypeAri $job) use (&$executed, $tenant) {
+            $this->assertSame($tenant->id, app(TenantContext::class)->id());
+            $this->assertSame(321, $job->roomTypeId);
+            $executed = true;
+        });
+
+        $this->assertTrue($executed);
+        $this->assertNull($context->id());
+
+        $queued->delete();
+        $this->assertDatabaseCount('jobs', 0);
+    }
+
     public function test_job_middleware_rejects_missing_or_suspended_tenant(): void
     {
         $job = new \stdClass;

@@ -15,7 +15,9 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -29,16 +31,69 @@ jobs:
             set -Eeuo pipefail
             cd /var/www/villamucho
 
+            tested_sha='${{ github.event.workflow_run.head_sha }}'
+            case "$tested_sha" in
+              ''|*[!0-9a-f]*)
+                echo "Invalid tested commit SHA: $tested_sha" >&2
+                exit 1
+                ;;
+            esac
+            if [ "${#tested_sha}" -ne 40 ]; then
+              echo "Expected a full 40-character tested commit SHA." >&2
+              exit 1
+            fi
+
+            pre_deploy_commit="$(git rev-parse HEAD)"
+            git fetch --no-tags origin \
+              '+refs/heads/main:refs/remotes/origin/main' --quiet
+            git cat-file -e "$tested_sha^{commit}"
+            if ! git merge-base --is-ancestor "$tested_sha" origin/main; then
+              echo "Tested commit is no longer reachable from origin/main." >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$pre_deploy_commit" "$tested_sha"; then
+              echo "Refusing a non-fast-forward or stale production deploy." >&2
+              exit 1
+            fi
+
             # Fail closed: a partial deploy must remain in maintenance until it is
             # explicitly repaired or rolled back.
-            php artisan down --retry=15 || true
+            maintenance_secret="$(php -r 'echo bin2hex(random_bytes(32));')"
+            php artisan down --retry=15 --secret="$maintenance_secret" --quiet
             deploy_succeeded=false
-            trap 'if [ "$deploy_succeeded" = true ]; then php artisan up || true; else echo "Deploy failed; production remains in maintenance mode." >&2; fi' EXIT
+            smoke_cookie="/tmp/lora-deploy-smoke-$$.cookie"
+            queue_service=villamucho-queue.service
+            scheduler_file=/etc/cron.d/villamucho-scheduler
+            scheduler_hold=/var/lib/lora-backup/villamucho-scheduler.deploy-paused
+            trap 'rm -f "$smoke_cookie"; if [ "$deploy_succeeded" != true ]; then echo "Deploy failed; production remains in maintenance mode with queue/scheduler paused." >&2; fi' EXIT
+
+            # Maintenance mode only blocks HTTP. Quiesce every old-code writer
+            # before the shadow-key backfill and trigger/FK replacement.
+            systemctl stop "$queue_service"
+            if systemctl is-active --quiet "$queue_service"; then
+              echo "Queue workers did not stop cleanly." >&2
+              exit 1
+            fi
+            if [ ! -f "$scheduler_file" ]; then
+              echo "Expected scheduler file $scheduler_file is missing." >&2
+              exit 1
+            fi
+            mv "$scheduler_file" "$scheduler_hold"
+            php artisan schedule:interrupt --quiet
+            for attempt in $(seq 1 30); do
+              if ! pgrep -f '[p]hp artisan schedule:(run|work)' > /dev/null; then
+                break
+              fi
+              if [ "$attempt" -eq 30 ]; then
+                echo "Scheduler is still running after 30 seconds." >&2
+                exit 1
+              fi
+              sleep 1
+            done
 
             state_dir=/var/lib/lora-backup/releases
             state_file="$state_dir/$(date --utc +%Y%m%dT%H%M%SZ)-deploy.env"
             install -d -m 0700 "$state_dir"
-            pre_deploy_commit="$(git rev-parse HEAD)"
             previous_batch="$(php artisan tinker --execute='echo DB::table("migrations")->max("batch");')"
             (
               umask 077
@@ -46,18 +101,34 @@ jobs:
                 "$pre_deploy_commit" "$previous_batch" > "$state_file"
             )
 
-            git fetch origin main --quiet
-            git reset --hard origin/main
+            git reset --hard "$tested_sha"
+            if [ "$(git rev-parse HEAD)" != "$tested_sha" ]; then
+              echo "Checked-out release does not match the tested commit." >&2
+              exit 1
+            fi
             export COMPOSER_ALLOW_SUPERUSER=1
             composer install --no-dev --optimize-autoloader -q
             npm ci --no-audit --no-fund
             npm run build
+            # Fail before DDL if the production DB account cannot create the
+            # validation triggers required by this release.
+            php artisan tinker --execute='
+              $grants = collect(DB::select("SHOW GRANTS FOR CURRENT_USER"))->flatMap(fn ($row) => (array) $row)->implode(" ");
+              if (! str_contains($grants, "ALL PRIVILEGES") && ! preg_match("/\\bTRIGGER\\b/i", $grants)) {
+                  throw new RuntimeException("Database account is missing TRIGGER privilege.");
+              }
+              if ((int) DB::selectOne("SELECT @@global.log_bin AS enabled")->enabled === 1
+                  && (int) DB::selectOne("SELECT @@global.log_bin_trust_function_creators AS trusted")->trusted === 0
+                  && ! preg_match("/\\bSUPER\\b/i", $grants)) {
+                  throw new RuntimeException("Binary logging policy may reject CREATE TRIGGER; enable log_bin_trust_function_creators or grant the required admin privilege.");
+              }
+            '
             php artisan tenants:verify-integrity \
               --snapshot=/var/lib/lora-backup/pre-release.json
             php artisan migrate --force
             release_batch="$(php artisan tinker --execute='echo DB::table("migrations")->max("batch");')"
             printf 'RELEASE_COMMIT=%q\nRELEASE_BATCH=%q\n' \
-              "$(git rev-parse HEAD)" "$release_batch" >> "$state_file"
+              "$tested_sha" "$release_batch" >> "$state_file"
             php artisan tenants:verify-integrity \
               --compare=/var/lib/lora-backup/pre-release.json \
               --allow-additive-schema \
@@ -65,8 +136,9 @@ jobs:
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
-            # Reload the queue worker so it picks up the new code (no-op if none runs).
-            php artisan queue:restart || true
+            # A cache/backend failure here means workers cannot safely receive
+            # the new-code signal, so it must fail the release.
+            php artisan queue:restart
             chown -R www-data:www-data storage bootstrap/cache
             # Clear stale OPcache after atomic code/cache replacement. Discover the
             # running service instead of hard-coding the server's PHP minor version.
@@ -78,7 +150,30 @@ jobs:
             install -m 0644 deploy/nginx/fastcgi-buffers.conf /etc/nginx/conf.d/villamucho-fastcgi-buffers.conf
             nginx -t
             systemctl reload nginx
+
+            # Exercise the deployed PHP/Nginx stack while maintenance is still
+            # active. The one-release bypass cookie reaches /up without exposing
+            # the application to normal traffic before the smoke check passes.
+            app_url="$(php -r 'require "vendor/autoload.php"; $app = require "bootstrap/app.php"; $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); echo rtrim((string) config("app.url"), "/");')"
+            case "$app_url" in
+              http://*|https://*) ;;
+              *) echo "APP_URL is not a valid HTTP(S) URL." >&2; exit 1 ;;
+            esac
+            curl --fail --silent --show-error --location \
+              --connect-timeout 5 --max-time 20 \
+              --cookie-jar "$smoke_cookie" \
+              "$app_url/$maintenance_secret" > /dev/null
+            curl --fail --silent --show-error \
+              --connect-timeout 5 --max-time 20 \
+              --cookie "$smoke_cookie" \
+              "$app_url/up?release=$tested_sha" > /dev/null
+            rm -f "$smoke_cookie"
+
+            systemctl start "$queue_service"
+            systemctl is-active --quiet "$queue_service"
+            mv "$scheduler_hold" "$scheduler_file"
+
             php artisan up
             deploy_succeeded=true
             trap - EXIT
-            echo "Deployed at $(date)"
+            echo "Deployed tested commit $tested_sha at $(date)"

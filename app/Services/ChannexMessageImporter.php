@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Message;
 use App\Models\MessageThread;
+use App\Models\Reservation;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -23,8 +25,8 @@ class ChannexMessageImporter
     public function importMessage(array $payload, ?string $expectedPropertyId = null): array
     {
         $property = (string) ($payload['property_id'] ?? '');
-        if ($expectedPropertyId !== null && $expectedPropertyId !== ''
-            && $property !== '' && $property !== $expectedPropertyId) {
+        if ($expectedPropertyId !== null
+            && ($expectedPropertyId === '' || $property === '' || $property !== $expectedPropertyId)) {
             return ['status' => 'foreign_property'];
         }
 
@@ -38,18 +40,30 @@ class ChannexMessageImporter
         $body = (string) ($payload['message'] ?? '');
         $hasAttachment = (bool) ($payload['have_attachment'] ?? false);
 
-        return DB::transaction(function () use ($threadId, $messageId, $sender, $body, $hasAttachment, $payload) {
+        return DB::transaction(function () use ($threadId, $messageId, $sender, $body, $hasAttachment, $payload, $expectedPropertyId, $property) {
             $thread = MessageThread::where('channex_thread_id', $threadId)->first();
 
             if (! $thread) {
-                // Enrich guest name + channel from the thread object (best-effort;
-                // a failure must not drop the message).
+                // The thread callback is also an independent tenant-identity
+                // check. A matching webhook payload must not be allowed to name
+                // a foreign (or unverifiable) thread id.
+                $details = null;
                 $attr = [];
                 try {
                     $details = $this->channex->getMessageThread($threadId);
                     $attr = $details['attributes'] ?? $details ?? [];
                 } catch (\Throwable $e) {
                     report($e);
+                }
+
+                $expectedThreadProperty = $expectedPropertyId ?? ($property !== '' ? $property : null);
+                $threadProperty = (string) ($attr['property_id']
+                    ?? data_get($details, 'relationships.property.data.id', ''));
+                if ($expectedThreadProperty !== null
+                    && ($expectedThreadProperty === ''
+                        || $threadProperty === ''
+                        || $threadProperty !== $expectedThreadProperty)) {
+                    return ['status' => 'foreign_property'];
                 }
 
                 $bookingId = $payload['booking_id'] ?? ($attr['booking_id'] ?? null);
@@ -118,7 +132,7 @@ class ChannexMessageImporter
         $property = (string) ($attr['property_id']
             ?? data_get($threadObject, 'relationships.property.data.id', ''));
         $expected = $this->channex->propertyId();
-        if ($expected !== '' && $property !== '' && $property !== $expected) {
+        if ($expected === '' || $property === '' || $property !== $expected) {
             return ['status' => 'foreign_property'];
         }
 
@@ -158,7 +172,7 @@ class ChannexMessageImporter
                 // Channex timestamps are UTC; convert before saving — the datetime
                 // cast stores the wall time verbatim and re-reads it as app-local.
                 $sentAt = ! empty($mAttr['inserted_at'])
-                    ? \Illuminate\Support\Carbon::parse($mAttr['inserted_at'])->setTimezone(config('app.timezone'))
+                    ? Carbon::parse($mAttr['inserted_at'])->setTimezone(config('app.timezone'))
                     : now();
 
                 $message = $thread->messages()->create([
@@ -201,7 +215,7 @@ class ChannexMessageImporter
             return null;
         }
 
-        $id = \App\Models\Reservation::where('channex_booking_id', $bookingId)->value('id');
+        $id = Reservation::where('channex_booking_id', $bookingId)->value('id');
         if ($id) {
             return $id;
         }
@@ -219,7 +233,7 @@ class ChannexMessageImporter
             return null;
         }
 
-        $reservation = \App\Models\Reservation::where('channel_ref', $ref)->first();
+        $reservation = Reservation::where('channel_ref', $ref)->first();
         if (! $reservation) {
             return null;
         }

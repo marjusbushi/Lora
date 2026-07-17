@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\AiAccessToken;
+use App\Models\AiOAuthGrant;
 use App\Models\Setting;
+use App\Services\AiOAuthGrantManager;
 use App\Services\TenantBillingService;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
@@ -21,13 +23,32 @@ class LoraAiController extends Controller
             ->where('tenant_id', $tenant->id)
             ->where('user_id', $request->user()->id)
             ->pluck('access_token_id');
-        $connected = $bindings->isNotEmpty() && DB::table('oauth_access_tokens')
-            ->whereIn('id', $bindings)->where('revoked', false)
-            ->where('expires_at', '>', now())->exists();
+        $grants = AiOAuthGrant::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('user_id', $request->user()->id);
+        $hasGrant = (clone $grants)->exists();
+        $grantClientIds = $grants->pluck('client_id');
+        $grantBindings = AiAccessToken::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('user_id', $request->user()->id)
+            ->whereIn('client_id', $grantClientIds)
+            ->pluck('access_token_id');
+        $liveAccess = $grantBindings->isNotEmpty() && DB::table('oauth_access_tokens')
+            ->whereIn('id', $grantBindings)
+            ->where('revoked', false)
+            ->where('expires_at', '>', now())
+            ->exists();
+        $liveRefresh = $grantBindings->isNotEmpty() && DB::table('oauth_refresh_tokens')
+            ->whereIn('access_token_id', $grantBindings)
+            ->where('revoked', false)
+            ->where('expires_at', '>', now())
+            ->exists();
+        $connected = $hasGrant && ($liveAccess || $liveRefresh);
 
         return Inertia::render('LoraAi/Index', [
             'connection' => [
                 'connected' => $connected,
+                'revocable' => $hasGrant || $bindings->isNotEmpty(),
                 'endpoint' => url('/mcp/lora-hotel'),
                 'chatgptUrl' => config('services.openai.chatgpt_connect_url', 'https://chatgpt.com/'),
                 'hotel' => $tenant->name,
@@ -66,14 +87,10 @@ class LoraAiController extends Controller
         return back()->with('success', 'Lejet e Lora AI u ruajtën.');
     }
 
-    public function disconnect(Request $request): RedirectResponse
+    public function disconnect(Request $request, AiOAuthGrantManager $grants): RedirectResponse
     {
         $tenantId = app(TenantContext::class)->requireId();
-        $ids = AiAccessToken::query()->where('tenant_id', $tenantId)
-            ->where('user_id', $request->user()->id)->pluck('access_token_id');
-
-        DB::table('oauth_access_tokens')->whereIn('id', $ids)->update(['revoked' => true]);
-        AiAccessToken::query()->whereIn('access_token_id', $ids)->delete();
+        $grants->disconnectTenant($request->user()->id, $tenantId);
 
         return back()->with('success', 'Lidhja me ChatGPT u shkëput.');
     }

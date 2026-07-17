@@ -14,16 +14,22 @@ use App\Mcp\Tools\GetReservationContextTool;
 use App\Mcp\Tools\PrepareGuestReplyTool;
 use App\Mcp\Tools\SearchReservationsTool;
 use App\Models\AiAccessToken;
+use App\Models\AiOAuthGrant;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\Tenant;
+use App\Models\TenantDomain;
 use App\Models\User;
+use App\Services\TenantRoleService;
 use App\Tenancy\TenantContext;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Passport\AccessToken as PassportAccessToken;
 use Laravel\Passport\Events\AccessTokenCreated;
+use Laravel\Passport\Passport;
 use Tests\TestCase;
 
 class LoraAiMcpTest extends TestCase
@@ -45,13 +51,77 @@ class LoraAiMcpTest extends TestCase
         $tenant = Tenant::query()->sole();
         $user = User::factory()->create(['current_tenant_id' => $tenant->id]);
         $user->tenants()->syncWithoutDetaching([$tenant->id => ['is_active' => true, 'is_owner' => true]]);
+        $this->persistGrant($user, $tenant);
 
-        app(BindAiAccessTokenToTenant::class)->handle(new AccessTokenCreated('token-1', (string) $user->id, 'client-1'));
+        $this->persistPassportToken($user, 'token-1', ['mcp:use']);
+        app(BindAiAccessTokenToTenant::class)->handle(new AccessTokenCreated(
+            'token-1',
+            (string) $user->id,
+            $this->passportClientId(),
+        ));
 
         $this->assertDatabaseHas('ai_access_tokens', [
             'access_token_id' => 'token-1',
             'tenant_id' => $tenant->id,
             'user_id' => $user->id,
+        ]);
+    }
+
+    public function test_oauth_tokens_without_mcp_scope_are_not_bound_to_a_hotel(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $user = User::factory()->create(['current_tenant_id' => $tenant->id]);
+        $user->tenants()->syncWithoutDetaching([$tenant->id => ['is_active' => true, 'is_owner' => true]]);
+        $this->persistGrant($user, $tenant);
+
+        foreach ([
+            'token-empty' => [],
+            'token-unrelated' => ['profile:read'],
+        ] as $tokenId => $scopes) {
+            $this->persistPassportToken($user, $tokenId, $scopes);
+            app(BindAiAccessTokenToTenant::class)->handle(new AccessTokenCreated(
+                $tokenId,
+                (string) $user->id,
+                $this->passportClientId(),
+            ));
+
+            $this->assertDatabaseMissing('ai_access_tokens', ['access_token_id' => $tokenId]);
+        }
+    }
+
+    public function test_explicit_client_grant_keeps_new_tokens_bound_after_the_user_switches_hotels(): void
+    {
+        $first = Tenant::query()->sole();
+        $second = Tenant::factory()->create();
+        $user = User::factory()->create(['current_tenant_id' => $first->id]);
+        $user->tenants()->syncWithoutDetaching([
+            $first->id => ['is_active' => true, 'is_owner' => true],
+            $second->id => ['is_active' => true, 'is_owner' => true],
+        ]);
+        $this->persistGrant($user, $first);
+
+        foreach (['original-token', 'refreshed-token'] as $index => $tokenId) {
+            if ($index === 1) {
+                $user->forceFill(['current_tenant_id' => $second->id])->save();
+            }
+
+            $this->persistPassportToken($user, $tokenId, ['mcp:use']);
+            app(BindAiAccessTokenToTenant::class)->handle(new AccessTokenCreated(
+                $tokenId,
+                (string) $user->id,
+                $this->passportClientId(),
+            ));
+        }
+
+        $this->assertDatabaseHas('ai_access_tokens', [
+            'access_token_id' => 'refreshed-token',
+            'tenant_id' => $first->id,
+            'user_id' => $user->id,
+            'client_id' => $this->passportClientId(),
+        ]);
+        $this->assertDatabaseMissing('ai_access_tokens', [
+            'access_token_id' => 'refreshed-token',
+            'tenant_id' => $second->id,
         ]);
     }
 
@@ -142,6 +212,51 @@ class LoraAiMcpTest extends TestCase
         $this->assertSame(0, AiAccessToken::count());
     }
 
+    public function test_bound_tokens_without_mcp_scope_are_rejected_before_the_server_bootstraps(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $user = User::factory()->create(['current_tenant_id' => $tenant->id]);
+        $user->tenants()->syncWithoutDetaching([$tenant->id => ['is_active' => true, 'is_owner' => true]]);
+        $this->persistGrant($user, $tenant);
+
+        foreach ([
+            'token-empty' => [],
+            'token-unrelated' => ['profile:read'],
+        ] as $tokenId => $scopes) {
+            $this->persistPassportToken($user, $tokenId, $scopes);
+            AiAccessToken::query()->create([
+                'access_token_id' => $tokenId,
+                'tenant_id' => $tenant->id,
+                'user_id' => $user->id,
+                'client_id' => $this->passportClientId(),
+            ]);
+            $this->actAsWithPassportToken($user, $tokenId, $scopes);
+
+            $this->initializeMcp()->assertForbidden();
+        }
+    }
+
+    public function test_bound_token_with_mcp_scope_can_initialize_the_server(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $user = User::factory()->create(['current_tenant_id' => $tenant->id]);
+        $user->tenants()->syncWithoutDetaching([$tenant->id => ['is_active' => true, 'is_owner' => true]]);
+        $this->persistGrant($user, $tenant);
+
+        $this->persistPassportToken($user, 'token-mcp', ['mcp:use']);
+        app(BindAiAccessTokenToTenant::class)->handle(new AccessTokenCreated(
+            'token-mcp',
+            (string) $user->id,
+            $this->passportClientId(),
+        ));
+        $this->actAsWithPassportToken($user, 'token-mcp', ['mcp:use']);
+
+        $this->initializeMcp()
+            ->assertOk()
+            ->assertJsonPath('id', 1)
+            ->assertJsonMissingPath('error');
+    }
+
     public function test_mcp_client_can_register_through_oauth_discovery(): void
     {
         $response = $this->postJson('/oauth/register', [
@@ -152,7 +267,7 @@ class LoraAiMcpTest extends TestCase
         $response->assertCreated()
             ->assertJsonPath('grant_types.0', 'authorization_code')
             ->assertJsonPath('response_types.0', 'code')
-            ->assertJsonPath('scope', 'mcp:use')
+            ->assertJsonPath('scope', 'mcp:use offline_access')
             ->assertJsonPath('token_endpoint_auth_method', 'none')
             ->assertJsonStructure(['client_id', 'redirect_uris']);
 
@@ -161,6 +276,34 @@ class LoraAiMcpTest extends TestCase
             'name' => 'Lora test client',
             'revoked' => false,
         ]);
+    }
+
+    public function test_dynamic_client_registration_rejects_untrusted_redirect_origins(): void
+    {
+        config(['mcp.redirect_domains' => ['https://chatgpt.com']]);
+
+        $this->postJson('/oauth/register', [
+            'client_name' => 'Spoofed ChatGPT client',
+            'redirect_uris' => ['https://attacker.example/oauth/callback'],
+        ])->assertBadRequest()
+            ->assertJsonPath('error', 'invalid_redirect_uri');
+
+        $this->assertSame(0, DB::table('oauth_clients')
+            ->where('name', 'Spoofed ChatGPT client')
+            ->count());
+    }
+
+    public function test_oauth_metadata_uses_the_authoritative_hotel_request_origin(): void
+    {
+        $this->twoHotelOAuthUser();
+
+        $this->getJson('https://hotel-b.test/.well-known/oauth-authorization-server')
+            ->assertOk()
+            ->assertJsonPath('issuer', 'https://hotel-b.test')
+            ->assertJsonPath('authorization_endpoint', 'https://hotel-b.test/oauth/authorize')
+            ->assertJsonPath('token_endpoint', 'https://hotel-b.test/oauth/token')
+            ->assertJsonPath('scopes_supported.0', 'mcp:use')
+            ->assertJsonPath('scopes_supported.1', 'offline_access');
     }
 
     public function test_all_mcp_tool_schemas_can_be_serialized(): void
@@ -211,5 +354,763 @@ class LoraAiMcpTest extends TestCase
 
         $this->assertFalse((bool) Setting::get('ai_mcp.guest_reply_enabled'));
         $this->assertTrue((bool) Setting::get('ai_mcp.reservations_enabled'));
+    }
+
+    public function test_disconnect_revokes_access_and_refresh_tokens_for_the_hotel_grant(): void
+    {
+        $tenant = Tenant::query()->sole();
+        app(TenantContext::class)->set($tenant);
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create(['current_tenant_id' => $tenant->id]);
+        $admin->assignRole('admin');
+        $this->persistGrant($admin, $tenant);
+
+        $this->persistPassportToken($admin, 'disconnect-token', ['mcp:use']);
+        AiAccessToken::query()->create([
+            'access_token_id' => 'disconnect-token',
+            'tenant_id' => $tenant->id,
+            'user_id' => $admin->id,
+            'client_id' => $this->passportClientId(),
+        ]);
+        DB::table('oauth_refresh_tokens')->insert([
+            'id' => 'refresh-token',
+            'access_token_id' => 'disconnect-token',
+            'revoked' => false,
+            'expires_at' => now()->addDay(),
+        ]);
+
+        $this->actingAs($admin)
+            ->delete(route('lora-ai.disconnect'))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('oauth_access_tokens', ['id' => 'disconnect-token', 'revoked' => true]);
+        $this->assertDatabaseHas('oauth_refresh_tokens', ['id' => 'refresh-token', 'revoked' => true]);
+        $this->assertDatabaseMissing('ai_access_tokens', ['access_token_id' => 'disconnect-token']);
+        $this->assertDatabaseMissing('ai_oauth_grants', [
+            'user_id' => $admin->id,
+            'client_id' => $this->passportClientId(),
+        ]);
+    }
+
+    public function test_pkce_authorization_and_refresh_bind_to_the_registered_host_hotel(): void
+    {
+        [$first, $second, $user] = $this->twoHotelOAuthUser();
+        $redirectUri = 'http://127.0.0.1:53682/callback';
+        $clientId = $this->registerOAuthClient([
+            'https://chatgpt.com/oauth/not-selected',
+            $redirectUri,
+        ]);
+        $verifier = str_repeat('pkce-verifier-', 5);
+        $state = 'host-authority-state';
+
+        $consent = $this->actingAs($user)
+            ->withSession(['tenant_id' => $first->id])
+            ->get($this->authorizationUrl(
+                'hotel-b.test',
+                $clientId,
+                $redirectUri,
+                $verifier,
+                $state,
+            ));
+
+        $consent->assertOk()
+            ->assertSee($second->name)
+            ->assertSee('http://127.0.0.1:53682');
+        preg_match(
+            '/Hotel që do të lidhet:<\/p>\s*<p[^>]*>([^<]+)<\/p>/',
+            (string) $consent->getContent(),
+            $displayedHotel,
+        );
+        $this->assertSame($second->name, html_entity_decode(trim($displayedHotel[1] ?? '')));
+
+        $authorizationCode = $this->approveAuthorization(
+            'hotel-b.test',
+            $clientId,
+            $state,
+            (string) session('authToken'),
+        );
+
+        $this->assertDatabaseHas('ai_oauth_grants', [
+            'tenant_id' => $second->id,
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+        $this->assertDatabaseMissing('ai_oauth_grants', [
+            'tenant_id' => $first->id,
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+
+        $token = $this->exchangeAuthorizationCode(
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $authorizationCode,
+            $verifier,
+        )->assertOk()
+            ->assertJsonStructure(['access_token', 'refresh_token', 'token_type', 'expires_in']);
+        $this->exchangeAuthorizationCode(
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $authorizationCode,
+            $verifier,
+        )->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+
+        $firstAccessTokenId = DB::table('oauth_access_tokens')
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->sole()
+            ->id;
+        $this->assertDatabaseHas('ai_access_tokens', [
+            'access_token_id' => $firstAccessTokenId,
+            'tenant_id' => $second->id,
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+
+        $refreshed = $this->refreshAccessToken(
+            'hotel-b.test',
+            $clientId,
+            (string) $token->json('refresh_token'),
+        )->assertOk()
+            ->assertJsonStructure(['access_token', 'refresh_token', 'token_type', 'expires_in']);
+
+        $newAccessTokenId = DB::table('oauth_access_tokens')
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->where('id', '!=', $firstAccessTokenId)
+            ->sole()
+            ->id;
+        $this->assertDatabaseHas('ai_access_tokens', [
+            'access_token_id' => $newAccessTokenId,
+            'tenant_id' => $second->id,
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+        $this->refreshAccessToken(
+            'hotel-b.test',
+            $clientId,
+            (string) $token->json('refresh_token'),
+        )->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+        $this->assertSame($first->id, $user->fresh()->current_tenant_id);
+        $this->assertNotSame($token->json('refresh_token'), $refreshed->json('refresh_token'));
+    }
+
+    public function test_an_active_client_grant_rejects_authorization_on_another_hotel_host(): void
+    {
+        [$first, $second, $user] = $this->twoHotelOAuthUser();
+        $redirectUri = 'http://127.0.0.1:53682/callback';
+        $clientId = $this->registerOAuthClient($redirectUri);
+        $verifier = str_repeat('conflict-verifier-', 4);
+
+        $this->authorizeClientOnHost(
+            $user,
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $verifier,
+            'hotel-b-grant',
+        );
+
+        $response = $this->actingAs($user)
+            ->get($this->authorizationUrl(
+                'hotel-a.test',
+                $clientId,
+                $redirectUri,
+                $verifier,
+                'hotel-a-conflict',
+            ));
+
+        $response->assertRedirect();
+        parse_str(
+            (string) parse_url($response->headers->get('Location'), PHP_URL_QUERY),
+            $errorQuery,
+        );
+        $this->assertSame('access_denied', $errorQuery['error'] ?? null);
+        $this->assertSame('hotel-a-conflict', $errorQuery['state'] ?? null);
+
+        $this->assertDatabaseHas('ai_oauth_grants', [
+            'tenant_id' => $second->id,
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+        $this->assertDatabaseMissing('ai_oauth_grants', [
+            'tenant_id' => $first->id,
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+    }
+
+    public function test_consent_session_cannot_be_approved_on_another_hotel_host(): void
+    {
+        [$first, , $user] = $this->twoHotelOAuthUser();
+        $redirectUri = 'http://127.0.0.1:53682/callback';
+        $clientId = $this->registerOAuthClient($redirectUri);
+        $verifier = str_repeat('host-swap-verifier-', 4);
+        $state = 'host-swap-state';
+
+        $consent = $this->actingAs($user)->get($this->authorizationUrl(
+            'hotel-a.test',
+            $clientId,
+            $redirectUri,
+            $verifier,
+            $state,
+        ));
+        $consent->assertOk()->assertSee($first->name);
+        $authToken = (string) session('authToken');
+
+        $this->post('https://hotel-b.test/oauth/authorize', [
+            'client_id' => $clientId,
+            'state' => $state,
+            'auth_token' => $authToken,
+        ])->assertForbidden();
+
+        $this->assertDatabaseMissing('ai_oauth_grants', [
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+        $this->assertSame(0, DB::table('oauth_auth_codes')
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->count());
+    }
+
+    public function test_disconnect_revokes_the_complete_oauth_grant_and_allows_fresh_authorization(): void
+    {
+        [, $second, $user] = $this->twoHotelOAuthUser();
+        $redirectUri = 'http://127.0.0.1:53682/callback';
+        $clientId = $this->registerOAuthClient($redirectUri);
+        $verifier = str_repeat('disconnect-verifier-', 4);
+        $firstCode = $this->authorizeClientOnHost(
+            $user,
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $verifier,
+            'initial-authorization',
+        );
+        $token = $this->exchangeAuthorizationCode(
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $firstCode,
+            $verifier,
+        )->assertOk();
+        $pendingCode = $this->authorizeClientOnHost(
+            $user,
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $verifier,
+            'pending-authorization',
+        );
+        $pendingCodeId = DB::table('oauth_auth_codes')
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->where('revoked', false)
+            ->sole()
+            ->id;
+
+        $this->actingAs($user)
+            ->withSession(['tenant_id' => $second->id])
+            ->delete('https://hotel-b.test/pms/lora-ai/connection')
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('ai_oauth_grants', [
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+        $this->assertSame(0, AiAccessToken::query()
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->count());
+        $this->assertSame(0, DB::table('oauth_access_tokens')
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->where('revoked', false)
+            ->count());
+        $this->assertSame(0, DB::table('oauth_refresh_tokens')
+            ->join('oauth_access_tokens', 'oauth_access_tokens.id', '=', 'oauth_refresh_tokens.access_token_id')
+            ->where('oauth_access_tokens.user_id', $user->id)
+            ->where('oauth_access_tokens.client_id', $clientId)
+            ->where('oauth_refresh_tokens.revoked', false)
+            ->count());
+        $this->assertDatabaseHas('oauth_auth_codes', ['id' => $pendingCodeId, 'revoked' => true]);
+
+        $this->exchangeAuthorizationCode(
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $pendingCode,
+            $verifier,
+        )->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+        $this->refreshAccessToken(
+            'hotel-b.test',
+            $clientId,
+            (string) $token->json('refresh_token'),
+        )->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+
+        $freshCode = $this->authorizeClientOnHost(
+            $user,
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $verifier,
+            'fresh-authorization',
+        );
+        $this->exchangeAuthorizationCode(
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $freshCode,
+            $verifier,
+        )->assertOk();
+
+        $this->assertDatabaseHas('ai_oauth_grants', [
+            'tenant_id' => $second->id,
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+        $this->assertDatabaseHas('ai_access_tokens', [
+            'tenant_id' => $second->id,
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+    }
+
+    public function test_inactive_membership_revokes_the_grant_on_the_next_mcp_request(): void
+    {
+        [, $second, $user] = $this->twoHotelOAuthUser();
+        $redirectUri = 'http://127.0.0.1:53682/callback';
+        $clientId = $this->registerOAuthClient($redirectUri);
+        $verifier = str_repeat('membership-verifier-', 4);
+        $code = $this->authorizeClientOnHost(
+            $user,
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $verifier,
+            'membership-cleanup',
+        );
+        $token = $this->exchangeAuthorizationCode(
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $code,
+            $verifier,
+        )->assertOk();
+
+        DB::table('tenant_user')
+            ->where('tenant_id', $second->id)
+            ->where('user_id', $user->id)
+            ->update(['is_active' => false]);
+
+        $this->initializeMcpWithBearer((string) $token->json('access_token'))
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('ai_oauth_grants', [
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+        $this->assertSame(0, AiAccessToken::query()
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->count());
+        $this->assertSame(0, DB::table('oauth_access_tokens')
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->where('revoked', false)
+            ->count());
+        $this->refreshAccessToken(
+            'hotel-b.test',
+            $clientId,
+            (string) $token->json('refresh_token'),
+        )->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+    }
+
+    public function test_soft_deleting_a_user_revokes_grants_tokens_refreshes_and_pending_codes(): void
+    {
+        [, , $user] = $this->twoHotelOAuthUser();
+        $redirectUri = 'http://127.0.0.1:53682/callback';
+        $clientId = $this->registerOAuthClient($redirectUri);
+        $verifier = str_repeat('deleted-user-verifier-', 4);
+        $code = $this->authorizeClientOnHost(
+            $user,
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $verifier,
+            'deleted-user-token',
+        );
+        $token = $this->exchangeAuthorizationCode(
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $code,
+            $verifier,
+        )->assertOk();
+        $this->authorizeClientOnHost(
+            $user,
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $verifier,
+            'deleted-user-pending-code',
+        );
+
+        $user->delete();
+
+        $this->assertDatabaseMissing('ai_oauth_grants', [
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+        $this->assertSame(0, AiAccessToken::query()->where('user_id', $user->id)->count());
+        $this->assertSame(0, DB::table('oauth_access_tokens')
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->where('revoked', false)
+            ->count());
+        $this->assertSame(0, DB::table('oauth_refresh_tokens')
+            ->join('oauth_access_tokens', 'oauth_access_tokens.id', '=', 'oauth_refresh_tokens.access_token_id')
+            ->where('oauth_access_tokens.user_id', $user->id)
+            ->where('oauth_access_tokens.client_id', $clientId)
+            ->where('oauth_refresh_tokens.revoked', false)
+            ->count());
+        $this->assertSame(0, DB::table('oauth_auth_codes')
+            ->where('user_id', $user->id)
+            ->where('client_id', $clientId)
+            ->where('revoked', false)
+            ->count());
+        $this->refreshAccessToken(
+            'hotel-b.test',
+            $clientId,
+            (string) $token->json('refresh_token'),
+        )->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+    }
+
+    public function test_super_admin_membership_deactivation_revokes_and_does_not_resurrect_oauth_on_reactivation(): void
+    {
+        [, $second, $user] = $this->twoHotelOAuthUser();
+        DB::table('tenant_user')
+            ->where('tenant_id', $second->id)
+            ->where('user_id', $user->id)
+            ->update(['is_owner' => false]);
+        $redirectUri = 'http://127.0.0.1:53682/callback';
+        $clientId = $this->registerOAuthClient($redirectUri);
+        $verifier = str_repeat('member-offboard-verifier-', 3);
+        $code = $this->authorizeClientOnHost(
+            $user,
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $verifier,
+            'member-offboard',
+        );
+        $token = $this->exchangeAuthorizationCode(
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $code,
+            $verifier,
+        )->assertOk();
+        $superAdmin = User::factory()->create(['is_super_admin' => true]);
+        $this->configureControlPanelHost();
+
+        $membershipUrl = "https://admin.lorapms.test/super-admin/tenants/{$second->id}/members/{$user->id}";
+        $membership = [
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => 'admin',
+        ];
+
+        $this->actingAs($superAdmin)
+            ->put($membershipUrl, [...$membership, 'is_active' => false])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseMissing('ai_oauth_grants', [
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+
+        $this->actingAs($superAdmin)
+            ->put($membershipUrl, [...$membership, 'is_active' => true])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseMissing('ai_oauth_grants', [
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+        $this->refreshAccessToken(
+            'hotel-b.test',
+            $clientId,
+            (string) $token->json('refresh_token'),
+        )->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+    }
+
+    public function test_tenant_suspension_revokes_all_oauth_grants_before_reactivation(): void
+    {
+        [, $second, $user] = $this->twoHotelOAuthUser();
+        $redirectUri = 'http://127.0.0.1:53682/callback';
+        $clientId = $this->registerOAuthClient($redirectUri);
+        $verifier = str_repeat('tenant-suspend-verifier-', 3);
+        $code = $this->authorizeClientOnHost(
+            $user,
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $verifier,
+            'tenant-suspend',
+        );
+        $token = $this->exchangeAuthorizationCode(
+            'hotel-b.test',
+            $clientId,
+            $redirectUri,
+            $code,
+            $verifier,
+        )->assertOk();
+        $superAdmin = User::factory()->create(['is_super_admin' => true]);
+        $this->configureControlPanelHost();
+
+        foreach (['suspended', 'active'] as $status) {
+            $this->actingAs($superAdmin)
+                ->patch("https://admin.lorapms.test/super-admin/tenants/{$second->id}/status", [
+                    'status' => $status,
+                ])
+                ->assertRedirect();
+        }
+
+        $this->assertDatabaseMissing('ai_oauth_grants', [
+            'tenant_id' => $second->id,
+            'client_id' => $clientId,
+        ]);
+        $this->refreshAccessToken(
+            'hotel-b.test',
+            $clientId,
+            (string) $token->json('refresh_token'),
+        )->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+    }
+
+    /** @param list<string> $scopes */
+    private function persistPassportToken(User $user, string $tokenId, array $scopes): void
+    {
+        $this->persistPassportClient();
+
+        Passport::token()->newQuery()->forceCreate([
+            'id' => $tokenId,
+            'user_id' => $user->id,
+            'client_id' => $this->passportClientId(),
+            'scopes' => $scopes,
+            'revoked' => false,
+            'expires_at' => now()->addHour(),
+        ]);
+    }
+
+    /** @param list<string> $scopes */
+    private function actAsWithPassportToken(User $user, string $tokenId, array $scopes): void
+    {
+        Passport::actingAs($user, $scopes, 'api');
+        $user->withAccessToken(new PassportAccessToken([
+            'oauth_access_token_id' => $tokenId,
+            'oauth_client_id' => $this->passportClientId(),
+            'oauth_user_id' => (string) $user->id,
+            'oauth_scopes' => $scopes,
+        ]));
+    }
+
+    private function initializeMcp()
+    {
+        return $this->postJson('/mcp/lora-hotel', [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'initialize',
+            'params' => [
+                'protocolVersion' => '2025-06-18',
+                'capabilities' => (object) [],
+                'clientInfo' => ['name' => 'scope-test', 'version' => '1.0'],
+            ],
+        ]);
+    }
+
+    private function initializeMcpWithBearer(string $accessToken)
+    {
+        return $this->withHeader('Authorization', 'Bearer '.$accessToken)
+            ->postJson('/mcp/lora-hotel', [
+                'jsonrpc' => '2.0',
+                'id' => 1,
+                'method' => 'initialize',
+                'params' => [
+                    'protocolVersion' => '2025-06-18',
+                    'capabilities' => (object) [],
+                    'clientInfo' => ['name' => 'grant-cleanup-test', 'version' => '1.0'],
+                ],
+            ]);
+    }
+
+    private function passportClientId(): string
+    {
+        return '00000000-0000-0000-0000-000000000001';
+    }
+
+    private function persistPassportClient(?string $clientId = null, string $redirectUri = 'http://127.0.0.1:53682/callback'): string
+    {
+        $clientId ??= $this->passportClientId();
+
+        Passport::client()->newQuery()->firstOrCreate(
+            ['id' => $clientId],
+            [
+                'name' => 'Lora test client',
+                'secret' => null,
+                'redirect_uris' => [$redirectUri],
+                'grant_types' => ['authorization_code', 'refresh_token'],
+                'revoked' => false,
+            ],
+        );
+
+        return $clientId;
+    }
+
+    private function persistGrant(User $user, Tenant $tenant, ?string $clientId = null): AiOAuthGrant
+    {
+        $clientId = $this->persistPassportClient($clientId);
+
+        return AiOAuthGrant::query()->firstOrCreate([
+            'tenant_id' => $tenant->id,
+            'user_id' => $user->id,
+            'client_id' => $clientId,
+        ]);
+    }
+
+    /** @return array{0:Tenant,1:Tenant,2:User} */
+    private function twoHotelOAuthUser(): array
+    {
+        $first = Tenant::query()->sole();
+        $second = Tenant::factory()->create(['name' => 'Hotel B OAuth']);
+
+        TenantDomain::query()->create(['tenant_id' => $first->id, 'domain' => 'hotel-a.test']);
+        TenantDomain::query()->create(['tenant_id' => $second->id, 'domain' => 'hotel-b.test']);
+        app(TenantRoleService::class)->provision($first);
+        app(TenantRoleService::class)->provision($second);
+
+        $user = User::factory()->create(['current_tenant_id' => $first->id]);
+        $user->tenants()->syncWithoutDetaching([
+            $first->id => ['is_active' => true, 'is_owner' => true],
+            $second->id => ['is_active' => true, 'is_owner' => true],
+        ]);
+        app(TenantContext::class)->run($second, fn () => $user->unsetRelation('roles')->assignRole('admin'));
+
+        return [$first, $second, $user];
+    }
+
+    /** @param string|list<string> $redirectUris */
+    private function registerOAuthClient(string|array $redirectUris): string
+    {
+        return (string) $this->postJson('/oauth/register', [
+            'client_name' => 'PKCE integration client',
+            'redirect_uris' => is_array($redirectUris) ? $redirectUris : [$redirectUris],
+        ])->assertCreated()->json('client_id');
+    }
+
+    private function configureControlPanelHost(): void
+    {
+        config([
+            'lora.control_panel_url' => 'https://admin.lorapms.test',
+            'lora.control_panel_hosts' => ['admin.lorapms.test'],
+            'lora.dedicated_control_panel_hosts' => ['admin.lorapms.test'],
+        ]);
+    }
+
+    private function authorizationUrl(
+        string $host,
+        string $clientId,
+        string $redirectUri,
+        string $verifier,
+        string $state,
+    ): string {
+        $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
+
+        return 'https://'.$host.'/oauth/authorize?'.http_build_query([
+            'client_id' => $clientId,
+            'redirect_uri' => $redirectUri,
+            'response_type' => 'code',
+            'scope' => 'mcp:use offline_access',
+            'state' => $state,
+            'code_challenge' => $challenge,
+            'code_challenge_method' => 'S256',
+            'prompt' => 'consent',
+        ]);
+    }
+
+    private function authorizeClientOnHost(
+        User $user,
+        string $host,
+        string $clientId,
+        string $redirectUri,
+        string $verifier,
+        string $state,
+    ): string {
+        $consent = $this->actingAs($user)->get($this->authorizationUrl(
+            $host,
+            $clientId,
+            $redirectUri,
+            $verifier,
+            $state,
+        ));
+        $consent->assertOk();
+
+        return $this->approveAuthorization(
+            $host,
+            $clientId,
+            $state,
+            (string) session('authToken'),
+        );
+    }
+
+    private function approveAuthorization(
+        string $host,
+        string $clientId,
+        string $state,
+        string $authToken,
+    ): string {
+        $response = $this->post('https://'.$host.'/oauth/authorize', [
+            'client_id' => $clientId,
+            'state' => $state,
+            'auth_token' => $authToken,
+        ])->assertRedirect();
+
+        parse_str((string) parse_url((string) $response->headers->get('Location'), PHP_URL_QUERY), $query);
+
+        $this->assertSame($state, $query['state'] ?? null);
+        $this->assertIsString($query['code'] ?? null);
+
+        return $query['code'];
+    }
+
+    private function exchangeAuthorizationCode(
+        string $host,
+        string $clientId,
+        string $redirectUri,
+        string $code,
+        string $verifier,
+    ) {
+        return $this->postJson('https://'.$host.'/oauth/token', [
+            'grant_type' => 'authorization_code',
+            'client_id' => $clientId,
+            'redirect_uri' => $redirectUri,
+            'code' => $code,
+            'code_verifier' => $verifier,
+        ]);
+    }
+
+    private function refreshAccessToken(string $host, string $clientId, string $refreshToken)
+    {
+        return $this->postJson('https://'.$host.'/oauth/token', [
+            'grant_type' => 'refresh_token',
+            'client_id' => $clientId,
+            'refresh_token' => $refreshToken,
+            'scope' => 'mcp:use offline_access',
+        ]);
     }
 }

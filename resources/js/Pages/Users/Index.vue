@@ -522,7 +522,7 @@ function submitRole() {
                 <FormGroup :label="$t('admin.generated.k_6e66e9ca3801')" html-for="create-email" :error="createForm.errors.email" required>
                     <TextInput id="create-email" v-model="createForm.email" type="email" :placeholder="$t('admin.generated.k_974084c68249')" :error="createForm.errors.email" />
                 </FormGroup>
-                <FormGroup :label="$t('admin.generated.k_0f014ba2fa67')" html-for="create-password" :error="createForm.errors.password">
+                <FormGroup :label="$t('admin.generated.k_0f014ba2fa67')" html-for="create-password" :error="createForm.errors.password" required>
                     <TextInput id="create-password" v-model="createForm.password" type="password" :placeholder="$t('admin.generated.k_55695440090a')" :error="createForm.errors.password" />
                 </FormGroup>
                 <p class="-mt-2 text-tiny text-neutral-500">{{ $t('admin.generated.k_bbe1ac4be3f7') }}</p>

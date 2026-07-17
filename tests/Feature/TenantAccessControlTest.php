@@ -55,7 +55,7 @@ class TenantAccessControlTest extends TestCase
         $this->assertTrue($shared->unsetRelation('roles')->hasRole('manager'));
     }
 
-    public function test_existing_email_is_linked_without_resetting_its_password_or_other_hotel_role(): void
+    public function test_existing_email_requires_acceptance_without_resetting_its_password_or_other_hotel_role(): void
     {
         [$first, $admin] = $this->firstTenantWithAdmin();
         $second = $this->newProvisionedTenant();
@@ -71,21 +71,24 @@ class TenantAccessControlTest extends TestCase
             ->post(route('users.store'), [
                 'name' => 'Shared Account',
                 'email' => 'shared@example.test',
-                'password' => '',
+                'password' => 'ignored-password',
                 'role' => 'receptionist',
             ])
             ->assertRedirect()
             ->assertSessionHasNoErrors();
 
         $this->assertSame($passwordBefore, User::withoutGlobalScopes()->findOrFail($existing->id)->password);
-        $this->assertDatabaseHas('tenant_user', [
+        $this->assertDatabaseMissing('tenant_user', [
             'tenant_id' => $first->id,
             'user_id' => $existing->id,
-            'is_active' => true,
+        ]);
+        $this->assertDatabaseHas('tenant_user_invitations', [
+            'tenant_id' => $first->id,
+            'user_id' => $existing->id,
+            'email' => $existing->email,
+            'accepted_at' => null,
         ]);
 
-        $context->set($first);
-        $this->assertTrue($existing->unsetRelation('roles')->hasRole('receptionist'));
         $context->set($second);
         $this->assertTrue($existing->unsetRelation('roles')->hasRole('manager'));
     }

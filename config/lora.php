@@ -35,6 +35,17 @@ return [
         )),
     ))),
 
+    // Explicit non-public hosts used by infrastructure health checks or an
+    // internal load balancer. Tenant domains are loaded from tenant_domains.
+    'additional_trusted_hosts' => array_values(array_filter(array_map(
+        static fn (string $host): string => strtolower(trim($host)),
+        explode(',', (string) env('LORA_ADDITIONAL_TRUSTED_HOSTS', '')),
+    ))),
+
+    // Shared local cache keeps TrustHosts off the database hot path. Model
+    // changes invalidate it immediately; the TTL covers direct SQL changes.
+    'trusted_hosts_cache_seconds' => (int) env('LORA_TRUSTED_HOSTS_CACHE_SECONDS', 60),
+
     /*
     |--------------------------------------------------------------------------
     | Tenant onboarding

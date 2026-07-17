@@ -116,7 +116,7 @@ const actions = {
                             </label>
                         </div>
                         <div class="flex items-center justify-between border-t border-neutral-200 px-5 py-4">
-                            <button v-if="connection.connected" type="button" class="text-sm font-semibold text-red-600 hover:text-red-700" @click="disconnect">Shkëput ChatGPT</button><span v-else />
+                            <button v-if="connection.revocable" type="button" class="text-sm font-semibold text-red-600 hover:text-red-700" @click="disconnect">Shkëput ChatGPT</button><span v-else />
                             <button type="submit" :disabled="form.processing" class="h-10 rounded-lg bg-primary-700 px-5 text-sm font-semibold text-white hover:bg-primary-800 disabled:opacity-50">{{ form.processing ? 'Duke ruajtur…' : 'Ruaj lejet' }}</button>
                         </div>
                     </section>

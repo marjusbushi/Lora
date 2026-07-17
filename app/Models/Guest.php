@@ -12,6 +12,10 @@ class Guest extends TenantModel
 {
     use HasFactory, SoftDeletes;
 
+    protected $hidden = [
+        'merged_into_guest_tenant_id',
+    ];
+
     protected $fillable = [
         'first_name',
         'last_name',

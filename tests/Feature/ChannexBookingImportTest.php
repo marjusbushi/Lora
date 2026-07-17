@@ -200,7 +200,7 @@ class ChannexBookingImportTest extends TestCase
         $uuid = '11111111-1111-1111-1111-111111111111';
         Http::fake([
             '*/ack' => Http::response(['meta' => ['message' => 'Success']]),
-            '*booking_revisions/*' => Http::response(['data' => $this->revision()]),
+            '*booking_revisions/*' => Http::response(['data' => $this->revision(['property_id' => 'PROP-1'])]),
         ]);
 
         $this->postJson('/channex/webhook', ['event' => 'booking', 'payload' => ['revision_id' => $uuid]], ['X-Channex-Webhook-Secret' => 'topsecret'])
@@ -248,7 +248,7 @@ class ChannexBookingImportTest extends TestCase
         $this->studio();
         Http::fake([
             '*/ack' => Http::response(['meta' => ['message' => 'Success']]),
-            '*booking_revisions/feed*' => Http::response(['data' => [$this->revision()], 'meta' => ['total' => 1]]),
+            '*booking_revisions/feed*' => Http::response(['data' => [$this->revision(['property_id' => 'PROP-1'])], 'meta' => ['total' => 1]]),
         ]);
 
         $this->artisan('channex:pull-bookings')->assertSuccessful();
@@ -356,6 +356,7 @@ class ChannexBookingImportTest extends TestCase
 
         $this->assertSame(1, Reservation::first()->payments()->where('method', 'ota')->count()); // not duplicated
     }
+
     public function test_foreign_property_revision_is_not_imported_and_flagged_for_no_ack(): void
     {
         $this->studio();
@@ -386,6 +387,20 @@ class ChannexBookingImportTest extends TestCase
         $this->assertSame(1, Reservation::count());
     }
 
+    public function test_revision_without_property_identity_is_not_imported(): void
+    {
+        $this->studio();
+
+        $summary = app(ChannexBookingImporter::class)->importRevision(
+            $this->revision(),
+            'PROP-1',
+        );
+
+        $this->assertSame('foreign_property', $summary['status']);
+        $this->assertSame(0, Reservation::count());
+        $this->assertSame(0, Guest::count());
+    }
+
     public function test_unmapped_room_type_leaves_a_sync_log_trace(): void
     {
         // No studio()/mapping created — the revision's room type is unknown.
@@ -397,6 +412,7 @@ class ChannexBookingImportTest extends TestCase
             ChannelSyncLog::where('action', 'booking.room_type_unmapped')->where('status', 'skipped')->exists(),
         );
     }
+
     public function test_unverifiable_property_refuses_import_entirely(): void
     {
         $this->studio();

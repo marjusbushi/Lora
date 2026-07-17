@@ -9,8 +9,10 @@ preket pa backup të freskët, CI green dhe aprovim eksplicit.
 2. Sigurohu që production është clean dhe nuk ka migrime pending.
 3. Ekzekuto backup-in off-server dhe verifiko `last-success`.
 4. Restore backup-in në MySQL të izoluar dhe provo upgrade + rollback.
-5. Kërko `application`, `mysql-migrations` dhe `mysql-upgrade` green në PR.
+5. Kërko `application`, `mysql-migrations`, `mysql-tenancy` dhe `mysql-upgrade` green në PR.
 6. Kryej smoke test në staging dhe merr aprovimin eksplicit.
+7. Verifiko që user-i MySQL ka `TRIGGER`; me binary logging aktiv kërko edhe
+   `log_bin_trust_function_creators=1` ose privilegjin administrativ përkatës.
 
 ## Deploy i kontrolluar
 
@@ -23,6 +25,9 @@ export PRE_DEPLOY_COMMIT="$(git rev-parse HEAD)"
 export PREVIOUS_BATCH="$(php artisan tinker --execute='echo DB::table("migrations")->max("batch");')"
 php artisan tenants:verify-integrity --snapshot=/var/lib/lora-backup/pre-release.json
 php artisan down --retry=15
+systemctl stop villamucho-queue.service
+mv /etc/cron.d/villamucho-scheduler /var/lib/lora-backup/villamucho-scheduler.deploy-paused
+php artisan schedule:interrupt
 ```
 
 Pas vendosjes së kodit kandidat:
@@ -41,6 +46,8 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 php artisan queue:restart
+systemctl start villamucho-queue.service
+mv /var/lib/lora-backup/villamucho-scheduler.deploy-paused /etc/cron.d/villamucho-scheduler
 ```
 
 Smoke testohen login-i, rezervimet, pagesat, Finance, POS, website dhe izolimi i
@@ -71,6 +78,11 @@ Nëse versioni i ri ka pranuar shkrime, migrimet nuk kthehen verbërisht. Mbaje
 maintenance mode, bëj snapshot të ri dhe zgjidh mes një forward-fix-i ose restore-it
 të backup-it. Restore mund të humbasë transaksionet pas snapshot-it, ndaj është
 opsioni i fundit.
+
+Migrimi i trigger/FK përdor DDL që auto-commit në MySQL. Nëse dështon në mes,
+mos e ridrejto verbërisht: mbaji queue/scheduler të ndaluar, inventarizo kolonat,
+FK-të dhe trigger-at e krijuar, dhe zgjidh ose cleanup të kontrolluar nga DBA ose
+restore të backup-it të verifikuar. Vetëm pastaj përsërit migrimin.
 
 ## Rehearsal mbi kopjen production — 2026-07-15
 

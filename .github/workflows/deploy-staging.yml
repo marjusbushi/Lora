@@ -52,6 +52,6 @@ jobs:
             run_artisan config:cache
             run_artisan route:cache
             run_artisan view:cache
-            run_artisan queue:restart || true
+            run_artisan queue:restart
 
             echo "Staging MCP prepared at $(date --iso-8601=seconds)"

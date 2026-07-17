@@ -4,12 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\UserStoreRequest;
 use App\Http\Requests\UserUpdateRequest;
+use App\Mail\TenantUserInvitationMail;
 use App\Models\AuditLog;
+use App\Models\TenantUserInvitation;
 use App\Models\User;
+use App\Services\AiOAuthGrantManager;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -174,29 +180,90 @@ class UserController extends Controller
             ->first();
 
         if ($existing) {
-            $user = $existing;
-            if ($user->trashed()) {
-                $user->restore();
+            $role = Role::query()
+                ->where('team_id', $tenantId)
+                ->where('guard_name', 'web')
+                ->where('name', $request->validated('role'))
+                ->firstOrFail();
+            $expiresAt = now()->addHours(TenantUserInvitation::LIFETIME_HOURS);
+            $email = strtolower(trim((string) $existing->email));
+            try {
+                $invitation = DB::transaction(function () use ($tenantId, $existing, $email, $role, $request, $expiresAt) {
+                    // Serialize reissues and keep the prior grant intact if
+                    // synchronous delivery of its replacement fails.
+                    TenantUserInvitation::query()
+                        ->where('tenant_id', $tenantId)
+                        ->where('email', $email)
+                        ->lockForUpdate()
+                        ->first();
+
+                    $invitationId = (string) Str::uuid();
+                    $timestamp = now();
+
+                    // Updating the primary key on conflict makes every reissue a
+                    // distinct grant. A URL signed for the previous role can never
+                    // resolve to the newly issued invitation.
+                    DB::table('tenant_user_invitations')->upsert([[
+                        'id' => $invitationId,
+                        'tenant_id' => $tenantId,
+                        'user_id' => $existing->id,
+                        'email' => $email,
+                        'role_id' => $role->id,
+                        'invited_by' => $request->user()->id,
+                        'accepted_by' => null,
+                        'expires_at' => $expiresAt,
+                        'accepted_at' => null,
+                        'created_at' => $timestamp,
+                        'updated_at' => $timestamp,
+                    ]], ['tenant_id', 'email'], [
+                        'id',
+                        'user_id',
+                        'role_id',
+                        'invited_by',
+                        'accepted_by',
+                        'expires_at',
+                        'accepted_at',
+                        'created_at',
+                        'updated_at',
+                    ]);
+
+                    $invitation = TenantUserInvitation::query()
+                        ->whereKey($invitationId)
+                        ->with(['tenant', 'role'])
+                        ->firstOrFail();
+                    $relativeUrl = URL::temporarySignedRoute(
+                        'tenant-invitations.show',
+                        $invitation->expires_at,
+                        ['invitation' => $invitation],
+                        absolute: false,
+                    );
+                    $invitationUrl = $request->getSchemeAndHttpHost().$relativeUrl;
+
+                    Mail::to($existing->email)->send(new TenantUserInvitationMail($invitation, $invitationUrl));
+
+                    return $invitation;
+                });
+            } catch (\Throwable $exception) {
+                report($exception);
+
+                return back()->withErrors([
+                    'email' => 'Ftesa nuk u dërgua. Ftesa e mëparshme, nëse ekziston, mbetet aktive. Provoni përsëri.',
+                ]);
             }
-            $user->tenants()->syncWithoutDetaching([
-                $tenantId => ['is_owner' => false, 'is_active' => true],
-            ]);
+
+            AuditLog::record('user.invitation.create', $invitation, ['role' => $role->name]);
         } else {
             $user = User::create([
                 'name' => $request->validated('name'),
                 'email' => $request->validated('email'),
                 'password' => bcrypt($request->validated('password')),
             ]);
+            $user->unsetRelation('roles')->assignRole($request->validated('role'));
+
+            AuditLog::record('user.create', $user, ['role' => $request->validated('role')]);
         }
 
-        $user->unsetRelation('roles');
-        $user->assignRole($request->validated('role'));
-
-        AuditLog::record('user.create', $user, ['role' => $request->validated('role')]);
-
-        return back()->with('success', $existing
-            ? 'Llogaria ekzistuese u lidh me kete hotel.'
-            : 'Perdoruesi u krijua me sukses.');
+        return back()->with('success', 'Kërkesa për shtimin e përdoruesit u përpunua.');
     }
 
     public function update(UserUpdateRequest $request, User $user): RedirectResponse
@@ -248,7 +315,7 @@ class UserController extends Controller
         return back()->with('success', 'Perdoruesi u perditesua me sukses.');
     }
 
-    public function destroy(User $user): RedirectResponse
+    public function destroy(User $user, AiOAuthGrantManager $grants): RedirectResponse
     {
         if ($user->id === auth()->id()) {
             return back()->with('error', 'Nuk mund te fshish veten.');
@@ -271,11 +338,15 @@ class UserController extends Controller
             return back()->with('error', 'Pronari i hotelit nuk mund te çaktivizohet.');
         }
 
-        DB::transaction(function () use ($tenantId, $user) {
+        DB::transaction(function () use ($tenantId, $user, $grants) {
             DB::table('tenant_user')
                 ->where('tenant_id', $tenantId)
                 ->where('user_id', $user->id)
                 ->update(['is_active' => false, 'updated_at' => now()]);
+
+            // A later membership reactivation must require a fresh explicit
+            // OAuth consent; never resurrect the hotel's previous AI grant.
+            $grants->disconnectTenant($user->id, $tenantId);
 
             $stillActive = DB::table('tenant_user')
                 ->where('user_id', $user->id)

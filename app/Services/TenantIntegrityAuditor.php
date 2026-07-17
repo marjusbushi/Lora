@@ -12,6 +12,11 @@ final class TenantIntegrityAuditor
         ['bill_items', 'bill_id', 'bills'],
         ['bill_items', 'inventory_item_id', 'inventory_items'],
         ['bill_items', 'warehouse_id', 'warehouses'],
+        ['billing_invoices', 'tenant_subscription_id', 'tenant_subscriptions'],
+        ['billing_payment_attempts', 'billing_invoice_id', 'billing_invoices'],
+        ['billing_payment_attempts', 'billing_payment_id', 'billing_payments'],
+        ['billing_payment_attempts', 'tenant_subscription_id', 'tenant_subscriptions'],
+        ['billing_payments', 'billing_invoice_id', 'billing_invoices'],
         ['bills', 'supplier_id', 'suppliers'],
         ['channel_mappings', 'room_type_id', 'room_types'],
         ['channel_sync_logs', 'reservation_id', 'reservations'],
@@ -26,6 +31,10 @@ final class TenantIntegrityAuditor
         ['folio_items', 'reservation_id', 'reservations'],
         ['folio_items', 'warehouse_id', 'warehouses'],
         ['guest_documents', 'guest_id', 'guests'],
+        ['guest_merges', 'primary_guest_id', 'guests'],
+        ['guest_merges', 'secondary_guest_id', 'guests'],
+        ['guests', 'merged_into_guest_id', 'guests'],
+        ['inventory_items', 'room_warehouse_id', 'warehouses'],
         ['inventory_movements', 'inventory_item_id', 'inventory_items'],
         ['inventory_movements', 'warehouse_id', 'warehouses'],
         ['inventory_transfers', 'from_warehouse_id', 'warehouses'],
@@ -41,6 +50,8 @@ final class TenantIntegrityAuditor
         ['menu_item_inventory', 'inventory_item_id', 'inventory_items'],
         ['menu_item_inventory', 'menu_item_id', 'menu_items'],
         ['menu_items', 'menu_category_id', 'menu_categories'],
+        ['menu_items', 'inventory_item_id', 'inventory_items'],
+        ['menu_items', 'warehouse_id', 'warehouses'],
         ['message_threads', 'reservation_id', 'reservations'],
         ['messages', 'message_thread_id', 'message_threads'],
         ['payments', 'reservation_id', 'reservations'],
@@ -50,6 +61,9 @@ final class TenantIntegrityAuditor
         ['pos_orders', 'reservation_id', 'reservations'],
         ['pricing_autopilot_logs', 'room_type_id', 'room_types'],
         ['pricing_manual_protections', 'room_type_id', 'room_types'],
+        ['provider_events', 'billing_invoice_id', 'billing_invoices'],
+        ['provider_events', 'billing_payment_attempt_id', 'billing_payment_attempts'],
+        ['provider_events', 'billing_payment_id', 'billing_payments'],
         ['rate_overrides', 'room_type_id', 'room_types'],
         ['reservation_status_logs', 'reservation_id', 'reservations'],
         ['reservations', 'guest_id', 'guests'],
@@ -64,21 +78,38 @@ final class TenantIntegrityAuditor
         ['website_search_logs', 'room_type_id', 'room_types'],
     ];
 
+    /** @var list<string> */
+    private const NULLABLE_TENANT_TABLES = [
+        'provider_events',
+    ];
+
     /** @return list<string> */
     public function violations(): array
     {
         $violations = [];
 
         foreach ($this->tenantTables() as $table) {
-            $invalidTenantCount = DB::table("{$table} as child")
-                ->leftJoin('tenants as tenant', 'tenant.id', '=', 'child.tenant_id')
-                ->where(fn ($query) => $query
-                    ->whereNull('child.tenant_id')
-                    ->orWhereNull('tenant.id'))
-                ->count();
+            $tenantRows = DB::table("{$table} as child")
+                ->leftJoin('tenants as tenant', 'tenant.id', '=', 'child.tenant_id');
+
+            if (in_array($table, self::NULLABLE_TENANT_TABLES, true)) {
+                $invalidTenantCount = $tenantRows
+                    ->whereNotNull('child.tenant_id')
+                    ->whereNull('tenant.id')
+                    ->count();
+            } else {
+                $invalidTenantCount = $tenantRows
+                    ->where(fn ($query) => $query
+                        ->whereNull('child.tenant_id')
+                        ->orWhereNull('tenant.id'))
+                    ->count();
+            }
 
             if ($invalidTenantCount > 0) {
-                $violations[] = "{$table}: {$invalidTenantCount} rows have a null or unknown tenant_id";
+                $description = in_array($table, self::NULLABLE_TENANT_TABLES, true)
+                    ? 'an unknown tenant_id'
+                    : 'a null or unknown tenant_id';
+                $violations[] = "{$table}: {$invalidTenantCount} rows have {$description}";
             }
         }
 
@@ -96,12 +127,59 @@ final class TenantIntegrityAuditor
                 $violations[] = "{$childTable}.{$column}: {$unknown} rows reference a missing {$parentTable} row";
             }
 
+            if (in_array($childTable, self::NULLABLE_TENANT_TABLES, true)) {
+                $missingTenant = (clone $relation)
+                    ->whereNotNull('parent.id')
+                    ->whereNull('child.tenant_id')
+                    ->count();
+                if ($missingTenant > 0) {
+                    $violations[] = "{$childTable}.{$column}: {$missingTenant} linked rows have a null tenant_id";
+                }
+            }
+
             $crossTenant = (clone $relation)
                 ->whereNotNull('parent.id')
+                ->whereNotNull('child.tenant_id')
                 ->whereColumn('child.tenant_id', '!=', 'parent.tenant_id')
                 ->count();
             if ($crossTenant > 0) {
                 $violations[] = "{$childTable}.{$column}: {$crossTenant} rows cross tenant boundaries";
+            }
+        }
+
+        if (Schema::hasTable('guests')
+            && Schema::hasColumn('guests', 'merged_into_guest_id')
+            && Schema::hasColumn('guests', 'merged_into_guest_tenant_id')) {
+            $invalidGuestShadows = DB::table('guests')
+                ->where(function ($query) {
+                    $query->whereNull('merged_into_guest_id')
+                        ->whereNotNull('merged_into_guest_tenant_id');
+                })
+                ->orWhere(function ($query) {
+                    $query->whereNotNull('merged_into_guest_id')
+                        ->where(function ($nested) {
+                            $nested->whereNull('merged_into_guest_tenant_id')
+                                ->orWhereColumn('merged_into_guest_tenant_id', '!=', 'tenant_id');
+                        });
+                })
+                ->count();
+
+            if ($invalidGuestShadows > 0) {
+                $violations[] = "guests.merged_into_guest_tenant_id: {$invalidGuestShadows} rows have an inconsistent tenant shadow key";
+            }
+        }
+
+        if ($this->invitationRoleRelationExists()) {
+            $invalidInvitationRoles = DB::table('tenant_user_invitations as invitation')
+                ->leftJoin('roles as role', 'role.id', '=', 'invitation.role_id')
+                ->where(fn ($query) => $query
+                    ->whereNull('role.id')
+                    ->orWhereNull('role.team_id')
+                    ->orWhereColumn('role.team_id', '!=', 'invitation.tenant_id'))
+                ->count();
+
+            if ($invalidInvitationRoles > 0) {
+                $violations[] = "tenant_user_invitations.role_id: {$invalidInvitationRoles} rows reference a missing or cross-tenant role";
             }
         }
 
@@ -216,6 +294,15 @@ final class TenantIntegrityAuditor
             && Schema::hasColumn($childTable, 'tenant_id')
             && Schema::hasColumn($childTable, $column)
             && Schema::hasColumn($parentTable, 'tenant_id');
+    }
+
+    private function invitationRoleRelationExists(): bool
+    {
+        return Schema::hasTable('tenant_user_invitations')
+            && Schema::hasTable('roles')
+            && Schema::hasColumn('tenant_user_invitations', 'tenant_id')
+            && Schema::hasColumn('tenant_user_invitations', 'role_id')
+            && Schema::hasColumn('roles', 'team_id');
     }
 
     private function sortRecursively(array &$value): void

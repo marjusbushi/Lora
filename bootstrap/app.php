@@ -11,6 +11,7 @@ use App\Http\Middleware\ResolveTenant;
 use App\Models\ChannelSyncLog;
 use App\Models\WebsiteSearchLog;
 use App\Services\TenantBillingService;
+use App\Support\TrustedHostPatterns;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -29,6 +30,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Exact platform + registered tenant hosts only. Do not trust arbitrary
+        // subdomains of APP_URL; every hotel domain must be explicitly registered.
+        $middleware->trustHosts(
+            at: static fn (): array => TrustedHostPatterns::all(),
+            subdomains: false,
+        );
+
         $middleware->web(append: [
             ResolveTenant::class,
             HandleInertiaRequests::class,

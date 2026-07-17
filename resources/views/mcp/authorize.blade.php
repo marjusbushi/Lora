@@ -72,10 +72,14 @@
                 <div class="rounded-lg border p-4 bg-muted/50">
                     <p class="text-sm text-muted-foreground mb-2">Logged in as:</p>
                     <p class="font-medium">{{ $user->email }}</p>
-                    @if($user->currentTenant)
+                    @if($oauthTenant)
                         <p class="mt-3 text-sm text-muted-foreground">Hotel që do të lidhet:</p>
-                        <p class="font-semibold text-primary">{{ $user->currentTenant->name }}</p>
+                        <p class="font-semibold text-primary">{{ $oauthTenant->name }}</p>
                     @endif
+                    <p class="mt-3 text-sm text-muted-foreground">Redirect origin:</p>
+                    <p class="font-mono text-xs break-all">
+                        {{ parse_url((string) $request->query('redirect_uri'), PHP_URL_SCHEME) }}://{{ parse_url((string) $request->query('redirect_uri'), PHP_URL_HOST) }}@if(parse_url((string) $request->query('redirect_uri'), PHP_URL_PORT)):{{ parse_url((string) $request->query('redirect_uri'), PHP_URL_PORT) }}@endif
+                    </p>
                 </div>
 
                 <!-- Scopes / Permissions -->

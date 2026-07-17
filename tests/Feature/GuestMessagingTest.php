@@ -2,14 +2,15 @@
 
 namespace Tests\Feature;
 
-use App\Models\Message;
-use App\Models\RoomType;
-use App\Models\Room;
-use App\Models\Reservation;
 use App\Models\Guest;
+use App\Models\Message;
 use App\Models\MessageThread;
+use App\Models\Reservation;
+use App\Models\Room;
+use App\Models\RoomType;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\ChannexMessageImporter;
 use App\Services\TenantRoleService;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -39,7 +40,7 @@ class GuestMessagingTest extends TestCase
             'https://staging.channex.io/api/v1/message_threads/*/open' => Http::response(['data' => ['attributes' => ['is_closed' => false]]], 200),
             'https://staging.channex.io/api/v1/message_threads/*/messages' => Http::response(['data' => ['id' => 'MSG-ECHO']], 200),
             'https://staging.channex.io/api/v1/message_threads/*' => Http::response(['data' => ['attributes' => [
-                'title' => 'John Guest', 'channel' => 'booking.com', 'status' => 'open',
+                'title' => 'John Guest', 'channel' => 'booking.com', 'status' => 'open', 'property_id' => 'PROP-1',
             ]]], 200),
             'https://staging.channex.io/api/v1/bookings/*' => Http::response(['data' => [
                 'id' => 'BK-1', 'attributes' => ['ota_reservation_code' => 'BK-REF'],
@@ -99,6 +100,65 @@ class GuestMessagingTest extends TestCase
         $this->assertSame(0, MessageThread::query()->count());
     }
 
+    public function test_message_webhook_refuses_a_missing_property(): void
+    {
+        $payload = $this->messagePayload();
+        unset($payload['property_id']);
+
+        $this->postJson('/channex/webhook', ['event' => 'message', 'payload' => $payload],
+            ['X-Channex-Webhook-Secret' => 'topsecret'])
+            ->assertOk();
+
+        $this->assertSame(0, MessageThread::query()->count());
+        Http::assertNothingSent();
+    }
+
+    public function test_message_webhook_refuses_import_when_property_is_not_configured(): void
+    {
+        config(['services.channex.property_id' => '']);
+
+        $this->postJson('/channex/webhook', ['event' => 'message', 'payload' => $this->messagePayload()],
+            ['X-Channex-Webhook-Secret' => 'topsecret'])
+            ->assertOk();
+
+        $this->assertSame(0, MessageThread::query()->count());
+        Http::assertNothingSent();
+    }
+
+    public function test_message_webhook_refuses_a_foreign_property_returned_by_thread_enrichment(): void
+    {
+        Http::fake([
+            'https://staging.channex.io/api/v1/message_threads/TH-1' => Http::response(['data' => [
+                'attributes' => ['property_id' => 'PROP-OTHER', 'title' => 'Foreign guest'],
+            ]], 200),
+        ]);
+
+        $this->postJson('/channex/webhook', ['event' => 'message', 'payload' => $this->messagePayload()],
+            ['X-Channex-Webhook-Secret' => 'topsecret'])
+            ->assertOk()
+            ->assertSeeText('ignored — foreign property');
+
+        $this->assertSame(0, MessageThread::query()->count());
+        $this->assertSame(0, Message::query()->count());
+    }
+
+    public function test_message_webhook_refuses_thread_enrichment_without_property_identity(): void
+    {
+        Http::fake([
+            'https://staging.channex.io/api/v1/message_threads/TH-1' => Http::response(['data' => [
+                'attributes' => ['title' => 'Unverifiable guest'],
+            ]], 200),
+        ]);
+
+        $this->postJson('/channex/webhook', ['event' => 'message', 'payload' => $this->messagePayload()],
+            ['X-Channex-Webhook-Secret' => 'topsecret'])
+            ->assertOk()
+            ->assertSeeText('ignored — foreign property');
+
+        $this->assertSame(0, MessageThread::query()->count());
+        $this->assertSame(0, Message::query()->count());
+    }
+
     public function test_inbox_only_shows_the_current_hotels_threads(): void
     {
         $context = app(TenantContext::class);
@@ -153,6 +213,7 @@ class GuestMessagingTest extends TestCase
         $host = Message::where('sender', 'host')->sole();
         $this->assertSame('Sigurisht, e rezervoj për ju.', $host->body);
     }
+
     public function test_thread_links_to_the_matching_ota_reservation(): void
     {
         $this->fakeChannex();
@@ -177,6 +238,7 @@ class GuestMessagingTest extends TestCase
 
         $this->assertSame($reservation->id, MessageThread::query()->sole()->reservation_id);
     }
+
     public function test_unread_endpoint_returns_the_hotels_total(): void
     {
         $context = app(TenantContext::class);
@@ -254,6 +316,18 @@ class GuestMessagingTest extends TestCase
 
         // Only the guest message counts as unread, not the host's own reply.
         $this->assertSame(1, MessageThread::query()->sole()->unread_count);
+    }
+
+    public function test_backfill_refuses_a_thread_without_property_identity(): void
+    {
+        $summary = app(ChannexMessageImporter::class)->importThreadFromApi([
+            'id' => 'TH-NO-PROPERTY',
+            'attributes' => ['title' => 'Unverifiable guest'],
+        ]);
+
+        $this->assertSame('foreign_property', $summary['status']);
+        $this->assertSame(0, MessageThread::query()->count());
+        Http::assertNothingSent();
     }
 
     public function test_quick_replies_can_be_saved_and_are_returned_on_index(): void

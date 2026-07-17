@@ -61,7 +61,8 @@ class ChannexBookingImporter
         $revisionProperty = (string) ($rev['property_id'] ?? '');
         if ($expectedPropertyId !== null
             && ($expectedPropertyId === ''
-                || ($revisionProperty !== '' && $revisionProperty !== $expectedPropertyId))) {
+                || $revisionProperty === ''
+                || $revisionProperty !== $expectedPropertyId)) {
             $summary['status'] = 'foreign_property';
             $summary['flagged'][] = "revision belongs to property {$revisionProperty} — not ours, skipped";
             $this->log($channel, $ref !== '' ? $ref : (string) $revisionId, $revisionId, 'booking.foreign_property', null, null, 'skipped');

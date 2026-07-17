@@ -4,7 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\RoomType;
 use App\Models\Setting;
+use App\Models\Tenant;
+use App\Models\User;
+use App\Services\TenantRoleService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class TenantIntegrityCommandTest extends TestCase
@@ -16,6 +22,84 @@ class TenantIntegrityCommandTest extends TestCase
         $this->artisan('tenants:verify-integrity')
             ->expectsOutput('Tenant integrity passed.')
             ->assertSuccessful();
+    }
+
+    public function test_unresolved_provider_event_without_billing_references_is_valid(): void
+    {
+        DB::table('provider_events')->insert([
+            'tenant_id' => null,
+            'provider' => 'stripe',
+            'external_id' => 'evt-unresolved-without-tenant',
+            'event_type' => 'event.received',
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->artisan('tenants:verify-integrity')
+            ->expectsOutput('Tenant integrity passed.')
+            ->assertSuccessful();
+    }
+
+    public function test_database_rejects_an_invitation_with_a_cross_tenant_role(): void
+    {
+        $first = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($first);
+        $second = Tenant::factory()->create();
+        app(TenantRoleService::class)->provision($second);
+        $user = User::factory()->create();
+        $foreignRoleId = DB::table('roles')
+            ->where('team_id', $second->id)
+            ->value('id');
+
+        $this->assertNotNull($foreignRoleId);
+        try {
+            DB::table('tenant_user_invitations')->insert([
+                'id' => (string) Str::uuid(),
+                'tenant_id' => $first->id,
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'role_id' => $foreignRoleId,
+                'expires_at' => now()->addDay(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->fail('A cross-tenant invitation role should be rejected.');
+        } catch (QueryException) {
+            $this->assertDatabaseMissing('tenant_user_invitations', [
+                'tenant_id' => $first->id,
+                'role_id' => $foreignRoleId,
+            ]);
+        }
+    }
+
+    public function test_integrity_command_detects_an_inconsistent_guest_merge_shadow_key(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $targetId = DB::table('guests')->insertGetId([
+            'tenant_id' => $tenant->id,
+            'first_name' => 'Merge',
+            'last_name' => 'Target',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $sourceId = DB::table('guests')->insertGetId([
+            'tenant_id' => $tenant->id,
+            'merged_into_guest_id' => $targetId,
+            'first_name' => 'Merge',
+            'last_name' => 'Source',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::unprepared('DROP TRIGGER IF EXISTS guests_merged_tenant_update_sync');
+        DB::table('guests')->where('id', $sourceId)->update([
+            'merged_into_guest_tenant_id' => null,
+        ]);
+
+        $this->artisan('tenants:verify-integrity')
+            ->expectsOutputToContain('guests.merged_into_guest_tenant_id: 1 rows have an inconsistent tenant shadow key')
+            ->assertFailed();
     }
 
     public function test_snapshot_detects_changed_counts_or_financial_totals(): void

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Tenant;
+use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
 use App\Services\ChannexConfiguration;
@@ -53,6 +54,11 @@ class TenantBillingTest extends TestCase
         $tenant = Tenant::factory()->create();
         app(TenantBillingService::class)->provision($tenant);
         app(TenantRoleService::class)->provision($tenant);
+        TenantDomain::query()->create([
+            'tenant_id' => $tenant->id,
+            'domain' => 'new-hotel.test',
+            'is_primary' => true,
+        ]);
         app(TenantContext::class)->set($tenant);
 
         $admin = User::factory()->create(['current_tenant_id' => $tenant->id]);
@@ -65,12 +71,12 @@ class TenantBillingTest extends TestCase
 
         $this->actingAs($admin)
             ->withSession(['tenant_id' => $tenant->id])
-            ->get(route('housekeeping.index'))
+            ->get('https://new-hotel.test'.route('housekeeping.index', absolute: false))
             ->assertForbidden();
 
         $this->actingAs($admin)
             ->withSession(['tenant_id' => $tenant->id])
-            ->get(route('inventory.index'))
+            ->get('https://new-hotel.test'.route('inventory.index', absolute: false))
             ->assertForbidden();
 
         $billing = app(TenantBillingService::class)->summary($tenant->fresh());

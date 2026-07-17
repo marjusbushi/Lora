@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Models\User;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\DB;
@@ -18,16 +17,7 @@ class UserStoreRequest extends FormRequest
 
     public function rules(): array
     {
-        $email = strtolower(trim((string) $this->input('email')));
         $tenantId = app(TenantContext::class)->id();
-        $existingAccount = User::withoutGlobalScopes()
-            ->withTrashed()
-            ->where('email', $email)
-            ->exists();
-
-        $passwordRules = $existingAccount
-            ? ['nullable', Password::min(8)]
-            : ['required', Password::min(8)];
 
         return [
             'name' => ['required', 'string', 'max:255'],
@@ -46,7 +36,9 @@ class UserStoreRequest extends FormRequest
                     }
                 },
             ],
-            'password' => $passwordRules,
+            // Keep validation identical for existing and new email addresses so
+            // the response cannot be used as a global-account existence oracle.
+            'password' => ['required', Password::min(8)],
             'role' => [
                 'required', 'string',
                 Rule::exists('roles', 'name')->where('team_id', $tenantId)->where('guard_name', 'web'),
