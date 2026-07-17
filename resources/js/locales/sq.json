@@ -4564,5 +4564,23 @@
       "copy150": "Dil",
       "copy151": "Hap menunë"
     }
+  },
+  "financeSuppliers": {
+    "categories": {
+      "manage": "Menaxho kategoritë",
+      "close": "Mbyll menaxhimin",
+      "title": "Kategoritë e financës",
+      "description": "Përdoren te furnitorët dhe faturat e blerjes.",
+      "addPlaceholder": "Emri i kategorisë së re",
+      "add": "Shto kategori",
+      "save": "Ruaj",
+      "cancel": "Anulo",
+      "delete": "Fshi kategorinë",
+      "inUse": "Kategoria është në përdorim dhe nuk mund të fshihet.",
+      "usage": "{suppliers} furnitorë · {bills} fatura",
+      "editLabel": "Ndrysho kategorinë {name}",
+      "deleteLabel": "Fshi kategorinë {name}",
+      "deleteConfirm": "Ta fshijmë kategorinë {name}?"
+    }
   }
 }

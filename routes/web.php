@@ -365,7 +365,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/bills', [FinanceController::class, 'storeBill'])->middleware('permission:manage_bills')->name('finance.bills.store');
         Route::put('/bills/{bill}', [FinanceController::class, 'updateBill'])->middleware('permission:manage_bills')->name('finance.bills.update');
         Route::post('/bills/{bill}/receive', [FinanceController::class, 'receiveBill'])->middleware('permission:manage_inventory')->name('finance.bills.receive');
-        Route::post('/bills/categories', [FinanceController::class, 'storeBillCategory'])->middleware('permission:manage_bills')->name('finance.bill-categories.store');
+        Route::post('/bills/categories', [FinanceController::class, 'storeBillCategory'])->middleware('permission:manage_bills|manage_suppliers')->name('finance.bill-categories.store');
+        Route::put('/bills/categories/{category}', [FinanceController::class, 'updateBillCategory'])->where('category', '.*')->middleware('permission:manage_bills|manage_suppliers')->name('finance.bill-categories.update');
+        Route::delete('/bills/categories/{category}', [FinanceController::class, 'destroyBillCategory'])->where('category', '.*')->middleware('permission:manage_bills|manage_suppliers')->name('finance.bill-categories.destroy');
         Route::post('/bills/{bill}/pay', [FinanceController::class, 'payBill'])->middleware('permission:pay_bills')->name('finance.bills.pay');
         Route::get('/suppliers', [FinanceController::class, 'suppliers'])->name('finance.suppliers');
         Route::post('/suppliers', [FinanceController::class, 'storeSupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.store');

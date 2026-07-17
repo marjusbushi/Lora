@@ -4564,5 +4564,23 @@
       "copy150": "Log out",
       "copy151": "Open menu"
     }
+  },
+  "financeSuppliers": {
+    "categories": {
+      "manage": "Manage categories",
+      "close": "Close category manager",
+      "title": "Finance categories",
+      "description": "Used by suppliers and purchase bills.",
+      "addPlaceholder": "New category name",
+      "add": "Add category",
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete category",
+      "inUse": "This category is in use and cannot be deleted.",
+      "usage": "{suppliers} suppliers · {bills} bills",
+      "editLabel": "Edit category {name}",
+      "deleteLabel": "Delete category {name}",
+      "deleteConfirm": "Delete the category {name}?"
+    }
   }
 }

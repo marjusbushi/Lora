@@ -151,6 +151,8 @@ class FinanceBillsTest extends TestCase
 
         $this->actingAs($rec)->post(route('finance.suppliers.store'), ['name' => 'X'])->assertForbidden();
         $this->actingAs($rec)->post(route('finance.bill-categories.store'), ['name' => 'Pajisje'])->assertForbidden();
+        $this->actingAs($rec)->put(route('finance.bill-categories.update', ['category' => 'Marketing']), ['name' => 'Reklama'])->assertForbidden();
+        $this->actingAs($rec)->delete(route('finance.bill-categories.destroy', ['category' => 'Marketing']))->assertForbidden();
     }
 
     public function test_bill_form_can_create_dynamic_categories_and_suppliers(): void
@@ -184,6 +186,86 @@ class FinanceBillsTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->where('categories.6', 'Pajisje hoteli')
                 ->where('suppliers.0.name', 'Tekno Hotel'));
+    }
+
+    public function test_finance_categories_can_be_renamed_and_unused_categories_deleted(): void
+    {
+        $this->withoutVite();
+        $admin = $this->role('admin');
+        $supplier = $this->supplier('Eco Market');
+        $bill = $this->lekBill($supplier);
+
+        $this->actingAs($admin)->from(route('finance.suppliers'))
+            ->put(route('finance.bill-categories.update', ['category' => 'Ushqim & Pije']), [
+                'name' => 'Ushqime & Furnizime',
+            ])->assertRedirect(route('finance.suppliers'))
+            ->assertSessionHasNoErrors();
+
+        $this->assertContains('Ushqime & Furnizime', Setting::get('financial.expense_categories'));
+        $this->assertNotContains('Ushqim & Pije', Setting::get('financial.expense_categories'));
+        $this->assertSame('Ushqime & Furnizime', $supplier->fresh()->category);
+        $this->assertSame('Ushqime & Furnizime', $bill->fresh()->category);
+
+        $this->actingAs($admin)->from(route('finance.bills.create'))
+            ->post(route('finance.bills.store'), [
+                'supplier_id' => $supplier->id,
+                'category' => 'Ushqim & Pije',
+                'issue_date' => '2026-07-15',
+                'currency' => 'ALL',
+                'fx_rate' => 98.7,
+                'total' => 9870,
+            ])->assertSessionHasErrors('category');
+
+        $this->actingAs($admin)->from(route('finance.bills.edit', $bill))
+            ->put(route('finance.bills.update', $bill), [
+                'supplier_id' => $supplier->id,
+                'number' => $bill->number,
+                'category' => 'Ushqim & Pije',
+                'issue_date' => '2026-07-10',
+                'due_date' => '2026-07-24',
+                'currency' => 'ALL',
+                'fx_rate' => 98.7,
+                'total' => 9870,
+            ])->assertSessionHasErrors('category');
+
+        $this->actingAs($admin)->from(route('finance.suppliers'))
+            ->delete(route('finance.bill-categories.destroy', ['category' => 'Ushqime & Furnizime']))
+            ->assertRedirect(route('finance.suppliers'))
+            ->assertSessionHas('error');
+
+        $this->actingAs($admin)->from(route('finance.suppliers'))
+            ->post(route('finance.bill-categories.store'), ['name' => 'Kopshtari'])
+            ->assertSessionHasNoErrors();
+        $this->assertContains('Kopshtari', Setting::get('financial.expense_categories'));
+
+        $this->actingAs($admin)->from(route('finance.suppliers'))
+            ->delete(route('finance.bill-categories.destroy', ['category' => 'Kopshtari']))
+            ->assertRedirect(route('finance.suppliers'))
+            ->assertSessionHasNoErrors();
+        $this->assertNotContains('Kopshtari', Setting::get('financial.expense_categories'));
+
+        $this->actingAs($admin)->from(route('finance.suppliers'))
+            ->post(route('finance.bill-categories.store'), ['name' => 'IT/Software'])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($admin)->from(route('finance.suppliers'))
+            ->put(route('finance.bill-categories.update', ['category' => 'IT/Software']), ['name' => 'Teknologji'])
+            ->assertSessionHasNoErrors();
+        $this->assertContains('Teknologji', Setting::get('financial.expense_categories'));
+        $this->actingAs($admin)->from(route('finance.suppliers'))
+            ->delete(route('finance.bill-categories.destroy', ['category' => 'Teknologji']))
+            ->assertSessionHasNoErrors();
+    }
+
+    public function test_finance_category_rename_rejects_duplicate_names(): void
+    {
+        $this->withoutVite();
+        $admin = $this->role('admin');
+
+        $this->actingAs($admin)->from(route('finance.suppliers'))
+            ->put(route('finance.bill-categories.update', ['category' => 'Utilitete']), [
+                'name' => '  MARKETING  ',
+            ])->assertRedirect(route('finance.suppliers'))
+            ->assertSessionHasErrors('name');
     }
 
     public function test_bills_page_ships_rows_and_category_totals(): void
