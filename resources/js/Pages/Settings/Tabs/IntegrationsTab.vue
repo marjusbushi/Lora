@@ -1,13 +1,19 @@
 <script setup>
 import Button from '@/Components/UI/Button.vue';
+import Card from '@/Components/UI/Card.vue';
 import { router } from '@inertiajs/vue3';
 import {
+    AlertTriangle,
+    ArrowRight,
     Bot,
     Cable,
+    CheckCircle2,
     CircleDollarSign,
+    CircleOff,
     FileCheck2,
     RefreshCw,
     SearchCheck,
+    ShieldCheck,
     Waves,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
@@ -73,6 +79,15 @@ const categories = computed(() => [
 })).filter((category) => category.items.length));
 
 const configuredCount = computed(() => props.integrations.filter((item) => item.configured).length);
+const attentionCount = computed(() => props.integrations.filter((item) => item.status === 'needs_attention').length);
+const inactiveCount = computed(() => props.integrations.filter((item) => item.status === 'inactive').length);
+
+const integrationCopy = (item) => copy[item.id] || {
+    name: item.id,
+    sq: 'Shërbim i jashtëm i lidhur me hotelin.',
+    en: 'External service connected to the hotel.',
+    icon: Cable,
+};
 
 const statusLabel = (item) => {
     if (item.configured) return locale.value === 'sq' ? 'Konfiguruar' : 'Configured';
@@ -85,6 +100,24 @@ const statusClass = (item) => item.configured
     : item.status === 'needs_attention'
         ? 'bg-amber-50 text-amber-700 ring-amber-200'
         : 'bg-neutral-100 text-neutral-500 ring-neutral-200';
+
+const settingsTab = (item) => item.settings_tab || (item.id === 'channex' ? 'channel-manager' : null);
+
+const ownerLabel = (item) => item.managed_by === 'lora'
+    ? (locale.value === 'sq' ? 'Menaxhohet nga stafi Lora' : 'Managed by Lora staff')
+    : (locale.value === 'sq' ? 'Menaxhohet nga hoteli' : 'Managed by the hotel');
+
+function formatLastTest(value) {
+    if (!value) return null;
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat(locale.value === 'sq' ? 'sq-AL' : 'en-GB', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    }).format(date);
+}
 
 function testConnection(item) {
     testing.value = item.id;
@@ -102,93 +135,108 @@ function testConnection(item) {
 </script>
 
 <template>
-    <div class="space-y-6">
-        <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-card">
-            <div class="flex flex-col gap-5 border-b border-neutral-200 bg-gradient-to-br from-[#f3faf7] to-white p-6 sm:flex-row sm:items-center sm:justify-between">
+    <Card :padding="false">
+        <template #header>
+            <div class="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#2d6a4f]">{{ $t('integrationCenter.title') }}</p>
-                    <h2 class="mt-2 text-2xl font-semibold text-neutral-900">
-                        {{ locale === 'sq' ? 'Lidhjet e hotelit' : 'Hotel integrations' }}
-                    </h2>
-                    <p class="mt-1 max-w-2xl text-sm leading-6 text-neutral-500">
+                    <h3>{{ locale === 'sq' ? 'Qendra e integrimeve' : 'Integration center' }}</h3>
+                    <p class="max-w-2xl">
                         {{ locale === 'sq'
-                            ? 'Statusi i të gjitha shërbimeve të jashtme në një vend. Kredencialet kryesore menaxhohen në mënyrë të sigurt nga Lora.'
-                            : 'The status of every external service in one place. Core credentials are securely managed by Lora.' }}
+                            ? 'Statusi, testimi dhe hyrja drejt konfigurimit për çdo shërbim të jashtëm.'
+                            : 'Status, testing and configuration access for every external service.' }}
                     </p>
                 </div>
-                <div class="shrink-0 rounded-xl border border-emerald-100 bg-white px-5 py-3 text-center shadow-sm">
-                    <p class="text-2xl font-semibold text-emerald-700">{{ configuredCount }}/{{ integrations.length }}</p>
-                    <p class="text-xs text-neutral-500">{{ locale === 'sq' ? 'të konfiguruara' : 'configured' }}</p>
+                <div class="flex flex-wrap gap-2">
+                    <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                        <CheckCircle2 class="h-3.5 w-3.5" />
+                        {{ configuredCount }} {{ locale === 'sq' ? 'aktive' : 'active' }}
+                    </span>
+                    <span v-if="attentionCount" class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">
+                        <AlertTriangle class="h-3.5 w-3.5" />
+                        {{ attentionCount }} {{ locale === 'sq' ? 'kërkojnë vëmendje' : 'need attention' }}
+                    </span>
+                    <span v-if="inactiveCount" class="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] font-semibold text-neutral-600 ring-1 ring-inset ring-neutral-200">
+                        <CircleOff class="h-3.5 w-3.5" />
+                        {{ inactiveCount }} {{ locale === 'sq' ? 'jo aktive' : 'inactive' }}
+                    </span>
                 </div>
             </div>
-        </section>
+        </template>
 
-        <section v-for="category in categories" :key="category.id">
-            <h3 class="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-neutral-400">{{ category.label }}</h3>
-            <div class="grid gap-4 xl:grid-cols-2">
+        <div class="divide-y divide-neutral-100">
+            <section v-for="category in categories" :key="category.id" class="px-4 py-4 sm:px-5">
+                <h4 class="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-neutral-400">{{ category.label }}</h4>
+                <div class="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white">
                 <article
                     v-for="item in category.items"
                     :key="item.id"
-                    class="group rounded-2xl border border-neutral-200 bg-white p-5 shadow-card transition hover:border-neutral-300 hover:shadow-md"
+                    class="group grid gap-3 p-4 transition hover:bg-neutral-50/70 lg:grid-cols-[minmax(0,1fr)_190px_auto] lg:items-center"
                 >
-                    <div class="flex items-start gap-4">
-                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#edf7f2] text-[#2d6a4f]">
-                            <component :is="copy[item.id].icon" class="h-5 w-5" />
+                    <div class="flex min-w-0 items-start gap-3">
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-accent-50 text-accent-700">
+                            <component :is="integrationCopy(item).icon" class="h-[18px] w-[18px]" />
                         </span>
                         <div class="min-w-0 flex-1">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <h4 class="font-semibold text-neutral-900">{{ copy[item.id].name }}</h4>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h5 class="font-semibold text-neutral-900">{{ integrationCopy(item).name }}</h5>
                                 <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset" :class="statusClass(item)">
                                     {{ statusLabel(item) }}
                                 </span>
                             </div>
-                            <p class="mt-1 text-sm leading-5 text-neutral-500">{{ locale === 'sq' ? copy[item.id].sq : copy[item.id].en }}</p>
-
-                            <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-4">
-                                <span v-if="item.environment" class="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                                    {{ item.environment === 'sandbox' ? 'Sandbox / Test' : 'Production / Live' }}
-                                </span>
-                                <span v-if="item.last_test_status" class="text-xs" :class="item.last_test_status === 'success' ? 'text-emerald-700' : 'text-red-600'">
-                                    {{ item.last_test_status === 'success'
-                                        ? (locale === 'sq' ? 'Lidhja u verifikua' : 'Connection verified')
-                                        : (locale === 'sq' ? 'Testi i fundit dështoi' : 'Last test failed') }}
-                                </span>
-                                <span v-if="item.managed_by === 'lora'" class="mr-auto text-xs text-neutral-400">
-                                    {{ locale === 'sq' ? 'Menaxhohet nga Lora Control Panel' : 'Managed in Lora Control Panel' }}
-                                </span>
-                                <span v-else class="mr-auto" />
-
-                                <Button
-                                    v-if="item.test_supported"
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    :disabled="testing === item.id"
-                                    @click="testConnection(item)"
-                                >
-                                    <RefreshCw class="mr-1.5 h-3.5 w-3.5" :class="testing === item.id && 'animate-spin'" />
-                                    {{ locale === 'sq' ? 'Testo lidhjen' : 'Test connection' }}
-                                </Button>
-                                <Button
-                                    v-else-if="item.settings_tab"
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    @click="emit('select-tab', item.settings_tab)"
-                                >
-                                    {{ locale === 'sq' ? 'Konfiguro' : 'Configure' }}
-                                </Button>
-                            </div>
+                            <p class="mt-1 text-xs leading-5 text-neutral-500">{{ locale === 'sq' ? integrationCopy(item).sq : integrationCopy(item).en }}</p>
                         </div>
                     </div>
-                </article>
-            </div>
-        </section>
 
-        <p class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
-            {{ locale === 'sq'
-                ? 'Siguri: token-et dhe çelësat privatë ruhen të enkriptuar në server dhe nuk dërgohen në shfletues.'
-                : 'Security: tokens and private keys are encrypted on the server and are never sent to the browser.' }}
-        </p>
-    </div>
+                    <div class="space-y-1 lg:border-l lg:border-neutral-100 lg:pl-4">
+                        <p class="text-[11px] font-medium text-neutral-600">{{ ownerLabel(item) }}</p>
+                        <p v-if="item.environment" class="text-[11px] text-neutral-400">
+                            {{ item.environment === 'sandbox' ? 'Sandbox / Test' : 'Production / Live' }}
+                        </p>
+                        <p v-if="item.last_test_status" class="text-[11px]" :class="item.last_test_status === 'success' ? 'text-emerald-700' : 'text-red-600'">
+                            {{ item.last_test_status === 'success'
+                                ? (locale === 'sq' ? 'Testi i fundit: në rregull' : 'Last test: successful')
+                                : (locale === 'sq' ? 'Testi i fundit: dështoi' : 'Last test: failed') }}
+                            <span v-if="formatLastTest(item.last_tested_at)" class="text-neutral-400"> · {{ formatLastTest(item.last_tested_at) }}</span>
+                        </p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2 lg:justify-end">
+                        <Button
+                            v-if="item.test_supported"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            :disabled="testing === item.id"
+                            @click="testConnection(item)"
+                        >
+                            <RefreshCw class="h-3.5 w-3.5" :class="testing === item.id && 'animate-spin'" />
+                            {{ locale === 'sq' ? 'Testo' : 'Test' }}
+                        </Button>
+                        <Button
+                            v-if="settingsTab(item)"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            @click="emit('select-tab', settingsTab(item))"
+                        >
+                            {{ item.managed_by === 'lora'
+                                ? (locale === 'sq' ? 'Shiko' : 'View')
+                                : (locale === 'sq' ? 'Konfiguro' : 'Configure') }}
+                            <ArrowRight class="h-3.5 w-3.5" />
+                        </Button>
+                    </div>
+                </article>
+                </div>
+            </section>
+        </div>
+
+        <template #footer>
+            <p class="flex items-start gap-2 text-[11px] leading-5 text-neutral-500">
+                <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-accent-600" />
+                {{ locale === 'sq'
+                    ? 'Token-et dhe çelësat privatë ruhen të enkriptuar. Kjo faqe shfaq vetëm statusin dhe nuk dublikon konfigurimet.'
+                    : 'Tokens and private keys are encrypted. This page only shows status and does not duplicate configuration.' }}
+            </p>
+        </template>
+    </Card>
 </template>

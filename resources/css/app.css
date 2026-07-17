@@ -57,6 +57,169 @@
         @apply border-t border-neutral-200/80;
     }
 
+    /* PMS Settings — one compact visual contract for every settings tab.
+       Components keep their normal defaults outside this scoped shell. */
+    .pms-settings-shell {
+        --settings-ink: #17211d;
+        --settings-muted: #68736e;
+        --settings-line: #dfe5e2;
+        --settings-brand: #2d6a4f;
+        --settings-brand-soft: #f0faf5;
+        --settings-radius: 14px;
+        --settings-control-radius: 9px;
+        --settings-control-height: 40px;
+        --settings-shadow: 0 1px 2px rgba(18, 45, 36, 0.04), 0 8px 24px rgba(18, 45, 36, 0.035);
+        color: var(--settings-ink);
+        font-size: 13px;
+        line-height: 1.45;
+    }
+
+    .pms-settings-shell .settings-page-heading h1 {
+        color: var(--settings-ink);
+        font-size: 24px;
+        font-weight: 650;
+        letter-spacing: -0.03em;
+        line-height: 1.2;
+    }
+
+    .pms-settings-shell .settings-page-heading nav,
+    .pms-settings-shell .settings-page-heading > p {
+        font-size: 12px;
+    }
+
+    .pms-settings-shell [data-ui='card'] {
+        overflow: hidden;
+        border-color: var(--settings-line);
+        border-radius: var(--settings-radius);
+        box-shadow: var(--settings-shadow);
+    }
+
+    .pms-settings-shell [data-ui='card-header'] {
+        min-height: 62px;
+        padding: 14px 18px;
+        border-color: var(--settings-line);
+    }
+
+    .pms-settings-shell [data-ui='card-header'] h3 {
+        color: var(--settings-ink);
+        font-size: 16px;
+        font-weight: 650;
+        letter-spacing: -0.015em;
+        line-height: 1.3;
+    }
+
+    .pms-settings-shell [data-ui='card-header'] p {
+        margin-top: 3px;
+        color: var(--settings-muted);
+        font-size: 12px;
+        line-height: 1.45;
+    }
+
+    .pms-settings-shell [data-ui='card-body'][data-padding='true'] {
+        padding: 18px;
+    }
+
+    .pms-settings-shell [data-ui='card-footer'] {
+        padding: 11px 18px;
+        border-color: var(--settings-line);
+    }
+
+    .pms-settings-shell [data-ui='form-group'] > label,
+    .pms-settings-shell label {
+        color: #3f4c46;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .pms-settings-shell :is(
+        [data-ui='text-input'],
+        [data-ui='select'],
+        input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']):not([type='file']):not([type='color']),
+        select
+    ) {
+        min-height: var(--settings-control-height);
+        border-color: var(--settings-line);
+        border-radius: var(--settings-control-radius);
+        color: #34413b;
+        font-size: 13px;
+    }
+
+    .pms-settings-shell textarea {
+        min-height: 84px;
+        border-color: var(--settings-line);
+        border-radius: var(--settings-control-radius);
+        color: #34413b;
+        font-size: 13px;
+    }
+
+    .pms-settings-shell :is(input, select, textarea):focus {
+        border-color: #6ba98f;
+        box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.11);
+        outline: none;
+        --tw-ring-color: transparent;
+    }
+
+    .pms-settings-shell [data-ui='button'] {
+        min-height: 38px;
+        border-radius: var(--settings-control-radius);
+        font-size: 12px;
+        font-weight: 650;
+    }
+
+    .pms-settings-shell [data-ui='button'][data-size='sm'] {
+        min-height: 34px;
+    }
+
+    .pms-settings-shell [data-ui='settings-nav'] {
+        border-color: var(--settings-line);
+        border-radius: var(--settings-radius);
+        box-shadow: var(--settings-shadow);
+    }
+
+    .pms-settings-shell .settings-sidebar a,
+    .pms-settings-shell .settings-sidebar button {
+        min-height: 38px;
+        display: flex;
+        align-items: center;
+        font-size: 12.5px;
+    }
+
+    .pms-settings-shell .settings-content > * {
+        width: 100%;
+    }
+
+    .pms-settings-shell .settings-content table {
+        font-size: 12px;
+    }
+
+    .pms-settings-shell .lucide {
+        stroke-width: 1.8;
+    }
+
+    @media (max-width: 1023px) {
+        .pms-settings-shell [data-ui='settings-nav'] {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .pms-settings-shell [data-ui='settings-nav'] > div {
+            margin-top: 0;
+        }
+    }
+
+    @media (max-width: 639px) {
+        .pms-settings-shell [data-ui='settings-nav'] {
+            grid-template-columns: 1fr;
+        }
+
+        .pms-settings-shell [data-ui='card-header'],
+        .pms-settings-shell [data-ui='card-body'][data-padding='true'],
+        .pms-settings-shell [data-ui='card-footer'] {
+            padding-inline: 15px;
+        }
+    }
+
     /* Lora Control Panel — compact Super Admin template.
        Scoped tokens keep the platform UI consistent without changing hotel PMS screens. */
     .super-admin-shell {

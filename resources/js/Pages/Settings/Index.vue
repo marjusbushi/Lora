@@ -68,7 +68,7 @@ const allTabs = [
 const requestedTab = new URLSearchParams(usePage().url.split('?')[1] || '').get('tab');
 const validTabs = allTabs.map((tab) => tab.id);
 const activeTab = ref(validTabs.includes(requestedTab) ? requestedTab : 'hotel');
-const generalIntegrations = computed(() => props.integrations.filter((item) => item.id !== 'channex'));
+const generalIntegrations = computed(() => props.integrations);
 const channelManagerIntegrations = computed(() => props.integrations.filter((item) => item.id === 'channex'));
 
 function selectTab(tab) {
@@ -82,36 +82,40 @@ function selectTab(tab) {
 
 <template>
     <AppLayout>
-        <PageHeader
-            :title="$t('accountCenter.settingsTitle')"
-            :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: $t('accountCenter.settingsTitle') }]"
-        />
-        <p class="mt-1 text-body-sm text-neutral-500">{{ $t('accountCenter.settingsSubtitle') }}</p>
+        <div class="pms-settings-shell mx-auto w-full max-w-[1480px]">
+            <header class="settings-page-heading">
+                <PageHeader
+                    :title="$t('accountCenter.settingsTitle')"
+                    :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: $t('accountCenter.settingsTitle') }]"
+                />
+                <p class="mt-1 text-body-sm text-neutral-500">{{ $t('accountCenter.settingsSubtitle') }}</p>
+            </header>
 
-        <div class="mt-6 flex flex-col gap-6 lg:flex-row">
-            <SettingsSidebar :active-item="activeTab" interactive @select="selectTab" />
+            <div class="settings-layout mt-5 flex flex-col gap-5 lg:flex-row lg:items-start">
+                <SettingsSidebar :active-item="activeTab" interactive @select="selectTab" />
 
-            <div class="min-w-0 flex-1">
-                <HotelTab v-if="activeTab === 'hotel'" :settings="settings.hotel || {}" :toasts="toasts" />
-                <WebsiteTab v-else-if="activeTab === 'website'" :settings="settings.hotel || {}" :toasts="toasts" />
-                <AboutTab v-else-if="activeTab === 'about'" :settings="settings.about || {}" :toasts="toasts" />
-                <BookingPoliciesTab v-else-if="activeTab === 'booking-policies'" :settings="settings.hotel || {}" :toasts="toasts" />
-                <RoomTypesTab v-else-if="activeTab === 'room-types'" :room-types="roomTypes" :amenities="amenities" :toasts="toasts" />
-                <AmenitiesTab v-else-if="activeTab === 'amenities'" :amenities="amenities" :toasts="toasts" />
-                <FloorsTab v-else-if="activeTab === 'floors'" :floors="floors" :toasts="toasts" />
-                <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :inventory-enabled="modules.finance === true" :toasts="toasts" />
-                <HousekeepingTab v-else-if="activeTab === 'housekeeping'" :settings="settings.housekeeping || {}" :checklist-defaults="checklistDefaults" :toasts="toasts" />
-                <FinancialTab v-else-if="activeTab === 'financial'" :settings="settings.financial || {}" :toasts="toasts" />
-                <CurrenciesTab v-else-if="activeTab === 'currencies'" :settings="settings.currencies || {}" :toasts="toasts" />
-                <PricingProgramsTab v-else-if="activeTab === 'pricing-programs'" :settings="settings.pricing_programs || {}" :financial="settings.financial || {}" :toasts="toasts" />
-                <MarketRatesTab v-else-if="activeTab === 'market-rates'" :settings="settings.market_rates || {}" :toasts="toasts" />
-                <IntegrationsTab v-else-if="activeTab === 'integrations'" :integrations="generalIntegrations" :toasts="toasts" @select-tab="selectTab" />
-                <AiTab v-else-if="activeTab === 'ai'" :settings="settings.ai || {}" :toasts="toasts" />
-                <IntegrationsTab v-else-if="activeTab === 'channel-manager'" :integrations="channelManagerIntegrations" :toasts="toasts" @select-tab="selectTab" />
-                <UsersPage v-else-if="activeTab === 'users'" v-bind="userManagement" embedded />
-                <NotificationsTab v-else-if="activeTab === 'notifications'" :settings="settings.notifications || {}" :hotel-email="settings.hotel?.email || ''" :toasts="toasts" />
-                <SecurityTab v-else-if="activeTab === 'security'" />
-                <AuditLogsPage v-else-if="activeTab === 'history'" v-bind="auditHistory" embedded />
+                <main class="settings-content min-w-0 flex-1">
+                    <HotelTab v-if="activeTab === 'hotel'" :settings="settings.hotel || {}" :toasts="toasts" />
+                    <WebsiteTab v-else-if="activeTab === 'website'" :settings="settings.hotel || {}" :toasts="toasts" />
+                    <AboutTab v-else-if="activeTab === 'about'" :settings="settings.about || {}" :toasts="toasts" />
+                    <BookingPoliciesTab v-else-if="activeTab === 'booking-policies'" :settings="settings.hotel || {}" :toasts="toasts" />
+                    <RoomTypesTab v-else-if="activeTab === 'room-types'" :room-types="roomTypes" :amenities="amenities" :toasts="toasts" />
+                    <AmenitiesTab v-else-if="activeTab === 'amenities'" :amenities="amenities" :toasts="toasts" />
+                    <FloorsTab v-else-if="activeTab === 'floors'" :floors="floors" :toasts="toasts" />
+                    <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :inventory-enabled="modules.finance === true" :toasts="toasts" />
+                    <HousekeepingTab v-else-if="activeTab === 'housekeeping'" :settings="settings.housekeeping || {}" :checklist-defaults="checklistDefaults" :toasts="toasts" />
+                    <FinancialTab v-else-if="activeTab === 'financial'" :settings="settings.financial || {}" :toasts="toasts" />
+                    <CurrenciesTab v-else-if="activeTab === 'currencies'" :settings="settings.currencies || {}" :toasts="toasts" />
+                    <PricingProgramsTab v-else-if="activeTab === 'pricing-programs'" :settings="settings.pricing_programs || {}" :financial="settings.financial || {}" :toasts="toasts" />
+                    <MarketRatesTab v-else-if="activeTab === 'market-rates'" :settings="settings.market_rates || {}" :toasts="toasts" />
+                    <IntegrationsTab v-else-if="activeTab === 'integrations'" :integrations="generalIntegrations" :toasts="toasts" @select-tab="selectTab" />
+                    <AiTab v-else-if="activeTab === 'ai'" :settings="settings.ai || {}" :toasts="toasts" />
+                    <IntegrationsTab v-else-if="activeTab === 'channel-manager'" :integrations="channelManagerIntegrations" :toasts="toasts" @select-tab="selectTab" />
+                    <UsersPage v-else-if="activeTab === 'users'" v-bind="userManagement" embedded />
+                    <NotificationsTab v-else-if="activeTab === 'notifications'" :settings="settings.notifications || {}" :hotel-email="settings.hotel?.email || ''" :toasts="toasts" />
+                    <SecurityTab v-else-if="activeTab === 'security'" />
+                    <AuditLogsPage v-else-if="activeTab === 'history'" v-bind="auditHistory" embedded />
+                </main>
             </div>
         </div>
 

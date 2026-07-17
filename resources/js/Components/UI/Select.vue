@@ -25,6 +25,7 @@ defineProps({
 <template>
     <select
         v-model="model"
+        data-ui="select"
         :disabled="disabled"
         :class="[
             'block w-full rounded-md border px-3 py-2 text-body-sm text-neutral-900 transition-colors duration-150',

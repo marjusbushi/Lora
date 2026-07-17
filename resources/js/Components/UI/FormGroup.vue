@@ -20,7 +20,7 @@ defineProps({
 </script>
 
 <template>
-    <div class="space-y-1.5">
+    <div data-ui="form-group" class="space-y-1.5">
         <label
             v-if="label"
             :for="htmlFor"

@@ -41,6 +41,7 @@ defineExpose({ focus: () => input.value.focus() });
     <input
         ref="input"
         v-model="model"
+        data-ui="text-input"
         :type="type"
         :placeholder="placeholder"
         :disabled="disabled"

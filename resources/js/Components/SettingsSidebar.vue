@@ -55,10 +55,10 @@ const itemClass = (id) => [
 </script>
 
 <template>
-    <aside class="shrink-0 lg:w-64">
-        <nav class="rounded-xl border border-neutral-200 bg-white p-2 shadow-card" :aria-label="$t('accountCenter.settingsTitle')">
+    <aside class="settings-sidebar shrink-0 lg:sticky lg:top-5 lg:w-[232px]">
+        <nav data-ui="settings-nav" class="rounded-xl border border-neutral-200 bg-white p-2 shadow-card" :aria-label="$t('accountCenter.settingsTitle')">
             <div v-for="group in groups" :key="group.id" :class="group.id !== 'hotel' && 'mt-3'">
-                <p class="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-400">{{ group.label }}</p>
+                <p class="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-neutral-400">{{ group.label }}</p>
 
                 <template v-for="tab in group.tabs" :key="tab.id">
                     <button
