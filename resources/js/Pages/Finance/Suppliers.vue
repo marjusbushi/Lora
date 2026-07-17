@@ -20,6 +20,8 @@ import {
     ReceiptText,
     Search,
     SlidersHorizontal,
+    Tags,
+    Trash2,
     Users,
     X,
 } from 'lucide-vue-next';
@@ -35,6 +37,7 @@ const props = defineProps({
     focusSupplierId: Number,
     summary: Object,
     categories: Array,
+    categoryUsage: Object,
     can: Object,
 });
 
@@ -46,6 +49,8 @@ const page = ref(1);
 const perPage = 20;
 const selectedSupplier = ref(props.suppliers.find((supplier) => supplier.id === Number(props.focusSupplierId)) || null);
 const editing = ref(null);
+const showCategoryManager = ref(false);
+const editingCategory = ref(null);
 
 const statusChips = computed(() => [
     { key: 'all', label: translate('admin.generated.k_13117768e2ef'), count: props.suppliers.length },
@@ -99,11 +104,15 @@ const form = useForm({
     payment_terms_days: 0,
     is_active: true,
 });
+const categoryCreateForm = useForm({ name: '' });
+const categoryEditForm = useForm({ name: '' });
 
 function openNew() {
     form.reset();
     form.clearErrors();
     form.is_active = true;
+    showCategoryManager.value = false;
+    editingCategory.value = null;
     editing.value = 'new';
 }
 
@@ -124,7 +133,60 @@ function openEdit(supplier) {
 
 function closeForm() {
     editing.value = null;
+    showCategoryManager.value = false;
+    editingCategory.value = null;
     form.clearErrors();
+    categoryCreateForm.clearErrors();
+    categoryEditForm.clearErrors();
+}
+
+function createCategory() {
+    categoryCreateForm.post(route('finance.bill-categories.store'), {
+        preserveScroll: true,
+        onSuccess: () => categoryCreateForm.reset(),
+    });
+}
+
+function startCategoryEdit(categoryName) {
+    editingCategory.value = categoryName;
+    categoryEditForm.name = categoryName;
+    categoryEditForm.clearErrors();
+}
+
+function cancelCategoryEdit() {
+    editingCategory.value = null;
+    categoryEditForm.reset();
+    categoryEditForm.clearErrors();
+}
+
+function updateCategory() {
+    const previousName = editingCategory.value;
+    const nextName = categoryEditForm.name.trim();
+    categoryEditForm.put(route('finance.bill-categories.update', { category: previousName }), {
+        preserveScroll: true,
+        onSuccess: () => {
+            if (form.category === previousName) form.category = nextName;
+            cancelCategoryEdit();
+        },
+    });
+}
+
+function categoryIsUsed(categoryName) {
+    const usage = props.categoryUsage?.[categoryName];
+
+    return Number(usage?.suppliers || 0) + Number(usage?.bills || 0) > 0;
+}
+
+function destroyCategory(categoryName) {
+    if (!confirm(translate('financeSuppliers.categories.deleteConfirm', { name: categoryName }))) return;
+
+    categoryEditForm.delete(route('finance.bill-categories.destroy', { category: categoryName }), {
+        preserveScroll: true,
+        onSuccess: () => {
+            if (form.category === categoryName) form.category = '';
+            if (editingCategory.value === categoryName) cancelCategoryEdit();
+        },
+    });
 }
 
 function submit() {
@@ -399,12 +461,82 @@ function clearFilters() {
                     <p v-if="form.errors.nipt" class="mt-1 text-tiny text-error-600">{{ form.errors.nipt }}</p>
                 </div>
                 <div>
-                    <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_0ea0690ef262') }}</label>
+                    <div class="mb-1 flex items-center justify-between gap-3">
+                        <label class="block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_0ea0690ef262') }}</label>
+                        <button
+                            type="button"
+                            class="text-tiny font-bold text-accent-700 hover:text-accent-800"
+                            @click="showCategoryManager = !showCategoryManager"
+                        >{{ showCategoryManager ? $t('financeSuppliers.categories.close') : $t('financeSuppliers.categories.manage') }}</button>
+                    </div>
                     <select v-model="form.category" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
                         <option value="">—</option>
                         <option v-for="item in categories" :key="item" :value="item">{{ item }}</option>
                     </select>
+                    <p v-if="form.errors.category" class="mt-1 text-tiny text-error-600">{{ form.errors.category }}</p>
                 </div>
+
+                <section v-if="showCategoryManager" class="sm:col-span-2 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50/70">
+                    <div class="flex items-start gap-3 border-b border-neutral-200 px-4 py-3">
+                        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent-50 text-accent-700"><Tags class="h-4 w-4" /></span>
+                        <div>
+                            <h4 class="text-body-sm font-bold text-primary-900">{{ $t('financeSuppliers.categories.title') }}</h4>
+                            <p class="mt-0.5 text-tiny text-neutral-500">{{ $t('financeSuppliers.categories.description') }}</p>
+                        </div>
+                    </div>
+
+                    <div class="border-b border-neutral-200 p-3">
+                        <div class="flex flex-col gap-2 sm:flex-row">
+                            <input
+                                v-model="categoryCreateForm.name"
+                                type="text"
+                                maxlength="60"
+                                class="min-w-0 flex-1 rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500"
+                                :placeholder="$t('financeSuppliers.categories.addPlaceholder')"
+                                @keydown.enter.prevent="createCategory"
+                            >
+                            <Button size="sm" :loading="categoryCreateForm.processing" :disabled="!categoryCreateForm.name.trim()" @click="createCategory">
+                                <Plus class="h-4 w-4" /> {{ $t('financeSuppliers.categories.add') }}
+                            </Button>
+                        </div>
+                        <p v-if="categoryCreateForm.errors.name" class="mt-1 text-tiny text-error-600">{{ categoryCreateForm.errors.name }}</p>
+                    </div>
+
+                    <div class="max-h-56 divide-y divide-neutral-200 overflow-y-auto bg-white">
+                        <div v-for="item in categories" :key="item" class="flex items-center gap-3 px-4 py-2.5">
+                            <template v-if="editingCategory === item">
+                                <div class="min-w-0 flex-1">
+                                    <input
+                                        v-model="categoryEditForm.name"
+                                        type="text"
+                                        maxlength="60"
+                                        class="w-full rounded-lg border-neutral-200 px-3 py-1.5 text-body-sm focus:border-accent-500 focus:ring-accent-500"
+                                        @keydown.enter.prevent="updateCategory"
+                                        @keydown.esc.prevent="cancelCategoryEdit"
+                                    >
+                                    <p v-if="categoryEditForm.errors.name" class="mt-1 text-tiny text-error-600">{{ categoryEditForm.errors.name }}</p>
+                                </div>
+                                <button type="button" class="text-tiny font-bold text-accent-700" :disabled="categoryEditForm.processing || !categoryEditForm.name.trim()" @click="updateCategory">{{ $t('financeSuppliers.categories.save') }}</button>
+                                <button type="button" class="text-tiny font-semibold text-neutral-500" :disabled="categoryEditForm.processing" @click="cancelCategoryEdit">{{ $t('financeSuppliers.categories.cancel') }}</button>
+                            </template>
+                            <template v-else>
+                                <div class="min-w-0 flex-1">
+                                    <strong class="block truncate text-body-sm text-primary-900">{{ item }}</strong>
+                                    <span class="text-tiny text-neutral-400">{{ $t('financeSuppliers.categories.usage', { suppliers: categoryUsage?.[item]?.suppliers || 0, bills: categoryUsage?.[item]?.bills || 0 }) }}</span>
+                                </div>
+                                <button type="button" :aria-label="$t('financeSuppliers.categories.editLabel', { name: item })" class="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-accent-700" @click="startCategoryEdit(item)"><Pencil class="h-4 w-4" /></button>
+                                <button
+                                    type="button"
+                                    :aria-label="$t('financeSuppliers.categories.deleteLabel', { name: item })"
+                                    :title="categoryIsUsed(item) ? $t('financeSuppliers.categories.inUse') : $t('financeSuppliers.categories.delete')"
+                                    class="rounded-md p-1.5 text-neutral-400 hover:bg-error-50 hover:text-error-600 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-neutral-400"
+                                    :disabled="categoryIsUsed(item) || categories.length === 1"
+                                    @click="destroyCategory(item)"
+                                ><Trash2 class="h-4 w-4" /></button>
+                            </template>
+                        </div>
+                    </div>
+                </section>
                 <div>
                     <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_4054fedf0da3') }}</label>
                     <TextInput v-model="form.phone" class="w-full" placeholder="+355 69 ..." />

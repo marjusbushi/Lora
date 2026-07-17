@@ -17,6 +17,7 @@ use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Setting;
 use App\Models\Supplier;
+use App\Models\Tenant;
 use App\Models\Warehouse;
 use App\Services\BaseCurrency;
 use App\Services\BillDocumentAiExtractor;
@@ -25,6 +26,7 @@ use App\Services\GeminiClient;
 use App\Services\InventoryLedger;
 use App\Services\VatConfiguration;
 use App\Tenancy\TenantRule;
+use App\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -802,7 +804,7 @@ class FinanceController extends Controller
         $data = $request->validate([
             'supplier_id' => ['required', 'integer', TenantRule::exists('suppliers')],
             'number' => ['nullable', 'string', 'max:60'],
-            'category' => ['required', 'string', 'max:60'],
+            'category' => ['required', 'string', 'max:60', Rule::in(Bill::categories())],
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'currency' => ['required', Rule::in(config('lora.tenant_currencies', ['EUR', 'ALL']))],
@@ -915,7 +917,7 @@ class FinanceController extends Controller
         $rules = [
             'supplier_id' => ['required', 'integer', TenantRule::exists('suppliers')],
             'number' => ['nullable', 'string', 'max:60'],
-            'category' => ['required', 'string', 'max:60'],
+            'category' => ['required', 'string', 'max:60', Rule::in(Bill::categories())],
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'notes' => ['nullable', 'string', 'max:500'],
@@ -1226,22 +1228,110 @@ class FinanceController extends Controller
     public function storeBillCategory(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:60', function (string $attribute, mixed $value, \Closure $fail) {
-                $normalized = mb_strtolower(trim((string) $value));
-                $exists = collect(Bill::categories())
-                    ->contains(fn (string $category) => mb_strtolower(trim($category)) === $normalized);
-
-                if ($exists) {
-                    $fail('Kjo kategori ekziston tashmë.');
-                }
-            }],
+            'name' => ['required', 'string', 'max:60'],
         ]);
 
-        $categories = Bill::categories();
-        $categories[] = trim($data['name']);
-        Setting::set('financial.expense_categories', array_values($categories), 'json');
+        $this->withLockedBillCategories(function (array $categories) use ($data): void {
+            $name = trim($data['name']);
+            $normalized = mb_strtolower($name);
+            $exists = collect($categories)
+                ->contains(fn (string $category) => mb_strtolower(trim($category)) === $normalized);
+
+            if ($exists) {
+                throw ValidationException::withMessages(['name' => 'Kjo kategori ekziston tashmë.']);
+            }
+
+            $categories[] = $name;
+            Setting::set('financial.expense_categories', array_values($categories), 'json');
+        });
 
         return back()->with('success', 'Kategoria u shtua.');
+    }
+
+    public function updateBillCategory(Request $request, string $category): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:60'],
+        ]);
+
+        $this->withLockedBillCategories(function (array $categories) use ($category, $data): void {
+            $current = $this->resolveBillCategory($category, $categories);
+            $currentNormalized = mb_strtolower(trim($current));
+            $name = trim($data['name']);
+            $normalized = mb_strtolower($name);
+            $exists = collect($categories)->contains(function (string $category) use ($normalized, $currentNormalized) {
+                $candidate = mb_strtolower(trim($category));
+
+                return $candidate !== $currentNormalized && $candidate === $normalized;
+            });
+
+            if ($exists) {
+                throw ValidationException::withMessages(['name' => 'Kjo kategori ekziston tashmë.']);
+            }
+
+            $updatedCategories = collect($categories)
+                ->map(fn (string $item) => $item === $current ? $name : $item)
+                ->values()
+                ->all();
+
+            Setting::set('financial.expense_categories', $updatedCategories, 'json');
+            Supplier::query()->where('category', $current)->update(['category' => $name]);
+            Bill::query()->where('category', $current)->update(['category' => $name]);
+        });
+
+        return back()->with('success', 'Kategoria u përditësua kudo.');
+    }
+
+    public function destroyBillCategory(string $category): RedirectResponse
+    {
+        $deleted = $this->withLockedBillCategories(function (array $availableCategories) use ($category): bool {
+            $current = $this->resolveBillCategory($category, $availableCategories);
+
+            if (Supplier::query()->where('category', $current)->exists() || Bill::query()->where('category', $current)->exists()) {
+                return false;
+            }
+
+            $categories = collect($availableCategories)
+                ->reject(fn (string $item) => $item === $current)
+                ->values()
+                ->all();
+
+            if ($categories === []) {
+                throw ValidationException::withMessages(['category' => 'Duhet të mbetet të paktën një kategori.']);
+            }
+
+            Setting::set('financial.expense_categories', $categories, 'json');
+
+            return true;
+        });
+
+        if (! $deleted) {
+            return back()->with('error', 'Kategoria është në përdorim. Riemërtoje ose ndrysho furnitorët dhe faturat përpara se ta fshish.');
+        }
+
+        return back()->with('success', 'Kategoria u fshi.');
+    }
+
+    private function withLockedBillCategories(\Closure $callback): mixed
+    {
+        return DB::transaction(function () use ($callback) {
+            $tenantId = app(TenantContext::class)->id();
+            abort_if($tenantId === null, 409, 'Mungon konteksti i hotelit.');
+            Tenant::query()->whereKey($tenantId)->lockForUpdate()->firstOrFail();
+
+            return $callback(Bill::categories());
+        });
+    }
+
+    private function resolveBillCategory(string $category, ?array $categories = null): string
+    {
+        $normalized = mb_strtolower(trim($category));
+        $resolved = collect($categories ?? Bill::categories())
+            ->first(fn (string $item) => mb_strtolower(trim($item)) === $normalized);
+
+        abort_if($resolved === null, 404);
+
+        return $resolved;
     }
 
     /** Pay a bill (fully or partially) from a visible account — atomic. */
@@ -1377,6 +1467,12 @@ class FinanceController extends Controller
             'focusSupplierId' => $request->integer('supplier_id') ?: null,
             'summary' => $summary,
             'categories' => Bill::categories(),
+            'categoryUsage' => collect(Bill::categories())->mapWithKeys(fn (string $name) => [
+                $name => [
+                    'suppliers' => $suppliers->where('category', $name)->count(),
+                    'bills' => Bill::query()->where('category', $name)->count(),
+                ],
+            ]),
         ]));
     }
 
@@ -1415,7 +1511,7 @@ class FinanceController extends Controller
         return $request->validate([
             'name' => ['required', 'string', 'max:255', TenantRule::unique('suppliers', 'name')->ignore($ignoreId)],
             'nipt' => ['nullable', 'string', 'max:20'],
-            'category' => ['nullable', 'string', 'max:60'],
+            'category' => ['nullable', 'string', 'max:60', Rule::in(Bill::categories())],
             'phone' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string', 'max:255'],
