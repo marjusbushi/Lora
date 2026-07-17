@@ -4,6 +4,7 @@ import Sidebar from '@/Components/UI/Sidebar.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import LanguageSwitcher from '@/Components/LanguageSwitcher.vue';
 import NotificationBell from '@/Components/NotificationBell.vue';
+import GlobalSearch from '@/Components/GlobalSearch.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 import { ChevronDown, LogOut, Settings, UserRound } from 'lucide-vue-next';
@@ -189,6 +190,13 @@ const navItems = computed(() =>
         && (!item.role || page.props.auth.user?.role === item.role)
     )
 );
+
+const globalSearchLinks = computed(() => navItems.value.flatMap((item) => {
+    if (item.children?.length) {
+        return item.children.map((child) => ({ label: child.label, href: child.href }));
+    }
+    return item.href ? [{ label: item.label, href: item.href }] : [];
+}));
 </script>
 
 <template>
@@ -240,7 +248,7 @@ const navItems = computed(() =>
                     </svg>
                 </button>
 
-                <div class="hidden lg:block" />
+                <GlobalSearch :quick-links="globalSearchLinks" />
 
                 <!-- User dropdown -->
                 <div class="flex items-center gap-4">

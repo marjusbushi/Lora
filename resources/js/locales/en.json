@@ -3908,6 +3908,31 @@
       "allFloors": "All floors"
     }
   },
+  "globalSearch": {
+    "open": "Open global search",
+    "shortcut": "⌘K",
+    "placeholder": "Search reservation, guest, room, invoice…",
+    "inputPlaceholder": "Type a name, reference, room or document…",
+    "openPage": "Open page",
+    "navigate": "Navigate",
+    "openResult": "Open",
+    "close": "Close",
+    "noResults": "No results found",
+    "noResultsHint": "Try a guest name, room, reservation or invoice number.",
+    "errorTitle": "Search could not be completed",
+    "errorHint": "Please try again in a moment.",
+    "groups": {
+      "pages": "Pages and modules",
+      "reservations": "Reservations",
+      "guests": "Guests",
+      "rooms": "Rooms",
+      "finance": "Finance",
+      "housekeeping": "Housekeeping",
+      "maintenance": "Maintenance",
+      "pos": "POS Bar/Restaurant",
+      "inventory": "Inventory"
+    }
+  },
   "accountCenter": {
     "account": "Account",
     "staff": "Staff",

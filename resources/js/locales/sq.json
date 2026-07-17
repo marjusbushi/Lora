@@ -3908,6 +3908,31 @@
       "allFloors": "Të gjitha katet"
     }
   },
+  "globalSearch": {
+    "open": "Hap kërkimin global",
+    "shortcut": "⌘K",
+    "placeholder": "Kërko rezervim, mysafir, dhomë, faturë…",
+    "inputPlaceholder": "Shkruaj emër, referencë, dhomë ose dokument…",
+    "openPage": "Hap faqen",
+    "navigate": "Lëviz",
+    "openResult": "Hap",
+    "close": "Mbyll",
+    "noResults": "Nuk u gjet asnjë rezultat",
+    "noResultsHint": "Provo një emër, numër dhome, rezervimi ose fature.",
+    "errorTitle": "Kërkimi nuk u krye",
+    "errorHint": "Provo përsëri pas pak.",
+    "groups": {
+      "pages": "Faqet dhe modulet",
+      "reservations": "Rezervimet",
+      "guests": "Mysafirët",
+      "rooms": "Dhomat",
+      "finance": "Financa",
+      "housekeeping": "Pastrimi",
+      "maintenance": "Mirëmbajtja",
+      "pos": "POS Bar/Restorant",
+      "inventory": "Inventari"
+    }
+  },
   "accountCenter": {
     "account": "Llogaria",
     "staff": "Staf",

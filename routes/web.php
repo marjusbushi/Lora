@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\GuestController;
 use App\Http\Controllers\GuestMergeController;
+use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LoraAiController;
 use App\Http\Controllers\MaintenanceController;
@@ -194,6 +195,10 @@ Route::get('/design-system', function () {
 
 // ===== PMS (authenticated) =====
 Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
+    Route::get('/global-search', GlobalSearchController::class)
+        ->middleware('throttle:120,1')
+        ->name('global-search');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
