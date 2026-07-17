@@ -144,10 +144,10 @@ const icons = {
 const allNavItems = computed(() => [
     { label: t('admin.sidebar.dashboard'), href: '/dashboard', routeName: 'dashboard', icon: icons.dashboard, permission: null },
     { label: 'Lora AI', href: '/pms/lora-ai', match: '/pms/lora-ai', icon: icons.ai, permission: 'view_settings' },
-    { label: t('admin.sidebar.rooms'), href: '/pms/rooms', icon: icons.rooms, permission: 'view_rooms' },
     { label: t('admin.sidebar.reservations'), href: '/pms/reservations', match: '/pms/reservations', icon: icons.reservations, permission: 'view_reservations' },
-    { label: t('admin.sidebar.messages'), href: '/pms/messages', match: '/pms/messages', icon: icons.messages, permission: 'view_reservations', module: 'channel_manager' },
+    { label: t('admin.sidebar.rooms'), href: '/pms/rooms', icon: icons.rooms, permission: 'view_rooms' },
     { label: t('admin.sidebar.guests'), href: '/pms/guests', icon: icons.guests, permission: 'view_guests' },
+    { label: t('admin.sidebar.messages'), href: '/pms/messages', match: '/pms/messages', icon: icons.messages, permission: 'view_reservations', module: 'channel_manager' },
     { label: t('admin.sidebar.housekeeping'), href: '/pms/housekeeping', icon: icons.housekeeping, permission: 'view_housekeeping', module: 'housekeeping' },
     { label: t('maintenance.title'), href: '/pms/maintenance', icon: icons.maintenance, permission: 'view_maintenance' },
     { label: t('admin.sidebar.pos'), href: '/pms/pos', icon: icons.pos, permission: 'view_pos_orders', module: 'pos' },
@@ -176,9 +176,9 @@ const allNavItems = computed(() => [
             { label: t('admin.sidebar.inventoryWarehouses'), href: '/pms/inventory/warehouses' },
         ],
     },
-    { label: t('admin.sidebar.reports'), href: '/pms/reports', icon: icons.reports, permission: 'view_reports' },
     { label: t('admin.sidebar.pricing'), href: '/pms/pricing', icon: icons.pricing, permission: 'view_settings' },
     { label: t('admin.sidebar.smartPricing'), href: '/pms/pricing/smart', icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5"><path d="M15.98 1.804a1 1 0 00-1.96 0l-.24 1.192a1 1 0 01-.784.785l-1.192.238a1 1 0 000 1.962l1.192.238a1 1 0 01.785.785l.238 1.192a1 1 0 001.962 0l.238-1.192a1 1 0 01.785-.785l1.192-.238a1 1 0 000-1.962l-1.192-.238a1 1 0 01-.785-.785l-.238-1.192zM6.949 5.684a1 1 0 00-1.898 0l-.683 2.051a1 1 0 01-.633.633l-2.051.683a1 1 0 000 1.898l2.051.684a1 1 0 01.633.632l.683 2.051a1 1 0 001.898 0l.683-2.051a1 1 0 01.633-.633l2.051-.683a1 1 0 000-1.898l-2.051-.683a1 1 0 01-.633-.633L6.95 5.684zM13.949 13.684a1 1 0 00-1.898 0l-.184.551a1 1 0 01-.632.633l-.551.183a1 1 0 000 1.898l.551.184a1 1 0 01.633.632l.183.551a1 1 0 001.898 0l.184-.551a1 1 0 01.632-.633l.551-.183a1 1 0 000-1.898l-.551-.184a1 1 0 01-.633-.632l-.183-.551z" /></svg>', permission: 'view_settings', module: 'smart_pricing' },
+    { label: t('admin.sidebar.reports'), href: '/pms/reports', icon: icons.reports, permission: 'view_reports' },
 ]);
 
 // Filter nav items based on user permissions
