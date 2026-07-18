@@ -92,6 +92,17 @@ class FinanceTest extends TestCase
         $this->assertDatabaseCount('finance_payments', 0);
     }
 
+    public function test_deposits_and_refunds_are_mirrored_with_the_correct_direction(): void
+    {
+        $res = $this->reservation();
+        Payment::create(['reservation_id' => $res->id, 'amount' => 100, 'method' => 'cash', 'type' => 'deposit']);
+        Payment::create(['reservation_id' => $res->id, 'amount' => 30, 'method' => 'cash', 'type' => 'refund']);
+
+        $this->assertSame(70.0, $this->arka()->balance());
+        $this->assertSame(1, FinancePayment::where('direction', 'in')->count());
+        $this->assertSame(1, FinancePayment::where('direction', 'out')->count());
+    }
+
     public function test_closing_a_pos_shift_deposits_the_counted_yield_once(): void
     {
         $user = User::factory()->create();

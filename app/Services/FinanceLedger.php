@@ -44,8 +44,11 @@ class FinanceLedger
 
             return null;
         }
-        if (($payment->type ?? 'payment') !== 'payment') {
-            return null; // refunds/adjustments are out of Phase 1 scope
+        $type = $payment->type ?? 'payment';
+        if (! in_array($type, ['payment', 'deposit', 'refund'], true)) {
+            $this->removeFor($payment);
+
+            return null;
         }
 
         $baseCurrency = BaseCurrency::code();
@@ -55,14 +58,18 @@ class FinanceLedger
         return FinancePayment::updateOrCreate(
             ['sourceable_type' => Payment::class, 'sourceable_id' => $payment->id],
             [
-                'direction' => 'in',
+                'direction' => $type === 'refund' ? 'out' : 'in',
                 'account_id' => self::accountFor($method)->id,
                 'amount' => $payment->amount,
                 'currency' => $currency,
                 'fx_rate' => $currency === $baseCurrency ? null : $this->fxRate($currency),
                 'method' => $method,
                 'source' => 'auto',
-                'description' => 'Pagesë folio — rezervimi #'.$payment->reservation_id,
+                'description' => match ($type) {
+                    'deposit' => 'Depozitë folio — rezervimi #'.$payment->reservation_id,
+                    'refund' => 'Rimbursim folio — rezervimi #'.$payment->reservation_id,
+                    default => 'Pagesë folio — rezervimi #'.$payment->reservation_id,
+                },
                 'paid_at' => $payment->created_at ?? now(),
                 'created_by' => $payment->created_by,
             ],

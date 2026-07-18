@@ -63,7 +63,7 @@ final class PaymentReconciliationService
 
         $paymentLedger = FinancePayment::query()
             ->where('sourceable_type', Payment::class)
-            ->whereIn('sourceable_id', $activePayments->pluck('id'))
+            ->whereIn('sourceable_id', $activePayments->pluck('id')->concat($refunds->pluck('id')))
             ->get(['id', 'sourceable_id', 'direction', 'amount', 'amount_base'])
             ->keyBy('sourceable_id');
         $shiftLedger = FinancePayment::query()
@@ -102,6 +102,30 @@ final class PaymentReconciliationService
                     'error',
                     'reservation',
                     $payment->reservation_id,
+                ));
+            }
+        }
+
+        foreach ($refunds as $refund) {
+            $expectedSources++;
+            $ledger = $paymentLedger->get($refund->id);
+            $expected = round((float) $refund->amount, 2);
+            $actual = $ledger && $ledger->direction === 'out' ? round((float) $ledger->amount, 2) : 0.0;
+
+            if ($ledger && abs($expected - $actual) < 0.01) {
+                $matchedSources++;
+            } else {
+                $unpostedTotal += $expected;
+                $issues->push($this->issue(
+                    $ledger ? 'ledger_mismatch' : 'missing_ledger',
+                    'pms',
+                    'PMS-REFUND-'.$refund->id,
+                    $refund->created_at?->toDateString(),
+                    $expected,
+                    $actual,
+                    'error',
+                    'reservation',
+                    $refund->reservation_id,
                 ));
             }
         }
@@ -238,7 +262,8 @@ final class PaymentReconciliationService
                 'refunds' => round((float) $refunds->sum('amount') + (float) $posPayments->where('direction', 'out')->sum('amount'), 2),
                 'voided' => round((float) $voided->sum('amount'), 2),
                 'transaction_count' => $activePayments->count()
-                    + $posPayments->where('direction', 'in')->whereIn('method', ['cash', 'card'])->count()
+                    + $refunds->count()
+                    + $posPayments->whereIn('method', ['cash', 'card'])->count()
                     + $legacyPosOrders->whereIn('payment_method', ['cash', 'card'])->count(),
                 'expected_sources' => $expectedSources,
                 'matched_sources' => $matchedSources,
@@ -249,8 +274,8 @@ final class PaymentReconciliationService
             ],
             'methods' => $methods,
             'sources' => [
-                ['source' => 'pms', 'cash' => $pmsCash, 'card' => $pmsCard, 'total' => round($pmsCash + $pmsCard, 2), 'count' => $activePayments->count()],
-                ['source' => 'pos', 'cash' => $posCash, 'card' => $posCard, 'total' => round($posCash + $posCard, 2), 'count' => $posPayments->where('direction', 'in')->whereIn('method', ['cash', 'card'])->count() + $legacyPosOrders->whereIn('payment_method', ['cash', 'card'])->count()],
+                ['source' => 'pms', 'cash' => $pmsCash, 'card' => $pmsCard, 'total' => round($pmsCash + $pmsCard, 2), 'count' => $activePayments->count() + $refunds->count()],
+                ['source' => 'pos', 'cash' => $posCash, 'card' => $posCard, 'total' => round($posCash + $posCard, 2), 'count' => $posPayments->whereIn('method', ['cash', 'card'])->count() + $legacyPosOrders->whereIn('payment_method', ['cash', 'card'])->count()],
             ],
             'daily' => $daily,
             'issues' => $issues->sortBy([
