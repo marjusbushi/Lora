@@ -7,6 +7,7 @@ use App\Models\FolioItem;
 use App\Models\Payment;
 use App\Models\PosOrder;
 use App\Models\PosOrderPayment;
+use App\Models\Reservation;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Collection;
 
@@ -20,6 +21,8 @@ final class DiscountRefundCashFlowService
 
         $folioDiscounts = FolioItem::query()
             ->where('type', 'discount')
+            ->whereNull('pos_order_id')
+            ->where('amount', '>', 0)
             ->whereBetween('charge_date', [$period->from->toDateString(), $period->to->toDateString()])
             ->with(['reservation:id,guest_id,room_id', 'reservation.guest:id,first_name,last_name', 'reservation.room:id,room_number'])
             ->get();
@@ -32,6 +35,16 @@ final class DiscountRefundCashFlowService
                     ->orWhere(fn ($legacy) => $legacy->whereNull('business_date')->whereNull('paid_at')->whereBetween('created_at', [$start, $end]));
             })
             ->get(['id', 'discount_amount', 'discount_reason', 'is_complimentary', 'business_date', 'paid_at', 'created_at']);
+        $directDiscounts = Reservation::query()
+            ->where('status', '!=', 'cancelled')
+            ->whereNull('no_show_at')
+            ->where('direct_discount_amount', '>', 0)
+            ->where(function ($query) use ($start, $end) {
+                $query->whereBetween('booked_at', [$start, $end])
+                    ->orWhere(fn ($legacy) => $legacy->whereNull('booked_at')->whereBetween('created_at', [$start, $end]));
+            })
+            ->with(['guest:id,first_name,last_name', 'room:id,room_number'])
+            ->get(['id', 'guest_id', 'room_id', 'direct_discount_amount', 'booked_at', 'created_at']);
 
         $pmsRefunds = Payment::query()
             ->where('type', 'refund')
@@ -50,7 +63,8 @@ final class DiscountRefundCashFlowService
             ->whereIn('direction', ['in', 'out'])
             ->get(['id', 'direction', 'amount_base', 'method', 'description', 'paid_at', 'invoice_id', 'bill_id']);
 
-        $discountTotal = round((float) $folioDiscounts->sum('amount') + (float) $posDiscounts->sum('discount_amount'), 2);
+        $pmsDiscountTotal = (float) $folioDiscounts->sum('amount') + (float) $directDiscounts->sum('direct_discount_amount');
+        $discountTotal = round($pmsDiscountTotal + (float) $posDiscounts->sum('discount_amount'), 2);
         $refundTotal = round((float) $pmsRefunds->sum('amount') + (float) $posRefunds->sum('amount'), 2);
         $inflow = round((float) $ledger->where('direction', 'in')->sum('amount_base'), 2);
         $outflow = round((float) $ledger->where('direction', 'out')->sum('amount_base'), 2);
@@ -62,6 +76,14 @@ final class DiscountRefundCashFlowService
                 'reason' => $item->description ?: '—', 'method' => null,
                 'reference' => 'RES-'.$item->reservation_id, 'link_kind' => 'reservation', 'link_id' => $item->reservation_id,
                 'counterparty' => trim(($item->reservation?->guest?->first_name ?? '').' '.($item->reservation?->guest?->last_name ?? '')) ?: '—',
+            ]))
+            ->concat($directDiscounts->map(fn (Reservation $reservation) => [
+                'key' => 'direct-discount-'.$reservation->id, 'kind' => 'discount', 'source' => 'pms',
+                'date' => ($reservation->booked_at ?? $reservation->created_at)?->toDateString(),
+                'amount' => round((float) $reservation->direct_discount_amount, 2),
+                'reason' => 'Ulje rezervimi direkt', 'method' => null,
+                'reference' => 'RES-'.$reservation->id, 'link_kind' => 'reservation', 'link_id' => $reservation->id,
+                'counterparty' => trim(($reservation->guest?->first_name ?? '').' '.($reservation->guest?->last_name ?? '')) ?: '—',
             ]))
             ->concat($posDiscounts->map(fn (PosOrder $order) => [
                 'key' => 'pos-discount-'.$order->id, 'kind' => 'discount', 'source' => 'pos',
@@ -90,12 +112,12 @@ final class DiscountRefundCashFlowService
             'summary' => [
                 'discounts' => $discountTotal, 'refunds' => $refundTotal,
                 'inflow' => $inflow, 'outflow' => $outflow, 'net_cash_flow' => round($inflow - $outflow, 2),
-                'discount_count' => $folioDiscounts->count() + $posDiscounts->count(),
+                'discount_count' => $folioDiscounts->count() + $directDiscounts->count() + $posDiscounts->count(),
                 'refund_count' => $pmsRefunds->count() + $posRefunds->count(),
             ],
             'daily' => $this->daily($period, $ledger),
             'discount_sources' => [
-                ['source' => 'pms', 'amount' => round((float) $folioDiscounts->sum('amount'), 2), 'count' => $folioDiscounts->count()],
+                ['source' => 'pms', 'amount' => round($pmsDiscountTotal, 2), 'count' => $folioDiscounts->count() + $directDiscounts->count()],
                 ['source' => 'pos', 'amount' => round((float) $posDiscounts->sum('discount_amount'), 2), 'count' => $posDiscounts->count()],
             ],
             'reasons' => $activity->where('kind', 'discount')->groupBy('reason')->map(fn (Collection $rows, string $reason) => [

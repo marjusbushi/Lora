@@ -31,7 +31,8 @@ class DiscountRefundCashFlowServiceTest extends TestCase
         $reservation = Reservation::create([
             'room_id' => $room->id, 'guest_id' => $guest->id, 'created_by' => $user->id,
             'check_in_date' => '2026-07-01', 'check_out_date' => '2026-07-05', 'status' => 'checked_in',
-            'total_amount' => 300, 'adults' => 1, 'children' => 0, 'channel' => 'direct',
+            'total_amount' => 300, 'rate_before_discount' => 315, 'direct_discount_amount' => 15,
+            'booked_at' => '2026-07-02 09:00:00', 'adults' => 1, 'children' => 0, 'channel' => 'direct',
         ]);
 
         FolioItem::create([
@@ -59,8 +60,16 @@ class DiscountRefundCashFlowServiceTest extends TestCase
             'pos_order_id' => $pos->id, 'direction' => 'out', 'method' => 'card',
             'amount' => 8, 'paid_at' => '2026-07-04 13:00:00', 'created_by' => $user->id,
         ]);
+        FolioItem::create([
+            'reservation_id' => $reservation->id, 'pos_order_id' => $pos->id,
+            'description' => 'POS refund reversal', 'amount' => -8,
+            'type' => 'discount', 'charge_date' => '2026-07-04',
+        ]);
 
-        $account = FinanceAccount::create(['name' => 'Arka', 'type' => 'cash', 'currency' => 'EUR']);
+        $account = FinanceAccount::firstOrCreate(
+            ['name' => 'Arka'],
+            ['type' => 'cash', 'currency' => 'EUR'],
+        );
         foreach ([['in', 200, '2026-07-02 12:00:00'], ['out', 40, '2026-07-03 12:00:00']] as [$direction, $amount, $paidAt]) {
             FinancePayment::create([
                 'direction' => $direction, 'account_id' => $account->id, 'amount' => $amount,
@@ -70,12 +79,15 @@ class DiscountRefundCashFlowServiceTest extends TestCase
 
         $report = app(DiscountRefundCashFlowService::class)->summary(new ReportingPeriod('2026-07-01', '2026-07-31'));
 
-        $this->assertSame(25.0, $report['summary']['discounts']);
+        $this->assertSame(40.0, $report['summary']['discounts']);
         $this->assertSame(18.0, $report['summary']['refunds']);
         $this->assertSame(200.0, $report['summary']['inflow']);
         $this->assertSame(40.0, $report['summary']['outflow']);
         $this->assertSame(160.0, $report['summary']['net_cash_flow']);
-        $this->assertCount(4, $report['activity']);
+        $this->assertSame(3, $report['summary']['discount_count']);
+        $this->assertCount(5, $report['activity']);
+        $this->assertSame(35.0, collect($report['discount_sources'])->firstWhere('source', 'pms')['amount']);
+        $this->assertFalse(collect($report['activity'])->contains('reason', 'POS refund reversal'));
         $this->assertSame(200.0, collect($report['daily'])->firstWhere('date', '2026-07-02')['inflow']);
     }
 }
