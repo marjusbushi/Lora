@@ -24,7 +24,7 @@ const maxWeekdayRevenue = computed(() => Math.max(0, ...props.byWeekday.map((r) 
 const pct = (v, max) => (Number(max) > 0 ? Math.round((Number(v ?? 0) / Number(max)) * 100) : 0);
 
 // Hours with at least one order — keep the bar list readable.
-const activeHours = computed(() => props.byHour.filter((r) => Number(r.count ?? 0) > 0));
+const activeHours = computed(() => props.byHour.filter((r) => Number(r.count ?? 0) > 0 || Math.abs(Number(r.revenue ?? 0)) > 0.009));
 
 const kpis = [
     { label: translate('admin.generated.k_cbac0a0055be'), value: () => money(props.summary.total_revenue), tone: 'accent', icon: Banknote },
@@ -61,7 +61,7 @@ const kpis = [
             <div class="px-5 py-4 border-b border-neutral-200">
                 <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_89d3e91b2dd1') }}</h3>
             </div>
-            <table v-if="summary.order_count" class="min-w-full divide-y divide-neutral-200">
+            <table v-if="summary.order_count || Math.abs(Number(summary.total_revenue ?? 0)) > 0.009" class="min-w-full divide-y divide-neutral-200">
                 <thead class="bg-neutral-50">
                     <tr>
                         <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('admin.generated.k_f92f5c8f29ee') }}</th>

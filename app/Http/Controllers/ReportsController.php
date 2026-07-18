@@ -631,57 +631,30 @@ class ReportsController extends Controller
         ]);
     }
 
-    /**
-     * POS sales by hour-of-day and weekday over a date range.
-     * Cross-DB safe: we fetch completed POS orders then bucket hour/weekday in PHP via Carbon
-     * (no MySQL-only HOUR()/strftime). Hour = 0..23, weekday = ISO 1=Mon..7=Sun.
-     */
-    public function posHourly(Request $request): Response
+    /** POS sales and refund events by hour-of-day and weekday. */
+    public function posHourly(Request $request, PosPerformanceService $report): Response
     {
         [$from, $to, $days] = $this->range($request);
-
-        $orders = $this->posBusinessRange(PosOrder::where('status', 'completed')->whereNull('refunded_at'), $from, $to)
-            ->get(['id', 'total_amount', 'paid_at', 'created_at']);
-
-        // 24 hour buckets.
-        $byHour = [];
-        for ($h = 0; $h < 24; $h++) {
-            $byHour[$h] = ['hour' => $h, 'count' => 0, 'revenue' => 0.0];
-        }
-
-        // 7 weekday buckets (ISO 1=Mon .. 7=Sun).
+        $analytics = $report->summary(new ReportingPeriod($from, $to));
         $weekdayLabels = [1 => 'Hën', 2 => 'Mar', 3 => 'Mër', 4 => 'Enj', 5 => 'Pre', 6 => 'Sht', 7 => 'Die'];
-        $byWeekday = [];
-        foreach ($weekdayLabels as $iso => $label) {
-            $byWeekday[$iso] = ['weekday' => $label, 'count' => 0, 'revenue' => 0.0];
-        }
-
-        $totalRevenue = 0.0;
-        $orderCount = 0;
-
-        foreach ($orders as $o) {
-            $when = Carbon::parse($o->paid_at ?? $o->created_at);
-            $h = (int) $when->hour;             // 0..23
-            $iso = (int) $when->dayOfWeekIso;   // 1..7
-            $amount = (float) ($o->total_amount ?? 0);
-
-            $byHour[$h]['count']++;
-            $byHour[$h]['revenue'] += $amount;
-
-            $byWeekday[$iso]['count']++;
-            $byWeekday[$iso]['revenue'] += $amount;
-
-            $totalRevenue += $amount;
-            $orderCount++;
-        }
+        $byHour = collect($analytics['hours'])->map(fn (array $row) => [
+            'hour' => $row['hour'],
+            'count' => $row['orders'],
+            'revenue' => $row['revenue'],
+        ])->values();
+        $byWeekday = collect($analytics['weekdays'])->map(fn (array $row) => [
+            'weekday' => $weekdayLabels[$row['weekday']],
+            'count' => $row['orders'],
+            'revenue' => $row['revenue'],
+        ])->values();
 
         return Inertia::render('Reports/PosHourly', [
             'filters' => ['from' => $from, 'to' => $to],
-            'byHour' => array_values($byHour),
-            'byWeekday' => array_values($byWeekday),
+            'byHour' => $byHour,
+            'byWeekday' => $byWeekday,
             'summary' => [
-                'total_revenue' => round($totalRevenue, 2),
-                'order_count' => $orderCount,
+                'total_revenue' => $analytics['summary']['total_revenue'],
+                'order_count' => $analytics['summary']['order_count'],
                 'days' => $days,
             ],
             'currency' => $this->currency(),
@@ -923,23 +896,6 @@ class ReportsController extends Controller
         $days = Carbon::parse($from)->diffInDays(Carbon::parse($to)) + 1;
 
         return [$from, $to, max(1, (int) $days)];
-    }
-
-    private function posBusinessRange($query, string $from, string $to)
-    {
-        return $query->where(function ($range) use ($from, $to) {
-            $range->where(function ($business) use ($from, $to) {
-                $business->whereDate('business_date', '>=', $from)->whereDate('business_date', '<=', $to);
-            })
-                ->orWhere(function ($legacy) use ($from, $to) {
-                    $legacy->whereNull('business_date')
-                        ->whereBetween('paid_at', ["{$from} 00:00:00", "{$to} 23:59:59"]);
-                })
-                ->orWhere(function ($legacy) use ($from, $to) {
-                    $legacy->whereNull('business_date')->whereNull('paid_at')
-                        ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"]);
-                });
-        });
     }
 
     private function currency(): string
