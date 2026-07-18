@@ -180,6 +180,18 @@ jobs:
       - name: Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
+      - name: Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '22.20.0'
+          cache: npm
+
+      - name: Frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build frontend
+        run: npm run build
+
       - name: Enable application-owned trigger DDL
         run: mysql -h 127.0.0.1 -P 3306 -uroot -proot -e 'SET GLOBAL log_bin_trust_function_creators = 1'
 
