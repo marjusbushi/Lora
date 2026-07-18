@@ -874,6 +874,14 @@ onMounted(() => {
                 <p class="mt-3 font-semibold text-primary-900">{{ view === 'orders' ? 'Nuk ka porosi të hapura' : 'Nuk ka shitje për këtë filtër' }}</p>
                 <p class="mt-1 text-body-sm text-neutral-500">{{ view === 'orders' ? 'Porositë e ruajtura shfaqen automatikisht këtu.' : 'Ndrysho filtrin ose regjistro shitjen e parë.' }}</p>
             </div>
+            <div v-if="orders.last_page > 1" class="flex items-center justify-between border-t border-neutral-200 px-5 py-4">
+                <p class="text-small text-neutral-500">{{ orders.from }}–{{ orders.to }} nga {{ orders.total }}</p>
+                <div class="flex items-center gap-2">
+                    <Button size="sm" variant="outline" :disabled="!orders.prev_page_url" @click="router.visit(orders.prev_page_url, { preserveScroll: true })">Para</Button>
+                    <span class="min-w-16 text-center text-small font-semibold text-neutral-600">{{ orders.current_page }} / {{ orders.last_page }}</span>
+                    <Button size="sm" variant="outline" :disabled="!orders.next_page_url" @click="router.visit(orders.next_page_url, { preserveScroll: true })">Pas</Button>
+                </div>
+            </div>
         </Card>
 
         <div v-else-if="view === 'shifts'" class="space-y-5">

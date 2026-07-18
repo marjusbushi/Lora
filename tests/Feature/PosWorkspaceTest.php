@@ -152,4 +152,35 @@ class PosWorkspaceTest extends TestCase
         $this->assertSame('open', $order->status);
         $this->assertSame('4.00', $order->total_amount);
     }
+
+    public function test_pos_registers_expose_paginated_results(): void
+    {
+        $this->withoutVite();
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        foreach (range(1, 16) as $index) {
+            PosOrder::create([
+                'status' => 'open',
+                'total_amount' => $index,
+                'created_by' => $admin->id,
+            ]);
+        }
+
+        $this->actingAs($admin)->get(route('pos.orders'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('view', 'orders')
+                ->where('orders.current_page', 1)
+                ->where('orders.last_page', 2)
+                ->where('orders.total', 16)
+                ->has('orders.data', 15));
+
+        $this->actingAs($admin)->get(route('pos.orders', ['page' => 2]))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('orders.current_page', 2)
+                ->has('orders.data', 1));
+    }
 }

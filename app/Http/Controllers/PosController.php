@@ -193,7 +193,7 @@ class PosController extends Controller
                 });
             });
 
-        $orders = $query->paginate(15)->through(fn (PosOrder $order) => [
+        $orders = $query->paginate(15)->withQueryString()->through(fn (PosOrder $order) => [
             'id' => $order->id,
             'reservation_id' => $order->reservation_id,
             'table_number' => $order->table_number,
