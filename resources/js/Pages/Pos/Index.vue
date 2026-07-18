@@ -13,7 +13,7 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ShiftBanner from '@/Components/Pos/ShiftBanner.vue';
 import PosReceipt from '@/Components/Invoices/PosReceipt.vue';
-import { ArrowLeft, Banknote, Clock3, Maximize2, Minus, Pencil, Plus, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, X } from 'lucide-vue-next';
+import { ArrowLeft, Banknote, Clock3, Maximize2, Minimize2, Minus, Pencil, Plus, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, X } from 'lucide-vue-next';
 
 const props = defineProps({
     view: { type: String, default: 'sale' },
@@ -493,14 +493,19 @@ onMounted(() => {
             <div>
                 <div class="flex items-center gap-3">
                     <h1 class="text-h2 text-primary-900">{{ view === 'sale' ? 'Shitje POS' : view === 'orders' ? 'Porositë' : view === 'receipts' ? 'Shitjet & kuponët' : 'Turnet POS' }}</h1>
-                    <span v-if="touchMode && view === 'sale'" class="rounded-full bg-accent-100 px-3 py-1 text-tiny font-bold uppercase tracking-wide text-accent-800">Touch Mode</span>
                 </div>
                 <p v-if="!touchMode || view !== 'sale'" class="mt-1 text-body-sm text-neutral-500">{{ view === 'sale' ? 'Porosia dhe pagesa përfundojnë në një ekran.' : view === 'orders' ? 'Ndrysho, arkëto ose anulo porositë ende të hapura.' : view === 'receipts' ? 'Historiku i shitjeve, kuponëve dhe rimbursimeve.' : 'Hapja, mbyllja dhe kontrolli i arkës sipas turnit.' }}</p>
             </div>
             <div v-if="view === 'sale'" class="flex flex-wrap items-center gap-2">
-                <Button variant="outline" class="h-[58px]" @click="toggleTouchMode">
-                    <Maximize2 class="h-4 w-4" /> {{ touchMode ? 'Dil nga Touch Mode' : 'Hap Touch Mode' }}
-                </Button>
+                <div v-if="!touchMode" class="inline-flex items-center rounded-xl border border-neutral-200 bg-neutral-100 p-1 shadow-sm" aria-label="Mënyra e përdorimit të POS-it">
+                    <span class="inline-flex h-9 items-center rounded-lg bg-white px-3 text-small font-semibold text-primary-900 shadow-sm">Standard</span>
+                    <button type="button" class="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-small font-semibold text-neutral-500 transition hover:bg-white hover:text-accent-700" @click="toggleTouchMode">
+                        <Maximize2 class="h-4 w-4" /> Touch
+                    </button>
+                </div>
+                <button v-else type="button" class="inline-flex h-9 items-center gap-2 rounded-lg border border-accent-200 bg-white px-3 text-small font-semibold text-accent-700 shadow-sm transition hover:border-accent-300 hover:bg-accent-50" @click="toggleTouchMode">
+                    <Minimize2 class="h-4 w-4" /> Dil nga Touch
+                </button>
                 <div class="rounded-xl border border-neutral-200 bg-white px-4 py-2 shadow-card">
                     <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">Hapur</p>
                     <p class="text-h4 text-warning-700">{{ stats.open }}</p>
