@@ -24,9 +24,9 @@ const changes = computed(() => props.analytics.changes || {});
 const daily = computed(() => Object.entries(props.analytics.current?.daily || {}).map(([date, value], index) => ({
     date,
     ...value,
-    previous: Object.values(props.analytics.previous_period?.daily || {})[index]?.room_revenue || 0,
+    previous: Object.values(props.analytics.previous_period?.daily || {})[index]?.total_revenue || 0,
 })));
-const maxDailyRevenue = computed(() => Math.max(1, ...daily.value.flatMap((day) => [day.room_revenue, day.previous])));
+const maxDailyRevenue = computed(() => Math.max(1, ...daily.value.flatMap((day) => [day.total_revenue, day.previous])));
 const forecastKpis = computed(() => props.forecast.kpis || {});
 const budgetProgress = computed(() => props.budget.revenue_target
     ? Math.min(100, Math.round(Number(current.value.total_revenue || 0) / Number(props.budget.revenue_target) * 100))
@@ -36,7 +36,7 @@ const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(g
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const trendText = (key) => changes.value[key] === null || changes.value[key] === undefined
     ? translate('reports360.noComparison')
-    : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}%`;
+    : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}${key === 'occupancy' ? ' pp' : '%'}`;
 const trend = (key) => changes.value[key] > 0 ? 'up' : changes.value[key] < 0 ? 'down' : 'flat';
 
 const kpis = computed(() => [
@@ -69,9 +69,9 @@ const alertMeta = (alert) => ({
                 </div>
                 <div class="h-64 px-5 pb-4 pt-5">
                     <div v-if="daily.length" class="flex h-full items-end gap-1.5 border-b border-neutral-200">
-                        <div v-for="day in daily" :key="day.date" class="group relative flex h-full min-w-0 flex-1 items-end justify-center gap-px" :title="`${day.date}: ${money(day.room_revenue)}`">
+                        <div v-for="day in daily" :key="day.date" class="group relative flex h-full min-w-0 flex-1 items-end justify-center gap-px" :title="`${day.date}: ${money(day.total_revenue)}`">
                             <span class="w-1/3 rounded-t bg-neutral-200" :style="{ height: `${Math.max(2, day.previous / maxDailyRevenue * 100)}%` }" />
-                            <span class="w-1/3 rounded-t bg-accent-500 transition group-hover:bg-accent-700" :style="{ height: `${Math.max(2, day.room_revenue / maxDailyRevenue * 100)}%` }" />
+                            <span class="w-1/3 rounded-t bg-accent-500 transition group-hover:bg-accent-700" :style="{ height: `${Math.max(2, day.total_revenue / maxDailyRevenue * 100)}%` }" />
                         </div>
                     </div>
                     <div v-else class="flex h-full items-center justify-center text-body-sm text-neutral-400">{{ $t('reports360.noData') }}</div>
@@ -79,6 +79,7 @@ const alertMeta = (alert) => ({
                 <div class="flex flex-wrap gap-x-8 gap-y-2 border-t border-neutral-200 px-5 py-3 text-tiny text-neutral-500">
                     <span>{{ $t('reports360.roomRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.room_revenue) }}</b></span>
                     <span>{{ $t('reports360.posRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.pos_revenue) }}</b></span>
+                    <span>{{ $t('reports360.otherRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.other_revenue) }}</b></span>
                     <span>{{ $t('reports360.netRoomRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.net_room_revenue) }}</b></span>
                 </div>
             </Card>
@@ -97,6 +98,11 @@ const alertMeta = (alert) => ({
                         <p class="mt-2 text-tiny text-neutral-500">{{ budgetProgress }}% {{ $t('reports360.completed') }}</p>
                     </div>
                     <p v-else class="mt-3 text-tiny text-neutral-500">{{ $t('reports360.budgetMissing') }}</p>
+                    <div v-if="budget.has_budget" class="mt-3 grid grid-cols-3 gap-2 border-t border-neutral-100 pt-3 text-tiny">
+                        <span><small class="block text-neutral-500">ADR</small><b class="text-primary-900">{{ budget.adr_target ? money(budget.adr_target) : '—' }}</b></span>
+                        <span><small class="block text-neutral-500">{{ $t('reports360.occupancy') }}</small><b class="text-primary-900">{{ budget.occupancy_target ? pct(budget.occupancy_target) : '—' }}</b></span>
+                        <span><small class="block text-neutral-500">RevPAR</small><b class="text-primary-900">{{ budget.revpar_target ? money(budget.revpar_target) : '—' }}</b></span>
+                    </div>
                 </Card>
 
                 <Card>
