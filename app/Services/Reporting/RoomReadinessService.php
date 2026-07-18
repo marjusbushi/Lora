@@ -103,7 +103,7 @@ final class RoomReadinessService
                 'turnovers' => $rows->whereIn('state', ['turnover', 'departure_pending'])->count(),
             ],
             'states' => $rows->countBy('state')->map(fn (int $value, string $key) => ['key' => $key, 'value' => $value])->values()->all(),
-            'rooms' => $rows->take(100)->all(),
+            'rooms' => $rows->all(),
         ];
     }
 
@@ -115,11 +115,11 @@ final class RoomReadinessService
         if ($room->status === 'maintenance') {
             return 'maintenance';
         }
-        if ($task || $room->status === 'cleaning') {
-            return $arrival ? 'cleaning_for_arrival' : 'cleaning';
-        }
         if ($departure?->status === 'checked_in') {
             return $arrival ? 'turnover' : 'departure_pending';
+        }
+        if ($task || $room->status === 'cleaning') {
+            return $arrival ? 'cleaning_for_arrival' : 'cleaning';
         }
         if ($arrival && in_array($arrival->status, ['pending', 'confirmed'], true)) {
             return $room->status === 'available' ? 'ready' : 'occupied';

@@ -17,6 +17,20 @@ class RoomReadinessServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_it_returns_the_complete_room_board_without_a_hidden_limit(): void
+    {
+        User::factory()->create();
+        $type = RoomType::create(['name' => 'Large property', 'base_price' => 100, 'max_occupancy' => 2, 'amenities' => []]);
+        foreach (range(1, 101) as $number) {
+            $this->room($type, str_pad((string) $number, 3, '0', STR_PAD_LEFT), 'available');
+        }
+
+        $report = app(RoomReadinessService::class)->snapshot();
+
+        $this->assertSame(101, $report['summary']['total_rooms']);
+        $this->assertCount(101, $report['rooms']);
+    }
+
     public function test_it_prioritizes_live_arrival_readiness_and_turnovers(): void
     {
         CarbonImmutable::setTestNow('2026-07-18 10:00:00');
@@ -37,6 +51,10 @@ class RoomReadinessServiceTest extends TestCase
         CleaningTask::create([
             'room_id' => $cleaning->id, 'assigned_to' => $user->id,
             'type' => 'checkout_clean', 'status' => 'in_progress', 'priority' => 'urgent',
+        ]);
+        CleaningTask::create([
+            'room_id' => $turnover->id, 'assigned_to' => $user->id,
+            'type' => 'checkout_clean', 'status' => 'pending', 'priority' => 'urgent',
         ]);
 
         $report = app(RoomReadinessService::class)->snapshot();
