@@ -1,13 +1,15 @@
 <script setup>
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import SettingsSidebar from '@/Components/SettingsSidebar.vue';
+import { settingsGroups, visibleSettingsTabs } from '@/Pages/Settings/settingsNavigation';
 import {
-    Bot, CalendarDays, Check, Copy, ExternalLink, MessageSquareText,
+    Bot, BriefcaseBusiness, CalendarDays, Check, Copy, ExternalLink, Hotel, MessageSquareText,
     PackageSearch, Search, ShieldCheck, Sparkles, SprayCan, UtensilsCrossed,
-    WalletCards, Wrench,
+    WalletCards, Wrench, X,
 } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -20,8 +22,28 @@ const props = defineProps({
 
 const copied = ref(false);
 const promptCopied = ref('');
+const settingsSearch = ref('');
 const form = useForm({ ...props.aiSettings });
-const isAdmin = computed(() => usePage().props.auth.user?.role === 'admin');
+const page = usePage();
+const { locale } = useI18n();
+const modules = computed(() => page.props.modules || {});
+const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
+const groupIcons = { Hotel, BriefcaseBusiness, Bot, ShieldCheck };
+const navigationTabs = computed(() => visibleSettingsTabs(modules.value).map((tab) => ({
+    ...tab,
+    label: locale.value === 'sq' ? tab.labelSq : tab.labelEn,
+})));
+const navigationGroups = computed(() => settingsGroups.map((group) => ({
+    ...group,
+    label: locale.value === 'sq' ? group.labelSq : group.labelEn,
+    tabs: navigationTabs.value.filter((tab) => tab.group === group.id),
+})));
+const settingsSearchResults = computed(() => {
+    const query = settingsSearch.value.trim().toLocaleLowerCase(locale.value);
+    if (!query) return [];
+
+    return navigationTabs.value.filter((tab) => tab.label.toLocaleLowerCase(locale.value).includes(query)).slice(0, 6);
+});
 const breadcrumbs = computed(() => isAdmin.value
     ? [{ label: 'Paneli', href: '/dashboard' }, { label: 'Cilësimet', href: '/pms/settings' }, { label: 'Lora AI' }]
     : [{ label: 'Paneli', href: '/dashboard' }, { label: 'Lora AI' }]);
@@ -57,6 +79,21 @@ function disconnect() {
     }
 }
 
+function navigateSettingsTab(tab) {
+    settingsSearch.value = '';
+    router.visit(tab.href || route('settings.index', { tab: tab.id }));
+}
+
+function selectSettingsGroup(groupId) {
+    const firstTab = navigationGroups.value.find((group) => group.id === groupId)?.tabs[0];
+    if (firstTab) navigateSettingsTab(firstTab);
+}
+
+function selectSettingsPage(tabId) {
+    const tab = navigationTabs.value.find((item) => item.id === tabId);
+    if (tab) navigateSettingsTab(tab);
+}
+
 const actions = {
     'ai.guest_reply.sent': 'Përgjigje për mysafirin u dërgua',
     'ai.pricing_range.applied': 'Çmimet e aprovuara u aplikuan',
@@ -66,15 +103,54 @@ const actions = {
 <template>
     <Head title="Lora AI" />
     <AppLayout>
-        <div class="mx-auto w-full max-w-[1440px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-            <PageHeader
-                title="Lora AI"
-                subtitle="Lidhja me ChatGPT, kërkimi universal dhe lejet e kontrolluara."
-                :breadcrumbs="breadcrumbs"
-            />
+        <div class="pms-settings-shell mx-auto w-full max-w-[1480px]">
+            <header class="settings-page-heading flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                    <PageHeader title="Konfigurimi i Lora AI" :breadcrumbs="breadcrumbs" />
+                    <p class="mt-1 text-body-sm text-neutral-500">Lidhja me ChatGPT, kërkimi universal dhe lejet e kontrolluara.</p>
+                </div>
 
-            <div class="flex flex-col gap-6 lg:flex-row">
-                <SettingsSidebar v-if="isAdmin" active-item="lora-ai" />
+                <div v-if="isAdmin" class="settings-search relative w-full md:w-[340px]">
+                    <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                    <input v-model="settingsSearch" type="search" class="w-full border bg-white py-2 pl-9 pr-9" :placeholder="locale === 'sq' ? 'Kërko konfigurim…' : 'Search settings…'">
+                    <button v-if="settingsSearch" type="button" class="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" @click="settingsSearch = ''">
+                        <X class="h-4 w-4" />
+                    </button>
+                    <div v-if="settingsSearch" class="settings-search-results absolute right-0 top-[calc(100%+8px)] z-30 w-full overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
+                        <button v-for="tab in settingsSearchResults" :key="tab.id" type="button" class="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-body-sm text-neutral-700 hover:bg-accent-50 hover:text-accent-800" @click="navigateSettingsTab(tab)">
+                            <span>{{ tab.label }}</span>
+                            <span class="text-tiny text-neutral-400">{{ navigationGroups.find((group) => group.id === tab.group)?.label }}</span>
+                        </button>
+                        <p v-if="!settingsSearchResults.length" class="px-3 py-3 text-body-sm text-neutral-500">{{ locale === 'sq' ? 'Nuk u gjet konfigurim.' : 'No settings found.' }}</p>
+                    </div>
+                </div>
+            </header>
+
+            <nav v-if="isAdmin" class="settings-category-tabs mt-5 hidden grid-cols-4 gap-2 rounded-xl border border-neutral-200 bg-white p-2 shadow-card lg:grid" :aria-label="locale === 'sq' ? 'Kategoritë e konfigurimit' : 'Settings categories'">
+                <button v-for="group in navigationGroups" :key="group.id" type="button" class="settings-category-tab flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-body-sm font-semibold transition" :class="group.id === 'automation' ? 'bg-accent-700 text-white shadow-sm' : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'" :aria-pressed="group.id === 'automation'" @click="selectSettingsGroup(group.id)">
+                    <component :is="groupIcons[group.icon]" class="h-4 w-4" />
+                    <span>{{ group.label }}</span>
+                    <span class="rounded-full px-1.5 py-0.5 text-tiny" :class="group.id === 'automation' ? 'bg-white/15 text-white' : 'bg-neutral-100 text-neutral-500'">{{ group.tabs.length }}</span>
+                </button>
+            </nav>
+
+            <div v-if="isAdmin" class="settings-mobile-nav mt-4 grid gap-2 sm:grid-cols-2 lg:hidden">
+                <label>
+                    <span class="sr-only">{{ locale === 'sq' ? 'Kategoria' : 'Category' }}</span>
+                    <select class="w-full" value="automation" @change="selectSettingsGroup($event.target.value)">
+                        <option v-for="group in navigationGroups" :key="group.id" :value="group.id">{{ group.label }}</option>
+                    </select>
+                </label>
+                <label>
+                    <span class="sr-only">{{ locale === 'sq' ? 'Faqja' : 'Page' }}</span>
+                    <select class="w-full" value="ai" @change="selectSettingsPage($event.target.value)">
+                        <option v-for="tab in navigationTabs.filter((item) => item.group === 'automation')" :key="tab.id" :value="tab.id">{{ tab.label }}</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="settings-layout mt-4 flex flex-col gap-4 lg:flex-row lg:items-start">
+                <SettingsSidebar v-if="isAdmin" active-item="lora-ai" active-group-only />
 
                 <div class="min-w-0 flex-1 space-y-5">
             <section class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
