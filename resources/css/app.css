@@ -176,6 +176,21 @@
         box-shadow: var(--settings-shadow);
     }
 
+    .pms-settings-shell .settings-category-tabs,
+    .pms-settings-shell .settings-search-results {
+        border-color: var(--settings-line);
+        box-shadow: var(--settings-shadow);
+    }
+
+    .pms-settings-shell .settings-search input,
+    .pms-settings-shell .settings-mobile-nav select {
+        min-height: var(--settings-control-height);
+        border-color: var(--settings-line);
+        border-radius: var(--settings-control-radius);
+        color: #34413b;
+        font-size: 13px;
+    }
+
     .pms-settings-shell .settings-sidebar a,
     .pms-settings-shell .settings-sidebar button {
         min-height: 38px;
