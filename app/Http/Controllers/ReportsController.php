@@ -24,6 +24,7 @@ use App\Services\Reporting\MaintenanceSlaReportService;
 use App\Services\Reporting\OutstandingBalanceService;
 use App\Services\Reporting\PaymentReconciliationService;
 use App\Services\Reporting\PickupPaceService;
+use App\Services\Reporting\RecurringMaintenanceIssueService;
 use App\Services\Reporting\ReportingPeriod;
 use App\Services\Reporting\RoomTypePerformanceService;
 use App\Services\Reporting\StayRevenueAllocator;
@@ -935,6 +936,18 @@ class ReportsController extends Controller
         [$from, $to] = $this->range($request);
 
         return Inertia::render('Reports/MaintenanceSla', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'analytics' => $report->summary(new ReportingPeriod($from, $to)),
+            'canViewMaintenance' => $request->user()?->can('view_maintenance') ?? false,
+            'currency' => $this->currency(),
+        ]);
+    }
+
+    public function recurringMaintenance(Request $request, RecurringMaintenanceIssueService $report): Response
+    {
+        [$from, $to] = $this->range($request);
+
+        return Inertia::render('Reports/RecurringMaintenance', [
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $report->summary(new ReportingPeriod($from, $to)),
             'canViewMaintenance' => $request->user()?->can('view_maintenance') ?? false,

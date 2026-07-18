@@ -66,8 +66,11 @@ class ReportsLoadTest extends TestCase
             'reports.posVoids' => 'Reports/PosVoids',
             'reports.roomStatus' => 'Reports/RoomStatus',
             'reports.housekeepingReport' => 'Reports/Housekeeping',
+            'reports.maintenanceSla' => 'Reports/MaintenanceSla',
+            'reports.recurringMaintenance' => 'Reports/RecurringMaintenance',
             'reports.inHouse' => 'Reports/InHouse',
             'reports.discounts' => 'Reports/Discounts',
+            'reports.departmentRevenue' => 'Reports/DepartmentRevenue',
         ];
         foreach ($routes as $name => $component) {
             $this->actingAs($admin)->get(route($name))
