@@ -4970,6 +4970,20 @@
       "verify": "Verifiko",
       "missingStatus": "Mungon"
     },
+    "posPerformance": {
+      "title": "Shitjet & Performanca POS",
+      "short": "Shitjet, kërkesa, artikujt dhe marzhi bruto i vlerësuar.",
+      "category": "POS & inventari",
+      "revenue": "Shitje neto",
+      "orders": "Porosi",
+      "avgTicket": "Kuponi mesatar",
+      "grossMargin": "Marzhi bruto",
+      "byCategory": "Performanca sipas kategorisë",
+      "hourly": "Kërkesa sipas orës",
+      "items": "artikuj",
+      "cost": "Kosto e vlerësuar",
+      "margin": "Marzhi"
+    },
     "cancellationRisk": {
       "title": "Anulime & No-Show",
       "short": "Humbjet dhe rezervimet që kërkojnë veprim.",

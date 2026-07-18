@@ -122,8 +122,7 @@ const groups = [
         module: 'pos',
         icon: Utensils,
         reports: [
-            { name: translate('admin.generated.k_443dc45fa745'), desc: translate('admin.generated.k_f8476b1b0151'), to: 'reports.posSales', icon: ShoppingBasket },
-            { name: translate('admin.generated.k_598ef37ef3c9'), desc: translate('admin.generated.k_5c43b8be2406'), to: 'reports.posHourly', icon: Clock3 },
+            { name: translate('reports360.posPerformance.title'), desc: translate('reports360.posPerformance.short'), to: 'reports.posSales', icon: ShoppingBasket },
             { name: translate('admin.reports.catalog.posPaymentMix'), desc: translate('admin.generated.k_fe6e775c6227'), to: 'reports.posPaymentMix', icon: CreditCard },
             { name: translate('admin.reports.catalog.posVoids'), desc: translate('admin.generated.k_22c51f5e6a35'), to: 'reports.posVoids', icon: CalendarX },
         ],

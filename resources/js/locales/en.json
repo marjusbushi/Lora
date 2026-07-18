@@ -4970,6 +4970,20 @@
       "verify": "Verify",
       "missingStatus": "Missing"
     },
+    "posPerformance": {
+      "title": "POS Sales & Performance",
+      "short": "Sales, demand, products and estimated gross margin.",
+      "category": "POS & inventory",
+      "revenue": "Net sales",
+      "orders": "Orders",
+      "avgTicket": "Average ticket",
+      "grossMargin": "Gross margin",
+      "byCategory": "Performance by category",
+      "hourly": "Hourly demand",
+      "items": "items",
+      "cost": "Est. cost",
+      "margin": "Margin"
+    },
     "cancellationRisk": {
       "title": "Cancellations & No-Show",
       "short": "Losses and reservations requiring action.",

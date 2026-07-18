@@ -28,12 +28,12 @@ use App\Services\Reporting\OperationsExecutiveService;
 use App\Services\Reporting\OutstandingBalanceService;
 use App\Services\Reporting\PaymentReconciliationService;
 use App\Services\Reporting\PickupPaceService;
+use App\Services\Reporting\PosPerformanceService;
 use App\Services\Reporting\RecurringMaintenanceIssueService;
 use App\Services\Reporting\ReportingPeriod;
 use App\Services\Reporting\RoomReadinessService;
 use App\Services\Reporting\RoomTypePerformanceService;
 use App\Services\Reporting\StayRevenueAllocator;
-use App\Tenancy\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -261,75 +261,19 @@ class ReportsController extends Controller
         ]);
     }
 
-    /** POS sales (F&B): revenue by menu category + top items for a date range. */
-    public function posSales(Request $request): Response
+    /** POS performance: sales, margin, hourly demand, categories and top items. */
+    public function posSales(Request $request, PosPerformanceService $report): Response
     {
-        [$from, $to, $days] = $this->range($request);
-
-        // Operational date is the hotel business date; paid_at is the legacy fallback.
-        $orderIds = $this->posBusinessRange(PosOrder::where('status', 'completed')->whereNull('refunded_at'), $from, $to)
-            ->pluck('id');
-
-        // (A) Sales by category: order_items -> menu_items -> menu_categories.
-        $byCategory = DB::table('pos_order_items as oi')
-            ->join('pos_orders as po', 'po.id', '=', 'oi.pos_order_id')
-            ->join('menu_items as mi', 'mi.id', '=', 'oi.menu_item_id')
-            ->leftJoin('menu_categories as mc', 'mc.id', '=', 'mi.menu_category_id')
-            ->whereIn('oi.pos_order_id', $orderIds)
-            ->where('oi.tenant_id', app(TenantContext::class)->id())
-            ->groupBy('mc.name')
-            ->select(
-                DB::raw("COALESCE(mc.name, 'Pa kategori') as category"),
-                DB::raw('SUM(oi.quantity) as qty'),
-                DB::raw('SUM(oi.total_price * CASE WHEN po.subtotal_amount > 0 THEN 1.0 * po.total_amount / po.subtotal_amount ELSE 1 END) as revenue')
-            )
-            ->orderByDesc('revenue')
-            ->get()
-            ->map(fn ($r) => [
-                'category' => $r->category,
-                'qty' => (int) $r->qty,
-                'revenue' => round((float) $r->revenue, 2),
-            ]);
-
-        // (B) Top 15 items by revenue.
-        $topItems = DB::table('pos_order_items as oi')
-            ->join('pos_orders as po', 'po.id', '=', 'oi.pos_order_id')
-            ->join('menu_items as mi', 'mi.id', '=', 'oi.menu_item_id')
-            ->leftJoin('menu_categories as mc', 'mc.id', '=', 'mi.menu_category_id')
-            ->whereIn('oi.pos_order_id', $orderIds)
-            ->where('oi.tenant_id', app(TenantContext::class)->id())
-            ->groupBy('mi.name', 'mc.name')
-            ->select(
-                'mi.name as item',
-                DB::raw("COALESCE(mc.name, 'Pa kategori') as category"),
-                DB::raw('SUM(oi.quantity) as qty'),
-                DB::raw('SUM(oi.total_price * CASE WHEN po.subtotal_amount > 0 THEN 1.0 * po.total_amount / po.subtotal_amount ELSE 1 END) as revenue')
-            )
-            ->orderByDesc('revenue')
-            ->limit(15)
-            ->get()
-            ->map(fn ($r) => [
-                'item' => $r->item,
-                'category' => $r->category,
-                'qty' => (int) $r->qty,
-                'revenue' => round((float) $r->revenue, 2),
-            ]);
-
-        // (C) Summary KPIs.
-        $orderCount = $orderIds->count();
-        $totalRevenue = (float) PosOrder::whereIn('id', $orderIds)->sum('total_amount');
-        $avgTicket = $orderCount ? $totalRevenue / $orderCount : 0.0;
+        [$from, $to] = $this->range($request);
+        $analytics = $report->withComparison(new ReportingPeriod($from, $to));
+        $current = $analytics['current'];
 
         return Inertia::render('Reports/PosSales', [
             'filters' => ['from' => $from, 'to' => $to],
-            'byCategory' => $byCategory,
-            'topItems' => $topItems,
-            'summary' => [
-                'order_count' => $orderCount,
-                'total_revenue' => round($totalRevenue, 2),
-                'avg_ticket' => round($avgTicket, 2),
-                'days' => $days,
-            ],
+            'analytics' => $analytics,
+            'byCategory' => $current['categories'],
+            'topItems' => $current['top_items'],
+            'summary' => $current['summary'],
             'currency' => $this->currency(),
         ]);
     }
