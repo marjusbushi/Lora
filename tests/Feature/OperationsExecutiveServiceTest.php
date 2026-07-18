@@ -32,6 +32,7 @@ class OperationsExecutiveServiceTest extends TestCase
         CleaningTask::create(['room_id' => $arrivalRoom->id, 'type' => 'checkout_clean', 'status' => 'pending', 'priority' => 'urgent']);
         PosOrder::create(['reservation_id' => $departure->id, 'status' => 'open', 'total_amount' => 10, 'created_by' => $user->id]);
         MaintenanceIssue::create(['room_id' => $arrivalRoom->id, 'reported_by' => $user->id, 'title' => 'AC', 'priority' => 'critical', 'status' => 'reported', 'due_at' => '2026-07-18 09:00:00']);
+        MaintenanceIssue::create(['room_id' => $departureRoom->id, 'reported_by' => $user->id, 'title' => 'TV', 'priority' => 'low', 'status' => 'resolved', 'due_at' => '2026-07-19 09:00:00']);
 
         $snapshot = app(OperationsExecutiveService::class)->snapshot();
 
@@ -40,8 +41,9 @@ class OperationsExecutiveServiceTest extends TestCase
         $this->assertSame(1, $snapshot['flow']['in_house_stays']);
         $this->assertSame(1, $snapshot['flow']['open_pos']);
         $this->assertSame(1, $snapshot['readiness']['attention']);
-        $this->assertSame(1, $snapshot['maintenance']['open']);
+        $this->assertSame(2, $snapshot['maintenance']['open']);
         $this->assertSame(1, $snapshot['maintenance']['overdue']);
+        $this->assertFalse(collect($snapshot['actions'])->contains(fn (array $action) => $action['kind'] === 'readiness' && $action['room'] === '102'));
         $this->assertTrue(collect($snapshot['actions'])->contains('kind', 'departure'));
         $this->assertTrue(collect($snapshot['actions'])->contains('kind', 'maintenance'));
 

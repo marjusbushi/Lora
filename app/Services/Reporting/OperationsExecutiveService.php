@@ -21,7 +21,7 @@ final class OperationsExecutiveService
         $movements = $this->guestMovements->summary($period);
         $readiness = $this->roomReadiness->snapshot($includeGuestDetails, $includeHousekeepingDetails);
         $openMaintenance = MaintenanceIssue::query()
-            ->whereNotIn('status', ['resolved', 'verified', 'closed'])
+            ->whereNotIn('status', ['verified', 'closed'])
             ->with('room:id,room_number')
             ->orderByRaw("CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END")
             ->orderBy('due_at')
@@ -32,7 +32,8 @@ final class OperationsExecutiveService
         $inHouse = collect($movements['in_house']);
         $now = now();
         $actions = collect($readiness['rooms'])
-            ->filter(fn (array $room) => in_array($room['state'], ['unassigned', 'maintenance', 'cleaning_for_arrival', 'turnover', 'occupied'], true))
+            ->filter(fn (array $room) => in_array($room['state'], ['unassigned', 'maintenance', 'cleaning_for_arrival', 'turnover'], true)
+                || ($room['state'] === 'occupied' && $room['arrival']))
             ->take(8)
             ->map(fn (array $room) => [
                 'key' => $room['key'],

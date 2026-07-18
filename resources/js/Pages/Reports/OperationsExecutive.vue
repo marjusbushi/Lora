@@ -44,7 +44,7 @@ const actionDetail = (action) => {
 };
 const actionHref = (action) => {
     if (action.reservation_id && props.permissions.reservations) return route('reservations.show', action.reservation_id);
-    if (action.kind === 'maintenance' && props.permissions.maintenance) return route('maintenance.index');
+    if (action.kind === 'maintenance' && props.permissions.maintenance) return route('maintenance.index', { issue_id: action.maintenance_id });
     if (action.kind === 'readiness') return route('reports.roomReadiness');
     return null;
 };
