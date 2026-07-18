@@ -499,7 +499,7 @@ onMounted(() => {
             <div v-if="view === 'sale'" class="flex flex-wrap items-center gap-2">
                 <button
                     type="button"
-                    class="group min-w-32 rounded-xl border border-neutral-200 bg-white px-4 py-2 text-left shadow-card transition hover:border-accent-300 hover:bg-accent-50 focus:outline-none focus:ring-2 focus:ring-accent-500/30"
+                    class="group h-14 min-w-32 rounded-xl border border-neutral-200 bg-white px-4 py-2 text-left shadow-card transition hover:border-accent-300 hover:bg-accent-50 focus:outline-none focus:ring-2 focus:ring-accent-500/30"
                     :aria-label="touchMode ? 'Kalo në modalitetin standard' : 'Kalo në modalitetin touch'"
                     @click="toggleTouchMode"
                 >
