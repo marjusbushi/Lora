@@ -36,6 +36,7 @@ const kpis = [
                         <tr>
                             <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('admin.generated.k_f822da246b96') }}</th>
                             <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('admin.generated.k_b2565e917a28') }}</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">Arsyeja</th>
                             <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('admin.generated.k_8ba5dc0142f7') }}</th>
                             <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('admin.generated.k_0949c49c0228') }}</th>
                         </tr>
@@ -47,6 +48,7 @@ const kpis = [
                                 <span v-else class="text-neutral-400">—</span>
                             </td>
                             <td class="px-5 py-3 text-body-sm text-right font-medium text-rose-600">{{ money(row.total_amount) }}</td>
+                            <td class="px-5 py-3 text-body-sm text-neutral-600">{{ row.reason || '—' }}</td>
                             <td class="px-5 py-3 text-body-sm">{{ row.created_at }}</td>
                             <td class="px-5 py-3 text-body-sm">{{ row.created_by }}</td>
                         </tr>
@@ -55,6 +57,7 @@ const kpis = [
                         <tr>
                             <td class="px-5 py-3 text-body-sm">{{ $t('admin.generated.k_4ff93dc2032a') }}{{ summary.count ?? 0 }})</td>
                             <td class="px-5 py-3 text-body-sm text-right text-rose-600">{{ money(summary.total) }}</td>
+                            <td class="px-5 py-3"></td>
                             <td class="px-5 py-3"></td>
                             <td class="px-5 py-3"></td>
                         </tr>

@@ -6,9 +6,9 @@ use App\Http\Controllers\ChannexWebhookController;
 use App\Http\Controllers\CleaningTaskController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceController;
+use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\GuestController;
 use App\Http\Controllers\GuestMergeController;
-use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LoraAiController;
 use App\Http\Controllers\MaintenanceController;
@@ -308,11 +308,13 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     Route::middleware(['module:pos', 'permission:view_pos_orders'])->group(function () {
         Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
         Route::post('/pos', [PosController::class, 'store'])->middleware('permission:create_pos_orders')->name('pos.store');
+        Route::put('/pos/{posOrder}', [PosController::class, 'update'])->middleware('permission:update_pos_orders')->name('pos.update');
         Route::post('/pos/{posOrder}/complete', [PosController::class, 'complete'])->middleware('permission:update_pos_orders')->name('pos.complete');
         Route::post('/pos/{posOrder}/fiscalize', [PosController::class, 'fiscalize'])
             ->middleware(['module:finance', 'permission:update_pos_orders', 'throttle:10,1'])
             ->name('pos.fiscalize');
         Route::post('/pos/{posOrder}/cancel', [PosController::class, 'cancel'])->middleware('permission:update_pos_orders')->name('pos.cancel');
+        Route::post('/pos/{posOrder}/refund', [PosController::class, 'refund'])->middleware('permission:update_pos_orders')->name('pos.refund');
 
         // Cash-drawer shifts (hapje/mbyllje turni)
         Route::post('/pos/shift/open', [PosShiftController::class, 'open'])->middleware('permission:open_pos_shift')->name('pos.shift.open');

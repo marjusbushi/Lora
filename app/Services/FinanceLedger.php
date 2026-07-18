@@ -5,12 +5,13 @@ namespace App\Services;
 use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
 use App\Models\Payment;
+use App\Models\PosOrderPayment;
 use App\Models\PosShift;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * The auto-feed into the finance ledger: folio payments and POS shift closes
- * become finance_payments WITHOUT anyone re-typing a number. Idempotent by
+ * The auto-feed into the finance ledger: folio payments, POS tenders/refunds
+ * and shift differences become finance_payments WITHOUT re-typing a number. Idempotent by
  * design — each source record maps to at most ONE ledger row (unique
  * sourceable index + updateOrCreate), so observers, webhooks and the
  * finance:backfill command can all run repeatedly without double-counting.
@@ -68,10 +69,38 @@ class FinanceLedger
         );
     }
 
+    /** Mirror one POS tender/refund. Room charges stay in the guest folio, not Arka/Banka. */
+    public function recordPosOrderPayment(PosOrderPayment $payment): ?FinancePayment
+    {
+        if ($payment->method === 'room_charge' || (float) $payment->amount <= 0) {
+            $this->removeFor($payment);
+
+            return null;
+        }
+
+        $payment->loadMissing('order');
+
+        return FinancePayment::updateOrCreate(
+            ['sourceable_type' => PosOrderPayment::class, 'sourceable_id' => $payment->id],
+            [
+                'direction' => $payment->direction,
+                'account_id' => self::accountFor($payment->method)->id,
+                'amount' => $payment->amount,
+                'currency' => BaseCurrency::code(),
+                'fx_rate' => null,
+                'method' => $payment->method,
+                'source' => 'auto',
+                'description' => ($payment->direction === 'out' ? 'Rimbursim' : 'Pagesë')
+                    .' POS — porosia #'.$payment->pos_order_id,
+                'paid_at' => $payment->paid_at,
+                'created_by' => $payment->created_by,
+            ],
+        );
+    }
+
     /**
-     * Mirror a CLOSED POS shift: the cash the till actually yielded
-     * (counted − opening float). A short drawer records as an OUT row so the
-     * Arka balance stays true to reality, not to expectations.
+     * Mirror a CLOSED POS shift. For the current tender workflow this records only
+     * the counted over/short adjustment; legacy shifts retain counted-yield behavior.
      */
     public function recordShiftClose(PosShift $shift): ?FinancePayment
     {
@@ -81,10 +110,22 @@ class FinanceLedger
             return null;
         }
 
-        $yield = $shift->counted_cash !== null
-            ? round((float) $shift->counted_cash - (float) $shift->opening_float, 2)
-            : round((float) $shift->cash_sales, 2);
+        // New tenders reach Arka/Banka at payment time. Orders completed before the
+        // tender table existed are posted here, even when the shift spans deployment.
+        $legacyCash = (float) $shift->orders()
+            ->where('status', 'completed')
+            ->where('payment_method', 'cash')
+            ->whereDoesntHave('payments', fn ($query) => $query->where('direction', 'in'))
+            ->sum('total_amount');
+        $hasNewTenders = $shift->payments()->where('direction', 'in')->exists();
+        $yield = $hasNewTenders || $legacyCash > 0
+            ? round($legacyCash + (float) $shift->over_short, 2)
+            : ($shift->counted_cash !== null
+                ? round((float) $shift->counted_cash - (float) $shift->opening_float, 2)
+                : round((float) $shift->cash_sales, 2));
         if ($yield == 0.0) {
+            $this->removeFor($shift);
+
             return null;
         }
 
@@ -98,8 +139,9 @@ class FinanceLedger
                 'fx_rate' => null,
                 'method' => 'cash',
                 'source' => 'auto',
-                'description' => 'Mbyllje turni POS — '.($shift->user?->name ?? ('turni #'.$shift->id))
-                    .((float) $shift->over_short != 0.0 ? sprintf(' (diferencë %+.2f)', (float) $shift->over_short) : ''),
+                'description' => ($legacyCash > 0 ? 'Mbyllje turni POS — ' : 'Diferencë turni POS — ')
+                    .($shift->user?->name ?? ('turni #'.$shift->id))
+                    .((float) $shift->over_short != 0.0 ? sprintf(' (%+.2f)', (float) $shift->over_short) : ''),
                 'paid_at' => $shift->closed_at,
                 'created_by' => $shift->closed_by,
             ],

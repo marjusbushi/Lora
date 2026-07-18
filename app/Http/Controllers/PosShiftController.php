@@ -41,7 +41,7 @@ class PosShiftController extends Controller
             ]);
         });
 
-        if (!$shift) {
+        if (! $shift) {
             return back()->with('error', 'Ke nje turn te hapur tashme.');
         }
 
@@ -56,12 +56,19 @@ class PosShiftController extends Controller
      */
     public function close(Request $request, PosShift $posShift): RedirectResponse
     {
-        if ($posShift->user_id !== auth()->id() && !$request->user()->can('close_any_pos_shift')) {
+        if ($posShift->user_id !== auth()->id() && ! $request->user()->can('close_any_pos_shift')) {
             abort(403);
         }
 
         if ($posShift->status !== 'open') {
             return back()->with('error', 'Ky turn eshte tashme i mbyllur.');
+        }
+
+        $openOrders = $posShift->orders()->where('status', 'open')->count();
+        if ($openOrders > 0) {
+            AuditLog::record('pos.shift.close_blocked', $posShift, ['open_orders' => $openOrders]);
+
+            return back()->with('error', "Mbyll ose anulo {$openOrders} porosi të hapura para mbylljes së turnit.");
         }
 
         $data = $request->validate([

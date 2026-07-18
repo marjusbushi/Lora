@@ -7,6 +7,7 @@ use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\Payment;
 use App\Models\PosOrder;
+use App\Models\PosOrderPayment;
 use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Room;
@@ -24,6 +25,7 @@ use App\Services\Reporting\StayRevenueAllocator;
 use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -254,13 +256,13 @@ class ReportsController extends Controller
     {
         [$from, $to, $days] = $this->range($request);
 
-        // Completed POS orders in the range (by created_at) — the universe for every figure below.
-        $orderIds = PosOrder::where('status', 'completed')
-            ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
+        // Operational date is the hotel business date; paid_at is the legacy fallback.
+        $orderIds = $this->posBusinessRange(PosOrder::where('status', 'completed')->whereNull('refunded_at'), $from, $to)
             ->pluck('id');
 
         // (A) Sales by category: order_items -> menu_items -> menu_categories.
         $byCategory = DB::table('pos_order_items as oi')
+            ->join('pos_orders as po', 'po.id', '=', 'oi.pos_order_id')
             ->join('menu_items as mi', 'mi.id', '=', 'oi.menu_item_id')
             ->leftJoin('menu_categories as mc', 'mc.id', '=', 'mi.menu_category_id')
             ->whereIn('oi.pos_order_id', $orderIds)
@@ -269,7 +271,7 @@ class ReportsController extends Controller
             ->select(
                 DB::raw("COALESCE(mc.name, 'Pa kategori') as category"),
                 DB::raw('SUM(oi.quantity) as qty'),
-                DB::raw('SUM(oi.total_price) as revenue')
+                DB::raw('SUM(oi.total_price * CASE WHEN po.subtotal_amount > 0 THEN 1.0 * po.total_amount / po.subtotal_amount ELSE 1 END) as revenue')
             )
             ->orderByDesc('revenue')
             ->get()
@@ -281,6 +283,7 @@ class ReportsController extends Controller
 
         // (B) Top 15 items by revenue.
         $topItems = DB::table('pos_order_items as oi')
+            ->join('pos_orders as po', 'po.id', '=', 'oi.pos_order_id')
             ->join('menu_items as mi', 'mi.id', '=', 'oi.menu_item_id')
             ->leftJoin('menu_categories as mc', 'mc.id', '=', 'mi.menu_category_id')
             ->whereIn('oi.pos_order_id', $orderIds)
@@ -290,7 +293,7 @@ class ReportsController extends Controller
                 'mi.name as item',
                 DB::raw("COALESCE(mc.name, 'Pa kategori') as category"),
                 DB::raw('SUM(oi.quantity) as qty'),
-                DB::raw('SUM(oi.total_price) as revenue')
+                DB::raw('SUM(oi.total_price * CASE WHEN po.subtotal_amount > 0 THEN 1.0 * po.total_amount / po.subtotal_amount ELSE 1 END) as revenue')
             )
             ->orderByDesc('revenue')
             ->limit(15)
@@ -534,16 +537,24 @@ class ReportsController extends Controller
             ->groupBy(DB::raw('DATE(created_at)'), 'method')
             ->get();
 
-        // Source 2: completed POS orders, grouped by day + payment_method (cash/card/room_charge).
-        $posRows = PosOrder::where('status', 'completed')
-            ->whereBetween('created_at', [$start, $end])
+        // Source 2: actual POS tenders, including split payments and refunds.
+        $posRows = PosOrderPayment::whereBetween('paid_at', [$start, $end])
             ->select(
-                DB::raw('DATE(created_at) as d'),
-                'payment_method',
-                DB::raw('SUM(total_amount) as total')
+                DB::raw('DATE(paid_at) as d'),
+                'method',
+                DB::raw("SUM(CASE WHEN direction = 'in' THEN amount ELSE -amount END) as total")
             )
-            ->groupBy(DB::raw('DATE(created_at)'), 'payment_method')
+            ->groupBy(DB::raw('DATE(paid_at)'), 'method')
             ->get();
+
+        // Pre-migration orders have no incoming tender row. Keep them visible without
+        // double-counting new orders (or legacy refunds, which only add an OUT row).
+        $legacyPosOrders = $this->posBusinessRange(
+            PosOrder::where('status', 'completed')
+                ->whereDoesntHave('payments', fn ($query) => $query->where('direction', 'in')),
+            $from,
+            $to,
+        )->get(['id', 'payment_method', 'total_amount', 'business_date', 'paid_at', 'created_at']);
 
         // Build a per-day map: payments_cash, payments_card, pos_cash, pos_card, pos_room_charge.
         $byDay = [];
@@ -568,12 +579,21 @@ class ReportsController extends Controller
         foreach ($posRows as $r) {
             $day = (string) $r->d;
             $byDay[$day] ??= $blank();
-            if ($r->payment_method === 'cash') {
+            if ($r->method === 'cash') {
                 $byDay[$day]['pos_cash'] += (float) $r->total;
-            } elseif ($r->payment_method === 'card') {
+            } elseif ($r->method === 'card') {
                 $byDay[$day]['pos_card'] += (float) $r->total;
-            } elseif ($r->payment_method === 'room_charge') {
+            } elseif ($r->method === 'room_charge') {
                 $byDay[$day]['pos_room_charge'] += (float) $r->total;
+            }
+        }
+
+        foreach ($legacyPosOrders as $order) {
+            $day = ($order->business_date ?? $order->paid_at ?? $order->created_at)->toDateString();
+            $byDay[$day] ??= $blank();
+            $key = 'pos_'.($order->payment_method ?: 'unknown');
+            if (array_key_exists($key, $byDay[$day])) {
+                $byDay[$day][$key] += (float) $order->total_amount;
             }
         }
 
@@ -634,10 +654,9 @@ class ReportsController extends Controller
             ->where('status', '!=', 'cancelled')
             ->get(['check_in_date', 'total_amount']);
 
-        // POS revenue — completed orders by created_at.
-        $pos = PosOrder::where('status', 'completed')
-            ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
-            ->get(['created_at', 'total_amount']);
+        // POS revenue — completed, non-refunded orders by business date.
+        $pos = $this->posBusinessRange(PosOrder::where('status', 'completed')->whereNull('refunded_at'), $from, $to)
+            ->get(['business_date', 'paid_at', 'created_at', 'total_amount']);
 
         $monthly = [];
         $add = function (string $month, string $type, float $amount) use (&$monthly) {
@@ -652,7 +671,8 @@ class ReportsController extends Controller
             $add($month, 'room', (float) $r->total_amount);
         }
         foreach ($pos as $o) {
-            $month = substr((string) ($o->created_at instanceof CarbonInterface ? $o->created_at->toDateString() : $o->created_at), 0, 7);
+            $date = $o->business_date ?? $o->paid_at ?? $o->created_at;
+            $month = substr((string) ($date instanceof CarbonInterface ? $date->toDateString() : $date), 0, 7);
             $add($month, 'product', (float) $o->total_amount);
         }
 
@@ -833,11 +853,8 @@ class ReportsController extends Controller
     {
         [$from, $to, $days] = $this->range($request);
 
-        $orders = PosOrder::query()
-            ->where('status', 'completed')
-            ->whereDate('created_at', '>=', $from)
-            ->whereDate('created_at', '<=', $to)
-            ->get(['id', 'total_amount', 'created_at']);
+        $orders = $this->posBusinessRange(PosOrder::where('status', 'completed')->whereNull('refunded_at'), $from, $to)
+            ->get(['id', 'total_amount', 'paid_at', 'created_at']);
 
         // 24 hour buckets.
         $byHour = [];
@@ -856,7 +873,7 @@ class ReportsController extends Controller
         $orderCount = 0;
 
         foreach ($orders as $o) {
-            $when = Carbon::parse($o->created_at);
+            $when = Carbon::parse($o->paid_at ?? $o->created_at);
             $h = (int) $when->hour;             // 0..23
             $iso = (int) $when->dayOfWeekIso;   // 1..7
             $amount = (float) ($o->total_amount ?? 0);
@@ -889,9 +906,29 @@ class ReportsController extends Controller
     {
         [$from, $to] = $this->range($request);
 
-        $orders = PosOrder::where('status', 'completed')
-            ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
-            ->get(['payment_method', 'total_amount']);
+        $payments = PosOrderPayment::whereBetween('paid_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
+            ->get(['pos_order_id', 'method', 'direction', 'amount'])
+            ->map(fn ($payment) => [
+                'pos_order_id' => $payment->pos_order_id,
+                'method' => $payment->method,
+                'direction' => $payment->direction,
+                'amount' => (float) $payment->amount,
+            ]);
+
+        $legacyPayments = $this->posBusinessRange(
+            PosOrder::where('status', 'completed')
+                ->whereDoesntHave('payments', fn ($query) => $query->where('direction', 'in')),
+            $from,
+            $to,
+        )->get(['id', 'payment_method', 'total_amount'])
+            ->map(fn ($order) => [
+                'pos_order_id' => $order->id,
+                'method' => $order->payment_method ?: '?',
+                'direction' => 'in',
+                'amount' => (float) $order->total_amount,
+            ]);
+
+        $payments = $payments->concat($legacyPayments);
 
         $labels = [
             'cash' => 'Kesh',
@@ -900,15 +937,15 @@ class ReportsController extends Controller
             '?' => 'E papërcaktuar',
         ];
 
-        $grouped = $orders->groupBy(fn ($o) => $o->payment_method ?: '?')
+        $grouped = $payments->groupBy('method')
             ->map(fn ($group, $method) => [
                 'method' => $method,
-                'count' => $group->count(),
-                'total' => round((float) $group->sum('total_amount'), 2),
+                'count' => $group->where('direction', 'in')->pluck('pos_order_id')->unique()->count(),
+                'total' => round((float) $group->sum(fn ($payment) => $payment['direction'] === 'in' ? $payment['amount'] : -$payment['amount']), 2),
             ]);
 
-        $grandTotal = round((float) $orders->sum('total_amount'), 2);
-        $orderCount = $orders->count();
+        $grandTotal = round((float) $payments->sum(fn ($payment) => $payment['direction'] === 'in' ? $payment['amount'] : -$payment['amount']), 2);
+        $orderCount = $payments->where('direction', 'in')->pluck('pos_order_id')->unique()->count();
 
         // Stable ordering: cash, card, room_charge, then any leftover (e.g. '?')
         $order = ['cash', 'card', 'room_charge', '?'];
@@ -942,9 +979,14 @@ class ReportsController extends Controller
 
         $orders = PosOrder::with('createdBy')
             ->where('status', 'cancelled')
-            ->whereDate('created_at', '>=', $from)
-            ->whereDate('created_at', '<=', $to)
-            ->orderByDesc('created_at')
+            ->where(function (Builder $query) use ($from, $to) {
+                $query->whereBetween('cancelled_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
+                    ->orWhere(function (Builder $legacy) use ($from, $to) {
+                        $legacy->whereNull('cancelled_at')
+                            ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"]);
+                    });
+            })
+            ->orderByRaw('COALESCE(cancelled_at, created_at) DESC')
             ->get();
 
         $rows = $orders->map(function ($o) {
@@ -952,7 +994,8 @@ class ReportsController extends Controller
                 'id' => $o->id,
                 'table_number' => $o->table_number,
                 'total_amount' => (float) ($o->total_amount ?? 0),
-                'created_at' => $o->created_at ? Carbon::parse($o->created_at)->format('d/m H:i') : '—',
+                'created_at' => Carbon::parse($o->cancelled_at ?? $o->created_at)->format('d/m H:i'),
+                'reason' => $o->cancellation_reason,
                 'created_by' => $o->createdBy->name ?? '—',
             ];
         })->values();
@@ -1131,6 +1174,23 @@ class ReportsController extends Controller
         $days = Carbon::parse($from)->diffInDays(Carbon::parse($to)) + 1;
 
         return [$from, $to, max(1, (int) $days)];
+    }
+
+    private function posBusinessRange($query, string $from, string $to)
+    {
+        return $query->where(function ($range) use ($from, $to) {
+            $range->where(function ($business) use ($from, $to) {
+                $business->whereDate('business_date', '>=', $from)->whereDate('business_date', '<=', $to);
+            })
+                ->orWhere(function ($legacy) use ($from, $to) {
+                    $legacy->whereNull('business_date')
+                        ->whereBetween('paid_at', ["{$from} 00:00:00", "{$to} 23:59:59"]);
+                })
+                ->orWhere(function ($legacy) use ($from, $to) {
+                    $legacy->whereNull('business_date')->whereNull('paid_at')
+                        ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"]);
+                });
+        });
     }
 
     private function currency(): string

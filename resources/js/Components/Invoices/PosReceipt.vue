@@ -37,6 +37,14 @@ const gross = computed(() => Number(document.value?.total ?? props.order?.total_
 const net = computed(() => rate.value > 0 ? gross.value / (1 + rate.value / 100) : gross.value);
 const tax = computed(() => gross.value - net.value);
 const allTotal = computed(() => currency.value === 'ALL' ? gross.value : gross.value * exchangeRate.value);
+const salePayments = computed(() => (props.order?.payments || []).filter(payment => payment.direction === 'in'));
+const paymentSummary = computed(() => {
+    if (salePayments.value.length > 1) {
+        return salePayments.value.map(payment => `${paymentLabel(payment.method)} ${number(payment.amount)}`).join(' + ');
+    }
+    return paymentLabel(document.value?.payment_method || salePayments.value[0]?.method || props.order?.payment_method)
+        || (props.order?.is_complimentary ? 'Komplimentare' : '—');
+});
 const vatLabel = computed(() => (
     rate.value === 0 && props.settings.vat_status === 'not_registered'
         ? translate('invoicePrint.withoutVat')
@@ -87,7 +95,7 @@ function paymentLabel(method) {
             <div><dt>{{ $t('invoicePrint.dateTime') }}</dt><dd>{{ dateTime(invoiceDate) }}</dd></div>
             <div><dt>{{ $t('invoicePrint.order') }}</dt><dd>#{{ order.id }}<template v-if="order.table_number"> · {{ $t('invoicePrint.table') }} {{ order.table_number }}</template></dd></div>
             <div><dt>{{ $t('invoicePrint.operator') }}</dt><dd>{{ document?.operator_code || order.created_by?.name || '—' }}</dd></div>
-            <div><dt>{{ $t('invoicePrint.payment') }}</dt><dd>{{ paymentLabel(document?.payment_method || order.payment_method) }}</dd></div>
+            <div><dt>{{ $t('invoicePrint.payment') }}</dt><dd>{{ order.is_complimentary ? 'Komplimentare' : paymentSummary }}</dd></div>
             <div><dt>{{ $t('invoicePrint.currency') }}</dt><dd>{{ currency }}</dd></div>
             <div v-if="currency !== 'ALL' && exchangeRate"><dt>{{ $t('invoicePrint.exchangeRate') }}</dt><dd>1 {{ currency }} = {{ exchangeRate.toFixed(4) }} ALL</dd></div>
         </dl>
@@ -109,6 +117,8 @@ function paymentLabel(method) {
 
         <div class="receipt-rule" />
         <dl class="receipt-totals">
+            <div v-if="Number(order.discount_amount || 0) > 0"><dt>Nëntotali i artikujve</dt><dd>{{ number(order.subtotal_amount) }} {{ currency }}</dd></div>
+            <div v-if="Number(order.discount_amount || 0) > 0"><dt>Ulje · {{ order.discount_reason }}</dt><dd>-{{ number(order.discount_amount) }} {{ currency }}</dd></div>
             <div><dt>{{ $t('invoicePrint.subtotal') }}</dt><dd>{{ number(net) }} {{ currency }}</dd></div>
             <div><dt>{{ vatLabel }}</dt><dd>{{ number(tax) }} {{ currency }}</dd></div>
             <div class="grand"><dt>TOTALI</dt><dd>{{ number(gross) }} {{ currency }}</dd></div>

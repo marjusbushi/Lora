@@ -193,6 +193,42 @@ class InventoryLedger
         });
     }
 
+    /** Release a reserved/sold POS recipe on edit, cancellation or full refund. */
+    public function releasePosOrderItem(PosOrderItem $orderItem, string $type, ?int $userId = null): void
+    {
+        DB::transaction(function () use ($orderItem, $type, $userId) {
+            if (! in_array($type, ['sale_release', 'sale_return'], true)) {
+                throw new \InvalidArgumentException('Invalid POS inventory reversal type.');
+            }
+
+            $sales = InventoryMovement::query()
+                ->where('sourceable_type', PosOrderItem::class)
+                ->where('sourceable_id', $orderItem->id)
+                ->where('type', 'sale')
+                ->get();
+
+            foreach ($sales as $sale) {
+                InventoryMovement::firstOrCreate(
+                    [
+                        'sourceable_type' => PosOrderItem::class,
+                        'sourceable_id' => $orderItem->id,
+                        'type' => $type,
+                        'warehouse_id' => $sale->warehouse_id,
+                        'inventory_item_id' => $sale->inventory_item_id,
+                    ],
+                    [
+                        'quantity' => abs((float) $sale->quantity),
+                        'unit_cost' => $sale->unit_cost,
+                        'notes' => ($type === 'sale_return' ? 'Kthim POS' : 'Lirim rezervimi POS')
+                            .' · Porosia #'.$orderItem->pos_order_id,
+                        'occurred_at' => now(),
+                        'created_by' => $userId,
+                    ],
+                );
+            }
+        });
+    }
+
     public function consumeFolioItem(FolioItem $folioItem, ?int $userId = null): InventoryMovement
     {
         return DB::transaction(function () use ($folioItem, $userId) {

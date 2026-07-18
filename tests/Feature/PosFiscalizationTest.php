@@ -122,6 +122,38 @@ class PosFiscalizationTest extends TestCase
                 ->where('receiptSettings.nipt', 'L00000000A'));
     }
 
+    public function test_pos_discount_is_included_in_the_fiscal_payload_and_document_total(): void
+    {
+        [$order] = $this->openOrder();
+        $this->actingAs($this->admin)
+            ->post(route('pos.complete', $order), [
+                'payment_method' => 'cash',
+                'discount_amount' => 0.5,
+                'discount_reason' => 'Ofertë testuese',
+            ])
+            ->assertSessionHasNoErrors();
+
+        Http::fake([
+            'https://demo.fature.al/api/v1/invoice/cash' => Http::response($this->successResponse()),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('pos.fiscalize', $order))
+            ->assertSessionHasNoErrors();
+
+        Http::assertSent(function (Request $request) {
+            $payload = $request->data();
+
+            return $payload['invoice_discount_type'] === 'amount'
+                && (float) $payload['invoice_discount_value'] === 0.5
+                && (float) $payload['lines'][0]['total'] === 3.0;
+        });
+
+        $document = PosFiscalDocument::query()->sole();
+        $this->assertSame(2.5, (float) $document->total);
+        $this->assertSame(0.5, (float) $document->invoice_payload['invoice_discount_value']);
+    }
+
     public function test_retry_reconciles_existing_pos_invoice_without_creating_a_duplicate(): void
     {
         [$order] = $this->openOrder();

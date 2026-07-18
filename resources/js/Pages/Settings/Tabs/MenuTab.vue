@@ -15,6 +15,7 @@ const props = defineProps({
     inventoryItems: Array,
     warehouses: Array,
     inventoryEnabled: { type: Boolean, default: false },
+    currencySymbol: { type: String, default: '€' },
     toasts: Object,
 });
 
@@ -177,7 +178,7 @@ function deleteItem(item) {
                         </div>
                         <div>
                             <span class="text-body-sm text-primary-900 font-medium">{{ item.name }}</span>
-                            <span class="text-body-sm text-accent-600 font-medium ml-2">€{{ item.price }}</span>
+                            <span class="text-body-sm text-accent-600 font-medium ml-2">{{ currencySymbol }}{{ item.price }}</span>
                             <span v-if="item.inventory_item_id" class="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Nga inventari</span>
                             <span v-if="item.inventory_components?.length" class="mt-0.5 block text-tiny text-neutral-400">{{ item.inventory_components.length }} {{ $t('inventory.pos.components') }}</span>
                         </div>

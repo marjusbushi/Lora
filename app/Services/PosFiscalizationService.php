@@ -102,6 +102,14 @@ class PosFiscalizationService
             ]);
         }
 
+        $gross = round((float) collect($lines)->sum('total'), 2);
+        $discount = round(min($gross, max(0, (float) $order->discount_amount)), 2);
+        if (round($gross - $discount, 2) <= 0) {
+            throw ValidationException::withMessages([
+                'fiscalization' => 'Totali fiskal duhet të jetë më i madh se zero.',
+            ]);
+        }
+
         $currency = strtoupper((string) ($this->tenantContext->tenant()?->currency ?: 'EUR'));
         if (! preg_match('/^[A-Z]{3}$/', $currency)) {
             $currency = 'EUR';
@@ -114,6 +122,11 @@ class PosFiscalizationService
             'notes' => 'Lora PMS · POS porosia #'.$order->id,
             'lines' => $lines,
         ];
+
+        if ($discount > 0) {
+            $payload['invoice_discount_type'] = 'amount';
+            $payload['invoice_discount_value'] = $discount;
+        }
 
         if ($currency !== 'ALL') {
             $exchangeRate = BaseCurrency::rate('ALL');
@@ -164,7 +177,10 @@ class PosFiscalizationService
                 'payment_method' => $payload['payment_method'],
                 'currency' => $payload['currency'],
                 'exchange_rate' => $payload['exchange_rate'] ?? null,
-                'total' => round(collect($payload['lines'])->sum('total'), 2),
+                'total' => round(
+                    collect($payload['lines'])->sum('total') - (float) ($payload['invoice_discount_value'] ?? 0),
+                    2,
+                ),
                 'vat_rate' => $this->vatConfiguration->productRate(),
                 'invoice_payload' => $payload,
                 'request_hash' => $requestHash,

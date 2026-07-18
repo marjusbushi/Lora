@@ -10,6 +10,7 @@ use App\Models\MenuItem;
 use App\Models\PosFiscalDocument;
 use App\Models\PosOrder;
 use App\Models\PosOrderItem;
+use App\Models\PosOrderPayment;
 use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Setting;
@@ -17,6 +18,7 @@ use App\Models\Warehouse;
 use App\Services\BaseCurrency;
 use App\Services\CurrencyRates;
 use App\Services\FatureAlConfiguration;
+use App\Services\FinanceLedger;
 use App\Services\InventoryLedger;
 use App\Services\PosFiscalizationService;
 use App\Services\VatConfiguration;
@@ -25,6 +27,7 @@ use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -33,6 +36,7 @@ class PosController extends Controller
 {
     public function __construct(
         private readonly InventoryLedger $inventoryLedger,
+        private readonly FinanceLedger $financeLedger,
         private readonly PosFiscalizationService $fiscalization,
         private readonly FatureAlConfiguration $fatureAlConfiguration,
         private readonly TenantContext $tenantContext,
@@ -43,13 +47,22 @@ class PosController extends Controller
     {
         $query = PosOrder::select(
             'id', 'reservation_id', 'table_number', 'status',
-            'payment_method', 'total_amount', 'created_by', 'paid_at', 'business_date', 'created_at'
+            'payment_method', 'subtotal_amount', 'discount_amount', 'discount_reason', 'is_complimentary',
+            'total_amount', 'created_by', 'paid_at', 'business_date', 'cancelled_at', 'cancellation_reason',
+            'refunded_at', 'refund_reason', 'created_at'
         )
-            ->with(['createdBy:id,name', 'items.menuItem:id,name', 'fiscalDocument'])
+            ->with(['createdBy:id,name', 'items.menuItem:id,name', 'payments', 'fiscalDocument'])
             ->orderByDesc('created_at');
 
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            if ($request->status === 'refunded') {
+                $query->whereNotNull('refunded_at');
+            } else {
+                $query->where('status', $request->status);
+                if ($request->status === 'completed') {
+                    $query->whereNull('refunded_at');
+                }
+            }
         }
         if ($request->integer('order_id')) {
             $query->whereKey($request->integer('order_id'));
@@ -65,14 +78,10 @@ class PosController extends Controller
         $shift = PosShift::currentFor(auth()->id());
         $currentShift = null;
         if ($shift) {
-            $byMethod = $shift->orders()
-                ->where('status', 'completed')
-                ->selectRaw('payment_method, COUNT(*) as cnt, SUM(total_amount) as sum')
-                ->groupBy('payment_method')
-                ->get();
-            $cash = (float) ($byMethod->firstWhere('payment_method', 'cash')->sum ?? 0);
-            $card = (float) ($byMethod->firstWhere('payment_method', 'card')->sum ?? 0);
-            $room = (float) ($byMethod->firstWhere('payment_method', 'room_charge')->sum ?? 0);
+            $totals = $shift->liveTotals();
+            $cash = $totals['cash'];
+            $card = $totals['card'];
+            $room = $totals['room_charge'];
 
             $currentShift = [
                 'id' => $shift->id,
@@ -80,7 +89,7 @@ class PosController extends Controller
                 'opening_float' => (float) $shift->opening_float,
                 'user_name' => auth()->user()->name,
                 'open_orders' => (int) $shift->orders()->where('status', 'open')->count(),
-                'completed_orders' => (int) $byMethod->sum('cnt'),
+                'completed_orders' => (int) $shift->orders()->where('status', 'completed')->count(),
                 'cash_sales' => $cash,
                 'card_sales' => $card,
                 'room_charge_sales' => $room,
@@ -92,7 +101,13 @@ class PosController extends Controller
         $salesCounts = PosOrderItem::query()
             ->whereHas('order', fn ($order) => $order
                 ->where('status', 'completed')
-                ->where('created_at', '>=', now()->subDays(30)))
+                ->whereNull('refunded_at')
+                ->where(function ($recent) {
+                    $recent->where('paid_at', '>=', now()->subDays(30))
+                        ->orWhere(function ($legacy) {
+                            $legacy->whereNull('paid_at')->where('created_at', '>=', now()->subDays(30));
+                        });
+                }))
             ->selectRaw('menu_item_id, SUM(quantity) as quantity_sold')
             ->groupBy('menu_item_id')
             ->pluck('quantity_sold', 'menu_item_id');
@@ -137,13 +152,28 @@ class PosController extends Controller
             'table_number' => $order->table_number,
             'status' => $order->status,
             'payment_method' => $order->payment_method,
+            'subtotal_amount' => (float) $order->subtotal_amount,
+            'discount_amount' => (float) $order->discount_amount,
+            'discount_reason' => $order->discount_reason,
+            'is_complimentary' => (bool) $order->is_complimentary,
             'total_amount' => (float) $order->total_amount,
             'created_at' => $order->created_at?->toIso8601String(),
             'paid_at' => $order->paid_at?->toIso8601String(),
             'business_date' => $order->business_date?->toDateString(),
+            'effective_status' => $order->refunded_at ? 'refunded' : $order->status,
+            'cancelled_at' => $order->cancelled_at?->toIso8601String(),
+            'cancellation_reason' => $order->cancellation_reason,
+            'refunded_at' => $order->refunded_at?->toIso8601String(),
+            'refund_reason' => $order->refund_reason,
+            'payments' => $order->payments->map(fn (PosOrderPayment $payment) => [
+                'method' => $payment->method,
+                'direction' => $payment->direction,
+                'amount' => (float) $payment->amount,
+            ])->values(),
             'created_by' => $order->createdBy ? ['name' => $order->createdBy->name] : null,
             'items' => $order->items->map(fn ($item) => [
                 'id' => $item->id,
+                'menu_item_id' => $item->menu_item_id,
                 'quantity' => (int) $item->quantity,
                 'unit_price' => (float) $item->unit_price,
                 'total_price' => (float) $item->total_price,
@@ -164,8 +194,16 @@ class PosController extends Controller
             'receiptSettings' => $this->receiptSettings(),
             'stats' => [
                 'open' => PosOrder::where('status', 'open')->count(),
-                'today_completed' => PosOrder::where('status', 'completed')->whereDate('created_at', today())->count(),
-                'today_revenue' => PosOrder::where('status', 'completed')->whereDate('created_at', today())->sum('total_amount'),
+                'today_completed' => PosOrder::where('status', 'completed')->whereNull('refunded_at')->where(function ($today) {
+                    $today->whereDate('business_date', today())
+                        ->orWhere(fn ($legacy) => $legacy->whereNull('business_date')->whereDate('paid_at', today()))
+                        ->orWhere(fn ($legacy) => $legacy->whereNull('business_date')->whereNull('paid_at')->whereDate('created_at', today()));
+                })->count(),
+                'today_revenue' => PosOrder::where('status', 'completed')->whereNull('refunded_at')->where(function ($today) {
+                    $today->whereDate('business_date', today())
+                        ->orWhere(fn ($legacy) => $legacy->whereNull('business_date')->whereDate('paid_at', today()))
+                        ->orWhere(fn ($legacy) => $legacy->whereNull('business_date')->whereNull('paid_at')->whereDate('created_at', today()));
+                })->sum('total_amount'),
             ],
         ]);
     }
@@ -200,13 +238,15 @@ class PosController extends Controller
 
             foreach ($request->items as $item) {
                 $menuItem = MenuItem::findOrFail($item['menu_item_id']);
-                PosOrderItem::create([
+                $orderItem = PosOrderItem::create([
                     'pos_order_id' => $order->id,
                     'menu_item_id' => $menuItem->id,
                     'quantity' => $item['quantity'],
                     'unit_price' => $menuItem->price,
                     'total_price' => $menuItem->price * $item['quantity'],
                 ]);
+                // Open orders reserve stock immediately so two terminals cannot oversell it.
+                $this->inventoryLedger->consumePosOrderItem($orderItem, $request->user()->id);
             }
 
             $order->recalculateTotal();
@@ -217,16 +257,74 @@ class PosController extends Controller
         return back()->with('success', "Porosia #{$order->id} u krijua — ".BaseCurrency::symbol().$order->total_amount);
     }
 
+    public function update(Request $request, PosOrder $posOrder): RedirectResponse
+    {
+        $data = $request->validate([
+            'table_number' => ['nullable', 'string', 'max:10'],
+            'reservation_id' => ['nullable', TenantRule::exists('reservations')],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.menu_item_id' => ['required', TenantRule::exists('menu_items')],
+            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:50'],
+        ]);
+
+        if ($posOrder->status !== 'open') {
+            return back()->with('error', 'Vetëm porositë e hapura mund të ndryshohen.');
+        }
+
+        $shift = PosShift::currentFor($request->user()->id);
+        if (! $shift) {
+            return back()->with('error', 'Hap një turn para se të ndryshosh porosinë.');
+        }
+
+        DB::transaction(function () use ($posOrder, $data, $request, $shift) {
+            $lockedOrder = PosOrder::query()->lockForUpdate()->findOrFail($posOrder->id);
+            if ($lockedOrder->status !== 'open') {
+                throw ValidationException::withMessages(['order' => 'Porosia nuk është më e hapur.']);
+            }
+
+            $lockedOrder->load('items');
+            foreach ($lockedOrder->items as $oldItem) {
+                $this->inventoryLedger->releasePosOrderItem($oldItem, 'sale_release', $request->user()->id);
+                $oldItem->delete();
+            }
+
+            $lockedOrder->update([
+                'table_number' => $data['table_number'] ?? null,
+                'reservation_id' => $data['reservation_id'] ?? null,
+                'pos_shift_id' => $shift->id,
+            ]);
+
+            foreach ($data['items'] as $item) {
+                $menuItem = MenuItem::findOrFail($item['menu_item_id']);
+                $orderItem = PosOrderItem::create([
+                    'pos_order_id' => $lockedOrder->id,
+                    'menu_item_id' => $menuItem->id,
+                    'quantity' => $item['quantity'],
+                    'unit_price' => $menuItem->price,
+                    'total_price' => $menuItem->price * $item['quantity'],
+                ]);
+                $this->inventoryLedger->consumePosOrderItem($orderItem, $request->user()->id);
+            }
+
+            $lockedOrder->recalculateTotal();
+        });
+
+        AuditLog::record('pos.update', $posOrder, ['amount' => $posOrder->fresh()->total_amount]);
+
+        return back()->with('success', "Porosia #{$posOrder->id} u përditësua.");
+    }
+
     public function complete(Request $request, PosOrder $posOrder): RedirectResponse
     {
-        $request->validate([
-            'payment_method' => ['required', 'in:cash,card,room_charge'],
-            // Only a currently checked-in reservation can be charged — never an arbitrary id (IDOR guard).
-            'reservation_id' => [
-                'nullable',
-                'required_if:payment_method,room_charge',
-                TenantRule::exists('reservations')->where('status', 'checked_in'),
-            ],
+        $data = $request->validate([
+            'payment_method' => ['nullable', 'in:cash,card,room_charge'],
+            'payments' => ['nullable', 'array', 'max:2'],
+            'payments.*.method' => ['required_with:payments', 'in:cash,card,room_charge'],
+            'payments.*.amount' => ['required_with:payments', 'numeric', 'min:0.01', 'max:99999999.99'],
+            'reservation_id' => ['nullable', TenantRule::exists('reservations')->where('status', 'checked_in')],
+            'discount_amount' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            'discount_reason' => ['nullable', 'string', 'max:255'],
+            'complimentary' => ['nullable', 'boolean'],
         ]);
 
         if ($posOrder->status !== 'open') {
@@ -241,17 +339,61 @@ class PosController extends Controller
             return back()->with('error', 'Hap nje turn para se te mbyllesh porosine.');
         }
 
-        DB::transaction(function () use ($posOrder, $request, $shift) {
-            // Room charge can target a reservation chosen at payment time;
-            // otherwise keep the one set when the order was created.
-            $reservationId = $request->payment_method === 'room_charge'
-                ? $request->reservation_id
-                : $posOrder->reservation_id;
+        DB::transaction(function () use ($posOrder, $request, $shift, $data) {
+            $order = PosOrder::query()->lockForUpdate()->findOrFail($posOrder->id);
+            if ($order->status !== 'open') {
+                throw ValidationException::withMessages(['order' => 'Porosia nuk është më e hapur.']);
+            }
 
-            $posOrder->update([
+            $subtotal = round((float) $order->items()->sum('total_price'), 2);
+            // Preserve the value of legacy/manual open tickets that predate item rows.
+            if ($subtotal === 0.0 && (float) $order->total_amount > 0) {
+                $subtotal = round((float) $order->total_amount, 2);
+            }
+            $complimentary = (bool) ($data['complimentary'] ?? false);
+            $discount = $complimentary ? $subtotal : round((float) ($data['discount_amount'] ?? 0), 2);
+            if ($discount > $subtotal) {
+                throw ValidationException::withMessages(['discount_amount' => 'Ulja nuk mund të kalojë nëntotalin.']);
+            }
+            if ($discount > 0 && blank($data['discount_reason'] ?? null)) {
+                throw ValidationException::withMessages(['discount_reason' => 'Shëno arsyen e uljes ose të komplimentares.']);
+            }
+
+            $total = round($subtotal - $discount, 2);
+            $tenders = collect($data['payments'] ?? []);
+            if ($tenders->isEmpty() && ! empty($data['payment_method']) && $total > 0) {
+                $tenders = collect([['method' => $data['payment_method'], 'amount' => $total]]);
+            }
+
+            if ($total > 0 && abs((float) $tenders->sum('amount') - $total) > 0.009) {
+                throw ValidationException::withMessages(['payments' => 'Shuma e pagesave duhet të jetë e barabartë me totalin.']);
+            }
+            if ($total === 0.0 && $tenders->isNotEmpty()) {
+                throw ValidationException::withMessages(['payments' => 'Një porosi komplimentare nuk kërkon pagesë.']);
+            }
+
+            $methods = $tenders->pluck('method')->unique()->values();
+            if ($methods->contains('room_charge') && ($methods->count() > 1 || $tenders->count() > 1)) {
+                throw ValidationException::withMessages(['payments' => 'Pagesa në dhomë nuk mund të ndahet me cash ose kartë.']);
+            }
+            if ($methods->contains('room_charge') && empty($data['reservation_id'])) {
+                throw ValidationException::withMessages(['reservation_id' => 'Zgjidh rezervimin aktiv për pagesën në dhomë.']);
+            }
+
+            $reservationId = $methods->contains('room_charge')
+                ? $data['reservation_id']
+                : $order->reservation_id;
+            $legacyMethod = $methods->count() === 1 ? $methods->first() : null;
+
+            $order->update([
                 'status' => 'completed',
-                'payment_method' => $request->payment_method,
+                'payment_method' => $legacyMethod,
                 'reservation_id' => $reservationId,
+                'subtotal_amount' => $subtotal,
+                'discount_amount' => $discount,
+                'discount_reason' => $data['discount_reason'] ?? null,
+                'is_complimentary' => $complimentary,
+                'total_amount' => $total,
                 'paid_at' => now(),
                 'business_date' => today(),
                 // Cash physically enters the drawer of whoever finalizes the sale, so attribute the
@@ -259,28 +401,44 @@ class PosController extends Controller
                 'pos_shift_id' => $shift->id,
             ]);
 
+            foreach ($tenders as $tender) {
+                $payment = PosOrderPayment::create([
+                    'pos_order_id' => $order->id,
+                    'pos_shift_id' => $shift->id,
+                    'direction' => 'in',
+                    'method' => $tender['method'],
+                    'amount' => round((float) $tender['amount'], 2),
+                    'paid_at' => now(),
+                    'created_by' => $request->user()->id,
+                ]);
+                $this->financeLedger->recordPosOrderPayment($payment);
+            }
+
             // Room charge → add a traceable line to the reservation folio
-            if ($request->payment_method === 'room_charge') {
-                $posOrder->loadMissing('items.menuItem.category');
+            if ($methods->contains('room_charge')) {
+                $order->loadMissing('items.menuItem.category');
                 FolioItem::create([
                     'reservation_id' => $reservationId,
-                    'pos_order_id' => $posOrder->id,
-                    'description' => "POS Porosi #{$posOrder->id}".($posOrder->table_number ? " (Tavolina {$posOrder->table_number})" : ''),
-                    'amount' => $posOrder->total_amount,
-                    'type' => $posOrder->items->first()?->menuItem?->category?->name === 'Pije' ? 'bar' : 'restaurant',
+                    'pos_order_id' => $order->id,
+                    'description' => "POS Porosi #{$order->id}".($order->table_number ? " (Tavolina {$order->table_number})" : ''),
+                    'amount' => $order->total_amount,
+                    'type' => $order->items->first()?->menuItem?->category?->name === 'Pije' ? 'bar' : 'restaurant',
                     'charge_date' => today(),
                 ]);
             }
 
-            $posOrder->loadMissing('items.menuItem.inventoryComponents');
-            foreach ($posOrder->items as $orderItem) {
+            // Legacy open tickets may not have reserved stock yet; this remains idempotent.
+            $order->loadMissing('items.menuItem.inventoryComponents');
+            foreach ($order->items as $orderItem) {
                 $this->inventoryLedger->consumePosOrderItem($orderItem, $request->user()->id);
             }
         });
 
+        $posOrder->refresh()->load('payments');
         AuditLog::record('pos.complete', $posOrder, [
             'amount' => $posOrder->total_amount,
-            'payment_method' => $request->payment_method,
+            'payment_methods' => $posOrder->payments->where('direction', 'in')->pluck('method')->values()->all(),
+            'discount_amount' => $posOrder->discount_amount,
             'reservation_id' => $posOrder->reservation_id,
         ]);
 
@@ -304,8 +462,12 @@ class PosController extends Controller
         }
     }
 
-    public function cancel(PosOrder $posOrder): RedirectResponse
+    public function cancel(Request $request, PosOrder $posOrder): RedirectResponse
     {
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:255'],
+        ]);
+
         if ($posOrder->status !== 'open') {
             return back()->with('error', 'Vetem porosite e hapura mund te anulohen.');
         }
@@ -318,11 +480,102 @@ class PosController extends Controller
             return back()->with('error', 'Hap nje turn para se te anulosh porosine.');
         }
 
-        $posOrder->update(['status' => 'cancelled', 'pos_shift_id' => $shift->id]);
+        DB::transaction(function () use ($posOrder, $shift, $request, $data) {
+            $order = PosOrder::query()->lockForUpdate()->findOrFail($posOrder->id);
+            $order->load('items');
+            foreach ($order->items as $orderItem) {
+                $this->inventoryLedger->releasePosOrderItem($orderItem, 'sale_release', $request->user()->id);
+            }
 
-        AuditLog::record('pos.cancel', $posOrder, ['amount' => $posOrder->total_amount]);
+            $order->update([
+                'status' => 'cancelled',
+                'pos_shift_id' => $shift->id,
+                'cancelled_at' => now(),
+                'cancelled_by' => $request->user()->id,
+                'cancellation_reason' => $data['reason'],
+            ]);
+        });
+
+        AuditLog::record('pos.cancel', $posOrder, [
+            'amount' => $posOrder->total_amount,
+            'reason' => $data['reason'],
+        ]);
 
         return back()->with('success', 'Porosia u anulua.');
+    }
+
+    public function refund(Request $request, PosOrder $posOrder): RedirectResponse
+    {
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:255'],
+        ]);
+
+        if ($posOrder->status !== 'completed' || $posOrder->refunded_at) {
+            return back()->with('error', 'Vetëm një porosi e përfunduar dhe e parimbursuar mund të kthehet.');
+        }
+
+        $shift = PosShift::currentFor($request->user()->id);
+        if (! $shift) {
+            return back()->with('error', 'Hap një turn para se të regjistrosh rimbursimin.');
+        }
+
+        DB::transaction(function () use ($posOrder, $shift, $request, $data) {
+            $order = PosOrder::query()->lockForUpdate()->with(['payments', 'items'])->findOrFail($posOrder->id);
+            if ($order->refunded_at) {
+                throw ValidationException::withMessages(['refund' => 'Porosia është rimbursuar tashmë.']);
+            }
+
+            $salePayments = $order->payments->where('direction', 'in');
+            if ($salePayments->isEmpty() && (float) $order->total_amount > 0 && $order->payment_method) {
+                // Backwards-compatible refund for orders completed before tender rows existed.
+                $salePayments = collect([new PosOrderPayment([
+                    'method' => $order->payment_method,
+                    'amount' => $order->total_amount,
+                ])]);
+            }
+
+            foreach ($salePayments as $salePayment) {
+                $refund = PosOrderPayment::create([
+                    'pos_order_id' => $order->id,
+                    'pos_shift_id' => $shift->id,
+                    'direction' => 'out',
+                    'method' => $salePayment->method,
+                    'amount' => $salePayment->amount,
+                    'refunded_from_id' => $salePayment->exists ? $salePayment->id : null,
+                    'paid_at' => now(),
+                    'created_by' => $request->user()->id,
+                ]);
+                $this->financeLedger->recordPosOrderPayment($refund);
+            }
+
+            if ($salePayments->contains(fn ($payment) => $payment->method === 'room_charge')) {
+                FolioItem::create([
+                    'reservation_id' => $order->reservation_id,
+                    'pos_order_id' => $order->id,
+                    'description' => "Rimbursim POS Porosi #{$order->id}",
+                    'amount' => -abs((float) $order->total_amount),
+                    'type' => 'discount',
+                    'charge_date' => today(),
+                ]);
+            }
+
+            foreach ($order->items as $orderItem) {
+                $this->inventoryLedger->releasePosOrderItem($orderItem, 'sale_return', $request->user()->id);
+            }
+
+            $order->update([
+                'refunded_at' => now(),
+                'refunded_by' => $request->user()->id,
+                'refund_reason' => $data['reason'],
+            ]);
+        });
+
+        AuditLog::record('pos.refund', $posOrder, [
+            'amount' => $posOrder->total_amount,
+            'reason' => $data['reason'],
+        ]);
+
+        return back()->with('success', "Porosia #{$posOrder->id} u rimbursua dhe stoku u kthye.");
     }
 
     private function receiptSettings(): array

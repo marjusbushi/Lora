@@ -13,7 +13,7 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ShiftBanner from '@/Components/Pos/ShiftBanner.vue';
 import PosReceipt from '@/Components/Invoices/PosReceipt.vue';
-import { Minus, Plus, ReceiptText, Search, ShoppingCart, Star, Trash2, X } from 'lucide-vue-next';
+import { Minus, Pencil, Plus, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, X } from 'lucide-vue-next';
 
 const props = defineProps({
     orders: Object,
@@ -32,6 +32,7 @@ const toasts = ref(null);
 const showPayModal = ref(false);
 const showOrdersPanel = ref(Boolean(props.filters?.order_id));
 const selectedOrder = ref(null);
+const editingOrderId = ref(null);
 const showReceipt = ref(false);
 const receiptOrder = ref(null);
 const fiscalizingOrder = ref(null);
@@ -56,6 +57,14 @@ const paymentOptions = [
 ];
 const paymentMethod = ref('');
 const selectedPayReservation = ref('');
+const discountType = ref('none');
+const discountValue = ref('');
+const discountReason = ref('');
+const splitCashAmount = ref('');
+const showCancelModal = ref(false);
+const showRefundModal = ref(false);
+const actionOrder = ref(null);
+const actionReason = ref('');
 
 // ===== Cash-drawer shift (hapje/mbyllje turni) =====
 const showOpenShift = ref(false);
@@ -133,6 +142,18 @@ const cartTotal = computed(() =>
 const cartCount = computed(() =>
     cart.value.reduce((sum, item) => sum + item.qty, 0)
 );
+
+const paymentSubtotal = computed(() => Number(selectedOrder.value?.subtotal_amount || selectedOrder.value?.total_amount || 0));
+const paymentDiscount = computed(() => {
+    if (discountType.value === 'complimentary') return paymentSubtotal.value;
+    const value = Math.max(0, Number(discountValue.value || 0));
+    if (discountType.value === 'percent') return Math.min(paymentSubtotal.value, paymentSubtotal.value * Math.min(value, 100) / 100);
+    if (discountType.value === 'fixed') return Math.min(paymentSubtotal.value, value);
+    return 0;
+});
+const paymentTotal = computed(() => Math.max(0, Math.round((paymentSubtotal.value - paymentDiscount.value) * 100) / 100));
+const splitCash = computed(() => Math.min(paymentTotal.value, Math.max(0, Number(splitCashAmount.value || 0))));
+const splitCard = computed(() => Math.round((paymentTotal.value - splitCash.value) * 100) / 100);
 
 const activeMenuItems = computed(() => {
     const allItems = (props.menu || []).flatMap((category) =>
@@ -231,6 +252,7 @@ function clearCart() {
     tableNumber.value = '';
     selectedReservation.value = '';
     serviceMode.value = 'table';
+    editingOrderId.value = null;
 }
 
 function submitOrder() {
@@ -243,27 +265,70 @@ function submitOrder() {
     });
 
     const submittedTotal = cartTotal.value;
-    form.post(route('pos.store'), {
+    const isEditing = Boolean(editingOrderId.value);
+    const options = {
         onSuccess: () => {
             clearCart();
-            toasts.value?.success(`Porosia u krijua — ${money(submittedTotal)}`);
+            toasts.value?.success(`${isEditing ? 'Porosia u përditësua' : 'Porosia u krijua'} — ${money(submittedTotal)}`);
         },
+        onError: (errors) => toasts.value?.error(errors.inventory || errors.order || 'Porosia nuk u ruajt.'),
+    };
+    if (editingOrderId.value) form.put(route('pos.update', editingOrderId.value), options);
+    else form.post(route('pos.store'), options);
+}
+
+function editOrder(order) {
+    const allMenuItems = (props.menu || []).flatMap(category => category.items || []);
+    cart.value = order.items.map(line => {
+        const menuItem = allMenuItems.find(item => Number(item.id) === Number(line.menu_item_id));
+        return {
+            id: line.menu_item_id,
+            name: line.menu_item?.name || menuItem?.name || 'Artikull',
+            price: Number(line.unit_price),
+            qty: Number(line.quantity),
+            emoji: getItemEmoji(menuItem || line.menu_item || {}),
+            inventory_tracked: Boolean(menuItem?.inventory_tracked),
+            available_portions: menuItem?.available_portions === null || menuItem?.available_portions === undefined
+                ? null
+                : Number(menuItem.available_portions) + Number(line.quantity),
+        };
     });
+    tableNumber.value = order.table_number || '';
+    selectedReservation.value = order.reservation_id || '';
+    serviceMode.value = order.reservation_id ? 'room' : 'table';
+    editingOrderId.value = order.id;
+    showOrdersPanel.value = false;
 }
 
 function openPay(order) {
     if (!hasOpenShift.value) { toasts.value?.error(translate('admin.generated.k_d4d2e4579cbb')); return; }
     selectedOrder.value = order;
     paymentMethod.value = '';
+    discountType.value = 'none';
+    discountValue.value = '';
+    discountReason.value = '';
+    splitCashAmount.value = '';
     selectedPayReservation.value = order.reservation_id || '';
     showPayModal.value = true;
 }
 
 function submitPay() {
     const orderId = selectedOrder.value.id;
+    const payments = [];
+    if (paymentTotal.value > 0) {
+        if (paymentMethod.value === 'split') {
+            if (splitCash.value > 0) payments.push({ method: 'cash', amount: splitCash.value });
+            if (splitCard.value > 0) payments.push({ method: 'card', amount: splitCard.value });
+        } else if (paymentMethod.value) {
+            payments.push({ method: paymentMethod.value, amount: paymentTotal.value });
+        }
+    }
     router.post(route('pos.complete', selectedOrder.value.id), {
-        payment_method: paymentMethod.value,
+        payments,
         reservation_id: paymentMethod.value === 'room_charge' ? selectedPayReservation.value : null,
+        discount_amount: paymentDiscount.value,
+        discount_reason: paymentDiscount.value > 0 ? discountReason.value : null,
+        complimentary: discountType.value === 'complimentary',
     }, {
         preserveScroll: true,
         onSuccess: (page) => {
@@ -275,7 +340,7 @@ function submitPay() {
             else toasts.value?.success(translate('admin.generated.k_4d1af80f8706'));
         },
         onError: (errors) => {
-            if (errors.inventory) toasts.value?.error(errors.inventory);
+            toasts.value?.error(errors.inventory || errors.payments || errors.discount_reason || errors.reservation_id || 'Pagesa nuk u regjistrua.');
         },
     });
 }
@@ -293,6 +358,7 @@ function printReceipt() {
 
 function canFiscalize(order) {
     return order?.status === 'completed'
+        && !order?.refunded_at
         && ['cash', 'card'].includes(order?.payment_method)
         && order?.fiscal_document?.status !== 'fiscalized';
 }
@@ -312,11 +378,31 @@ function fiscalizeReceipt(order) {
     });
 }
 
-function cancelOrder(order) {
-    if (!confirm(translate('admin.generated.k_1b7f971e087e'))) return;
-    router.post(route('pos.cancel', order.id), {}, {
+function openCancel(order) {
+    actionOrder.value = order;
+    actionReason.value = '';
+    showCancelModal.value = true;
+}
+
+function submitCancel() {
+    router.post(route('pos.cancel', actionOrder.value.id), { reason: actionReason.value }, {
         preserveScroll: true,
-        onSuccess: () => toasts.value?.success(translate('admin.generated.k_0d9b1bd67bed')),
+        onSuccess: () => { showCancelModal.value = false; toasts.value?.success(translate('admin.generated.k_0d9b1bd67bed')); },
+        onError: (errors) => toasts.value?.error(errors.reason || 'Anulimi nuk u regjistrua.'),
+    });
+}
+
+function openRefund(order) {
+    actionOrder.value = order;
+    actionReason.value = '';
+    showRefundModal.value = true;
+}
+
+function submitRefund() {
+    router.post(route('pos.refund', actionOrder.value.id), { reason: actionReason.value }, {
+        preserveScroll: true,
+        onSuccess: () => { showRefundModal.value = false; toasts.value?.success('Rimbursimi dhe kthimi i stokut u regjistruan.'); },
+        onError: (errors) => toasts.value?.error(errors.reason || errors.refund || 'Rimbursimi nuk u regjistrua.'),
     });
 }
 
@@ -324,9 +410,16 @@ const statusBadge = {
     open: { variant: 'warning', label: translate('admin.generated.k_35a3565ef9b7') },
     completed: { variant: 'success', label: translate('admin.generated.k_5a7f6ed24307') },
     cancelled: { variant: 'error', label: translate('admin.generated.k_a870d7f3f846') },
+    refunded: { variant: 'neutral', label: 'Rimbursuar' },
 };
 
-const payLabel = { cash: 'Cash', card: 'Karte', room_charge: 'Room Charge' };
+const payLabel = { cash: 'Cash', card: 'Kartë', room_charge: 'Në dhomë' };
+
+function orderPaymentLabel(order) {
+    const methods = [...new Set((order.payments || []).filter(payment => payment.direction === 'in').map(payment => payment.method))];
+    if (methods.length > 1) return 'Cash + Kartë';
+    return payLabel[methods[0] || order.payment_method] || (order.is_complimentary ? 'Komplimentare' : '—');
+}
 
 function formatTime(d) {
     return new Date(d).toLocaleTimeString(getIntlLocale(), { hour: '2-digit', minute: '2-digit' });
@@ -368,7 +461,7 @@ function formatTime(d) {
             </div>
         </div>
 
-        <div class="flex h-full flex-col gap-5 lg:flex-row">
+        <div class="flex h-full flex-col gap-5 xl:flex-row">
             <!-- LEFT: Menu area -->
             <div class="flex-1 min-w-0">
                 <!-- Orders Panel (toggle) -->
@@ -403,18 +496,19 @@ function formatTime(d) {
                                             {{ order.items?.map(i => i.menu_item?.name).join(', ') || '—' }}
                                         </td>
                                         <td class="px-4 py-2.5">
-                                            <Badge :variant="statusBadge[order.status]?.variant" dot size="sm">
-                                                {{ statusBadge[order.status]?.label }}
+                                            <Badge :variant="statusBadge[order.effective_status]?.variant" dot size="sm">
+                                                {{ statusBadge[order.effective_status]?.label }}
                                             </Badge>
                                         </td>
                                         <td class="px-4 py-2.5 text-right text-body-sm font-medium">{{ money(order.total_amount) }}</td>
                                         <td class="px-4 py-2.5 text-right">
                                             <div v-if="order.status === 'open'" class="flex justify-end gap-1">
+                                                <Button size="sm" variant="outline" :disabled="!hasOpenShift" @click="editOrder(order)"><Pencil class="h-3.5 w-3.5" /> Ndrysho</Button>
                                                 <Button size="sm" variant="primary" :disabled="!hasOpenShift" @click="openPay(order)">{{ $t('admin.generated.k_c0bc68ffb628') }}</Button>
-                                                <Button size="sm" variant="ghost" class="text-error-600" @click="cancelOrder(order)">{{ $t('admin.generated.k_28cc20e7fd5b') }}</Button>
+                                                <Button size="sm" variant="ghost" class="text-error-600" @click="openCancel(order)">{{ $t('admin.generated.k_28cc20e7fd5b') }}</Button>
                                             </div>
                                             <div v-else-if="order.status === 'completed'" class="flex flex-wrap justify-end gap-1.5">
-                                                <Badge v-if="order.payment_method" variant="neutral" size="sm">{{ payLabel[order.payment_method] }}</Badge>
+                                                <Badge variant="neutral" size="sm">{{ orderPaymentLabel(order) }}</Badge>
                                                 <Button
                                                     v-if="canFiscalize(order)"
                                                     size="sm"
@@ -425,6 +519,7 @@ function formatTime(d) {
                                                 <Button size="sm" variant="outline" @click="openReceipt(order)">
                                                     <ReceiptText class="h-3.5 w-3.5" /> {{ $t('reservationShow.invoice') }}
                                                 </Button>
+                                                <Button v-if="!order.refunded_at" size="sm" variant="ghost" class="text-error-600" :disabled="!hasOpenShift" @click="openRefund(order)"><RotateCcw class="h-3.5 w-3.5" /> Rimburso</Button>
                                             </div>
                                         </td>
                                     </tr>
@@ -488,7 +583,7 @@ function formatTime(d) {
 
                     <!-- Item grid -->
                     <div
-                        class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5"
+                        class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4"
                         :class="{ 'opacity-50 pointer-events-none': !hasOpenShift }"
                     >
                         <button
@@ -536,14 +631,14 @@ function formatTime(d) {
             </div>
 
             <!-- RIGHT: Cart sidebar -->
-            <div class="shrink-0 lg:w-[360px] xl:w-[390px]">
-                <div class="sticky top-20 flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card" style="height: calc(100vh - 7rem); min-height: 560px;">
+            <div class="shrink-0 xl:w-[390px]">
+                <div class="flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card xl:sticky xl:top-20 xl:h-[calc(100vh-7rem)] xl:min-h-[560px]">
                     <!-- Cart header -->
                     <div class="border-b border-neutral-200 px-4 py-4">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-2">
                                 <span class="grid h-9 w-9 place-items-center rounded-lg bg-accent-50 text-accent-700"><ShoppingCart class="h-5 w-5" /></span>
-                                <div><h3 class="font-semibold text-primary-900">Porosia e re</h3><p class="text-tiny text-neutral-400">{{ cartCount }} artikuj</p></div>
+                                <div><h3 class="font-semibold text-primary-900">{{ editingOrderId ? `Ndrysho porosinë #${editingOrderId}` : 'Porosia e re' }}</h3><p class="text-tiny text-neutral-400">{{ cartCount }} artikuj</p></div>
                             </div>
                             <button v-if="cart.length" type="button" class="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-small font-semibold text-error-600 hover:bg-error-50" @click="clearCart"><Trash2 class="h-4 w-4" /> Pastro</button>
                         </div>
@@ -561,7 +656,7 @@ function formatTime(d) {
                     </div>
 
                     <!-- Cart items -->
-                    <div class="flex-1 overflow-y-auto px-4 py-2">
+                    <div class="max-h-[420px] flex-1 overflow-y-auto px-4 py-2 xl:max-h-none">
                         <div v-if="cart.length" class="space-y-2">
                             <div v-for="(item, i) in cart" :key="i" class="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 border-b border-neutral-100 py-3 last:border-0">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-neutral-50 text-xl">{{ item.emoji }}</span>
@@ -592,24 +687,38 @@ function formatTime(d) {
                             <span class="text-h3 text-primary-900">{{ money(cartTotal) }}</span>
                         </div>
                         <Button variant="primary" size="lg" class="w-full" :disabled="!hasOpenShift || (serviceMode === 'room' && !selectedReservation)" @click="submitOrder">
-                            Krijo porosinë · {{ money(cartTotal) }}
+                            {{ editingOrderId ? 'Ruaj ndryshimet' : 'Krijo porosinë' }} · {{ money(cartTotal) }}
                         </Button>
-                        <p class="text-center text-tiny text-neutral-400">Porosia krijohet e hapur dhe arkëtohet te “Porositë”.</p>
+                        <p class="text-center text-tiny text-neutral-400">{{ editingOrderId ? 'Stoku i rezervuar përditësohet bashkë me rreshtat.' : 'Porosia krijohet e hapur dhe rezervon stokun menjëherë.' }}</p>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Payment Modal -->
-        <Modal :show="showPayModal" title="Arkëto porosinë" max-width="sm" @close="showPayModal = false">
+        <Modal :show="showPayModal" title="Arkëto porosinë" max-width="md" @close="showPayModal = false">
             <div class="space-y-4">
                 <div class="rounded-xl border border-neutral-200 bg-neutral-50 py-5 text-center">
                     <p class="text-small font-semibold uppercase tracking-wide text-neutral-400">Porosia #{{ selectedOrder?.id }}</p>
-                    <p class="mt-1 text-h1 text-primary-900">{{ money(selectedOrder?.total_amount) }}</p>
+                    <p class="mt-1 text-h1 text-primary-900">{{ money(paymentTotal) }}</p>
+                    <p v-if="paymentDiscount > 0" class="mt-1 text-small text-success-700">Ulje {{ money(paymentDiscount) }} nga {{ money(paymentSubtotal) }}</p>
                 </div>
-                <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <p class="mb-2 text-label text-neutral-600">Ulje / komplimentare</p>
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <button v-for="option in [{ value: 'none', label: 'Pa ulje' }, { value: 'percent', label: 'Përqindje' }, { value: 'fixed', label: 'Shumë fikse' }, { value: 'complimentary', label: 'Komplimentare' }]" :key="option.value" type="button" class="rounded-lg border px-3 py-2 text-small font-semibold" :class="discountType === option.value ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-600'" @click="discountType = option.value">{{ option.label }}</button>
+                    </div>
+                    <div v-if="discountType === 'percent' || discountType === 'fixed'" class="mt-3">
+                        <TextInput v-model="discountValue" type="number" min="0" :max="discountType === 'percent' ? 100 : paymentSubtotal" step="0.01" :placeholder="discountType === 'percent' ? 'P.sh. 10%' : 'Shuma e uljes'" />
+                    </div>
+                    <div v-if="paymentDiscount > 0" class="mt-3">
+                        <TextInput v-model="discountReason" placeholder="Arsyeja e uljes / komplimentares · e detyrueshme" />
+                    </div>
+                </div>
+
+                <div v-if="paymentTotal > 0" class="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <button
-                        v-for="opt in paymentOptions"
+                        v-for="opt in [...paymentOptions, { value: 'split', label: 'Cash + Kartë' }]"
                         :key="opt.value"
                         :class="[
                             'rounded-xl border-2 p-4 text-center transition-all duration-150',
@@ -619,9 +728,16 @@ function formatTime(d) {
                         ]"
                         @click="paymentMethod = opt.value"
                     >
-                        <span class="text-2xl block mb-1">{{ opt.value === 'cash' ? '💵' : opt.value === 'card' ? '💳' : '🏨' }}</span>
+                        <span class="text-2xl block mb-1">{{ opt.value === 'cash' ? '💵' : opt.value === 'card' ? '💳' : opt.value === 'split' ? '💵＋💳' : '🏨' }}</span>
                         <span class="text-body-sm font-medium">{{ opt.label }}</span>
                     </button>
+                </div>
+
+                <div v-if="paymentMethod === 'split'" class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                    <FormGroup label="Shuma cash">
+                        <TextInput v-model="splitCashAmount" type="number" min="0" :max="paymentTotal" step="0.01" placeholder="0.00" />
+                    </FormGroup>
+                    <div class="mt-3 flex items-center justify-between text-body-sm"><span class="text-neutral-500">Pjesa me kartë</span><strong class="text-primary-900">{{ money(splitCard) }}</strong></div>
                 </div>
 
                 <!-- Room picker (when charging to a room) -->
@@ -630,12 +746,28 @@ function formatTime(d) {
                     <Select v-model="selectedPayReservation" :options="reservationOptions" :placeholder="$t('admin.generated.k_b6c2dcec536d')" />
                     <p v-if="!reservationOptions.length" class="text-small text-error-500 mt-1">{{ $t('admin.generated.k_0732d0e36b56') }}</p>
                 </div>
-                <p class="rounded-lg border border-info-200 bg-info-50 px-3 py-2.5 text-small text-info-800">Pagesa cash ose kartë regjistrohet në Financë; pagesa në dhomë kalon në folion e rezervimit.</p>
+                <p class="rounded-lg border border-info-200 bg-info-50 px-3 py-2.5 text-small text-info-800">Cash regjistrohet në Arka, karta në Banka; pagesa në dhomë kalon në folion e rezervimit.</p>
             </div>
             <template #footer>
                 <Button variant="outline" @click="showPayModal = false">{{ $t('admin.generated.k_182fb16b9fb0') }}</Button>
-                <Button variant="primary" :disabled="!paymentMethod || (paymentMethod === 'room_charge' && !selectedPayReservation)" @click="submitPay">Konfirmo · {{ money(selectedOrder?.total_amount) }}</Button>
+                <Button variant="primary" :disabled="(paymentTotal > 0 && !paymentMethod) || (paymentMethod === 'room_charge' && !selectedPayReservation) || (paymentDiscount > 0 && !discountReason.trim()) || (paymentMethod === 'split' && (splitCash <= 0 || splitCard <= 0))" @click="submitPay">Konfirmo · {{ money(paymentTotal) }}</Button>
             </template>
+        </Modal>
+
+        <Modal :show="showCancelModal" title="Anulo porosinë" max-width="sm" @close="showCancelModal = false">
+            <div class="space-y-3">
+                <p class="text-body-sm text-neutral-600">Porosia #{{ actionOrder?.id }} do të anulohet dhe stoku i rezervuar do të lirohet.</p>
+                <textarea v-model="actionReason" rows="3" class="w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500" placeholder="Arsyeja e anulimit · e detyrueshme" />
+            </div>
+            <template #footer><Button variant="outline" @click="showCancelModal = false">Mbyll</Button><Button variant="danger" :disabled="actionReason.trim().length < 3" @click="submitCancel">Anulo porosinë</Button></template>
+        </Modal>
+
+        <Modal :show="showRefundModal" title="Rimburso porosinë" max-width="sm" @close="showRefundModal = false">
+            <div class="space-y-3">
+                <div class="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2.5 text-small text-warning-800">Do të kthehen {{ money(actionOrder?.total_amount) }}, do të krijohet lëvizja e kundërt në Financë dhe artikujt do të rikthehen në magazinë.</div>
+                <textarea v-model="actionReason" rows="3" class="w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500" placeholder="Arsyeja e rimbursimit · e detyrueshme" />
+            </div>
+            <template #footer><Button variant="outline" @click="showRefundModal = false">Mbyll</Button><Button variant="danger" :disabled="actionReason.trim().length < 3" @click="submitRefund">Konfirmo rimbursimin</Button></template>
         </Modal>
 
         <!-- Thermal POS receipt preview -->
