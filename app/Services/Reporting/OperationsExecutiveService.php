@@ -79,7 +79,7 @@ final class OperationsExecutiveService
             'flow' => [
                 'arrivals_total' => $arrivals->count(),
                 'arrivals_remaining' => $arrivals->whereIn('status', ['pending', 'confirmed'])->count(),
-                'arrivals_completed' => $arrivals->where('status', 'checked_in')->count(),
+                'arrivals_completed' => $arrivals->whereIn('status', ['checked_in', 'checked_out'])->count(),
                 'departures_total' => $departures->count(),
                 'departures_remaining' => $departures->where('status', 'checked_in')->count(),
                 'departures_completed' => $departures->where('status', 'checked_out')->count(),

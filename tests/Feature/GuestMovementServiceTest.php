@@ -27,18 +27,25 @@ class GuestMovementServiceTest extends TestCase
         $arrival = $this->reservation($this->room($type, '101'), $guest, $user, 'confirmed', '2026-07-10', '2026-07-12', 100);
         $departure = $this->reservation($this->room($type, '102'), $guest, $user, 'checked_out', '2026-07-08', '2026-07-10', 80);
         $this->reservation($this->room($type, '103'), $guest, $user, 'checked_in', '2026-07-09', '2026-08-01', 500);
+        $completedArrival = $this->reservation($this->room($type, '104'), $guest, $user, 'checked_out', '2026-07-10', '2026-07-11', 60);
 
         FolioItem::create(['reservation_id' => $arrival->id, 'description' => 'Spa', 'amount' => 20, 'type' => 'spa', 'charge_date' => '2026-07-10']);
         FolioItem::create(['reservation_id' => $arrival->id, 'description' => 'Discount', 'amount' => 5, 'type' => 'discount', 'charge_date' => '2026-07-10']);
         Payment::create(['reservation_id' => $arrival->id, 'amount' => 40, 'method' => 'cash', 'created_by' => $user->id]);
+        Payment::create(['reservation_id' => $arrival->id, 'amount' => 10, 'method' => 'cash', 'type' => 'refund', 'created_by' => $user->id]);
+        Payment::create(['reservation_id' => $arrival->id, 'amount' => 5, 'method' => 'other', 'type' => 'writeoff', 'created_by' => $user->id]);
+        Payment::create(['reservation_id' => $completedArrival->id, 'amount' => 80, 'method' => 'cash', 'created_by' => $user->id]);
         PosOrder::create(['reservation_id' => $departure->id, 'status' => 'open', 'total_amount' => 10, 'created_by' => $user->id]);
 
         $report = app(GuestMovementService::class)->summary(new ReportingPeriod('2026-07-10', '2026-07-11'));
 
-        $this->assertSame(1, $report['summary']['arrivals']['count']);
-        $this->assertSame(1, $report['summary']['departures']['count']);
+        $this->assertSame(2, $report['summary']['arrivals']['count']);
+        $this->assertSame(2, $report['summary']['departures']['count']);
         $this->assertSame(1, $report['summary']['in_house']['count']);
-        $this->assertSame(75.0, $report['arrivals'][0]['balance']);
+        $this->assertSame(80.0, collect($report['arrivals'])->firstWhere('id', $arrival->id)['balance']);
+        $this->assertSame(80.0, $report['summary']['arrivals']['balance']);
+        $this->assertSame(20.0, $report['summary']['arrivals']['credit']);
+        $this->assertTrue(collect($report['arrivals'])->contains('id', $completedArrival->id));
         $this->assertSame(1, $report['departures'][0]['open_pos_count']);
         $this->assertSame(1, $report['summary']['departures']['open_pos']);
     }
