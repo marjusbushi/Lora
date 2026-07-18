@@ -50,10 +50,11 @@ class PosControlReportServiceTest extends TestCase
         $this->assertSame(80.0, $current['summary']['net_collected']);
         $this->assertSame(1, $current['summary']['void_count']);
         $this->assertSame(50.0, $current['summary']['void_value']);
-        $this->assertSame(1, $current['summary']['missing_reason_count']);
+        $this->assertSame(3, $current['summary']['missing_reason_count']);
         $this->assertSame(100.0, $current['summary']['exception_rate']);
         $this->assertSame(80.0, $current['methods'][0]['net']);
         $this->assertSame('Arka Test', $current['operators'][0]['operator']);
+        $this->assertSame(2, $current['operators'][0]['refunds']);
         $this->assertCount(2, $current['refunds']);
         $this->assertCount(1, $current['voids']);
         $this->assertNull($report['changes']['exception_rate']);

@@ -36,6 +36,7 @@ final class PosControlReportService
         $to = $period->to->toDateString();
         $payments = PosOrderPayment::query()
             ->whereBetween('paid_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
+            ->with('order:id,refund_reason')
             ->get(['id', 'pos_order_id', 'direction', 'method', 'amount', 'reference', 'paid_at', 'created_by']);
 
         $legacySales = $this->orderRange(
@@ -50,16 +51,17 @@ final class PosControlReportService
         $legacyRefunds = PosOrder::query()
             ->whereBetween('refunded_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
             ->whereDoesntHave('payments', fn ($query) => $query->where('direction', 'out'))
-            ->get(['id', 'payment_method', 'total_amount', 'refunded_at', 'refunded_by', 'created_by'])
+            ->get(['id', 'payment_method', 'total_amount', 'refunded_at', 'refunded_by', 'refund_reason', 'created_by'])
             ->map(fn (PosOrder $order) => [
                 'id' => "legacy-refund-{$order->id}", 'pos_order_id' => $order->id, 'direction' => 'out',
                 'method' => $order->payment_method ?: '?', 'amount' => (float) $order->total_amount,
-                'reference' => null, 'paid_at' => $order->refunded_at, 'created_by' => $order->refunded_by ?? $order->created_by,
+                'reference' => null, 'reason' => $order->refund_reason, 'paid_at' => $order->refunded_at, 'created_by' => $order->refunded_by ?? $order->created_by,
             ]);
         $ledger = $payments->map(fn (PosOrderPayment $payment) => [
             'id' => $payment->id, 'pos_order_id' => $payment->pos_order_id, 'direction' => $payment->direction,
             'method' => $payment->method ?: '?', 'amount' => (float) $payment->amount,
-            'reference' => $payment->reference, 'paid_at' => $payment->paid_at, 'created_by' => $payment->created_by,
+            'reference' => $payment->reference, 'reason' => $payment->order?->refund_reason,
+            'paid_at' => $payment->paid_at, 'created_by' => $payment->created_by,
         ])->concat($legacySales)->concat($legacyRefunds);
 
         $voids = PosOrder::query()->where('status', 'cancelled')
@@ -104,13 +106,13 @@ final class PosControlReportService
             ];
         })->sortByDesc('gross')->values();
 
-        $byOperator = $voidRows->map(fn (array $row) => ['operator' => $row['operator'], 'voids' => 1, 'void_value' => $row['amount'], 'refunds' => 0, 'refund_value' => 0.0])
-            ->concat($refunds->map(fn (array $row) => ['operator' => $row['operator'], 'voids' => 0, 'void_value' => 0.0, 'refunds' => 1, 'refund_value' => $row['amount']]))
+        $byOperator = $voidRows->map(fn (array $row) => ['operator' => $row['operator'], 'order_id' => $row['id'], 'kind' => 'void', 'void_value' => $row['amount'], 'refund_value' => 0.0])
+            ->concat($refunds->map(fn (array $row) => ['operator' => $row['operator'], 'order_id' => $row['pos_order_id'], 'kind' => 'refund', 'void_value' => 0.0, 'refund_value' => $row['amount']]))
             ->groupBy('operator')->map(fn (Collection $rows, string $operator) => [
                 'operator' => $operator,
-                'voids' => $rows->sum('voids'),
+                'voids' => $rows->where('kind', 'void')->pluck('order_id')->unique()->count(),
                 'void_value' => round((float) $rows->sum('void_value'), 2),
-                'refunds' => $rows->sum('refunds'),
+                'refunds' => $rows->where('kind', 'refund')->pluck('order_id')->unique()->count(),
                 'refund_value' => round((float) $rows->sum('refund_value'), 2),
             ])->sortByDesc(fn (array $row) => $row['void_value'] + $row['refund_value'])->values();
 
@@ -122,7 +124,8 @@ final class PosControlReportService
                 'net_collected' => round($grossIn - $refundTotal, 2),
                 'void_count' => $voidRows->count(),
                 'void_value' => round((float) $voidRows->sum('amount'), 2),
-                'missing_reason_count' => $voidRows->filter(fn (array $row) => blank($row['reason']))->count(),
+                'missing_reason_count' => $voidRows->filter(fn (array $row) => blank($row['reason']))->count()
+                    + $refunds->filter(fn (array $row) => blank($row['reason']))->pluck('pos_order_id')->unique()->count(),
                 'order_population' => $population,
                 'exception_rate' => $population > 0 ? round($exceptionOrders / $population * 100, 1) : 0.0,
             ],
