@@ -508,10 +508,26 @@ class ReportsController extends Controller
 
         [$from, $to] = $this->range($request);
         $period = new ReportingPeriod($from, $to);
+        $analytics = $cancellationRisk->withComparisons($period);
+        $current = $analytics['current'];
+
+        // Preserve the original report contract used by dashboard action links.
+        // In that contract, "no show" means unresolved past-arrival candidates.
+        $legacySummary = [
+            'cancelled_count' => $current['summary']['cancelled_count'],
+            'cancelled_value' => $current['summary']['cancelled_value'],
+            'total_count' => $current['summary']['total_count'],
+            'cancellation_rate' => $current['summary']['cancellation_rate'],
+            'no_show_count' => $current['summary']['at_risk_count'],
+            'no_show_value' => $current['summary']['at_risk_value'],
+        ];
 
         return Inertia::render('Reports/Cancellations', [
             'filters' => $period->toArray(),
-            'analytics' => $cancellationRisk->withComparisons($period),
+            'analytics' => $analytics,
+            'summary' => $legacySummary,
+            'cancelled' => collect($current['losses'])->where('type', 'cancelled')->values(),
+            'noShows' => $current['at_risk'],
             'currency' => $this->currency(),
         ]);
     }
