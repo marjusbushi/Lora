@@ -14,30 +14,36 @@ final class HousekeepingProductivityService
     {
         $tasks = CleaningTask::query()
             ->with(['room:id,room_number', 'assignedUser:id,name'])
-            ->whereBetween('created_at', [$period->from->startOfDay(), $period->to->endOfDay()])
-            ->orderByDesc('created_at')
+            ->where(function ($query) use ($period) {
+                foreach (['created_at', 'started_at', 'completed_at', 'inspected_at'] as $column) {
+                    $query->orWhereBetween($column, [$period->from->startOfDay(), $period->to->endOfDay()]);
+                }
+            })
+            ->orderByDesc('updated_at')
             ->get([
                 'id', 'room_id', 'assigned_to', 'type', 'status', 'priority', 'issue_reported',
-                'created_at', 'started_at', 'completed_at', 'inspected_at',
+                'created_at', 'updated_at', 'started_at', 'completed_at', 'inspected_at',
             ]);
-        $completed = $tasks->filter(fn (CleaningTask $task) => in_array($task->status, ['completed', 'inspected'], true) && $task->completed_at);
-        $started = $tasks->filter(fn (CleaningTask $task) => $task->started_at);
-        $inspected = $tasks->filter(fn (CleaningTask $task) => $task->inspected_at || $task->status === 'inspected');
+        $assigned = $tasks->filter(fn (CleaningTask $task) => $this->inPeriod($task->created_at, $period));
+        $completed = $tasks->filter(fn (CleaningTask $task) => $this->inPeriod($task->completed_at, $period));
+        $started = $tasks->filter(fn (CleaningTask $task) => $this->inPeriod($task->started_at, $period));
+        $completedAssignedByEnd = $assigned->filter(fn (CleaningTask $task) => $task->completed_at && $task->completed_at->lte($period->to->endOfDay()));
+        $inspected = $completed->filter(fn (CleaningTask $task) => $task->inspected_at && $task->inspected_at->lte($period->to->endOfDay()));
 
         return [
             'period' => $period->toArray(),
             'summary' => [
-                'total' => $tasks->count(),
+                'total' => $assigned->count(),
                 'completed' => $completed->count(),
-                'pending' => $tasks->whereIn('status', ['pending', 'in_progress'])->count(),
-                'completion_rate' => $tasks->isEmpty() ? 0.0 : round($completed->count() / $tasks->count() * 100, 1),
+                'pending' => max(0, $assigned->count() - $completedAssignedByEnd->count()),
+                'completion_rate' => $assigned->isEmpty() ? 0.0 : round($completedAssignedByEnd->count() / $assigned->count() * 100, 1),
                 'avg_clean_minutes' => $this->averageMinutes($completed, 'started_at', 'completed_at'),
                 'avg_queue_minutes' => $this->averageMinutes($started, 'created_at', 'started_at'),
                 'inspection_rate' => $completed->isEmpty() ? 0.0 : round($inspected->count() / $completed->count() * 100, 1),
-                'issues' => $tasks->filter(fn (CleaningTask $task) => filled($task->issue_reported))->count(),
+                'issues' => $assigned->filter(fn (CleaningTask $task) => filled($task->issue_reported))->count(),
             ],
             'staff' => $this->staff($tasks, $period),
-            'types' => $this->types($tasks),
+            'types' => $this->types($tasks, $period),
             'daily' => $this->daily($tasks, $period),
             'tasks' => $tasks->take(50)->map(fn (CleaningTask $task) => [
                 'id' => $task->id,
@@ -58,28 +64,31 @@ final class HousekeepingProductivityService
     {
         return $tasks->groupBy(fn (CleaningTask $task) => $task->assignedUser?->name ?: 'Unassigned')
             ->map(function (Collection $rows, string $staff) use ($period) {
-                $completed = $rows->filter(fn (CleaningTask $task) => in_array($task->status, ['completed', 'inspected'], true) && $task->completed_at);
+                $assigned = $rows->filter(fn (CleaningTask $task) => $this->inPeriod($task->created_at, $period));
+                $completed = $rows->filter(fn (CleaningTask $task) => $this->inPeriod($task->completed_at, $period));
+                $cohortCompleted = $assigned->filter(fn (CleaningTask $task) => $task->completed_at && $task->completed_at->lte($period->to->endOfDay()));
 
                 return [
                     'staff' => $staff,
-                    'assigned' => $rows->count(),
+                    'assigned' => $assigned->count(),
                     'completed' => $completed->count(),
-                    'completion_rate' => round($completed->count() / max(1, $rows->count()) * 100, 1),
+                    'completion_rate' => round($cohortCompleted->count() / max(1, $assigned->count()) * 100, 1),
                     'avg_clean_minutes' => $this->averageMinutes($completed, 'started_at', 'completed_at'),
                     'tasks_per_day' => round($completed->count() / max(1, $period->days()), 1),
-                    'issues' => $rows->filter(fn (CleaningTask $task) => filled($task->issue_reported))->count(),
+                    'issues' => $assigned->filter(fn (CleaningTask $task) => filled($task->issue_reported))->count(),
                 ];
             })->sortByDesc('completed')->values()->all();
     }
 
-    private function types(Collection $tasks): array
+    private function types(Collection $tasks, ReportingPeriod $period): array
     {
-        return $tasks->groupBy('type')->map(function (Collection $rows, string $type) {
-            $completed = $rows->filter(fn (CleaningTask $task) => $task->completed_at);
+        return $tasks->groupBy('type')->map(function (Collection $rows, string $type) use ($period) {
+            $assigned = $rows->filter(fn (CleaningTask $task) => $this->inPeriod($task->created_at, $period));
+            $completed = $rows->filter(fn (CleaningTask $task) => $this->inPeriod($task->completed_at, $period));
 
             return [
                 'type' => $type,
-                'count' => $rows->count(),
+                'count' => $assigned->count(),
                 'completed' => $completed->count(),
                 'avg_clean_minutes' => $this->averageMinutes($completed, 'started_at', 'completed_at'),
             ];
@@ -90,12 +99,13 @@ final class HousekeepingProductivityService
     {
         return collect(CarbonPeriod::create($period->from, $period->to))->map(function ($day) use ($tasks) {
             $date = $day->toDateString();
-            $rows = $tasks->filter(fn (CleaningTask $task) => $task->created_at?->toDateString() === $date);
+            $assigned = $tasks->filter(fn (CleaningTask $task) => $task->created_at?->toDateString() === $date);
+            $completed = $tasks->filter(fn (CleaningTask $task) => $task->completed_at?->toDateString() === $date);
 
             return [
                 'date' => $date,
-                'assigned' => $rows->count(),
-                'completed' => $rows->filter(fn (CleaningTask $task) => in_array($task->status, ['completed', 'inspected'], true))->count(),
+                'assigned' => $assigned->count(),
+                'completed' => $completed->count(),
             ];
         })->all();
     }
@@ -105,6 +115,11 @@ final class HousekeepingProductivityService
         $values = $rows->map(fn (CleaningTask $task) => $this->minutes($task->{$from}, $task->{$to}))->filter(fn ($value) => $value !== null);
 
         return $values->isEmpty() ? 0.0 : round((float) $values->avg(), 1);
+    }
+
+    private function inPeriod($value, ReportingPeriod $period): bool
+    {
+        return $value && CarbonImmutable::parse($value)->betweenIncluded($period->from->startOfDay(), $period->to->endOfDay());
     }
 
     private function minutes($from, $to): ?int
