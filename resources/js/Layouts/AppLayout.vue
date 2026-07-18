@@ -161,8 +161,7 @@ const allNavItems = computed(() => [
         permission: 'view_pos_orders',
         module: 'pos',
         children: [
-            { label: 'Tavolinat', href: '/pms/pos/tables' },
-            { label: 'Shitje', href: '/pms/pos' },
+            { label: 'Shitje', href: '/pms/pos/tables' },
             { label: 'Porositë', href: '/pms/pos/orders' },
             { label: 'Shitjet & kuponët', href: '/pms/pos/receipts' },
             { label: 'Turnet', href: '/pms/pos/shifts' },

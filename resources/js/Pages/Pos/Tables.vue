@@ -27,7 +27,7 @@ const props = defineProps({
 
 const toasts = ref(null);
 const activeArea = ref(props.areas[0] || 'Salla kryesore');
-const selectedTableId = ref(props.selectedTableId || props.tables.find((table) => table.status !== 'free')?.id || props.tables[0]?.id || null);
+const selectedTableId = ref(props.selectedTableId || null);
 const activeCategory = ref(props.menu[0]?.id || null);
 const searchQuery = ref('');
 const cart = ref([]);
@@ -83,8 +83,13 @@ function tableStatus(table) {
 }
 
 function selectTable(table) {
+    if (!props.currentShift) {
+        toasts.value?.error('Hap një turn përpara se të zgjedhësh tavolinën.');
+        return;
+    }
     selectedTableId.value = table.id;
     showSummaryModal.value = false;
+    nextTick(() => openRound());
 }
 
 function openRound() {
@@ -96,6 +101,16 @@ function openRound() {
     covers.value = selectedOrder.value?.covers || 2;
     activeCategory.value = props.menu[0]?.id || null;
     showRoundModal.value = true;
+}
+
+function openSummaryFromTouch() {
+    showRoundModal.value = false;
+    showSummaryModal.value = true;
+}
+
+function openPaymentFromTouch() {
+    showRoundModal.value = false;
+    openPayment();
 }
 
 function addItem(item) {
@@ -149,6 +164,7 @@ function submitRound(send) {
                 const found = findRound(page.props.tables, page.props.printRoundId);
                 if (found) printProductionTicket(found.table, found.round);
             }
+            selectedTableId.value = null;
         },
         onError: (errors) => toasts.value?.error(errors.inventory || errors.items || 'Porosia nuk u ruajt.'),
         onFinish: () => { saving.value = false; },
@@ -230,6 +246,7 @@ function payTable() {
         preserveScroll: true,
         onSuccess: (page) => {
             showPaymentModal.value = false;
+            selectedTableId.value = null;
             toasts.value?.success(page.props.flash?.success || 'Pagesa u regjistrua dhe tavolina u lirua.');
         },
         onError: (errors) => toasts.value?.error(errors.order || errors.payments || errors.reservation_id || 'Pagesa nuk u regjistrua.'),
@@ -247,15 +264,15 @@ onMounted(() => {
         <div class="space-y-5">
             <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                 <div>
-                    <p class="text-small font-semibold text-accent-700">POS Bar/Restorant / Tavolinat</p>
-                    <h1 class="mt-1 text-h2 text-primary-900">Shërbimi në tavolinë</h1>
-                    <p class="mt-1 text-body-sm text-neutral-500">Raunde porosish, printim në banak dhe një llogari e përbashkët për tavolinën.</p>
+                    <p class="text-small font-semibold text-accent-700">POS Bar/Restorant / Shitje</p>
+                    <h1 class="mt-1 text-h2 text-primary-900">Shitje POS</h1>
+                    <p class="mt-1 text-body-sm text-neutral-500">Zgjidh tavolinën, shto porosinë në Touch POS dhe dërgoje për printim.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <Badge :variant="currentShift ? 'success' : 'warning'" dot size="sm">
                         {{ currentShift ? `Turn aktiv · ${currentShift.user_name} · ${currentShift.opened_at}` : 'Pa turn aktiv' }}
                     </Badge>
-                    <Button variant="primary" @click="openRound"><Plus class="h-4 w-4" /> Shto porosi</Button>
+                    <Button v-if="selectedTable" variant="primary" @click="openRound"><Plus class="h-4 w-4" /> Shto porosi</Button>
                 </div>
             </div>
 
@@ -266,15 +283,18 @@ onMounted(() => {
                 <Card class="!p-4"><p class="text-small text-neutral-500">Llogari të hapura</p><p class="mt-1 text-h3 text-accent-700">{{ money(stats.open_total) }}</p></Card>
             </div>
 
-            <div class="grid min-h-[620px] gap-5 2xl:grid-cols-[minmax(0,1.2fr)_minmax(430px,0.8fr)]">
+            <div
+                class="grid min-h-[620px] gap-5"
+                :class="selectedTable ? '2xl:grid-cols-[minmax(0,1.2fr)_minmax(430px,0.8fr)]' : 'grid-cols-1'"
+            >
                 <Card :padding="false" class="overflow-hidden">
                     <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div><h2 class="text-h4 text-primary-900">Harta e tavolinave</h2><p class="mt-1 text-small text-neutral-500">Zgjidh tavolinën për të hapur ose vazhduar porosinë.</p></div>
+                        <div><h2 class="text-h4 text-primary-900">Zgjidh tavolinën</h2><p class="mt-1 text-small text-neutral-500">Prek një tavolinë dhe POS Touch hapet menjëherë.</p></div>
                         <div class="flex gap-2 overflow-x-auto">
                             <button v-for="area in areas" :key="area" type="button" class="rounded-lg border px-3 py-2 text-small font-semibold whitespace-nowrap" :class="activeArea === area ? 'border-accent-600 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-500'" @click="activeArea = area">{{ area }}</button>
                         </div>
                     </div>
-                    <div class="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
+                    <div class="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
                         <button
                             v-for="table in areaTables"
                             :key="table.id"
@@ -293,7 +313,7 @@ onMounted(() => {
                     </div>
                 </Card>
 
-                <Card :padding="false" class="flex min-h-0 flex-col overflow-hidden">
+                <Card v-if="selectedTable" :padding="false" class="flex min-h-0 flex-col overflow-hidden">
                     <template v-if="selectedTable">
                         <div class="border-b border-neutral-200 px-5 py-4">
                             <div class="flex flex-wrap items-start justify-between gap-3">
@@ -329,13 +349,25 @@ onMounted(() => {
             </div>
         </div>
 
-        <Modal :show="showRoundModal" :title="`Porosi e re · ${selectedTable?.name || ''}`" max-width="4xl" @close="showRoundModal = false">
-            <div class="grid min-h-[560px] gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-                <div class="min-w-0">
+        <Modal :show="showRoundModal" :title="`Shitje Touch · ${selectedTable?.name || ''}`" max-width="screen" @close="showRoundModal = false">
+            <div class="flex h-[calc(100dvh-8rem)] min-h-[560px] flex-col">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <Badge :variant="selectedTable ? tableStatus(selectedTable).badge : 'neutral'" dot size="sm">{{ selectedTable ? tableStatus(selectedTable).label : '—' }}</Badge>
+                        <span class="text-body-sm font-semibold text-primary-900">{{ selectedOrder ? `${selectedOrder.rounds.length} porosi · ${money(selectedOrder.total_amount)} gjithsej` : 'Llogari e re' }}</span>
+                        <span class="text-small text-neutral-500">{{ selectedTable?.area }} · {{ selectedTable?.seats }} vende</span>
+                    </div>
+                    <div v-if="selectedOrder" class="flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" @click="openSummaryFromTouch"><FileText class="h-4 w-4" /> Përmbledhja</Button>
+                        <Button variant="primary" size="sm" @click="openPaymentFromTouch"><Banknote class="h-4 w-4" /> Paguaj</Button>
+                    </div>
+                </div>
+                <div class="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.28fr)]">
+                <div class="min-w-0 overflow-y-auto pr-1">
                     <div class="relative"><Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><input v-model="searchQuery" type="search" class="w-full rounded-lg border-neutral-200 py-2.5 pl-9 pr-3 text-body-sm focus:border-accent-500 focus:ring-accent-500" placeholder="Kërko produktin..." /></div>
                     <div class="mt-3 flex gap-2 overflow-x-auto pb-1"><button v-for="category in menu" :key="category.id" type="button" class="rounded-full border px-4 py-2 text-small font-semibold whitespace-nowrap" :class="activeCategory === category.id ? 'border-primary-900 bg-primary-900 text-white' : 'border-neutral-200 text-neutral-600'" @click="activeCategory = category.id">{{ category.name }}</button></div>
-                    <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        <button v-for="item in visibleMenuItems" :key="item.id" type="button" class="overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition hover:border-accent-400 hover:shadow-card" @click="addItem(item)"><div class="grid h-24 place-items-center overflow-hidden bg-neutral-100"><img v-if="item.image_path" :src="`/storage/${item.image_path}`" :alt="item.name" class="h-full w-full object-cover" /><ChefHat v-else class="h-7 w-7 text-neutral-300" /></div><div class="p-3"><p class="truncate font-semibold text-primary-900">{{ item.name }}</p><p class="mt-1 text-body-sm font-bold text-accent-700">{{ money(item.price) }}</p></div></button>
+                    <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                        <button v-for="item in visibleMenuItems" :key="item.id" type="button" class="overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition hover:border-accent-400 hover:shadow-card touch-manipulation" @click="addItem(item)"><div class="grid h-24 place-items-center overflow-hidden bg-neutral-100"><img v-if="item.image_path" :src="`/storage/${item.image_path}`" :alt="item.name" class="h-full w-full object-cover" /><ChefHat v-else class="h-7 w-7 text-neutral-300" /></div><div class="p-3"><p class="truncate font-semibold text-primary-900">{{ item.name }}</p><p class="mt-1 text-body-sm font-bold text-accent-700">{{ money(item.price) }}</p></div></button>
                     </div>
                 </div>
                 <div class="flex min-h-0 flex-col rounded-xl border border-neutral-200 bg-neutral-50">
@@ -345,6 +377,7 @@ onMounted(() => {
                         <div v-else class="grid h-full min-h-64 place-items-center text-center"><div><ShoppingCart class="mx-auto h-8 w-8 text-neutral-300" /><p class="mt-3 font-semibold text-primary-900">Raundi është bosh</p><p class="mt-1 text-small text-neutral-500">Prek produktet për t’i shtuar.</p></div></div>
                     </div>
                     <div class="border-t border-neutral-200 bg-white p-4"><div class="mb-3 flex items-center justify-between"><span class="text-body-sm text-neutral-500">Totali i raundit</span><strong class="text-h3">{{ money(cartTotal) }}</strong></div><div class="grid grid-cols-2 gap-2"><Button variant="outline" size="lg" :disabled="!cart.length" :loading="saving" @click="submitRound(false)">Mbaj pa dërguar</Button><Button variant="primary" size="lg" :disabled="!cart.length" :loading="saving" @click="submitRound(true)"><Printer class="h-4 w-4" /> Dërgo & printo</Button></div></div>
+                </div>
                 </div>
             </div>
         </Modal>
