@@ -8,6 +8,7 @@ final class ChannelPerformanceService
 {
     public function __construct(
         private readonly StayRevenueAllocator $revenueAllocator,
+        private readonly RoomRevenueService $roomRevenue,
         private readonly KpiCalculator $kpiCalculator,
     ) {}
 
@@ -20,6 +21,7 @@ final class ChannelPerformanceService
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
             ->whereDate('check_out_date', '>', $period->from->toDateString())
             ->get(['id', 'channel', 'check_in_date', 'check_out_date', 'total_amount', 'commission_amount']);
+        $discountFactors = $this->roomRevenue->discountFactors($reservations->pluck('id')->all());
 
         $daily = [];
         for ($date = $period->from; $date->lessThanOrEqualTo($period->to); $date = $date->addDay()) {
@@ -33,17 +35,21 @@ final class ChannelPerformanceService
 
         $rows = $reservations
             ->groupBy(fn (Reservation $reservation) => Reservation::normalizeChannel($reservation->channel))
-            ->map(function ($channelReservations, string $channel) use ($period, &$daily) {
+            ->map(function ($channelReservations, string $channel) use ($period, $discountFactors, &$daily) {
                 $gross = 0.0;
                 $commission = 0.0;
                 $nights = 0;
                 $isDirect = $channel === 'direct';
 
                 foreach ($channelReservations as $reservation) {
+                    $recognizedRoomRevenue = round(
+                        (float) $reservation->total_amount * ($discountFactors[$reservation->id] ?? 1),
+                        2,
+                    );
                     $revenueByDate = $this->revenueAllocator->allocate(
                         $reservation->check_in_date,
                         $reservation->check_out_date,
-                        $reservation->total_amount,
+                        $recognizedRoomRevenue,
                         $period,
                     );
                     $commissionByDate = $this->revenueAllocator->allocate(
