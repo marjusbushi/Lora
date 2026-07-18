@@ -9,6 +9,7 @@ import {
     Banknote,
     BarChart3,
     BedDouble,
+    Building2,
     CalendarCheck,
     CalendarX,
     ChartNoAxesCombined,
@@ -94,6 +95,7 @@ const groups = [
             { name: translate('reports360.paymentReconciliation.title'), desc: translate('reports360.paymentReconciliation.short'), to: 'reports.payments', icon: HandCoins },
             { name: translate('reports360.fiscalVat.title'), desc: translate('reports360.fiscalVat.short'), to: 'reports.vat', icon: Percent },
             { name: translate('reports360.discountCashFlow.title'), desc: translate('reports360.discountCashFlow.short'), to: 'reports.discounts', icon: CircleDollarSign },
+            { name: translate('reports360.departmentRevenue.title'), desc: translate('reports360.departmentRevenue.short'), to: 'reports.departmentRevenue', icon: Building2 },
         ],
     },
     {

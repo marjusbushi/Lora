@@ -4702,6 +4702,26 @@
         "eight_plus": "8+ net"
       }
     },
+    "departmentRevenue": {
+      "title": "Të ardhurat sipas departamentit",
+      "short": "Të ardhurat neto nga dhomat, POS dhe shërbimet e tjera.",
+      "category": "Financë & arka",
+      "total": "Të ardhura totale",
+      "daily": "Të ardhurat ditore",
+      "netRecognized": "Neto, sipas datës së realizimit",
+      "mix": "Miksi i të ardhurave",
+      "breakdown": "Krahasimi sipas departamentit",
+      "department": "Departamenti",
+      "current": "Periudha aktuale",
+      "previous": "Periudha e kaluar",
+      "change": "Ndryshimi",
+      "share": "Pesha",
+      "departments": {
+        "rooms": "Dhoma",
+        "pos": "POS / F&B",
+        "other": "Të tjera"
+      }
+    },
     "discountCashFlow": {
       "title": "Ulje, Rimbursime & Cash Flow",
       "short": "Ndikimi i uljeve, rimbursimeve dhe lëvizjeve reale të parasë.",

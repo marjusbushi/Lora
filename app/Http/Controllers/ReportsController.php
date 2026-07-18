@@ -16,6 +16,7 @@ use App\Services\Reporting\BookingBehaviorService;
 use App\Services\Reporting\BudgetTargetService;
 use App\Services\Reporting\CancellationRiskService;
 use App\Services\Reporting\ChannelPerformanceService;
+use App\Services\Reporting\DepartmentRevenueService;
 use App\Services\Reporting\DiscountRefundCashFlowService;
 use App\Services\Reporting\FiscalVatReportService;
 use App\Services\Reporting\HotelKpiService;
@@ -1019,6 +1020,18 @@ class ReportsController extends Controller
             'analytics' => $analytics,
             'canViewReservations' => $request->user()?->can('view_reservations') ?? false,
             'canViewPos' => $request->user()?->can('view_pos_orders') ?? false,
+            'currency' => $this->currency(),
+        ]);
+    }
+
+    /** Recognized net revenue split between Rooms, POS/F&B and other charges. */
+    public function departmentRevenue(Request $request, DepartmentRevenueService $report): Response
+    {
+        [$from, $to] = $this->range($request);
+
+        return Inertia::render('Reports/DepartmentRevenue', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
         ]);
     }

@@ -4702,6 +4702,26 @@
         "eight_plus": "8+ nights"
       }
     },
+    "departmentRevenue": {
+      "title": "Revenue by Department",
+      "short": "Net revenue from rooms, POS and other services.",
+      "category": "Finance & cash",
+      "total": "Total revenue",
+      "daily": "Daily revenue",
+      "netRecognized": "Net, by recognition date",
+      "mix": "Revenue mix",
+      "breakdown": "Department comparison",
+      "department": "Department",
+      "current": "Current period",
+      "previous": "Previous period",
+      "change": "Change",
+      "share": "Share",
+      "departments": {
+        "rooms": "Rooms",
+        "pos": "POS / F&B",
+        "other": "Other"
+      }
+    },
     "discountCashFlow": {
       "title": "Discounts, Refunds & Cash Flow",
       "short": "Impact of discounts, refunds and actual cash movements.",

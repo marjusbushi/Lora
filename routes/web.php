@@ -347,6 +347,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->middleware('module:housekeeping')->name('reports.housekeepingReport');
         Route::get('/reports/in-house', [ReportsController::class, 'inHouse'])->name('reports.inHouse');
         Route::get('/reports/discounts', [ReportsController::class, 'discounts'])->name('reports.discounts');
+        Route::get('/reports/department-revenue', [ReportsController::class, 'departmentRevenue'])->name('reports.departmentRevenue');
     });
 
     // Finance (module #11): NOT admin-only — the view gate is view_finance and
