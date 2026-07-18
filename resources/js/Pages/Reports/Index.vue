@@ -111,6 +111,7 @@ const groups = [
         reports: [
             { name: translate('admin.generated.k_584ca6441f0e'), desc: translate('admin.generated.k_b87974bf40e5'), to: 'reports.guests', icon: Users },
             { name: translate('reports360.guestLtv.title'), desc: translate('reports360.guestLtv.short'), to: 'reports.repeatGuests', icon: UserRoundCheck },
+            { name: translate('reports360.guestSegments.title'), desc: translate('reports360.guestSegments.short'), to: 'reports.guestSegments', icon: Users },
             { name: translate('admin.generated.k_71151c9f50b0'), desc: translate('admin.generated.k_261a465a8096'), to: 'reports.nationality', icon: FileBarChart },
         ],
     },

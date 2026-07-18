@@ -11,7 +11,7 @@ use Illuminate\Support\Collection;
 final class GuestLifetimeValueService
 {
     /** @return array{as_of:string,summary:array,segments:array,guests:array} */
-    public function summary(): array
+    public function summary(?int $guestLimit = 100): array
     {
         $guests = Guest::query()
             ->with(['reservations' => fn ($query) => $query
@@ -106,7 +106,7 @@ final class GuestLifetimeValueService
                 'upcoming_value' => round((float) $rows->sum('upcoming_value'), 2),
             ],
             'segments' => $this->segments($rows),
-            'guests' => $rows->sortByDesc('net_value')->take(100)->values()->all(),
+            'guests' => ($guestLimit === null ? $rows->sortByDesc('net_value') : $rows->sortByDesc('net_value')->take($guestLimit))->values()->all(),
         ];
     }
 

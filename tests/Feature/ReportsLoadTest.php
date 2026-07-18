@@ -59,6 +59,7 @@ class ReportsLoadTest extends TestCase
             'reports.vat' => 'Reports/Vat',
             'reports.performance' => 'Reports/Performance',
             'reports.repeatGuests' => 'Reports/RepeatGuests',
+            'reports.guestSegments' => 'Reports/GuestSegments',
             'reports.nationality' => 'Reports/Nationality',
             'reports.bookingBehavior' => 'Reports/BookingBehavior',
             'reports.posHourly' => 'Reports/PosHourly',

@@ -341,6 +341,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/reports/vat', [ReportsController::class, 'vat'])->name('reports.vat');
         Route::get('/reports/performance', [ReportsController::class, 'performance'])->name('reports.performance');
         Route::get('/reports/repeat-guests', [ReportsController::class, 'repeatGuests'])->name('reports.repeatGuests');
+        Route::get('/reports/guest-segments', [ReportsController::class, 'guestSegments'])->name('reports.guestSegments');
         Route::get('/reports/nationality', [ReportsController::class, 'nationality'])->name('reports.nationality');
         Route::get('/reports/booking-behavior', [ReportsController::class, 'bookingBehavior'])->name('reports.bookingBehavior');
         Route::get('/reports/pos-hourly', [ReportsController::class, 'posHourly'])->middleware('module:pos')->name('reports.posHourly');
