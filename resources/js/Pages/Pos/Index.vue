@@ -523,6 +523,7 @@ onMounted(() => {
             <div v-if="view === 'sale'" class="flex flex-wrap items-center gap-2">
                 <Button v-if="tableContext" variant="outline" class="h-[58px]" :href="route('pos.tables', { table: tableContext.id })"><ArrowLeft class="h-4 w-4" /> Tavolinat</Button>
                 <button
+                    v-if="!tableContext"
                     type="button"
                     class="group h-14 min-w-32 rounded-xl border border-neutral-200 bg-white px-4 py-2 text-left shadow-card transition hover:border-accent-300 hover:bg-accent-50 focus:outline-none focus:ring-2 focus:ring-accent-500/30"
                     :aria-label="touchMode ? 'Kalo në modalitetin standard' : 'Kalo në modalitetin touch'"
@@ -535,6 +536,12 @@ onMounted(() => {
                         {{ touchMode ? 'Standard' : 'Touch' }}
                     </p>
                 </button>
+                <div v-else class="h-14 min-w-32 rounded-xl border border-accent-200 bg-accent-50 px-4 py-2 shadow-card">
+                    <p class="text-tiny font-semibold uppercase tracking-wide text-accent-600">Modaliteti</p>
+                    <p class="mt-0.5 flex items-center gap-2 text-h4 text-accent-800">
+                        <Maximize2 class="h-4 w-4" /> Touch
+                    </p>
+                </div>
                 <div class="rounded-xl border border-neutral-200 bg-white px-4 py-2 shadow-card">
                     <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">Hapur</p>
                     <p class="text-h4 text-warning-700">{{ stats.open }}</p>

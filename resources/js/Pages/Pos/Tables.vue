@@ -203,23 +203,29 @@ onMounted(() => {
 </script>
 
 <template>
-    <AppLayout>
-        <div class="space-y-5">
-            <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+    <AppLayout :immersive="true">
+        <div class="flex h-full min-h-0 flex-col gap-3 bg-neutral-100 p-3">
+            <div class="flex shrink-0 flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-card xl:flex-row xl:items-center xl:justify-between">
                 <div>
                     <p class="text-small font-semibold text-accent-700">POS Bar/Restorant / Shitje</p>
-                    <h1 class="mt-1 text-h2 text-primary-900">Shitje POS</h1>
-                    <p class="mt-1 text-body-sm text-neutral-500">Zgjidh tavolinën, pastaj hap Porosinë ose Përmbledhjen e llogarisë.</p>
+                    <div class="mt-0.5 flex flex-wrap items-center gap-3">
+                        <h1 class="text-h2 text-primary-900">Tavolinat</h1>
+                        <Badge :variant="currentShift ? 'success' : 'warning'" dot size="sm">
+                            {{ currentShift ? `Turn aktiv · ${currentShift.user_name} · ${currentShift.opened_at}` : 'Pa turn aktiv' }}
+                        </Badge>
+                    </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <Badge :variant="currentShift ? 'success' : 'warning'" dot size="sm">
-                        {{ currentShift ? `Turn aktiv · ${currentShift.user_name} · ${currentShift.opened_at}` : 'Pa turn aktiv' }}
-                    </Badge>
-                    <Button v-if="selectedTable" variant="primary" @click="openOrder"><Plus class="h-4 w-4" /> Porosi</Button>
+                    <div v-if="selectedTable" class="mr-1 rounded-lg bg-neutral-100 px-3 py-2 text-body-sm font-bold text-primary-900">
+                        {{ selectedTable.name }} · {{ selectedOrder ? money(selectedOrder.total_amount) : 'E lirë' }}
+                    </div>
+                    <Button size="lg" variant="primary" :disabled="!selectedTable" @click="openOrder"><Plus class="h-5 w-5" /> Porosi</Button>
+                    <Button size="lg" variant="outline" :disabled="!selectedOrder" @click="showSummaryModal = true"><FileText class="h-5 w-5" /> Përmbledhje</Button>
+                    <Button size="lg" variant="success" :disabled="!selectedOrder" @click="openPayment"><Banknote class="h-5 w-5" /> Paguaj</Button>
                 </div>
             </div>
 
-            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Card class="!p-4"><p class="text-small text-neutral-500">Tavolina</p><p class="mt-1 text-h3 text-primary-900">{{ stats.total }}</p></Card>
                 <Card class="!p-4"><p class="text-small text-neutral-500">Të zëna</p><p class="mt-1 text-h3 text-info-700">{{ stats.occupied }}</p></Card>
                 <Card class="!p-4"><p class="text-small text-neutral-500">Presin faturën</p><p class="mt-1 text-h3 text-warning-700">{{ stats.bill_requested }}</p></Card>
@@ -227,17 +233,17 @@ onMounted(() => {
             </div>
 
             <div
-                class="grid min-h-[620px] gap-5"
+                class="grid min-h-0 flex-1 gap-3"
                 :class="selectedTable ? '2xl:grid-cols-[minmax(0,1.2fr)_minmax(430px,0.8fr)]' : 'grid-cols-1'"
             >
-                <Card :padding="false" class="overflow-hidden">
+                <Card :padding="false" class="flex min-h-0 flex-col overflow-hidden">
                     <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                         <div><h2 class="text-h4 text-primary-900">Zgjidh tavolinën</h2><p class="mt-1 text-small text-neutral-500">Prek tavolinën për të parë veprimet: Porosi ose Përmbledhje.</p></div>
                         <div class="flex gap-2 overflow-x-auto">
                             <button v-for="area in areas" :key="area" type="button" class="rounded-lg border px-3 py-2 text-small font-semibold whitespace-nowrap" :class="activeArea === area ? 'border-accent-600 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-500'" @click="activeArea = area">{{ area }}</button>
                         </div>
                     </div>
-                    <div class="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+                    <div class="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-5 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
                         <button
                             v-for="table in areaTables"
                             :key="table.id"
@@ -259,13 +265,7 @@ onMounted(() => {
                 <Card v-if="selectedTable" :padding="false" class="flex min-h-0 flex-col overflow-hidden">
                     <template v-if="selectedTable">
                         <div class="border-b border-neutral-200 px-5 py-4">
-                            <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div><div class="flex items-center gap-2"><h2 class="text-h3 text-primary-900">{{ selectedTable.name }}</h2><Badge :variant="tableStatus(selectedTable).badge" dot size="sm">{{ tableStatus(selectedTable).label }}</Badge></div><p class="mt-1 text-small text-neutral-500">{{ selectedOrder ? `${selectedOrder.covers || '—'} persona · ${elapsed(selectedOrder.created_at)} · ${selectedOrder.created_by || 'Stafi'}` : `${selectedTable.seats} vende · pa llogari të hapur` }}</p></div>
-                                <div class="flex gap-2">
-                                    <Button variant="primary" size="sm" @click="openOrder"><Plus class="h-4 w-4" /> Porosi</Button>
-                                    <Button variant="outline" size="sm" :disabled="!selectedOrder" @click="showSummaryModal = true"><FileText class="h-4 w-4" /> Përmbledhje</Button>
-                                </div>
-                            </div>
+                            <div class="flex items-center gap-2"><h2 class="text-h3 text-primary-900">{{ selectedTable.name }}</h2><Badge :variant="tableStatus(selectedTable).badge" dot size="sm">{{ tableStatus(selectedTable).label }}</Badge></div><p class="mt-1 text-small text-neutral-500">{{ selectedOrder ? `${selectedOrder.covers || '—'} persona · ${elapsed(selectedOrder.created_at)} · ${selectedOrder.created_by || 'Stafi'}` : `${selectedTable.seats} vende · pa llogari të hapur` }}</p>
                         </div>
 
                         <div v-if="selectedOrder" class="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
@@ -283,10 +283,9 @@ onMounted(() => {
 
                         <div v-if="selectedOrder" class="border-t border-neutral-200 bg-neutral-50 p-4">
                             <div class="mb-3 flex items-center justify-between"><span class="text-body-sm font-semibold text-neutral-600">Totali i tavolinës</span><strong class="text-h3 text-primary-900">{{ money(selectedOrder.total_amount) }}</strong></div>
-                            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            <div class="grid grid-cols-2 gap-2">
                                 <Button variant="outline" size="sm" @click="showTransferModal = true"><ArrowRightLeft class="h-4 w-4" /> Transfero</Button>
                                 <Button :variant="selectedOrder.service_status === 'bill_requested' ? 'success' : 'outline'" size="sm" @click="toggleBillRequest"><ReceiptText class="h-4 w-4" /> {{ selectedOrder.service_status === 'bill_requested' ? 'Fatura u kërkua' : 'Kërko faturën' }}</Button>
-                                <Button variant="primary" size="sm" @click="showSummaryModal = true"><FileText class="h-4 w-4" /> Përmbledhje</Button>
                             </div>
                         </div>
                     </template>
