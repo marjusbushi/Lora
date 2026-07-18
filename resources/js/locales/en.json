@@ -4701,6 +4701,27 @@
         "five_to_seven": "5–7 nights",
         "eight_plus": "8+ nights"
       }
+    },
+    "cancellationRisk": {
+      "title": "Cancellations & No-Show",
+      "short": "Losses and reservations requiring action.",
+      "category": "Reservations & channels",
+      "cancellationRate": "Cancellation rate",
+      "lostValue": "Lost value",
+      "noShowRate": "No-show rate",
+      "atRisk": "At risk",
+      "dailyLoss": "Loss by arrival date",
+      "cancelled": "Cancelled",
+      "breakdown": "Breakdown",
+      "totalBookings": "Bookings",
+      "needsAction": "Require action",
+      "cancelledValue": "Cancelled value",
+      "byChannel": "Risk by channel",
+      "guest": "Guest",
+      "room": "Room",
+      "value": "Value",
+      "lossDetails": "Loss details",
+      "type": "Type"
     }
   },
   "financeSuppliers": {

@@ -13,6 +13,7 @@ use App\Models\Room;
 use App\Services\BaseCurrency;
 use App\Services\Reporting\BookingBehaviorService;
 use App\Services\Reporting\BudgetTargetService;
+use App\Services\Reporting\CancellationRiskService;
 use App\Services\Reporting\ChannelPerformanceService;
 use App\Services\Reporting\HotelKpiService;
 use App\Services\Reporting\OutstandingBalanceService;
@@ -498,58 +499,47 @@ class ReportsController extends Controller
     }
 
     /** Anulime & No-Show: cancellation rate + value, plus unresolved past-arrival candidates. */
-    public function cancellations(Request $request): Response
+    public function cancellations(Request $request, CancellationRiskService $cancellationRisk): Response
     {
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => [
+                'nullable',
+                'date_format:Y-m-d',
+                'after_or_equal:from',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    if ($request->filled('from') && Carbon::parse($request->input('from'))->diffInDays(Carbon::parse($value)) > 366) {
+                        $fail(app()->getLocale() === 'sq'
+                            ? 'Periudha e raportit nuk mund të kalojë 367 ditë.'
+                            : 'The report period cannot exceed 367 days.');
+                    }
+                },
+            ],
+        ]);
+
         [$from, $to] = $this->range($request);
-        $today = now()->toDateString();
+        $period = new ReportingPeriod($from, $to);
+        $analytics = $cancellationRisk->withComparisons($period);
+        $current = $analytics['current'];
 
-        // All reservations whose check-in falls in the range (any status) — denominator for the rate.
-        $totalCount = Reservation::whereBetween('check_in_date', [$from, $to])->count();
-
-        // Cancelled reservations within the range.
-        $cancelled = Reservation::whereBetween('check_in_date', [$from, $to])
-            ->where('status', 'cancelled')
-            ->with(['room:id,room_number', 'guest:id,first_name,last_name'])
-            ->orderByDesc('check_in_date')
-            ->get(['id', 'room_id', 'guest_id', 'channel', 'check_in_date', 'check_out_date', 'total_amount']);
-
-        $cancelledCount = $cancelled->count();
-        $cancelledValue = (float) $cancelled->sum('total_amount');
-
-        // No-show candidates: pending/confirmed, arrival passed, not already marked.
-        $noShows = Reservation::whereBetween('check_in_date', [$from, $to])
-            ->whereIn('status', ['pending', 'confirmed'])
-            ->whereNull('no_show_at')
-            ->whereDate('check_in_date', '<', $today)
-            ->with(['room:id,room_number', 'guest:id,first_name,last_name'])
-            ->orderByDesc('check_in_date')
-            ->get(['id', 'room_id', 'guest_id', 'channel', 'check_in_date', 'check_out_date', 'total_amount']);
-
-        $mapRow = fn ($r) => [
-            'id' => $r->id,
-            'guest' => trim("{$r->guest?->first_name} {$r->guest?->last_name}") ?: 'Mysafir',
-            'room' => $r->room?->room_number,
-            'channel' => Reservation::normalizeChannel($r->channel),
-            'check_in' => $r->check_in_date?->toDateString(),
-            'check_out' => $r->check_out_date?->toDateString(),
-            'value' => round((float) $r->total_amount, 2),
+        // Preserve the original report contract used by dashboard action links.
+        // In that contract, "no show" means unresolved past-arrival candidates.
+        $legacySummary = [
+            'cancelled_count' => $current['summary']['cancelled_count'],
+            'cancelled_value' => $current['summary']['cancelled_value'],
+            'total_count' => $current['summary']['total_count'],
+            'cancellation_rate' => $current['summary']['cancellation_rate'],
+            'no_show_count' => $current['summary']['at_risk_count'],
+            'no_show_value' => $current['summary']['at_risk_value'],
         ];
 
-        $cancelledRows = $cancelled->map($mapRow)->values();
-        $noShowRows = $noShows->map($mapRow)->values();
-
         return Inertia::render('Reports/Cancellations', [
-            'filters' => ['from' => $from, 'to' => $to],
-            'summary' => [
-                'cancelled_count' => $cancelledCount,
-                'cancelled_value' => round($cancelledValue, 2),
-                'total_count' => $totalCount,
-                'cancellation_rate' => $totalCount ? round($cancelledCount / $totalCount * 100, 1) : 0,
-                'no_show_count' => $noShowRows->count(),
-                'no_show_value' => round((float) $noShowRows->sum('value'), 2),
-            ],
-            'cancelled' => $cancelledRows,
-            'noShows' => $noShowRows,
+            'filters' => $period->toArray(),
+            'analytics' => $analytics,
+            'summary' => $legacySummary,
+            'cancelled' => collect($current['losses'])->where('type', 'cancelled')->values(),
+            'noShows' => $current['at_risk'],
+            'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'currency' => $this->currency(),
         ]);
     }
