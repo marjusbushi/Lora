@@ -119,6 +119,11 @@ return Application::configure(basePath: dirname(__DIR__))
             requiredModule: TenantBillingService::HOUSEKEEPING,
         ))
             ->name('tenants:housekeeping:archive-inspected')->daily();
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run('reports:deliver-scheduled'))
+            ->name('tenants:reports:deliver-scheduled')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping()
+            ->onOneServer();
         // Platform billing is driven by each active subscription's next_billing_at.
         $schedule->command('billing:run-recurring')
             ->name('platform:billing:run-recurring')

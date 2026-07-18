@@ -16,12 +16,14 @@ use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosShiftController;
+use App\Http\Controllers\PosTableServiceController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\ReservationFiscalizationController;
 use App\Http\Controllers\RoomController;
+use App\Http\Controllers\SavedReportController;
 use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SmartPricingController;
@@ -306,11 +308,11 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
 
     // POS Bar/Restaurant
     Route::middleware(['module:pos', 'permission:view_pos_orders'])->group(function () {
-        Route::get('/pos/tables', [\App\Http\Controllers\PosTableServiceController::class, 'index'])->name('pos.tables');
-        Route::post('/pos/tables/{posTable}/rounds', [\App\Http\Controllers\PosTableServiceController::class, 'storeRound'])->middleware('permission:create_pos_orders')->name('pos.tables.rounds.store');
-        Route::post('/pos/rounds/{posOrderRound}/send', [\App\Http\Controllers\PosTableServiceController::class, 'sendRound'])->middleware('permission:update_pos_orders')->name('pos.rounds.send');
-        Route::post('/pos/tables/{posTable}/bill', [\App\Http\Controllers\PosTableServiceController::class, 'requestBill'])->middleware('permission:update_pos_orders')->name('pos.tables.bill');
-        Route::post('/pos/tables/{posTable}/transfer', [\App\Http\Controllers\PosTableServiceController::class, 'transfer'])->middleware('permission:update_pos_orders')->name('pos.tables.transfer');
+        Route::get('/pos/tables', [PosTableServiceController::class, 'index'])->name('pos.tables');
+        Route::post('/pos/tables/{posTable}/rounds', [PosTableServiceController::class, 'storeRound'])->middleware('permission:create_pos_orders')->name('pos.tables.rounds.store');
+        Route::post('/pos/rounds/{posOrderRound}/send', [PosTableServiceController::class, 'sendRound'])->middleware('permission:update_pos_orders')->name('pos.rounds.send');
+        Route::post('/pos/tables/{posTable}/bill', [PosTableServiceController::class, 'requestBill'])->middleware('permission:update_pos_orders')->name('pos.tables.bill');
+        Route::post('/pos/tables/{posTable}/transfer', [PosTableServiceController::class, 'transfer'])->middleware('permission:update_pos_orders')->name('pos.tables.transfer');
         Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
         Route::get('/pos/orders', [PosController::class, 'index'])->defaults('view', 'orders')->name('pos.orders');
         Route::get('/pos/receipts', [PosController::class, 'index'])->defaults('view', 'receipts')->name('pos.receipts');
@@ -332,6 +334,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     // Reports
     Route::middleware('permission:view_reports')->group(function () {
         Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
+        Route::get('/reports/saved/list', [SavedReportController::class, 'index'])->name('reports.saved.index');
+        Route::post('/reports/saved', [SavedReportController::class, 'store'])->name('reports.saved.store');
+        Route::delete('/reports/saved/{savedReport}', [SavedReportController::class, 'destroy'])->name('reports.saved.destroy');
         Route::get('/reports/executive', [ReportsController::class, 'executive'])->name('reports.executive');
         Route::get('/reports/channels', [ReportsController::class, 'channels'])->name('reports.channels');
         Route::get('/reports/outstanding', [ReportsController::class, 'outstanding'])->name('reports.outstanding');
