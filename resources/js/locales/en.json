@@ -4702,6 +4702,29 @@
         "eight_plus": "8+ nights"
       }
     },
+    "maintenanceSla": {
+      "title": "Maintenance SLA & Downtime",
+      "short": "Response, resolution and room-blocking time.",
+      "category": "Operations",
+      "reported": "Reported issues",
+      "open": "open",
+      "slaRate": "SLA met",
+      "resolutionTime": "Resolution time",
+      "overdue": "overdue",
+      "downtime": "Room downtime",
+      "rooms": "rooms",
+      "daily": "Daily flow",
+      "openedVsResolved": "Reported / resolved",
+      "byPriority": "By priority",
+      "issueControl": "Issue control",
+      "issue": "Issue",
+      "room": "Room",
+      "priority": "Priority",
+      "responseTime": "Response time",
+      "date": "Date",
+      "priorities": { "critical": "Critical", "high": "High", "medium": "Medium", "low": "Low" },
+      "sla": { "met": "Within SLA", "breached": "SLA breached", "overdue": "Overdue", "open": "Open", "not_set": "No SLA" }
+    },
     "housekeepingProductivity": {
       "title": "Housekeeping Productivity & Turnaround",
       "short": "Actual housekeeping time, completion and productivity.",

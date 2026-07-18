@@ -20,6 +20,7 @@ use App\Services\Reporting\DiscountRefundCashFlowService;
 use App\Services\Reporting\FiscalVatReportService;
 use App\Services\Reporting\HotelKpiService;
 use App\Services\Reporting\HousekeepingProductivityService;
+use App\Services\Reporting\MaintenanceSlaReportService;
 use App\Services\Reporting\OutstandingBalanceService;
 use App\Services\Reporting\PaymentReconciliationService;
 use App\Services\Reporting\PickupPaceService;
@@ -925,6 +926,18 @@ class ReportsController extends Controller
         return Inertia::render('Reports/Housekeeping', [
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $report->summary(new ReportingPeriod($from, $to)),
+            'currency' => $this->currency(),
+        ]);
+    }
+
+    public function maintenanceSla(Request $request, MaintenanceSlaReportService $report): Response
+    {
+        [$from, $to] = $this->range($request);
+
+        return Inertia::render('Reports/MaintenanceSla', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'analytics' => $report->summary(new ReportingPeriod($from, $to)),
+            'canViewMaintenance' => $request->user()?->can('view_maintenance') ?? false,
             'currency' => $this->currency(),
         ]);
     }

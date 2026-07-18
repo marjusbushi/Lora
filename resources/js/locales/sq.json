@@ -4702,6 +4702,29 @@
         "eight_plus": "8+ net"
       }
     },
+    "maintenanceSla": {
+      "title": "Maintenance SLA & Downtime",
+      "short": "Koha e reagimit, zgjidhjes dhe bllokimit të dhomave.",
+      "category": "Operacione",
+      "reported": "Probleme të raportuara",
+      "open": "të hapura",
+      "slaRate": "SLA e respektuar",
+      "resolutionTime": "Koha e zgjidhjes",
+      "overdue": "të vonuara",
+      "downtime": "Downtime i dhomave",
+      "rooms": "dhoma",
+      "daily": "Fluksi ditor",
+      "openedVsResolved": "Raportuar / zgjidhur",
+      "byPriority": "Sipas prioritetit",
+      "issueControl": "Kontrolli i problemeve",
+      "issue": "Problemi",
+      "room": "Dhoma",
+      "priority": "Prioriteti",
+      "responseTime": "Koha e reagimit",
+      "date": "Data",
+      "priorities": { "critical": "Kritik", "high": "I lartë", "medium": "Mesatar", "low": "I ulët" },
+      "sla": { "met": "Brenda SLA", "breached": "SLA e kaluar", "overdue": "Me vonesë", "open": "E hapur", "not_set": "Pa SLA" }
+    },
     "housekeepingProductivity": {
       "title": "Produktiviteti & Turnaround i Pastrimit",
       "short": "Koha, përfundimi dhe produktiviteti real i housekeeping.",

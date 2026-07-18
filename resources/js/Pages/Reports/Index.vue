@@ -30,6 +30,7 @@ import {
     Users,
     Utensils,
     WalletCards,
+    Wrench,
 } from 'lucide-vue-next';
 
 defineProps({ currency: { type: String, default: '€' } });
@@ -81,6 +82,7 @@ const groups = [
             { name: translate('admin.reports.catalog.departures'), desc: translate('admin.reports.catalog.departuresDesc'), to: 'reports.departuresManifest', icon: CalendarCheck },
             { name: translate('admin.reports.catalog.roomStatus'), desc: translate('admin.reports.catalog.roomStatusDesc'), to: 'reports.roomStatus', icon: BedDouble },
             { name: translate('reports360.housekeepingProductivity.title'), desc: translate('reports360.housekeepingProductivity.short'), to: 'reports.housekeepingReport', icon: Sparkles, module: 'housekeeping' },
+            { name: translate('reports360.maintenanceSla.title'), desc: translate('reports360.maintenanceSla.short'), to: 'reports.maintenanceSla', icon: Wrench },
             { name: translate('admin.reports.catalog.inHouse'), desc: translate('admin.reports.catalog.inHouseDesc'), to: 'reports.inHouse', icon: House },
         ],
     },
