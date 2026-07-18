@@ -1,76 +1,62 @@
 <script setup>
-import { getIntlLocale, translate } from '@/i18n';
+import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
+import { getIntlLocale, translate } from '@/i18n';
 import ReportShell from '@/Components/UI/ReportShell.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
-import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
-import { CirclePercent, RefreshCcw, Users } from 'lucide-vue-next';
+import { CirclePercent, Crown, RefreshCcw, WalletCards } from 'lucide-vue-next';
 
-const props = defineProps({
-    rows: { type: Array, default: () => [] },
-    summary: { type: Object, default: () => ({}) },
-    currency: { type: String, default: '€' },
-});
-
-const money = (v) => `${props.currency}${Number(v ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const fmtDate = (d) => {
-    if (!d) return '—';
-    const [y, m, day] = String(d).split('-');
-    return `${day}/${m}/${y}`;
-};
-
-const kpis = [
-    { label: translate('admin.generated.k_7f55392b936a'), value: () => props.summary.total_guests ?? 0, tone: 'neutral', icon: Users },
-    { label: translate('admin.generated.k_f87d8e61bce0'), value: () => props.summary.repeat_guests ?? 0, tone: 'success', icon: RefreshCcw, detail: translate('admin.generated.k_1e3573673169') },
-    { label: translate('admin.generated.k_7888ea6be2ae'), value: () => `${Number(props.summary.repeat_rate ?? 0).toLocaleString(getIntlLocale())}%`, tone: 'accent', icon: CirclePercent },
-];
+const props = defineProps({ analytics: { type: Object, default: () => ({}) }, canViewGuests: Boolean, currency: { type: String, default: '€' } });
+const summary = computed(() => props.analytics.summary || {});
+const rows = computed(() => props.analytics.guests || []);
+const money = (value) => `${props.currency}${Number(value || 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const number = (value, digits = 0) => Number(value || 0).toLocaleString(getIntlLocale(), { maximumFractionDigits: digits });
+const fmtDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const segmentVariant = (segment) => ({ loyal: 'success', returning: 'info', one_time: 'neutral' }[segment] || 'neutral');
+const kpis = computed(() => [
+    { label: translate('reports360.guestLtv.netLtv'), value: money(summary.value.net_lifetime_value), tone: 'accent', icon: WalletCards, detail: `${translate('reports360.guestLtv.average')} ${money(summary.value.average_ltv)}` },
+    { label: translate('reports360.guestLtv.repeatGuests'), value: number(summary.value.repeat_guests), tone: 'success', icon: RefreshCcw, detail: `${number(summary.value.repeat_rate, 1)}%` },
+    { label: translate('reports360.guestLtv.loyalGuests'), value: number(summary.value.loyal_guests), tone: 'info', icon: Crown, detail: translate('reports360.guestLtv.threePlus') },
+    { label: translate('reports360.guestLtv.repeatShare'), value: `${number(summary.value.repeat_value_share, 1)}%`, tone: 'success', icon: CirclePercent, detail: `${translate('reports360.guestLtv.upcoming')} ${money(summary.value.upcoming_value)}` },
+]);
+const segmentBars = computed(() => (props.analytics.segments || []).map((segment) => ({
+    key: segment.key,
+    label: translate(`reports360.guestLtv.segments.${segment.key}`),
+    value: segment.guests,
+    display: `${number(segment.guests)} · ${money(segment.net_value)}`,
+    barClass: segment.key === 'loyal' ? 'bg-success-500' : segment.key === 'returning' ? 'bg-info-500' : 'bg-neutral-400',
+})));
 </script>
 
 <template>
-    <ReportShell :title="$t('admin.generated.k_0a1f8ff63639')" :filters="null">
+    <ReportShell :title="$t('reports360.guestLtv.title')" :filters="null" :description="$t('reports360.guestLtv.short')" :category="$t('reports360.guestLtv.category')">
         <ReportKpiGrid :items="kpis" />
 
-        <div class="mt-6">
+        <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
             <Card :padding="false">
-                <table class="min-w-full divide-y divide-neutral-200">
-                    <thead class="bg-neutral-50">
-                        <tr>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('admin.generated.k_909542b47528') }}</th>
-                            <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('admin.generated.k_a060cd1136ed') }}</th>
-                            <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('admin.generated.k_d1341a62204c') }}</th>
-                            <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('admin.generated.k_36355badfb08') }}</th>
-                            <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('admin.generated.k_53ed2359db1e') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-neutral-100">
-                        <tr v-for="row in rows" :key="row.id" class="hover:bg-neutral-50">
-                            <td class="px-5 py-3 text-body-sm">
-                                <div class="flex items-center gap-2">
-                                    <Link :href="route('guests.show', row.id)" class="text-primary-900 font-medium hover:underline">{{ row.guest }}</Link>
-                                    <Badge v-if="row.is_repeat" color="emerald">{{ $t('admin.generated.k_a7b286dbe2f5') }}</Badge>
-                                </div>
-                                <p v-if="row.email" class="text-tiny text-neutral-500">{{ row.email }}</p>
-                            </td>
-                            <td class="px-5 py-3 text-right text-body-sm text-neutral-700">{{ row.stays }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm text-neutral-700">{{ row.nights }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm text-primary-900 font-medium">{{ money(row.total_spent) }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm text-neutral-700">{{ fmtDate(row.last_visit) }}</td>
-                        </tr>
-                    </tbody>
-                    <tfoot v-if="rows.length" class="bg-neutral-50 border-t-2 border-neutral-200">
-                        <tr class="font-semibold text-neutral-800">
-                            <td class="px-5 py-3 text-body-sm">{{ $t('admin.generated.k_df41e805e29b') }}{{ rows.length }} {{ $t('admin.generated.k_a6083ce12a69') }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm">{{ rows.reduce((s, r) => s + (r.stays || 0), 0) }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm">{{ rows.reduce((s, r) => s + (r.nights || 0), 0) }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm">{{ money(rows.reduce((s, r) => s + (r.total_spent || 0), 0)) }}</td>
-                            <td class="px-5 py-3"></td>
-                        </tr>
-                    </tfoot>
-                </table>
-                <div v-if="!rows.length" class="px-6 py-10 text-center text-body-sm text-neutral-500">{{ $t('admin.generated.k_71b0e3fc4997') }}</div>
+                <div class="border-b border-neutral-200 px-5 py-4"><h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.guestLtv.valueControl') }}</h2></div>
+                <div class="grid grid-cols-2 gap-px bg-neutral-200 sm:grid-cols-4">
+                    <div class="bg-white px-5 py-5"><p class="text-tiny text-neutral-500">{{ $t('reports360.guestLtv.totalGuests') }}</p><p class="mt-1 text-title font-semibold text-primary-900">{{ number(summary.total_guests) }}</p></div>
+                    <div class="bg-white px-5 py-5"><p class="text-tiny text-neutral-500">{{ $t('reports360.guestLtv.repeatRate') }}</p><p class="mt-1 text-title font-semibold text-success-700">{{ number(summary.repeat_rate, 1) }}%</p></div>
+                    <div class="bg-white px-5 py-5"><p class="text-tiny text-neutral-500">{{ $t('reports360.guestLtv.average') }}</p><p class="mt-1 text-title font-semibold text-primary-900">{{ money(summary.average_ltv) }}</p></div>
+                    <div class="bg-white px-5 py-5"><p class="text-tiny text-neutral-500">{{ $t('reports360.guestLtv.upcomingValue') }}</p><p class="mt-1 text-title font-semibold text-info-700">{{ money(summary.upcoming_value) }}</p></div>
+                </div>
             </Card>
+            <ReportBarList :title="$t('reports360.guestLtv.segmentMix')" :rows="segmentBars" />
         </div>
+
+        <Card class="mt-4" :padding="false">
+            <div class="border-b border-neutral-200 px-5 py-4"><h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.guestLtv.guestValue') }}</h2></div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-neutral-200">
+                    <thead class="bg-neutral-50 text-label text-neutral-600"><tr><th class="px-5 py-3 text-left">{{ $t('reports360.guestLtv.guest') }}</th><th class="px-4 py-3 text-left">{{ $t('reports360.guestLtv.segment') }}</th><th class="px-4 py-3 text-right">{{ $t('reports360.guestLtv.stays') }}</th><th class="px-4 py-3 text-right">{{ $t('reports360.guestLtv.nights') }}</th><th class="px-4 py-3 text-right">{{ $t('reports360.guestLtv.netValue') }}</th><th class="px-4 py-3 text-right">{{ $t('reports360.guestLtv.avgStay') }}</th><th class="px-5 py-3 text-right">{{ $t('reports360.guestLtv.lastVisit') }}</th></tr></thead>
+                    <tbody class="divide-y divide-neutral-100"><tr v-for="row in rows" :key="row.id" class="hover:bg-neutral-50"><td class="px-5 py-3"><Link v-if="canViewGuests" :href="route('guests.show', row.id)" class="text-body-sm font-semibold text-primary-900 hover:underline">{{ row.guest }}</Link><p v-else class="text-body-sm font-semibold text-primary-900">{{ row.guest }}</p><p v-if="row.email" class="text-tiny text-neutral-500">{{ row.email }}</p></td><td class="px-4 py-3"><Badge :variant="segmentVariant(row.segment)">{{ $t(`reports360.guestLtv.segments.${row.segment}`) }}</Badge></td><td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.stays }}</td><td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.nights }}</td><td class="px-4 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.net_value) }}</td><td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ money(row.average_stay_value) }}</td><td class="px-5 py-3 text-right"><p class="text-body-sm text-neutral-700">{{ fmtDate(row.last_visit) }}</p><p v-if="row.upcoming_stays" class="text-tiny text-success-700">{{ row.upcoming_stays }} {{ $t('reports360.guestLtv.upcomingStay') }}</p></td></tr></tbody>
+                </table>
+            </div>
+            <div v-if="!rows.length" class="px-6 py-12 text-center text-body-sm text-neutral-500">{{ $t('reports360.noData') }}</div>
+        </Card>
     </ReportShell>
 </template>

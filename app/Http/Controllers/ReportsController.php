@@ -18,6 +18,7 @@ use App\Services\Reporting\ChannelPerformanceService;
 use App\Services\Reporting\DepartmentRevenueService;
 use App\Services\Reporting\DiscountRefundCashFlowService;
 use App\Services\Reporting\FiscalVatReportService;
+use App\Services\Reporting\GuestLifetimeValueService;
 use App\Services\Reporting\GuestMovementService;
 use App\Services\Reporting\HotelKpiService;
 use App\Services\Reporting\HousekeepingProductivityService;
@@ -617,44 +618,13 @@ class ReportsController extends Controller
     }
 
     /** Mysafirë Kthyes & Top: lifetime per-guest stays/nights/spend (non-cancelled), top spenders + repeat flag. */
-    public function repeatGuests(Request $request): Response
+    public function repeatGuests(Request $request, GuestLifetimeValueService $report): Response
     {
-        $guests = Guest::with(['reservations' => function ($q) {
-            $q->where('status', '!=', 'cancelled')
-                ->select('id', 'guest_id', 'check_in_date', 'check_out_date', 'total_amount');
-        }])->get(['id', 'first_name', 'last_name', 'email', 'phone']);
-
-        $all = $guests->map(function ($g) {
-            $res = $g->reservations;
-            $stays = $res->count();
-            $checkIns = $res->pluck('check_in_date')->filter();
-
-            return [
-                'id' => $g->id,
-                'guest' => trim("{$g->first_name} {$g->last_name}") ?: 'Mysafir',
-                'email' => $g->email,
-                'phone' => $g->phone,
-                'stays' => $stays,
-                'nights' => (int) $res->sum(fn ($r) => $r->nights),
-                'total_spent' => round((float) $res->sum('total_amount'), 2),
-                'last_visit' => $checkIns->isNotEmpty() ? $checkIns->max()?->toDateString() : null,
-                'is_repeat' => $stays >= 2,
-            ];
-        })->filter(fn ($r) => $r['stays'] >= 1)->values();
-
-        $totalGuests = $all->count();
-        $repeatGuests = $all->filter(fn ($r) => $r['is_repeat'])->count();
-
-        // Table: top 50 by lifetime spend (repeat badge shown inline).
-        $rows = $all->sortByDesc('total_spent')->take(50)->values();
+        $analytics = $report->summary();
 
         return Inertia::render('Reports/RepeatGuests', [
-            'rows' => $rows,
-            'summary' => [
-                'total_guests' => $totalGuests,
-                'repeat_guests' => $repeatGuests,
-                'repeat_rate' => $totalGuests ? round($repeatGuests / $totalGuests * 100, 1) : 0,
-            ],
+            'analytics' => $analytics,
+            'canViewGuests' => $request->user()?->can('view_guests') ?? false,
             'currency' => $this->currency(),
         ]);
     }

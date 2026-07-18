@@ -110,7 +110,7 @@ const groups = [
         icon: Users,
         reports: [
             { name: translate('admin.generated.k_584ca6441f0e'), desc: translate('admin.generated.k_b87974bf40e5'), to: 'reports.guests', icon: Users },
-            { name: translate('admin.generated.k_ca09b5b0faab'), desc: translate('admin.generated.k_fc6ec82726f1'), to: 'reports.repeatGuests', icon: UserRoundCheck },
+            { name: translate('reports360.guestLtv.title'), desc: translate('reports360.guestLtv.short'), to: 'reports.repeatGuests', icon: UserRoundCheck },
             { name: translate('admin.generated.k_71151c9f50b0'), desc: translate('admin.generated.k_261a465a8096'), to: 'reports.nationality', icon: FileBarChart },
         ],
     },
