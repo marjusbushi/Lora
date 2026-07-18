@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Guest;
+use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
@@ -59,6 +60,13 @@ class CancellationRiskServiceTest extends TestCase
         $this->assertNull($analytics['changes']['at_risk_count']);
 
         $future = $this->reservation($user, $guest, $type, '108', 'booking.com', 'confirmed', '2026-08-01', 240);
+        Payment::create([
+            'reservation_id' => $future->id,
+            'amount' => 240,
+            'method' => 'card',
+            'created_by' => $user->id,
+            'type' => 'refund',
+        ]);
         $futureAnalytics = app(CancellationRiskService::class)
             ->summary(new ReportingPeriod('2026-08-01', '2026-08-01'));
         $risk = collect($futureAnalytics['at_risk'])->firstWhere('id', $future->id);
@@ -68,6 +76,7 @@ class CancellationRiskServiceTest extends TestCase
         $this->assertSame('high', $risk['risk_level']);
         $this->assertSame(['unpaid', 'high_risk_channel'], $risk['risk_drivers']);
         $this->assertSame('secure_payment', $risk['recommended_action']);
+        $this->assertSame(480.0, $risk['balance']);
         $this->assertSame(1, $futureAnalytics['risk_levels']['high']);
     }
 

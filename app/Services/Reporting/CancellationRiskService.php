@@ -17,8 +17,11 @@ final class CancellationRiskService
         $reservations = Reservation::query()
             ->whereDate('check_in_date', '>=', $period->from->toDateString())
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
-            ->with(['room:id,room_number', 'guest:id,first_name,last_name'])
-            ->withSum(['payments as paid_amount' => fn ($query) => $query->notVoided()], 'amount')
+            ->with([
+                'room:id,room_number',
+                'guest:id,first_name,last_name',
+                'payments' => fn ($query) => $query->notVoided()->select('id', 'reservation_id', 'amount', 'type'),
+            ])
             ->get([
                 'id', 'room_id', 'guest_id', 'channel', 'status', 'check_in_date',
                 'check_out_date', 'total_amount', 'no_show_at', 'created_at',
@@ -28,7 +31,12 @@ final class CancellationRiskService
             $isNoShow = $reservation->no_show_at !== null;
             $isCancelled = $reservation->status === 'cancelled' && ! $isNoShow;
             $channel = Reservation::normalizeChannel($reservation->channel);
-            $paid = round((float) ($reservation->paid_amount ?? 0), 2);
+            $paid = round((float) $reservation->payments
+                ->sum(fn ($payment) => match ($payment->type ?? 'payment') {
+                    'payment', 'deposit' => (float) $payment->amount,
+                    'refund' => -abs((float) $payment->amount),
+                    default => 0.0,
+                }), 2);
             $value = round((float) $reservation->total_amount, 2);
             $balance = round(max(0, $value - $paid), 2);
             $risk = $this->riskFor($reservation, $asOf, $channelRisk[$channel] ?? 0.0, $balance, $value);
