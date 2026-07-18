@@ -15,6 +15,7 @@ import {
     ChartNoAxesCombined,
     CircleDollarSign,
     CircleCheckBig,
+    Gauge,
     ClipboardList,
     Clock3,
     CreditCard,
@@ -79,6 +80,7 @@ const groups = [
         category: 'operations',
         icon: BedDouble,
         reports: [
+            { name: translate('reports360.operationsExecutive.title'), desc: translate('reports360.operationsExecutive.short'), to: 'reports.operationsExecutive', icon: Gauge },
             { name: translate('reports360.guestMovements.title'), desc: translate('reports360.guestMovements.short'), to: 'reports.guestMovements', icon: UserRoundCheck },
             { name: translate('admin.reports.catalog.roomStatus'), desc: translate('admin.reports.catalog.roomStatusDesc'), to: 'reports.roomStatus', icon: BedDouble },
             { name: translate('reports360.housekeepingProductivity.title'), desc: translate('reports360.housekeepingProductivity.short'), to: 'reports.housekeepingReport', icon: Sparkles, module: 'housekeeping' },

@@ -22,6 +22,7 @@ use App\Services\Reporting\GuestMovementService;
 use App\Services\Reporting\HotelKpiService;
 use App\Services\Reporting\HousekeepingProductivityService;
 use App\Services\Reporting\MaintenanceSlaReportService;
+use App\Services\Reporting\OperationsExecutiveService;
 use App\Services\Reporting\OutstandingBalanceService;
 use App\Services\Reporting\PaymentReconciliationService;
 use App\Services\Reporting\PickupPaceService;
@@ -968,6 +969,25 @@ class ReportsController extends Controller
                 'reservations' => $request->user()?->can('view_reservations') ?? false,
                 'housekeeping' => $request->user()?->can('view_housekeeping') ?? false,
             ],
+            'currency' => $this->currency(),
+        ]);
+    }
+
+    public function operationsExecutive(Request $request, OperationsExecutiveService $report): Response
+    {
+        $permissions = [
+            'reservations' => $request->user()?->can('view_reservations') ?? false,
+            'housekeeping' => $request->user()?->can('view_housekeeping') ?? false,
+            'maintenance' => $request->user()?->can('view_maintenance') ?? false,
+        ];
+
+        return Inertia::render('Reports/OperationsExecutive', [
+            'analytics' => $report->snapshot(
+                $permissions['reservations'],
+                $permissions['housekeeping'],
+                $permissions['maintenance'],
+            ),
+            'permissions' => $permissions,
             'currency' => $this->currency(),
         ]);
     }
