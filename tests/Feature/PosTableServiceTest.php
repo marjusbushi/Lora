@@ -149,4 +149,44 @@ class PosTableServiceTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('tables.1.status', 'free'));
     }
+
+    public function test_table_account_cannot_move_to_an_occupied_table(): void
+    {
+        $this->actingAs($this->admin)->get(route('pos.tables'));
+        [$source, $destination] = PosTable::take(2)->get();
+
+        foreach ([$source, $destination] as $table) {
+            $this->actingAs($this->admin)->post(route('pos.tables.rounds.store', $table), [
+                'items' => [['menu_item_id' => $this->item->id, 'quantity' => 1]],
+                'send' => true,
+            ])->assertSessionHasNoErrors();
+        }
+
+        $sourceOrder = PosOrder::where('pos_table_id', $source->id)->firstOrFail();
+        $this->actingAs($this->admin)->post(route('pos.tables.transfer', $source), [
+            'destination_table_id' => $destination->id,
+        ])->assertSessionHasErrors('destination_table_id');
+
+        $this->assertSame($source->id, $sourceOrder->fresh()->pos_table_id);
+    }
+
+    public function test_table_account_with_a_draft_round_cannot_be_paid(): void
+    {
+        $this->actingAs($this->admin)->get(route('pos.tables'));
+        $table = PosTable::firstOrFail();
+        $this->actingAs($this->admin)->post(route('pos.tables.rounds.store', $table), [
+            'items' => [['menu_item_id' => $this->item->id, 'quantity' => 1]],
+            'send' => false,
+        ])->assertSessionHasNoErrors();
+
+        $order = PosOrder::firstOrFail();
+        $this->actingAs($this->admin)->post(route('pos.complete', $order), [
+            'payment_method' => 'cash',
+            'return_to' => 'tables',
+            'table_id' => $table->id,
+        ])->assertSessionHasErrors('order');
+
+        $this->assertSame('open', $order->fresh()->status);
+        $this->assertSame('draft', $order->rounds()->firstOrFail()->status);
+    }
 }

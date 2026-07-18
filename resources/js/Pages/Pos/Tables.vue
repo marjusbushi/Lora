@@ -196,6 +196,10 @@ function openPayment() {
         toasts.value?.error('Hap një turn përpara pagesës.');
         return;
     }
+    if (selectedOrder.value?.rounds?.some((round) => round.status === 'draft')) {
+        toasts.value?.error('Dërgo dhe printo të gjitha porositë para pagesës.');
+        return;
+    }
     paymentMethod.value = 'cash';
     paymentReservationId.value = '';
     splitCashAmount.value = '';
@@ -208,7 +212,6 @@ function payTable() {
         toasts.value?.error('Zgjidh dhomën ose mysafirin.');
         return;
     }
-    saving.value = true;
     const payments = paymentMethod.value === 'split'
         ? [{ method: 'cash', amount: splitCash.value }, { method: 'card', amount: splitCard.value }]
         : [];
@@ -216,6 +219,7 @@ function payTable() {
         toasts.value?.error('Vendos një ndarje të vlefshme mes cash dhe kartës.');
         return;
     }
+    saving.value = true;
     router.post(route('pos.complete', selectedOrder.value.id), {
         payment_method: paymentMethod.value === 'split' ? null : paymentMethod.value,
         payments,
@@ -228,7 +232,7 @@ function payTable() {
             showPaymentModal.value = false;
             toasts.value?.success(page.props.flash?.success || 'Pagesa u regjistrua dhe tavolina u lirua.');
         },
-        onError: (errors) => toasts.value?.error(errors.payments || errors.reservation_id || 'Pagesa nuk u regjistrua.'),
+        onError: (errors) => toasts.value?.error(errors.order || errors.payments || errors.reservation_id || 'Pagesa nuk u regjistrua.'),
         onFinish: () => { saving.value = false; },
     });
 }

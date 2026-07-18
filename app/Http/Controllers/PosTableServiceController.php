@@ -225,21 +225,35 @@ class PosTableServiceController extends Controller
     public function transfer(Request $request, PosTable $posTable): RedirectResponse
     {
         $data = $request->validate(['destination_table_id' => ['required', 'integer', 'different:'.$posTable->id, TenantRule::exists('pos_tables')]]);
-        $destination = PosTable::query()->findOrFail($data['destination_table_id']);
+        [$order, $destination] = DB::transaction(function () use ($data, $posTable) {
+            // Locking the destination table serializes simultaneous transfers to the
+            // same free table, so only one open account can claim it.
+            $destination = PosTable::query()
+                ->lockForUpdate()
+                ->findOrFail($data['destination_table_id']);
 
-        $order = PosOrder::where('pos_table_id', $posTable->id)->where('status', 'open')->first();
-        if (! $order) {
-            return back()->with('error', 'Kjo tavolinë nuk ka llogari të hapur.');
-        }
-        if (PosOrder::where('pos_table_id', $destination->id)->where('status', 'open')->exists()) {
-            throw ValidationException::withMessages(['destination_table_id' => 'Tavolina e zgjedhur është e zënë.']);
-        }
+            $order = PosOrder::query()
+                ->where('pos_table_id', $posTable->id)
+                ->where('status', 'open')
+                ->lockForUpdate()
+                ->first();
 
-        $order->update([
-            'pos_table_id' => $destination->id,
-            'table_number' => $destination->number,
-            'service_status' => 'open',
-        ]);
+            if (! $order) {
+                throw ValidationException::withMessages(['table' => 'Kjo tavolinë nuk ka llogari të hapur.']);
+            }
+            if (PosOrder::where('pos_table_id', $destination->id)->where('status', 'open')->lockForUpdate()->exists()) {
+                throw ValidationException::withMessages(['destination_table_id' => 'Tavolina e zgjedhur është e zënë.']);
+            }
+
+            $order->update([
+                'pos_table_id' => $destination->id,
+                'table_number' => $destination->number,
+                'service_status' => 'open',
+            ]);
+
+            return [$order, $destination];
+        });
+
         AuditLog::record('pos.table.transferred', $order, ['from' => $posTable->id, 'to' => $destination->id]);
 
         return redirect()->route('pos.tables', ['table' => $destination->id])

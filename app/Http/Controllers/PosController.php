@@ -413,6 +413,11 @@ class PosController extends Controller
             if ($order->status !== 'open') {
                 throw ValidationException::withMessages(['order' => 'Porosia nuk është më e hapur.']);
             }
+            if ($order->pos_table_id && $order->rounds()->where('status', 'draft')->exists()) {
+                throw ValidationException::withMessages([
+                    'order' => 'Dërgo dhe printo të gjitha porositë e padërguara para pagesës.',
+                ]);
+            }
 
             $subtotal = round((float) $order->items()->sum('total_price'), 2);
             // Preserve the value of legacy/manual open tickets that predate item rows.
