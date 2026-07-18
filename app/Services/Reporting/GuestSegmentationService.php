@@ -12,7 +12,8 @@ final class GuestSegmentationService
     public function summary(string $activeSegment = 'all'): array
     {
         $rows = collect($this->lifetimeValue->summary(null)['guests']);
-        $vipThreshold = $this->percentile($rows->pluck('net_value'), 0.8);
+        $vipCandidates = $rows->filter(fn (array $row) => ($row['days_since_last'] ?? PHP_INT_MAX) <= 365 && $row['stays'] >= 2);
+        $vipThreshold = max(0, $this->percentile($vipCandidates->pluck('net_value'), 0.8));
         $segmented = $rows->map(function (array $row) use ($vipThreshold) {
             $segment = $this->segment($row, $vipThreshold);
 
@@ -61,7 +62,7 @@ final class GuestSegmentationService
                 $segmentOrder = array_search($left['segment_360'], $order, true) <=> array_search($right['segment_360'], $order, true);
 
                 return $segmentOrder !== 0 ? $segmentOrder : $right['net_value'] <=> $left['net_value'];
-            })->take(150)->values()->all(),
+            })->values()->all(),
             'rules' => [
                 'vip_percentile' => 80,
                 'active_days' => 365,

@@ -26,7 +26,7 @@ class GuestSegmentationServiceTest extends TestCase
         $this->stays($room, $user, 'VIP', 2, 500, '2026-06-01');
         $this->stays($room, $user, 'Loyal', 3, 100, '2026-05-01');
         $this->stays($room, $user, 'Returning', 2, 100, '2026-04-01');
-        $this->stays($room, $user, 'New', 1, 600, '2026-07-01');
+        $this->stays($room, $user, 'New', 1, 5000, '2026-07-01');
         $this->stays($room, $user, 'Dormant', 1, 100, '2024-01-01');
 
         $report = app(GuestSegmentationService::class)->summary();
@@ -34,6 +34,7 @@ class GuestSegmentationServiceTest extends TestCase
 
         $this->assertSame(5, $report['summary']['total_guests']);
         $this->assertSame(1, $report['summary']['vip_guests']);
+        $this->assertSame(1000.0, $report['summary']['vip_threshold']);
         $this->assertSame(1, $report['summary']['dormant_guests']);
         $this->assertSame('vip', $byName['VIP Test']['segment_360']);
         $this->assertSame('loyal', $byName['Loyal Test']['segment_360']);
