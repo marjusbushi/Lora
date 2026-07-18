@@ -5,12 +5,16 @@ import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import { BedDouble, BrushCleaning, CircleCheck, Wrench } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { useReportDrilldown } from '@/composables/useReportDrilldown';
 
 const props = defineProps({
     rows: { type: Array, default: () => [] },
     counts: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
 });
+const { can } = useReportDrilldown();
+const roomHref = (row) => can('view_rooms') ? route('rooms.index', { room: row.id }) : null;
 
 const statusMeta = {
     available: { label: translate('admin.generated.k_8e465c876aa5'), variant: 'success', color: 'text-success-600' },
@@ -33,6 +37,7 @@ const kpis = tiles.map((tile) => ({
     value: () => props.counts[tile.key] ?? 0,
     tone: tile.tone,
     icon: tile.icon,
+    href: can('view_rooms') ? route('rooms.index', { status: tile.key }) : null,
 }));
 </script>
 
@@ -53,7 +58,7 @@ const kpis = tiles.map((tile) => ({
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
                         <tr v-for="row in rows" :key="row.id" class="hover:bg-neutral-50">
-                            <td class="px-5 py-3 text-body-sm text-primary-900 font-medium">{{ row.room_number }}</td>
+                            <td class="px-5 py-3 text-body-sm text-primary-900 font-medium"><Link v-if="roomHref(row)" :href="roomHref(row)" class="hover:underline">{{ row.room_number }}</Link><span v-else>{{ row.room_number }}</span></td>
                             <td class="px-5 py-3 text-body-sm text-neutral-700">{{ row.floor ?? '—' }}</td>
                             <td class="px-5 py-3 text-body-sm text-neutral-700">{{ row.room_type }}</td>
                             <td class="px-5 py-3 text-body-sm">

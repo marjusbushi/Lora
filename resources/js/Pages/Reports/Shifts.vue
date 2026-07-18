@@ -5,6 +5,8 @@ import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import { Banknote, CreditCard, Scale, WalletCards } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { useReportDrilldown } from '@/composables/useReportDrilldown';
 
 const props = defineProps({
     filters: Object,
@@ -12,6 +14,9 @@ const props = defineProps({
     totals: Object,
     currency: { type: String, default: '€' },
 });
+const { can, hasModule } = useReportDrilldown();
+const shiftHref = (shift) => can('view_pos_orders') && hasModule('pos') ? route('pos.shifts', { shift: shift.id }) : null;
+const shiftsHref = () => can('view_pos_orders') && hasModule('pos') ? route('pos.shifts') : null;
 
 const money = (v) => `${props.currency}${Number(v ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -25,10 +30,10 @@ function overShortLabel(v) {
 }
 
 const kpis = [
-    { label: translate('admin.generated.k_c415521f6211'), value: () => props.shifts.length, tone: 'neutral', icon: WalletCards },
-    { label: translate('admin.generated.k_e9c1e13432f8'), value: () => money(props.totals?.cash), tone: 'success', icon: Banknote },
-    { label: translate('admin.generated.k_a2daff3a669c'), value: () => money(props.totals?.card), tone: 'info', icon: CreditCard },
-    { label: translate('admin.generated.k_1d57e3177577'), value: () => money(props.totals?.over_short), tone: () => Math.abs(Number(props.totals?.over_short ?? 0)) < 0.01 ? 'success' : 'error', icon: Scale },
+    { label: translate('admin.generated.k_c415521f6211'), value: () => props.shifts.length, tone: 'neutral', icon: WalletCards, href: shiftsHref() },
+    { label: translate('admin.generated.k_e9c1e13432f8'), value: () => money(props.totals?.cash), tone: 'success', icon: Banknote, href: shiftsHref() },
+    { label: translate('admin.generated.k_a2daff3a669c'), value: () => money(props.totals?.card), tone: 'info', icon: CreditCard, href: shiftsHref() },
+    { label: translate('admin.generated.k_1d57e3177577'), value: () => money(props.totals?.over_short), tone: () => Math.abs(Number(props.totals?.over_short ?? 0)) < 0.01 ? 'success' : 'error', icon: Scale, href: shiftsHref() },
 ];
 </script>
 
@@ -53,7 +58,7 @@ const kpis = [
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
                         <tr v-for="s in shifts" :key="s.id" class="hover:bg-neutral-50">
-                            <td class="px-4 py-3 text-body-sm text-primary-900 font-medium whitespace-nowrap">{{ s.user || '—' }}</td>
+                            <td class="px-4 py-3 text-body-sm text-primary-900 font-medium whitespace-nowrap"><Link v-if="shiftHref(s)" :href="shiftHref(s)" class="hover:underline">{{ s.user || '—' }}</Link><span v-else>{{ s.user || '—' }}</span></td>
                             <td class="px-4 py-3 text-body-sm text-neutral-500 whitespace-nowrap">{{ s.opened_at }} → {{ s.closed_at }}</td>
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ money(s.opening_float) }}</td>
                             <td class="px-4 py-3 text-right text-body-sm text-success-700">{{ money(s.cash_sales) }}</td>

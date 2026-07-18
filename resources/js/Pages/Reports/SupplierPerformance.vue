@@ -7,12 +7,17 @@ import Badge from '@/Components/UI/Badge.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import { AlertTriangle, Clock3, ReceiptText, Truck } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { useReportDrilldown } from '@/composables/useReportDrilldown';
 
 const props = defineProps({
     filters: Object,
     analytics: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
 });
+const { can, hasModule } = useReportDrilldown();
+const supplierHref = (row) => can('view_finance') && hasModule('finance') ? route('finance.suppliers', { supplier: row.id }) : null;
+const itemHref = (row) => can('view_inventory') && hasModule('finance') ? route('inventory.items', { item: row.id }) : null;
 
 const current = computed(() => props.analytics.current || {});
 const summary = computed(() => current.value.summary || {});
@@ -31,10 +36,10 @@ const statusLabel = (status) => translate(`reports360.supplierPerformance.status
 const statusVariant = (status) => ({ healthy: 'success', watch: 'warning', risk: 'error' }[status] || 'neutral');
 
 const kpis = computed(() => [
-    { label: translate('reports360.supplierPerformance.spend'), value: money(summary.value.total_spend), tone: 'accent', icon: Truck, trend: trend(changes.value.total_spend), trendText: pctChange('total_spend') },
-    { label: translate('reports360.supplierPerformance.avgBill'), value: money(summary.value.average_bill), tone: 'info', icon: ReceiptText, trend: trend(changes.value.average_bill), trendText: pctChange('average_bill'), detail: `${summary.value.bill_count || 0} ${translate('reports360.supplierPerformance.bills')}` },
-    { label: translate('reports360.supplierPerformance.onTime'), value: `${number(summary.value.on_time_rate)}%`, tone: 'success', icon: Clock3, trend: trend(changes.value.on_time_rate), trendText: pctChange('on_time_rate', ' pp') },
-    { label: translate('reports360.supplierPerformance.overdue'), value: money(summary.value.overdue_exposure), tone: summary.value.overdue_exposure ? 'warning' : 'neutral', icon: AlertTriangle, trend: trend(changes.value.overdue_exposure, true), trendText: pctChange('overdue_exposure'), detail: `${money(summary.value.outstanding)} ${translate('reports360.supplierPerformance.outstanding').toLocaleLowerCase(getIntlLocale())}` },
+    { label: translate('reports360.supplierPerformance.spend'), value: money(summary.value.total_spend), tone: 'accent', icon: Truck, trend: trend(changes.value.total_spend), trendText: pctChange('total_spend'), href: can('view_finance') && hasModule('finance') ? route('finance.bills') : null },
+    { label: translate('reports360.supplierPerformance.avgBill'), value: money(summary.value.average_bill), tone: 'info', icon: ReceiptText, trend: trend(changes.value.average_bill), trendText: pctChange('average_bill'), detail: `${summary.value.bill_count || 0} ${translate('reports360.supplierPerformance.bills')}`, href: can('view_finance') && hasModule('finance') ? route('finance.bills') : null },
+    { label: translate('reports360.supplierPerformance.onTime'), value: `${number(summary.value.on_time_rate)}%`, tone: 'success', icon: Clock3, trend: trend(changes.value.on_time_rate), trendText: pctChange('on_time_rate', ' pp'), href: can('view_finance') && hasModule('finance') ? route('finance.suppliers') : null },
+    { label: translate('reports360.supplierPerformance.overdue'), value: money(summary.value.overdue_exposure), tone: summary.value.overdue_exposure ? 'warning' : 'neutral', icon: AlertTriangle, trend: trend(changes.value.overdue_exposure, true), trendText: pctChange('overdue_exposure'), detail: `${money(summary.value.outstanding)} ${translate('reports360.supplierPerformance.outstanding').toLocaleLowerCase(getIntlLocale())}`, href: can('view_finance') && hasModule('finance') ? route('finance.bills', { status: 'overdue' }) : null },
 ]);
 
 const supplierBars = computed(() => suppliers.value.filter((row) => row.spend > 0).slice(0, 8).map((row) => ({
@@ -43,6 +48,7 @@ const supplierBars = computed(() => suppliers.value.filter((row) => row.spend > 
     value: Number(row.spend || 0),
     display: money(row.spend),
     detail: `${number(row.spend_share)}%`,
+    href: supplierHref(row),
 })));
 
 const categoryBars = computed(() => categories.value.map((row) => ({
@@ -84,7 +90,7 @@ const categoryBars = computed(() => categories.value.map((row) => ({
                     <tbody class="divide-y divide-neutral-100">
                         <tr v-for="row in suppliers" :key="row.id" class="hover:bg-neutral-50">
                             <td class="px-5 py-3">
-                                <p class="text-body-sm font-medium text-primary-900">{{ row.name }}</p>
+                                <Link v-if="supplierHref(row)" :href="supplierHref(row)" class="text-body-sm font-medium text-primary-900 hover:underline">{{ row.name }}</Link><p v-else class="text-body-sm font-medium text-primary-900">{{ row.name }}</p>
                                 <p class="text-tiny text-neutral-500">{{ row.category }} · {{ row.bill_count }} {{ $t('reports360.supplierPerformance.bills') }}</p>
                             </td>
                             <td class="px-4 py-3 text-right">
@@ -126,7 +132,7 @@ const categoryBars = computed(() => categories.value.map((row) => ({
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
                         <tr v-for="row in topItems" :key="row.id" class="hover:bg-neutral-50">
-                            <td class="px-5 py-3"><p class="text-body-sm font-medium text-primary-900">{{ row.name }}</p><p class="text-tiny text-neutral-500">{{ row.sku || '—' }}</p></td>
+                            <td class="px-5 py-3"><Link v-if="itemHref(row)" :href="itemHref(row)" class="text-body-sm font-medium text-primary-900 hover:underline">{{ row.name }}</Link><p v-else class="text-body-sm font-medium text-primary-900">{{ row.name }}</p><p class="text-tiny text-neutral-500">{{ row.sku || '—' }}</p></td>
                             <td class="px-4 py-3 text-right text-body-sm tabular-nums text-neutral-700">{{ number(row.quantity, 4) }} {{ row.unit }}</td>
                             <td class="px-4 py-3 text-right text-body-sm tabular-nums text-neutral-700">{{ row.supplier_count }}</td>
                             <td class="px-4 py-3 text-right text-body-sm tabular-nums text-neutral-700">{{ money(row.average_unit_cost) }}</td>

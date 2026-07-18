@@ -1,5 +1,6 @@
 <script setup>
 import Card from '@/Components/UI/Card.vue';
+import { Link } from '@inertiajs/vue3';
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -40,24 +41,28 @@ function trendIcon(trend) {
 
 <template>
     <div :class="['grid grid-cols-1 gap-3 sm:grid-cols-2', gridColumns[props.columns] || gridColumns[4]]">
-        <Card
+        <component
             v-for="item in items"
             :key="item.label"
-            :class="['border-l-4', tone(item).edge]"
+            :is="item.href ? Link : 'div'"
+            v-bind="item.href ? { href: valueOf(item.href) } : {}"
+            :class="item.href ? 'block rounded-lg no-underline transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent-500' : ''"
         >
-            <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <p class="text-tiny font-semibold uppercase tracking-wider text-neutral-500">{{ item.label }}</p>
-                    <p :class="['mt-2 truncate text-h3', tone(item).value]">{{ valueOf(item.value) }}</p>
+            <Card :class="['h-full border-l-4', tone(item).edge]">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-tiny font-semibold uppercase tracking-wider text-neutral-500">{{ item.label }}</p>
+                        <p :class="['mt-2 truncate text-h3', tone(item).value]">{{ valueOf(item.value) }}</p>
+                    </div>
+                    <span v-if="item.icon" :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tone(item).icon]">
+                        <component :is="item.icon" class="h-4.5 w-4.5" :stroke-width="1.75" />
+                    </span>
                 </div>
-                <span v-if="item.icon" :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tone(item).icon]">
-                    <component :is="item.icon" class="h-4.5 w-4.5" :stroke-width="1.75" />
-                </span>
-            </div>
-            <div v-if="item.detail || item.trendText" class="mt-2 flex items-center gap-1.5 text-tiny text-neutral-500">
-                <component v-if="item.trendText" :is="trendIcon(item.trend)" class="h-3.5 w-3.5" />
-                <span>{{ valueOf(item.trendText || item.detail) }}</span>
-            </div>
-        </Card>
+                <div v-if="item.detail || item.trendText" class="mt-2 flex items-center gap-1.5 text-tiny text-neutral-500">
+                    <component v-if="item.trendText" :is="trendIcon(item.trend)" class="h-3.5 w-3.5" />
+                    <span>{{ valueOf(item.trendText || item.detail) }}</span>
+                </div>
+            </Card>
+        </component>
     </div>
 </template>

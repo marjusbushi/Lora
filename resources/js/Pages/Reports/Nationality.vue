@@ -6,6 +6,8 @@ import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import { computed } from 'vue';
 import { Banknote, BedDouble, MapPinned, Users } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { useReportDrilldown } from '@/composables/useReportDrilldown';
 
 const props = defineProps({
     filters: Object,
@@ -13,13 +15,15 @@ const props = defineProps({
     totals: Object,
     currency: { type: String, default: '€' },
 });
+const { can } = useReportDrilldown();
+const guestHref = (nationality) => can('view_guests') ? route('guests.index', { nationality }) : null;
 
 const money = (v) => `${props.currency}${Number(v ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const num = (v) => Number(v ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 const kpis = [
-    { label: translate('admin.generated.k_494b215e7e76'), value: () => props.totals?.guests ?? 0, tone: 'accent', icon: Users },
-    { label: translate('admin.generated.k_0a150337bfe3'), value: () => props.rows.length, tone: 'info', icon: MapPinned, detail: translate('admin.generated.k_d93f3311ca4e') },
+    { label: translate('admin.generated.k_494b215e7e76'), value: () => props.totals?.guests ?? 0, tone: 'accent', icon: Users, href: can('view_guests') ? route('guests.index') : null },
+    { label: translate('admin.generated.k_0a150337bfe3'), value: () => props.rows.length, tone: 'info', icon: MapPinned, detail: translate('admin.generated.k_d93f3311ca4e'), href: can('view_guests') ? route('guests.index') : null },
     { label: translate('admin.generated.k_19e67e02aa38'), value: () => props.totals?.nights ?? 0, tone: 'neutral', icon: BedDouble },
     { label: translate('admin.generated.k_07a533b191f6'), value: () => money(props.totals?.revenue), tone: 'success', icon: Banknote },
 ];
@@ -30,6 +34,7 @@ const marketBars = computed(() => props.rows.slice(0, 8).map((row) => ({
     value: Number(row.nights ?? 0),
     display: translate('admin.generated.k_3ff80292950c', { p0: row.nights ?? 0 }),
     detail: translate('admin.generated.k_359b56560c0b', { p0: row.guests ?? 0, p1: money(row.revenue) }),
+    href: guestHref(row.nationality),
 })));
 </script>
 
@@ -53,7 +58,7 @@ const marketBars = computed(() => props.rows.slice(0, 8).map((row) => ({
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
                         <tr v-for="r in rows" :key="r.nationality" class="hover:bg-neutral-50">
-                            <td class="px-5 py-3 text-body-sm text-primary-900">{{ r.nationality }}</td>
+                            <td class="px-5 py-3 text-body-sm text-primary-900"><Link v-if="guestHref(r.nationality)" :href="guestHref(r.nationality)" class="hover:underline">{{ r.nationality }}</Link><span v-else>{{ r.nationality }}</span></td>
                             <td class="px-5 py-3 text-right text-body-sm text-neutral-700">{{ r.guests }}</td>
                             <td class="px-5 py-3 text-right text-body-sm text-neutral-700">{{ r.stays }}</td>
                             <td class="px-5 py-3 text-right text-body-sm text-neutral-700">{{ r.nights }}</td>

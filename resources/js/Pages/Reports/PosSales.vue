@@ -6,6 +6,8 @@ import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import { computed } from 'vue';
 import { Banknote, ChartNoAxesCombined, ReceiptText, ShoppingBasket } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { useReportDrilldown } from '@/composables/useReportDrilldown';
 
 const props = defineProps({
     filters: { type: Object, default: null },
@@ -15,6 +17,8 @@ const props = defineProps({
     summary: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
 });
+const { can, hasModule } = useReportDrilldown();
+const posHref = () => can('view_pos_orders') && hasModule('pos') ? route('pos.orders', { from: props.filters?.from, to: props.filters?.to }) : null;
 
 const money = (v) => `${props.currency}${Number(v ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const qty = (v) => Number(v ?? 0).toLocaleString(getIntlLocale());
@@ -30,8 +34,8 @@ const catTotalQty = () => props.byCategory.reduce((s, r) => s + Number(r.qty ?? 
 const catTotalRevenue = () => props.byCategory.reduce((s, r) => s + Number(r.revenue ?? 0), 0);
 
 const kpis = computed(() => [
-    { label: translate('reports360.posPerformance.revenue'), value: money(props.summary.total_revenue), tone: 'accent', icon: Banknote, trend: trend(changes.value.revenue), trendText: changeText('revenue') },
-    { label: translate('reports360.posPerformance.orders'), value: qty(props.summary.order_count), tone: 'info', icon: ReceiptText, trend: trend(changes.value.orders), trendText: changeText('orders') },
+    { label: translate('reports360.posPerformance.revenue'), value: money(props.summary.total_revenue), tone: 'accent', icon: Banknote, trend: trend(changes.value.revenue), trendText: changeText('revenue'), href: posHref() },
+    { label: translate('reports360.posPerformance.orders'), value: qty(props.summary.order_count), tone: 'info', icon: ReceiptText, trend: trend(changes.value.orders), trendText: changeText('orders'), href: posHref() },
     { label: translate('reports360.posPerformance.avgTicket'), value: money(props.summary.avg_ticket), tone: 'success', icon: ShoppingBasket, trend: trend(changes.value.avg_ticket), trendText: changeText('avg_ticket') },
     { label: translate('reports360.posPerformance.grossMargin'), value: pct(props.summary.gross_margin), tone: 'neutral', icon: ChartNoAxesCombined, detail: money(props.summary.gross_profit), trend: trend(changes.value.gross_margin), trendText: changeText('gross_margin', ' pp') },
 ]);
@@ -42,6 +46,7 @@ const categoryBars = computed(() => props.byCategory.map((row) => ({
     value: Number(row.revenue ?? 0),
     display: money(row.revenue),
     detail: `${qty(row.qty)} ${translate('reports360.posPerformance.items')} · ${pct(row.gross_margin)}`,
+    href: posHref(),
 })));
 </script>
 
@@ -79,7 +84,7 @@ const categoryBars = computed(() => props.byCategory.map((row) => ({
                 </thead>
                 <tbody class="divide-y divide-neutral-200">
                     <tr v-for="row in byCategory" :key="row.name">
-                        <td class="px-5 py-3 text-body-sm">{{ row.name }}</td>
+                        <td class="px-5 py-3 text-body-sm"><Link v-if="posHref()" :href="posHref()" class="hover:underline">{{ row.name }}</Link><span v-else>{{ row.name }}</span></td>
                         <td class="px-5 py-3 text-body-sm text-right">{{ qty(row.qty) }}</td>
                         <td class="px-5 py-3 text-body-sm text-right">{{ money(row.revenue) }}</td>
                     </tr>

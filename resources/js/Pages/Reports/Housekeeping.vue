@@ -7,8 +7,13 @@ import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import { CheckCircle2, Clock3, Gauge, Sparkles } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { useReportDrilldown } from '@/composables/useReportDrilldown';
 
 const props = defineProps({ filters: Object, analytics: { type: Object, default: () => ({}) }, currency: String });
+const { can, hasModule } = useReportDrilldown();
+const taskHref = (row) => can('view_housekeeping') && hasModule('housekeeping') ? route('housekeeping.clean', row.id) : null;
+const housekeepingHref = () => can('view_housekeeping') && hasModule('housekeeping') ? route('housekeeping.index') : null;
 const summary = computed(() => props.analytics.summary || {});
 const staff = computed(() => props.analytics.staff || []);
 const daily = computed(() => props.analytics.daily || []);
@@ -21,10 +26,10 @@ const typeLabel = (type) => translate(`reports360.housekeepingProductivity.types
 const statusLabel = (status) => translate(`reports360.housekeepingProductivity.statuses.${status}`);
 const staffBars = computed(() => staff.value.map((row) => ({ key: row.staff, label: row.staff, value: row.completed, display: `${row.completed} · ${minutes(row.avg_clean_minutes)}`, barClass: 'bg-accent-500' })));
 const kpis = computed(() => [
-    { label: translate('reports360.housekeepingProductivity.completed'), value: summary.value.completed || 0, tone: 'success', icon: CheckCircle2, detail: `${summary.value.total || 0} ${translate('reports360.housekeepingProductivity.assigned')}` },
-    { label: translate('reports360.housekeepingProductivity.completionRate'), value: pct(summary.value.completion_rate), tone: 'accent', icon: Gauge },
-    { label: translate('reports360.housekeepingProductivity.avgClean'), value: minutes(summary.value.avg_clean_minutes), tone: 'info', icon: Sparkles },
-    { label: translate('reports360.housekeepingProductivity.avgQueue'), value: minutes(summary.value.avg_queue_minutes), tone: 'warning', icon: Clock3, detail: `${summary.value.issues || 0} ${translate('reports360.housekeepingProductivity.issues')}` },
+    { label: translate('reports360.housekeepingProductivity.completed'), value: summary.value.completed || 0, tone: 'success', icon: CheckCircle2, detail: `${summary.value.total || 0} ${translate('reports360.housekeepingProductivity.assigned')}`, href: housekeepingHref() },
+    { label: translate('reports360.housekeepingProductivity.completionRate'), value: pct(summary.value.completion_rate), tone: 'accent', icon: Gauge, href: housekeepingHref() },
+    { label: translate('reports360.housekeepingProductivity.avgClean'), value: minutes(summary.value.avg_clean_minutes), tone: 'info', icon: Sparkles, href: housekeepingHref() },
+    { label: translate('reports360.housekeepingProductivity.avgQueue'), value: minutes(summary.value.avg_queue_minutes), tone: 'warning', icon: Clock3, detail: `${summary.value.issues || 0} ${translate('reports360.housekeepingProductivity.issues')}`, href: housekeepingHref() },
 ]);
 </script>
 
@@ -48,7 +53,7 @@ const kpis = computed(() => [
         <Card class="mt-4" :padding="false">
             <div class="border-b border-neutral-200 px-5 py-4"><h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.housekeepingProductivity.recentTasks') }}</h2></div>
             <div class="overflow-x-auto"><table class="min-w-full divide-y divide-neutral-200"><thead class="bg-neutral-50 text-label text-neutral-600"><tr><th class="px-5 py-3 text-left">{{ $t('reports360.housekeepingProductivity.room') }}</th><th class="px-4 py-3 text-left">{{ $t('reports360.housekeepingProductivity.type') }}</th><th class="px-4 py-3 text-left">{{ $t('reports360.housekeepingProductivity.staff') }}</th><th class="px-4 py-3 text-left">{{ $t('reports360.housekeepingProductivity.status') }}</th><th class="px-4 py-3 text-right">{{ $t('reports360.housekeepingProductivity.queue') }}</th><th class="px-4 py-3 text-right">{{ $t('reports360.housekeepingProductivity.cleaning') }}</th><th class="px-5 py-3 text-right">{{ $t('reports360.housekeepingProductivity.date') }}</th></tr></thead>
-                <tbody class="divide-y divide-neutral-100"><tr v-for="row in tasks" :key="row.id" class="hover:bg-neutral-50"><td class="px-5 py-3 text-body-sm font-medium text-primary-900">{{ row.room }}</td><td class="px-4 py-3 text-body-sm text-neutral-700">{{ typeLabel(row.type) }}</td><td class="px-4 py-3 text-body-sm text-neutral-700">{{ row.assigned }}</td><td class="px-4 py-3"><Badge :variant="row.status === 'inspected' ? 'accent' : row.status === 'completed' ? 'success' : row.status === 'in_progress' ? 'info' : 'warning'">{{ statusLabel(row.status) }}</Badge></td><td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.queue_minutes == null ? '—' : minutes(row.queue_minutes) }}</td><td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.clean_minutes == null ? '—' : minutes(row.clean_minutes) }}</td><td class="px-5 py-3 text-right text-body-sm text-neutral-500">{{ fmt(row.created_at) }}</td></tr></tbody></table></div>
+                <tbody class="divide-y divide-neutral-100"><tr v-for="row in tasks" :key="row.id" class="hover:bg-neutral-50"><td class="px-5 py-3 text-body-sm font-medium text-primary-900"><Link v-if="taskHref(row)" :href="taskHref(row)" class="hover:underline">{{ row.room }}</Link><span v-else>{{ row.room }}</span></td><td class="px-4 py-3 text-body-sm text-neutral-700">{{ typeLabel(row.type) }}</td><td class="px-4 py-3 text-body-sm text-neutral-700">{{ row.assigned }}</td><td class="px-4 py-3"><Badge :variant="row.status === 'inspected' ? 'accent' : row.status === 'completed' ? 'success' : row.status === 'in_progress' ? 'info' : 'warning'">{{ statusLabel(row.status) }}</Badge></td><td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.queue_minutes == null ? '—' : minutes(row.queue_minutes) }}</td><td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.clean_minutes == null ? '—' : minutes(row.clean_minutes) }}</td><td class="px-5 py-3 text-right text-body-sm text-neutral-500">{{ fmt(row.created_at) }}</td></tr></tbody></table></div>
             <div v-if="!tasks.length" class="px-6 py-12 text-center text-body-sm text-neutral-500">{{ $t('reports360.noData') }}</div>
         </Card>
     </ReportShell>

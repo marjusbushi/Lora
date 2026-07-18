@@ -1,6 +1,7 @@
 <script setup>
 import { translate } from '@/i18n';
 import { computed } from 'vue';
+import { Link } from '@inertiajs/vue3';
 import Card from '@/Components/UI/Card.vue';
 
 const props = defineProps({
@@ -26,7 +27,13 @@ function width(value) {
         </div>
 
         <div v-if="rows.length" class="mt-4 space-y-4">
-            <div v-for="row in rows" :key="row.key || row.label">
+            <component
+                v-for="row in rows"
+                :key="row.key || row.label"
+                :is="row.href ? Link : 'div'"
+                v-bind="row.href ? { href: row.href } : {}"
+                :class="row.href ? 'block rounded-md p-1.5 -m-1.5 no-underline transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-accent-500' : ''"
+            >
                 <div class="mb-1.5 flex items-center justify-between gap-4">
                     <div class="min-w-0">
                         <p class="truncate text-body-sm font-medium text-primary-900">{{ row.label }}</p>
@@ -41,7 +48,7 @@ function width(value) {
                         :style="{ width: `${width(row.value)}%` }"
                     />
                 </div>
-            </div>
+            </component>
         </div>
         <p v-else class="py-8 text-center text-body-sm text-neutral-500">{{ emptyText }}</p>
     </Card>

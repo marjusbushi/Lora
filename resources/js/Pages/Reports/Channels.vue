@@ -7,12 +7,16 @@ import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import { Banknote, ChartNoAxesCombined, HandCoins, Percent } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { useReportDrilldown } from '@/composables/useReportDrilldown';
 
 const props = defineProps({
     filters: Object,
     analytics: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
 });
+const { can } = useReportDrilldown();
+const channelHref = (channel) => can('view_reservations') ? route('reservations.index', { channel, from: props.filters?.from, to: props.filters?.to }) : null;
 
 const current = computed(() => props.analytics.current || {});
 const totals = computed(() => current.value.totals || {});
@@ -32,8 +36,8 @@ const changeText = (key, suffix = '%') => changes.value[key] == null
     : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}${suffix}`;
 
 const kpis = computed(() => [
-    { label: translate('reports360.distribution.netRevenue'), value: money(totals.value.net_revenue), tone: 'success', icon: HandCoins, trend: trend(changes.value.net_revenue), trendText: changeText('net_revenue') },
-    { label: translate('reports360.distribution.directShare'), value: pct(totals.value.direct_share), tone: 'accent', icon: Percent, trend: trend(changes.value.direct_share), trendText: changeText('direct_share', 'pp') },
+    { label: translate('reports360.distribution.netRevenue'), value: money(totals.value.net_revenue), tone: 'success', icon: HandCoins, trend: trend(changes.value.net_revenue), trendText: changeText('net_revenue'), href: can('view_reservations') ? route('reservations.index', props.filters) : null },
+    { label: translate('reports360.distribution.directShare'), value: pct(totals.value.direct_share), tone: 'accent', icon: Percent, trend: trend(changes.value.direct_share), trendText: changeText('direct_share', 'pp'), href: channelHref('direct') },
     { label: translate('reports360.distribution.commission'), value: money(totals.value.commission), tone: 'warning', icon: Banknote, detail: pct(totals.value.commission_rate) },
     { label: translate('reports360.distribution.netAdr'), value: money(totals.value.net_adr), tone: 'info', icon: ChartNoAxesCombined, detail: `${totals.value.nights || 0} ${translate('reports360.nights')}` },
 ]);
@@ -116,7 +120,7 @@ const kpis = computed(() => [
                     <tbody class="divide-y divide-neutral-100">
                         <tr v-for="row in rows" :key="row.channel" class="hover:bg-neutral-50">
                             <td class="px-5 py-3">
-                                <span class="inline-flex items-center gap-2 text-body-sm font-medium text-primary-900"><i class="h-2 w-2 rounded-full" :style="{ backgroundColor: channelMeta(row.channel).color }" />{{ channelMeta(row.channel).label }}</span>
+                                <Link v-if="channelHref(row.channel)" :href="channelHref(row.channel)" class="inline-flex items-center gap-2 text-body-sm font-medium text-primary-900 hover:underline"><i class="h-2 w-2 rounded-full" :style="{ backgroundColor: channelMeta(row.channel).color }" />{{ channelMeta(row.channel).label }}</Link><span v-else class="inline-flex items-center gap-2 text-body-sm font-medium text-primary-900"><i class="h-2 w-2 rounded-full" :style="{ backgroundColor: channelMeta(row.channel).color }" />{{ channelMeta(row.channel).label }}</span>
                             </td>
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ pct(row.revenue_share) }}</td>
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.bookings }}</td>

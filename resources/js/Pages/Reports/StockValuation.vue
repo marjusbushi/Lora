@@ -7,12 +7,18 @@ import Badge from '@/Components/UI/Badge.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import { AlertTriangle, ArrowDownToLine, PackageCheck, Warehouse } from 'lucide-vue-next';
+import { Link } from '@inertiajs/vue3';
+import { useReportDrilldown } from '@/composables/useReportDrilldown';
 
 const props = defineProps({
     filters: Object,
     analytics: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
 });
+const { can, hasModule } = useReportDrilldown();
+const canOpenInventory = () => can('view_inventory') && hasModule('finance');
+const itemHref = (row) => canOpenInventory() ? route('inventory.items', { item: row.id }) : null;
+const warehouseHref = (row) => canOpenInventory() ? route('inventory.warehouses', { warehouse: row.id }) : null;
 
 const current = computed(() => props.analytics.current || {});
 const summary = computed(() => current.value.summary || {});
@@ -28,10 +34,10 @@ const statusLabel = (status) => translate(`reports360.stockValuation.status.${st
 const statusVariant = (status) => ({ healthy: 'success', low: 'warning', out: 'error', negative: 'error' }[status] || 'neutral');
 
 const kpis = computed(() => [
-    { label: translate('reports360.stockValuation.stockValue'), value: money(summary.value.stock_value), tone: 'accent', icon: Warehouse, trend: trend(changes.value.stock_value), trendText: pctChange('stock_value') },
-    { label: translate('reports360.stockValuation.consumedValue'), value: money(summary.value.consumed_value), tone: 'info', icon: ArrowDownToLine, trend: trend(changes.value.consumed_value), trendText: pctChange('consumed_value') },
-    { label: translate('reports360.stockValuation.receivedValue'), value: money(summary.value.received_value), tone: 'success', icon: PackageCheck, trend: trend(changes.value.received_value), trendText: pctChange('received_value') },
-    { label: translate('reports360.stockValuation.atRisk'), value: summary.value.at_risk_count || 0, tone: summary.value.at_risk_count ? 'warning' : 'neutral', icon: AlertTriangle, detail: `${summary.value.negative_stock_count || 0} ${translate('reports360.stockValuation.negative')}` },
+    { label: translate('reports360.stockValuation.stockValue'), value: money(summary.value.stock_value), tone: 'accent', icon: Warehouse, trend: trend(changes.value.stock_value), trendText: pctChange('stock_value'), href: canOpenInventory() ? route('inventory.index') : null },
+    { label: translate('reports360.stockValuation.consumedValue'), value: money(summary.value.consumed_value), tone: 'info', icon: ArrowDownToLine, trend: trend(changes.value.consumed_value), trendText: pctChange('consumed_value'), href: canOpenInventory() ? route('inventory.items') : null },
+    { label: translate('reports360.stockValuation.receivedValue'), value: money(summary.value.received_value), tone: 'success', icon: PackageCheck, trend: trend(changes.value.received_value), trendText: pctChange('received_value'), href: canOpenInventory() ? route('inventory.items') : null },
+    { label: translate('reports360.stockValuation.atRisk'), value: summary.value.at_risk_count || 0, tone: summary.value.at_risk_count ? 'warning' : 'neutral', icon: AlertTriangle, detail: `${summary.value.negative_stock_count || 0} ${translate('reports360.stockValuation.negative')}`, href: canOpenInventory() ? route('inventory.items', { status: 'low' }) : null },
 ]);
 
 const warehouseBars = computed(() => warehouses.value.map((row) => ({
@@ -40,6 +46,7 @@ const warehouseBars = computed(() => warehouses.value.map((row) => ({
     value: Number(row.stock_value || 0),
     display: money(row.stock_value),
     detail: `${row.item_count} ${translate('reports360.stockValuation.items')}`,
+    href: warehouseHref(row),
 })));
 
 const consumptionBars = computed(() => topConsumption.value.map((row) => ({
@@ -49,6 +56,7 @@ const consumptionBars = computed(() => topConsumption.value.map((row) => ({
     display: money(row.consumed_value),
     detail: `${number(row.consumed_quantity, 4)} ${row.unit}`,
     barClass: 'bg-info-500',
+    href: itemHref(row),
 })));
 </script>
 
@@ -83,7 +91,7 @@ const consumptionBars = computed(() => topConsumption.value.map((row) => ({
                     <tbody class="divide-y divide-neutral-100">
                         <tr v-for="row in items" :key="row.id" class="hover:bg-neutral-50">
                             <td class="px-5 py-3">
-                                <p class="text-body-sm font-medium text-primary-900">{{ row.name }}</p>
+                                <Link v-if="itemHref(row)" :href="itemHref(row)" class="text-body-sm font-medium text-primary-900 hover:underline">{{ row.name }}</Link><p v-else class="text-body-sm font-medium text-primary-900">{{ row.name }}</p>
                                 <p class="text-tiny text-neutral-500">{{ row.sku }} · {{ row.category }}</p>
                             </td>
                             <td class="px-4 py-3 text-right text-body-sm tabular-nums text-neutral-600">{{ number(row.opening_quantity, 4) }}</td>
