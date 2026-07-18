@@ -42,6 +42,7 @@ const selectedTable = computed(() => props.tables.find((table) => Number(table.i
 const selectedOrder = computed(() => selectedTable.value?.open_order || null);
 const areaTables = computed(() => props.tables.filter((table) => table.area === activeArea.value));
 const freeTables = computed(() => props.tables.filter((table) => table.status === 'free' && Number(table.id) !== Number(selectedTableId.value)));
+const freeCount = computed(() => Math.max(0, Number(props.stats.total || 0) - Number(props.stats.occupied || 0) - Number(props.stats.bill_requested || 0)));
 const splitCash = computed(() => Math.min(Number(selectedOrder.value?.total_amount || 0), Math.max(0, Number(splitCashAmount.value || 0))));
 const splitCard = computed(() => Math.max(0, Math.round((Number(selectedOrder.value?.total_amount || 0) - splitCash.value) * 100) / 100));
 
@@ -66,6 +67,10 @@ function tableStatus(table) {
         : table.status === 'bill_requested'
             ? { label: 'Pret faturën', badge: 'warning' }
             : { label: 'E zënë', badge: 'info' };
+}
+
+function tableShortName(table) {
+    return `T${table.number || table.id}`;
 }
 
 function selectTable(table) {
@@ -225,22 +230,19 @@ onMounted(() => {
                 </div>
             </div>
 
-            <div class="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Card class="!p-4"><p class="text-small text-neutral-500">Tavolina</p><p class="mt-1 text-h3 text-primary-900">{{ stats.total }}</p></Card>
-                <Card class="!p-4"><p class="text-small text-neutral-500">Të zëna</p><p class="mt-1 text-h3 text-info-700">{{ stats.occupied }}</p></Card>
-                <Card class="!p-4"><p class="text-small text-neutral-500">Presin faturën</p><p class="mt-1 text-h3 text-warning-700">{{ stats.bill_requested }}</p></Card>
-                <Card class="!p-4"><p class="text-small text-neutral-500">Llogari të hapura</p><p class="mt-1 text-h3 text-accent-700">{{ money(stats.open_total) }}</p></Card>
-            </div>
-
             <div
-                class="grid min-h-0 flex-1 gap-3"
-                :class="selectedTable ? '2xl:grid-cols-[minmax(0,1.2fr)_minmax(430px,0.8fr)]' : 'grid-cols-1'"
+                class="grid min-h-0 flex-1 gap-3 2xl:grid-cols-[minmax(0,1fr)_minmax(330px,0.34fr)]"
             >
                 <Card :padding="false" class="flex min-h-0 flex-col overflow-hidden">
-                    <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div><h2 class="text-h4 text-primary-900">Zgjidh tavolinën</h2><p class="mt-1 text-small text-neutral-500">Prek tavolinën për të parë veprimet: Porosi ose Përmbledhje.</p></div>
+                    <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div class="flex gap-2 overflow-x-auto">
                             <button v-for="area in areas" :key="area" type="button" class="rounded-lg border px-3 py-2 text-small font-semibold whitespace-nowrap" :class="activeArea === area ? 'border-accent-600 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-500'" @click="activeArea = area">{{ area }}</button>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-small text-neutral-500">
+                            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-success-500"></span>E lirë {{ freeCount }}</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-info-500"></span>E zënë {{ stats.occupied }}</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-warning-500"></span>Pret pagesën {{ stats.bill_requested }}</span>
+                            <span class="font-semibold text-accent-700">Hapur {{ money(stats.open_total) }}</span>
                         </div>
                     </div>
                     <div class="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-5 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
@@ -248,28 +250,32 @@ onMounted(() => {
                             v-for="table in areaTables"
                             :key="table.id"
                             type="button"
-                            class="min-h-36 rounded-xl border-2 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-card"
+                            class="relative grid min-h-28 place-content-center gap-1.5 rounded-xl border-2 p-3 text-center transition hover:-translate-y-0.5 hover:shadow-card touch-manipulation"
                             :class="[
-                                selectedTableId === table.id ? 'border-accent-600 ring-2 ring-accent-100' : 'border-neutral-200',
-                                table.status === 'free' ? 'bg-white' : table.status === 'bill_requested' ? 'bg-warning-50/60' : 'bg-info-50/50',
+                                Number(selectedTableId) === Number(table.id) ? 'border-accent-600 ring-2 ring-accent-100' : 'border-neutral-200',
+                                table.status === 'free' ? 'bg-success-50/50' : table.status === 'bill_requested' ? 'bg-warning-50/70' : 'bg-info-50/60',
                             ]"
+                            :aria-label="`${table.name}, ${table.seats} vende, ${tableStatus(table).label}${table.open_order ? `, ${money(table.open_order.total_amount)}` : ''}`"
                             @click="selectTable(table)"
                         >
-                            <div class="flex items-start justify-between gap-2"><div><p class="font-bold text-primary-900">{{ table.name }}</p><p class="mt-0.5 text-small text-neutral-500">{{ table.seats }} vende</p></div><Badge :variant="tableStatus(table).badge" dot size="sm">{{ tableStatus(table).label }}</Badge></div>
-                            <div v-if="table.open_order" class="mt-7 flex items-end justify-between"><div><p class="text-h4 text-primary-900">{{ money(table.open_order.total_amount) }}</p><p class="mt-0.5 text-tiny text-neutral-500">{{ elapsed(table.open_order.created_at) }} · {{ table.open_order.rounds.length }} porosi</p></div><ArrowRightLeft class="h-4 w-4 text-neutral-400" /></div>
-                            <div v-else class="mt-8 flex items-center justify-between text-small text-neutral-400"><span>Prek për ta zgjedhur</span><Plus class="h-4 w-4" /></div>
+                            <span class="absolute right-3 top-3 h-2.5 w-2.5 rounded-full" :class="table.status === 'free' ? 'bg-success-500' : table.status === 'bill_requested' ? 'bg-warning-500' : 'bg-info-500'"></span>
+                            <strong class="text-h3 text-primary-900">{{ tableShortName(table) }}</strong>
+                            <span class="text-small text-neutral-500">{{ table.open_order ? money(table.open_order.total_amount) : `${table.seats} vende` }}</span>
                         </button>
                     </div>
                 </Card>
 
-                <Card v-if="selectedTable" :padding="false" class="flex min-h-0 flex-col overflow-hidden">
+                <Card :padding="false" class="flex min-h-0 flex-col overflow-hidden">
                     <template v-if="selectedTable">
                         <div class="border-b border-neutral-200 px-5 py-4">
-                            <div class="flex items-center gap-2"><h2 class="text-h3 text-primary-900">{{ selectedTable.name }}</h2><Badge :variant="tableStatus(selectedTable).badge" dot size="sm">{{ tableStatus(selectedTable).label }}</Badge></div><p class="mt-1 text-small text-neutral-500">{{ selectedOrder ? `${selectedOrder.covers || '—'} persona · ${elapsed(selectedOrder.created_at)} · ${selectedOrder.created_by || 'Stafi'}` : `${selectedTable.seats} vende · pa llogari të hapur` }}</p>
+                            <div class="flex items-start justify-between gap-3">
+                                <div><div class="flex items-center gap-2"><h2 class="text-h3 text-primary-900">{{ selectedTable.name }}</h2><Badge :variant="tableStatus(selectedTable).badge" dot size="sm">{{ tableStatus(selectedTable).label }}</Badge></div><p class="mt-1 text-small text-neutral-500">{{ selectedOrder ? `${selectedOrder.covers || '—'} persona · ${elapsed(selectedOrder.created_at)} · ${selectedOrder.created_by || 'Stafi'}` : `${selectedTable.seats} vende · pa llogari të hapur` }}</p></div>
+                                <strong class="text-h3 text-primary-900">{{ money(selectedOrder?.total_amount) }}</strong>
+                            </div>
                         </div>
 
-                        <div v-if="selectedOrder" class="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
-                            <div v-for="round in selectedOrder.rounds" :key="round.id || `legacy-${round.sequence}`" class="rounded-xl border border-neutral-200 bg-white p-4">
+                        <div v-if="selectedOrder" class="min-h-0 flex-1 divide-y divide-neutral-200 overflow-y-auto px-5">
+                            <div v-for="round in selectedOrder.rounds" :key="round.id || `legacy-${round.sequence}`" class="py-4">
                                 <div class="flex items-start justify-between gap-3">
                                     <div><div class="flex flex-wrap items-center gap-2"><p class="font-bold text-primary-900">Porosia #{{ round.sequence }}</p><Badge :variant="round.status === 'sent' ? 'success' : 'warning'" size="sm">{{ round.status === 'sent' ? 'Dërguar & printuar' : 'Pa dërguar' }}</Badge></div><p class="mt-1 text-tiny text-neutral-500">{{ round.created_by || 'Stafi' }} · {{ time(round.created_at) }} · {{ round.destination }}</p></div>
                                     <div class="text-right"><p class="font-bold text-primary-900">{{ money(round.total) }}</p><Button v-if="round.status === 'draft'" variant="outline" size="sm" class="mt-2" :loading="saving" @click="sendDraft(round)"><Printer class="h-3.5 w-3.5" /> Dërgo & printo</Button></div>
@@ -279,7 +285,7 @@ onMounted(() => {
                                 </div>
                             </div>
                         </div>
-                        <div v-else class="grid flex-1 place-items-center px-6 py-16 text-center"><div><span class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-neutral-100 text-neutral-400"><ReceiptText class="h-6 w-6" /></span><p class="mt-4 font-semibold text-primary-900">Tavolina është e lirë</p><p class="mt-1 text-body-sm text-neutral-500">Hap POS-in ekzistues për porosinë e parë.</p><Button variant="primary" class="mt-5" @click="openOrder"><Plus class="h-4 w-4" /> Porosi</Button></div></div>
+                        <div v-else class="grid flex-1 place-items-center px-6 py-16 text-center"><div><span class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-neutral-100 text-neutral-400"><ReceiptText class="h-6 w-6" /></span><p class="mt-4 font-semibold text-primary-900">Tavolina është e lirë</p><p class="mt-1 text-body-sm text-neutral-500">Përdor butonin “Porosi” sipër për të hapur POS-in.</p></div></div>
 
                         <div v-if="selectedOrder" class="border-t border-neutral-200 bg-neutral-50 p-4">
                             <div class="mb-3 flex items-center justify-between"><span class="text-body-sm font-semibold text-neutral-600">Totali i tavolinës</span><strong class="text-h3 text-primary-900">{{ money(selectedOrder.total_amount) }}</strong></div>
@@ -289,6 +295,9 @@ onMounted(() => {
                             </div>
                         </div>
                     </template>
+                    <div v-else class="grid flex-1 place-items-center px-6 py-16 text-center">
+                        <div><span class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-neutral-100 text-neutral-400"><ReceiptText class="h-6 w-6" /></span><p class="mt-4 font-semibold text-primary-900">Zgjidh një tavolinë</p><p class="mt-1 text-body-sm text-neutral-500">Porositë dhe totali shfaqen këtu.</p></div>
+                    </div>
                 </Card>
             </div>
         </div>
