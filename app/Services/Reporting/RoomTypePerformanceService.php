@@ -2,9 +2,7 @@
 
 namespace App\Services\Reporting;
 
-use App\Models\MaintenanceIssue;
 use App\Models\Reservation;
-use App\Models\Room;
 use App\Models\RoomType;
 
 final class RoomTypePerformanceService
@@ -13,6 +11,7 @@ final class RoomTypePerformanceService
         private readonly StayRevenueAllocator $revenueAllocator,
         private readonly SellableInventoryCalculator $inventoryCalculator,
         private readonly KpiCalculator $kpiCalculator,
+        private readonly MaintenanceDowntimeService $maintenanceDowntime,
     ) {}
 
     /** @return array{period:array{from:string,to:string},kpis:array,rows:array,daily:array} */
@@ -22,9 +21,11 @@ final class RoomTypePerformanceService
             ->with(['rooms:id,room_type_id,status'])
             ->orderBy('name')
             ->get(['id', 'name']);
-        $roomTypeByRoom = $types->flatMap(fn (RoomType $type) => $type->rooms
-            ->mapWithKeys(fn (Room $room) => [(string) $room->id => $type->id]));
-        $roomIds = $roomTypeByRoom->keys()->map(fn ($id) => (int) $id)->all();
+        $roomIds = $types->flatMap(fn (RoomType $type) => $type->rooms->pluck('id'))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
 
         $reservations = Reservation::query()
             ->whereIn('room_id', $roomIds)
@@ -34,32 +35,7 @@ final class RoomTypePerformanceService
             ->whereDate('check_out_date', '>', $period->from->toDateString())
             ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount']);
 
-        $blocks = MaintenanceIssue::query()
-            ->whereIn('room_id', $roomIds)
-            ->where('room_blocked', true)
-            ->where('created_at', '<=', $period->to->endOfDay())
-            ->where(function ($query) use ($period) {
-                $query->whereNull('resolved_at')
-                    ->orWhere('resolved_at', '>', $period->from->startOfDay());
-            })
-            ->get(['room_id', 'created_at', 'resolved_at'])
-            ->map(fn (MaintenanceIssue $issue) => [
-                'room_id' => $issue->room_id,
-                'starts_at' => $issue->created_at->toDateTimeString(),
-                'ends_at' => $issue->resolved_at?->toDateTimeString(),
-            ]);
-        $blockedRoomIds = $blocks->pluck('room_id')->map(fn ($id) => (string) $id)->all();
-
-        $types->flatMap->rooms
-            ->where('status', 'maintenance')
-            ->whereNotIn('id', $blockedRoomIds)
-            ->each(function (Room $room) use ($blocks, $period) {
-                $blocks->push([
-                    'room_id' => $room->id,
-                    'starts_at' => $period->from->toDateTimeString(),
-                    'ends_at' => null,
-                ]);
-            });
+        $blocks = collect($this->maintenanceDowntime->forRooms($roomIds, $period));
 
         $rows = $types->map(function (RoomType $type) use ($reservations, $blocks, $period) {
             $typeRoomIds = $type->rooms->pluck('id')->map(fn ($id) => (int) $id);

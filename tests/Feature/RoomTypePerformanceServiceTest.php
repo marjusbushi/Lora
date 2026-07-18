@@ -8,6 +8,7 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\User;
+use App\Services\Reporting\MaintenanceDowntimeService;
 use App\Services\Reporting\ReportingPeriod;
 use App\Services\Reporting\RoomTypePerformanceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -39,14 +40,23 @@ class RoomTypePerformanceServiceTest extends TestCase
             'channel' => 'direct',
         ]);
 
-        MaintenanceIssue::create([
+        $issue = MaintenanceIssue::create([
             'room_id' => $deluxeRoom->id,
             'reported_by' => $user->id,
             'title' => 'Blocked room',
             'room_blocked' => true,
             'status' => 'in_progress',
-            'created_at' => '2026-07-01 08:00:00',
         ]);
+        $issue->forceFill([
+            'created_at' => '2026-07-01 08:00:00',
+            'updated_at' => '2026-07-01 08:00:00',
+        ])->saveQuietly();
+
+        $this->assertTrue($issue->fresh()->room_blocked);
+        $this->assertCount(1, app(MaintenanceDowntimeService::class)->forRooms(
+            [$deluxeRoom->id],
+            new ReportingPeriod('2026-07-01', '2026-07-02'),
+        ));
 
         $summary = app(RoomTypePerformanceService::class)
             ->summary(new ReportingPeriod('2026-07-01', '2026-07-02'));
