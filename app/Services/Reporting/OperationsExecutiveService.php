@@ -31,6 +31,7 @@ final class OperationsExecutiveService
         $departures = collect($movements['departures']);
         $inHouse = collect($movements['in_house']);
         $now = now();
+        $activeMaintenance = $openMaintenance->whereIn('status', ['reported', 'assigned', 'in_progress']);
         $actions = collect($readiness['rooms'])
             ->filter(fn (array $room) => in_array($room['state'], ['unassigned', 'maintenance', 'cleaning_for_arrival', 'turnover'], true)
                 || ($room['state'] === 'occupied' && $room['arrival']))
@@ -60,7 +61,7 @@ final class OperationsExecutiveService
             ]);
 
         $maintenanceActions = $includeMaintenanceDetails
-            ? $openMaintenance->filter(fn (MaintenanceIssue $issue) => $issue->due_at?->isPast() || $issue->priority === 'critical')
+            ? $activeMaintenance->filter(fn (MaintenanceIssue $issue) => $issue->due_at?->isPast() || $issue->priority === 'critical')
                 ->take(6)
                 ->map(fn (MaintenanceIssue $issue) => [
                     'key' => 'maintenance-'.$issue->id,
@@ -84,14 +85,14 @@ final class OperationsExecutiveService
                 'departures_completed' => $departures->where('status', 'checked_out')->count(),
                 'in_house_stays' => $inHouse->count(),
                 'in_house_pax' => $inHouse->sum('pax'),
-                'departure_balance' => round((float) $departures->where('status', 'checked_in')->sum('balance'), 2),
+                'departure_balance' => round((float) $departures->where('status', 'checked_in')->sum(fn (array $row) => max(0, (float) $row['balance'])), 2),
                 'open_pos' => (int) $departures->where('status', 'checked_in')->sum('open_pos_count'),
             ],
             'readiness' => $readiness['summary'] + ['states' => $readiness['states']],
             'maintenance' => [
                 'open' => $openMaintenance->count(),
-                'overdue' => $openMaintenance->filter(fn (MaintenanceIssue $issue) => $issue->due_at?->lt($now))->count(),
-                'critical' => $openMaintenance->where('priority', 'critical')->count(),
+                'overdue' => $activeMaintenance->filter(fn (MaintenanceIssue $issue) => $issue->due_at?->lt($now))->count(),
+                'critical' => $activeMaintenance->where('priority', 'critical')->count(),
                 'blocked_rooms' => $readiness['summary']['maintenance'],
             ],
             'actions' => $actions

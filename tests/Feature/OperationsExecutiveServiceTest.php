@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\CleaningTask;
 use App\Models\Guest;
 use App\Models\MaintenanceIssue;
+use App\Models\Payment;
 use App\Models\PosOrder;
 use App\Models\Reservation;
 use App\Models\Room;
@@ -29,10 +30,12 @@ class OperationsExecutiveServiceTest extends TestCase
         $departureRoom = Room::create(['room_type_id' => $type->id, 'room_number' => '102', 'floor' => 1, 'status' => 'occupied']);
         $arrival = $this->reservation($arrivalRoom, $guest, $user, '2026-07-18', '2026-07-20', 'confirmed', 200);
         $departure = $this->reservation($departureRoom, $guest, $user, '2026-07-16', '2026-07-18', 'checked_in', 200);
+        Payment::create(['reservation_id' => $departure->id, 'amount' => 200, 'method' => 'cash', 'type' => 'payment', 'created_by' => $user->id]);
+        Payment::create(['reservation_id' => $departure->id, 'amount' => 25, 'method' => 'cash', 'type' => 'refund', 'created_by' => $user->id]);
         CleaningTask::create(['room_id' => $arrivalRoom->id, 'type' => 'checkout_clean', 'status' => 'pending', 'priority' => 'urgent']);
         PosOrder::create(['reservation_id' => $departure->id, 'status' => 'open', 'total_amount' => 10, 'created_by' => $user->id]);
         MaintenanceIssue::create(['room_id' => $arrivalRoom->id, 'reported_by' => $user->id, 'title' => 'AC', 'priority' => 'critical', 'status' => 'reported', 'due_at' => '2026-07-18 09:00:00']);
-        MaintenanceIssue::create(['room_id' => $departureRoom->id, 'reported_by' => $user->id, 'title' => 'TV', 'priority' => 'low', 'status' => 'resolved', 'due_at' => '2026-07-19 09:00:00']);
+        MaintenanceIssue::create(['room_id' => $departureRoom->id, 'reported_by' => $user->id, 'title' => 'TV', 'priority' => 'critical', 'status' => 'resolved', 'due_at' => '2026-07-17 09:00:00']);
 
         $snapshot = app(OperationsExecutiveService::class)->snapshot();
 
@@ -43,9 +46,12 @@ class OperationsExecutiveServiceTest extends TestCase
         $this->assertSame(1, $snapshot['readiness']['attention']);
         $this->assertSame(2, $snapshot['maintenance']['open']);
         $this->assertSame(1, $snapshot['maintenance']['overdue']);
+        $this->assertSame(1, $snapshot['maintenance']['critical']);
+        $this->assertSame(25.0, $snapshot['flow']['departure_balance']);
         $this->assertFalse(collect($snapshot['actions'])->contains(fn (array $action) => $action['kind'] === 'readiness' && $action['room'] === '102'));
         $this->assertTrue(collect($snapshot['actions'])->contains('kind', 'departure'));
         $this->assertTrue(collect($snapshot['actions'])->contains('kind', 'maintenance'));
+        $this->assertFalse(collect($snapshot['actions'])->contains(fn (array $action) => ($action['title'] ?? null) === 'TV'));
 
         $restricted = app(OperationsExecutiveService::class)->snapshot(false, false, false);
         $this->assertFalse(collect($restricted['actions'])->contains('kind', 'maintenance'));

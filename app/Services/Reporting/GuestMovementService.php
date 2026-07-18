@@ -82,7 +82,7 @@ final class GuestMovementService
         $payments = Payment::query()
             ->whereIn('reservation_id', $ids)
             ->notVoided()
-            ->select('reservation_id', DB::raw('SUM(amount) as paid'))
+            ->select('reservation_id', DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit', 'writeoff') THEN amount WHEN type = 'refund' THEN -ABS(amount) ELSE 0 END) as paid"))
             ->groupBy('reservation_id')
             ->pluck('paid', 'reservation_id');
 
