@@ -245,7 +245,8 @@ class ReportsController extends Controller
         [$from, $to] = $this->range($request);
 
         $arrivals = Reservation::whereBetween('check_in_date', [$from, $to])
-            ->whereIn('status', ['confirmed', 'checked_in', 'pending'])
+            ->whereIn('status', ['confirmed', 'checked_in', 'checked_out', 'pending'])
+            ->whereNull('no_show_at')
             ->with(['room:id,room_number,room_type_id', 'room.roomType:id,name', 'guest:id,first_name,last_name,phone'])
             ->get([
                 'id', 'room_id', 'guest_id', 'status',
@@ -263,7 +264,7 @@ class ReportsController extends Controller
 
         $pay = Payment::whereIn('reservation_id', $ids)
             ->notVoided()
-            ->select('reservation_id', DB::raw('SUM(amount) as paid'))
+            ->select('reservation_id', DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit', 'writeoff') THEN amount WHEN type = 'refund' THEN -ABS(amount) ELSE 0 END) as paid"))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
         $rows = $arrivals->map(function ($r) use ($folio, $pay) {
@@ -286,6 +287,7 @@ class ReportsController extends Controller
                 'adults' => (int) $r->adults,
                 'children' => (int) $r->children,
                 'channel' => Reservation::normalizeChannel($r->channel),
+                'gross' => $gross,
                 'balance' => round($gross - $paid, 2),
                 'notes' => $r->notes,
             ];
@@ -302,8 +304,8 @@ class ReportsController extends Controller
                 'count' => $rows->count(),
                 'nights' => (int) $rows->sum('nights'),
                 'pax' => (int) $rows->sum('pax'),
-                'revenue' => round((float) $arrivals->sum('total_amount'), 2),
-                'balance' => round((float) $rows->sum('balance'), 2),
+                'revenue' => round((float) $rows->sum('gross'), 2),
+                'balance' => round((float) $rows->sum(fn (array $row) => max(0, (float) $row['balance'])), 2),
             ],
             'currency' => $this->currency(),
         ]);
@@ -329,7 +331,7 @@ class ReportsController extends Controller
 
         $pay = Payment::whereIn('reservation_id', $ids)
             ->notVoided()
-            ->select('reservation_id', DB::raw('SUM(amount) as paid'))
+            ->select('reservation_id', DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit', 'writeoff') THEN amount WHEN type = 'refund' THEN -ABS(amount) ELSE 0 END) as paid"))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
         $openPos = PosOrder::whereIn('reservation_id', $ids)
@@ -358,7 +360,7 @@ class ReportsController extends Controller
             'rows' => $rows,
             'totals' => [
                 'count' => $rows->count(),
-                'outstanding' => round((float) $rows->sum('balance'), 2),
+                'outstanding' => round((float) $rows->sum(fn (array $row) => max(0, (float) $row['balance'])), 2),
             ],
             'currency' => $this->currency(),
         ]);
