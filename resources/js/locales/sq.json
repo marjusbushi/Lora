@@ -4701,6 +4701,27 @@
         "five_to_seven": "5–7 net",
         "eight_plus": "8+ net"
       }
+    },
+    "cancellationRisk": {
+      "title": "Anulime & No-Show",
+      "short": "Humbjet dhe rezervimet që kërkojnë veprim.",
+      "category": "Rezervime & kanale",
+      "cancellationRate": "Norma e anulimit",
+      "lostValue": "Vlera e humbur",
+      "noShowRate": "Norma no-show",
+      "atRisk": "Në risk",
+      "dailyLoss": "Humbja sipas datës së mbërritjes",
+      "cancelled": "Anuluar",
+      "breakdown": "Përmbledhje",
+      "totalBookings": "Rezervime",
+      "needsAction": "Kërkojnë veprim",
+      "cancelledValue": "Vlera e anuluar",
+      "byChannel": "Risku sipas kanalit",
+      "guest": "Mysafiri",
+      "room": "Dhoma",
+      "value": "Vlera",
+      "lossDetails": "Detajet e humbjeve",
+      "type": "Lloji"
     }
   },
   "financeSuppliers": {
