@@ -131,9 +131,10 @@ const groups = [
         key: 'inventory',
         name: translate('reports360.stockValuation.group'),
         category: 'operations',
+        module: 'finance',
         icon: Warehouse,
         reports: [
-            { name: translate('reports360.stockValuation.title'), desc: translate('reports360.stockValuation.short'), to: 'reports.stockValuation', icon: Warehouse },
+            { name: translate('reports360.stockValuation.title'), desc: translate('reports360.stockValuation.short'), to: 'reports.stockValuation', icon: Warehouse, module: 'finance' },
         ],
     },
 ];
