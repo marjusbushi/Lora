@@ -820,43 +820,13 @@ class ReportsController extends Controller
         ]);
     }
 
-    public function inHouse(Request $request): Response
+    public function inHouse(Request $request, GuestMovementService $report): Response
     {
-        $reservations = Reservation::with(['room.roomType', 'guest'])
-            ->where('status', 'checked_in')
-            ->get()
-            ->sortBy(fn ($r) => $r->room?->room_number ?? '')
-            ->values();
-
-        $rows = $reservations->map(function ($r) {
-            $guest = $r->guest;
-            $name = $guest
-                ? trim(($guest->first_name ?? '').' '.($guest->last_name ?? ''))
-                : '';
-
-            return [
-                'id' => $r->id,
-                'guest' => $name !== '' ? $name : '—',
-                'phone' => $guest?->phone,
-                'room' => $r->room?->room_number,
-                'room_type' => $r->room?->roomType?->name,
-                'check_in' => optional($r->check_in_date)->toDateString(),
-                'check_out' => optional($r->check_out_date)->toDateString(),
-                'nights' => $r->nights,
-                'adults' => (int) ($r->adults ?? 0),
-                'children' => (int) ($r->children ?? 0),
-                'pax' => (int) ($r->adults ?? 0) + (int) ($r->children ?? 0),
-            ];
-        })->values();
-
-        $summary = [
-            'count' => $rows->count(),
-            'pax' => $rows->sum('pax'),
-        ];
+        $analytics = $report->summary(new ReportingPeriod(today()->toDateString(), today()->toDateString()));
 
         return Inertia::render('Reports/InHouse', [
-            'rows' => $rows,
-            'summary' => $summary,
+            'rows' => $analytics['in_house'],
+            'summary' => $analytics['summary']['in_house'],
             'currency' => $this->currency(),
         ]);
     }
