@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CleaningTask;
 use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\Payment;
@@ -20,6 +19,7 @@ use App\Services\Reporting\DepartmentRevenueService;
 use App\Services\Reporting\DiscountRefundCashFlowService;
 use App\Services\Reporting\FiscalVatReportService;
 use App\Services\Reporting\HotelKpiService;
+use App\Services\Reporting\HousekeepingProductivityService;
 use App\Services\Reporting\OutstandingBalanceService;
 use App\Services\Reporting\PaymentReconciliationService;
 use App\Services\Reporting\PickupPaceService;
@@ -917,53 +917,14 @@ class ReportsController extends Controller
         ]);
     }
 
-    /** Raporti i Pastrimit: cleaning tasks in range (by created_at) — per-staff productivity + recent task list. */
-    public function housekeepingReport(Request $request): Response
+    /** Housekeeping productivity, queue time and cleaning turnaround. */
+    public function housekeepingReport(Request $request, HousekeepingProductivityService $report): Response
     {
         [$from, $to] = $this->range($request);
 
-        $tasks = CleaningTask::with(['room:id,room_number', 'assignedUser:id,name'])
-            ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
-            ->orderByDesc('created_at')
-            ->get(['id', 'room_id', 'assigned_to', 'type', 'status', 'priority', 'completed_at', 'created_at']);
-
-        $completedStatuses = ['completed', 'inspected'];
-        $pendingStatuses = ['pending', 'in_progress'];
-
-        // Per-staff productivity (group in PHP — cross-DB safe).
-        $byStaff = $tasks
-            ->groupBy(fn ($t) => $t->assignedUser?->name ?: 'Pa caktuar')
-            ->map(function ($group, $staff) use ($completedStatuses, $pendingStatuses) {
-                return [
-                    'staff' => $staff,
-                    'total' => $group->count(),
-                    'completed' => $group->whereIn('status', $completedStatuses)->count(),
-                    'pending' => $group->whereIn('status', $pendingStatuses)->count(),
-                ];
-            })
-            ->sortByDesc('total')
-            ->values();
-
-        // Recent task list (already ordered by created_at desc; cap to 50 rows).
-        $recent = $tasks->take(50)->map(fn ($t) => [
-            'id' => $t->id,
-            'room' => $t->room?->room_number ?? '—',
-            'type' => $t->type,
-            'status' => $t->status,
-            'priority' => $t->priority,
-            'assigned' => $t->assignedUser?->name ?: 'Pa caktuar',
-            'created' => $t->created_at?->toDateString(),
-        ])->values();
-
         return Inertia::render('Reports/Housekeeping', [
             'filters' => ['from' => $from, 'to' => $to],
-            'byStaff' => $byStaff,
-            'recent' => $recent,
-            'summary' => [
-                'total' => $tasks->count(),
-                'completed' => $tasks->whereIn('status', $completedStatuses)->count(),
-                'pending' => $tasks->whereIn('status', $pendingStatuses)->count(),
-            ],
+            'analytics' => $report->summary(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
         ]);
     }

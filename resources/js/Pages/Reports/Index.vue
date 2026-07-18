@@ -80,7 +80,7 @@ const groups = [
             { name: translate('admin.reports.catalog.arrivals'), desc: translate('admin.reports.catalog.arrivalsDesc'), to: 'reports.arrivalsManifest', icon: UserRoundCheck },
             { name: translate('admin.reports.catalog.departures'), desc: translate('admin.reports.catalog.departuresDesc'), to: 'reports.departuresManifest', icon: CalendarCheck },
             { name: translate('admin.reports.catalog.roomStatus'), desc: translate('admin.reports.catalog.roomStatusDesc'), to: 'reports.roomStatus', icon: BedDouble },
-            { name: translate('admin.reports.catalog.housekeeping'), desc: translate('admin.reports.catalog.housekeepingDesc'), to: 'reports.housekeepingReport', icon: Sparkles, module: 'housekeeping' },
+            { name: translate('reports360.housekeepingProductivity.title'), desc: translate('reports360.housekeepingProductivity.short'), to: 'reports.housekeepingReport', icon: Sparkles, module: 'housekeeping' },
             { name: translate('admin.reports.catalog.inHouse'), desc: translate('admin.reports.catalog.inHouseDesc'), to: 'reports.inHouse', icon: House },
         ],
     },

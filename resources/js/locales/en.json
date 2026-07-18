@@ -4702,6 +4702,31 @@
         "eight_plus": "8+ nights"
       }
     },
+    "housekeepingProductivity": {
+      "title": "Housekeeping Productivity & Turnaround",
+      "short": "Actual housekeeping time, completion and productivity.",
+      "category": "Operations",
+      "completed": "Completed",
+      "assigned": "assigned",
+      "completionRate": "Completion rate",
+      "avgClean": "Average cleaning time",
+      "avgQueue": "Average queue time",
+      "issues": "issues",
+      "daily": "Daily volume",
+      "assignedVsCompleted": "Assigned / completed",
+      "byStaff": "Completions by staff",
+      "staffPerformance": "Staff performance",
+      "staff": "Staff",
+      "recentTasks": "Recent tasks",
+      "room": "Room",
+      "type": "Type",
+      "status": "Status",
+      "queue": "Queue",
+      "cleaning": "Cleaning",
+      "date": "Date",
+      "types": { "checkout_clean": "Checkout clean", "stayover_clean": "Stayover clean", "deep_clean": "Deep clean", "inspection": "Inspection" },
+      "statuses": { "pending": "Pending", "in_progress": "In progress", "completed": "Completed", "inspected": "Inspected" }
+    },
     "departmentRevenue": {
       "title": "Revenue by Department",
       "short": "Net revenue from rooms, POS and other services.",

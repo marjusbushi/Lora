@@ -4702,6 +4702,31 @@
         "eight_plus": "8+ net"
       }
     },
+    "housekeepingProductivity": {
+      "title": "Produktiviteti & Turnaround i Pastrimit",
+      "short": "Koha, përfundimi dhe produktiviteti real i housekeeping.",
+      "category": "Operacione",
+      "completed": "Të përfunduara",
+      "assigned": "të caktuara",
+      "completionRate": "Norma e përfundimit",
+      "avgClean": "Koha mesatare e pastrimit",
+      "avgQueue": "Pritja mesatare",
+      "issues": "probleme",
+      "daily": "Volumi ditor",
+      "assignedVsCompleted": "Caktuar / përfunduar",
+      "byStaff": "Përfundime sipas stafit",
+      "staffPerformance": "Performanca e stafit",
+      "staff": "Stafi",
+      "recentTasks": "Detyrat e fundit",
+      "room": "Dhoma",
+      "type": "Lloji",
+      "status": "Statusi",
+      "queue": "Pritja",
+      "cleaning": "Pastrimi",
+      "date": "Data",
+      "types": { "checkout_clean": "Pastrim largimi", "stayover_clean": "Pastrim qëndrimi", "deep_clean": "Pastrim i thellë", "inspection": "Inspektim" },
+      "statuses": { "pending": "Në pritje", "in_progress": "Në proces", "completed": "Përfunduar", "inspected": "Inspektuar" }
+    },
     "departmentRevenue": {
       "title": "Të ardhurat sipas departamentit",
       "short": "Të ardhurat neto nga dhomat, POS dhe shërbimet e tjera.",
