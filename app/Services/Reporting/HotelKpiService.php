@@ -2,7 +2,6 @@
 
 namespace App\Services\Reporting;
 
-use App\Models\PosOrder;
 use App\Models\Reservation;
 use App\Models\Room;
 
@@ -13,6 +12,7 @@ final class HotelKpiService
         private readonly SellableInventoryCalculator $inventoryCalculator,
         private readonly KpiCalculator $kpiCalculator,
         private readonly MaintenanceDowntimeService $maintenanceDowntime,
+        private readonly DepartmentRevenueService $departmentRevenue,
     ) {}
 
     /**
@@ -31,20 +31,18 @@ final class HotelKpiService
             ->whereDate('check_out_date', '>', $period->from->toDateString())
             ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount', 'commission_amount']);
 
-        $revenueByDate = [];
         $occupiedRoomsByDate = [];
         $commissionByDate = [];
 
         foreach ($reservations as $reservation) {
-            $allocation = $this->revenueAllocator->allocate(
+            $occupiedDates = $this->revenueAllocator->allocate(
                 $reservation->check_in_date,
                 $reservation->check_out_date,
-                $reservation->total_amount,
+                1,
                 $period,
             );
 
-            foreach ($allocation as $date => $amount) {
-                $revenueByDate[$date] = ($revenueByDate[$date] ?? 0.0) + $amount;
+            foreach (array_keys($occupiedDates) as $date) {
                 if ($reservation->room_id) {
                     $occupiedRoomsByDate[$date][(string) $reservation->room_id] = true;
                 }
@@ -64,40 +62,44 @@ final class HotelKpiService
         $blocks = $this->maintenanceDowntime->forRooms($roomIds, $period);
 
         $inventory = $this->inventoryCalculator->calculate(Room::count(), $blocks, $period);
+        $departmentRevenue = $this->departmentRevenue->summary($period);
+        $departmentDaily = collect($departmentRevenue['daily'])->keyBy('date');
         $daily = [];
-        $roomRevenue = 0.0;
         $occupiedRoomNights = 0;
         $commission = 0.0;
 
         foreach ($inventory['by_date'] as $date => $dayInventory) {
-            $dayRevenue = round((float) ($revenueByDate[$date] ?? 0), 2);
+            $dayDepartment = $departmentDaily->get($date, ['rooms' => 0, 'pos' => 0, 'other' => 0, 'total' => 0]);
             $dayOccupied = count($occupiedRoomsByDate[$date] ?? []);
             $daily[$date] = [
-                'room_revenue' => $dayRevenue,
+                'room_revenue' => round((float) $dayDepartment['rooms'], 2),
+                'pos_revenue' => round((float) $dayDepartment['pos'], 2),
+                'other_revenue' => round((float) $dayDepartment['other'], 2),
+                'total_revenue' => round((float) $dayDepartment['total'], 2),
                 'occupied_room_nights' => $dayOccupied,
                 'sellable_room_nights' => $dayInventory['sellable'],
             ];
-            $roomRevenue += $dayRevenue;
             $occupiedRoomNights += $dayOccupied;
             $commission += (float) ($commissionByDate[$date] ?? 0);
         }
 
-        $posRevenue = (float) PosOrder::query()
-            ->where('status', 'completed')
-            ->whereBetween('created_at', [$period->from->startOfDay(), $period->to->endOfDay()])
-            ->sum('total_amount');
+        $roomRevenue = (float) $departmentRevenue['summary']['rooms'];
+        $posRevenue = (float) $departmentRevenue['summary']['pos'];
+        $otherRevenue = (float) $departmentRevenue['summary']['other'];
+        $totalRevenue = (float) $departmentRevenue['summary']['total'];
 
         return [
             'period' => $period->toArray(),
             'kpis' => array_merge(
                 $this->kpiCalculator->calculate(
                     $roomRevenue,
-                    $roomRevenue + $posRevenue,
+                    $totalRevenue,
                     $occupiedRoomNights,
                     $inventory['sellable_room_nights'],
                 ),
                 [
                     'pos_revenue' => round($posRevenue, 2),
+                    'other_revenue' => round($otherRevenue, 2),
                     'commission' => round($commission, 2),
                     'net_room_revenue' => round($roomRevenue - $commission, 2),
                     'reservation_count' => $reservations->count(),
@@ -116,10 +118,12 @@ final class HotelKpiService
         $changes = [];
 
         foreach (['room_revenue', 'total_revenue', 'occupancy', 'adr', 'revpar', 'trevpar'] as $key) {
-            $changes[$key] = $this->kpiCalculator->change(
-                (float) $current['kpis'][$key],
-                (float) $previousPeriod['kpis'][$key],
-            );
+            $changes[$key] = $key === 'occupancy'
+                ? round((float) $current['kpis'][$key] - (float) $previousPeriod['kpis'][$key], 1)
+                : $this->kpiCalculator->change(
+                    (float) $current['kpis'][$key],
+                    (float) $previousPeriod['kpis'][$key],
+                );
         }
 
         return [

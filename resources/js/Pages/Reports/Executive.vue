@@ -36,7 +36,7 @@ const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(g
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const trendText = (key) => changes.value[key] === null || changes.value[key] === undefined
     ? translate('reports360.noComparison')
-    : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}%`;
+    : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}${key === 'occupancy' ? ' pp' : '%'}`;
 const trend = (key) => changes.value[key] > 0 ? 'up' : changes.value[key] < 0 ? 'down' : 'flat';
 
 const kpis = computed(() => [
@@ -79,6 +79,7 @@ const alertMeta = (alert) => ({
                 <div class="flex flex-wrap gap-x-8 gap-y-2 border-t border-neutral-200 px-5 py-3 text-tiny text-neutral-500">
                     <span>{{ $t('reports360.roomRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.room_revenue) }}</b></span>
                     <span>{{ $t('reports360.posRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.pos_revenue) }}</b></span>
+                    <span>{{ $t('reports360.otherRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.other_revenue) }}</b></span>
                     <span>{{ $t('reports360.netRoomRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.net_room_revenue) }}</b></span>
                 </div>
             </Card>
@@ -97,6 +98,11 @@ const alertMeta = (alert) => ({
                         <p class="mt-2 text-tiny text-neutral-500">{{ budgetProgress }}% {{ $t('reports360.completed') }}</p>
                     </div>
                     <p v-else class="mt-3 text-tiny text-neutral-500">{{ $t('reports360.budgetMissing') }}</p>
+                    <div v-if="budget.has_budget" class="mt-3 grid grid-cols-3 gap-2 border-t border-neutral-100 pt-3 text-tiny">
+                        <span><small class="block text-neutral-500">ADR</small><b class="text-primary-900">{{ budget.adr_target ? money(budget.adr_target) : '—' }}</b></span>
+                        <span><small class="block text-neutral-500">{{ $t('reports360.occupancy') }}</small><b class="text-primary-900">{{ budget.occupancy_target ? pct(budget.occupancy_target) : '—' }}</b></span>
+                        <span><small class="block text-neutral-500">RevPAR</small><b class="text-primary-900">{{ budget.revpar_target ? money(budget.revpar_target) : '—' }}</b></span>
+                    </div>
                 </Card>
 
                 <Card>
