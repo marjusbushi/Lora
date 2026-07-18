@@ -23,7 +23,7 @@ final class PosPerformanceService
                 'revenue' => $this->kpiCalculator->change($current['summary']['total_revenue'], $previous['summary']['total_revenue']),
                 'orders' => $this->kpiCalculator->change($current['summary']['order_count'], $previous['summary']['order_count']),
                 'avg_ticket' => $this->kpiCalculator->change($current['summary']['avg_ticket'], $previous['summary']['avg_ticket']),
-                'gross_margin' => $previous['summary']['gross_margin'] > 0
+                'gross_margin' => $previous['summary']['order_count'] > 0
                     ? round($current['summary']['gross_margin'] - $previous['summary']['gross_margin'], 1)
                     : null,
             ],
@@ -64,7 +64,7 @@ final class PosPerformanceService
                 $category = $line->menuItem?->category?->name ?: 'Pa kategori';
                 $item = $line->menuItem?->name ?: 'Artikull';
                 $this->accumulate($categories, $category, $line->quantity, $itemRevenue, $itemCost);
-                $this->accumulate($items, $item, $line->quantity, $itemRevenue, $itemCost, $category);
+                $this->accumulate($items, "{$category}\0{$item}", $line->quantity, $itemRevenue, $itemCost, $category, $item);
                 $totalCost += $itemCost;
             }
         }
@@ -104,9 +104,9 @@ final class PosPerformanceService
         });
     }
 
-    private function accumulate(Collection $rows, string $key, int $quantity, float $revenue, float $cost, ?string $category = null): void
+    private function accumulate(Collection $rows, string $key, int $quantity, float $revenue, float $cost, ?string $category = null, ?string $name = null): void
     {
-        $row = $rows->get($key, ['name' => $key, 'category' => $category, 'qty' => 0, 'revenue' => 0.0, 'cost' => 0.0]);
+        $row = $rows->get($key, ['name' => $name ?? $key, 'category' => $category, 'qty' => 0, 'revenue' => 0.0, 'cost' => 0.0]);
         $row['qty'] += $quantity;
         $row['revenue'] = round($row['revenue'] + $revenue, 2);
         $row['cost'] = round($row['cost'] + $cost, 2);
