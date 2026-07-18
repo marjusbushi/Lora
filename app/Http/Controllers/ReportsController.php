@@ -6,7 +6,6 @@ use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\Payment;
 use App\Models\PosOrder;
-use App\Models\PosOrderPayment;
 use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Room;
@@ -28,13 +27,13 @@ use App\Services\Reporting\OperationsExecutiveService;
 use App\Services\Reporting\OutstandingBalanceService;
 use App\Services\Reporting\PaymentReconciliationService;
 use App\Services\Reporting\PickupPaceService;
+use App\Services\Reporting\PosControlReportService;
 use App\Services\Reporting\PosPerformanceService;
 use App\Services\Reporting\RecurringMaintenanceIssueService;
 use App\Services\Reporting\ReportingPeriod;
 use App\Services\Reporting\RoomReadinessService;
 use App\Services\Reporting\RoomTypePerformanceService;
 use App\Services\Reporting\StayRevenueAllocator;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -709,114 +708,26 @@ class ReportsController extends Controller
         ]);
     }
 
-    /** POS payment mix: completed POS orders grouped by payment method (cash, card, room_charge). */
-    public function posPaymentMix(Request $request): Response
+    /** POS controls: payment mix, refunds, voids and operator exceptions. */
+    public function posPaymentMix(Request $request, PosControlReportService $report): Response
     {
         [$from, $to] = $this->range($request);
-
-        $payments = PosOrderPayment::whereBetween('paid_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
-            ->get(['pos_order_id', 'method', 'direction', 'amount'])
-            ->map(fn ($payment) => [
-                'pos_order_id' => $payment->pos_order_id,
-                'method' => $payment->method,
-                'direction' => $payment->direction,
-                'amount' => (float) $payment->amount,
-            ]);
-
-        $legacyPayments = $this->posBusinessRange(
-            PosOrder::where('status', 'completed')
-                ->whereDoesntHave('payments', fn ($query) => $query->where('direction', 'in')),
-            $from,
-            $to,
-        )->get(['id', 'payment_method', 'total_amount'])
-            ->map(fn ($order) => [
-                'pos_order_id' => $order->id,
-                'method' => $order->payment_method ?: '?',
-                'direction' => 'in',
-                'amount' => (float) $order->total_amount,
-            ]);
-
-        $payments = $payments->concat($legacyPayments);
-
-        $labels = [
-            'cash' => 'Kesh',
-            'card' => 'Kartë',
-            'room_charge' => 'Në dhomë (folio)',
-            '?' => 'E papërcaktuar',
-        ];
-
-        $grouped = $payments->groupBy('method')
-            ->map(fn ($group, $method) => [
-                'method' => $method,
-                'count' => $group->where('direction', 'in')->pluck('pos_order_id')->unique()->count(),
-                'total' => round((float) $group->sum(fn ($payment) => $payment['direction'] === 'in' ? $payment['amount'] : -$payment['amount']), 2),
-            ]);
-
-        $grandTotal = round((float) $payments->sum(fn ($payment) => $payment['direction'] === 'in' ? $payment['amount'] : -$payment['amount']), 2);
-        $orderCount = $payments->where('direction', 'in')->pluck('pos_order_id')->unique()->count();
-
-        // Stable ordering: cash, card, room_charge, then any leftover (e.g. '?')
-        $order = ['cash', 'card', 'room_charge', '?'];
-        $rows = collect($order)
-            ->filter(fn ($m) => $grouped->has($m))
-            ->map(fn ($m) => $grouped->get($m))
-            ->merge($grouped->reject(fn ($g, $m) => in_array($m, $order, true))->values())
-            ->map(fn ($r) => [
-                'method' => $r['method'],
-                'label' => $labels[$r['method']] ?? $r['method'],
-                'count' => $r['count'],
-                'total' => $r['total'],
-                'pct' => $grandTotal > 0 ? round($r['total'] / $grandTotal * 100, 1) : 0.0,
-            ])
-            ->values();
+        $analytics = $report->withComparison(new ReportingPeriod($from, $to));
 
         return Inertia::render('Reports/PosPaymentMix', [
             'filters' => ['from' => $from, 'to' => $to],
-            'rows' => $rows,
-            'summary' => [
-                'grand_total' => $grandTotal,
-                'order_count' => $orderCount,
-            ],
+            'analytics' => $analytics,
             'currency' => $this->currency(),
         ]);
     }
 
-    public function posVoids(Request $request): Response
+    public function posVoids(Request $request, PosControlReportService $report): Response
     {
-        [$from, $to, $days] = $this->range($request);
+        [$from, $to] = $this->range($request);
 
-        $orders = PosOrder::with('createdBy')
-            ->where('status', 'cancelled')
-            ->where(function (Builder $query) use ($from, $to) {
-                $query->whereBetween('cancelled_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
-                    ->orWhere(function (Builder $legacy) use ($from, $to) {
-                        $legacy->whereNull('cancelled_at')
-                            ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"]);
-                    });
-            })
-            ->orderByRaw('COALESCE(cancelled_at, created_at) DESC')
-            ->get();
-
-        $rows = $orders->map(function ($o) {
-            return [
-                'id' => $o->id,
-                'table_number' => $o->table_number,
-                'total_amount' => (float) ($o->total_amount ?? 0),
-                'created_at' => Carbon::parse($o->cancelled_at ?? $o->created_at)->format('d/m H:i'),
-                'reason' => $o->cancellation_reason,
-                'created_by' => $o->createdBy->name ?? '—',
-            ];
-        })->values();
-
-        $summary = [
-            'count' => $rows->count(),
-            'total' => round($orders->sum('total_amount'), 2),
-        ];
-
-        return Inertia::render('Reports/PosVoids', [
+        return Inertia::render('Reports/PosPaymentMix', [
             'filters' => ['from' => $from, 'to' => $to],
-            'rows' => $rows,
-            'summary' => $summary,
+            'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
         ]);
     }

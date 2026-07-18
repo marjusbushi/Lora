@@ -123,8 +123,7 @@ const groups = [
         icon: Utensils,
         reports: [
             { name: translate('reports360.posPerformance.title'), desc: translate('reports360.posPerformance.short'), to: 'reports.posSales', icon: ShoppingBasket },
-            { name: translate('admin.reports.catalog.posPaymentMix'), desc: translate('admin.generated.k_fe6e775c6227'), to: 'reports.posPaymentMix', icon: CreditCard },
-            { name: translate('admin.reports.catalog.posVoids'), desc: translate('admin.generated.k_22c51f5e6a35'), to: 'reports.posVoids', icon: CalendarX },
+            { name: translate('reports360.posControls.title'), desc: translate('reports360.posControls.short'), to: 'reports.posPaymentMix', icon: CreditCard },
         ],
     },
 ];
