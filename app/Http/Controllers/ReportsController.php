@@ -16,6 +16,7 @@ use App\Services\Reporting\BookingBehaviorService;
 use App\Services\Reporting\BudgetTargetService;
 use App\Services\Reporting\CancellationRiskService;
 use App\Services\Reporting\ChannelPerformanceService;
+use App\Services\Reporting\FiscalVatReportService;
 use App\Services\Reporting\HotelKpiService;
 use App\Services\Reporting\OutstandingBalanceService;
 use App\Services\Reporting\PaymentReconciliationService;
@@ -23,9 +24,7 @@ use App\Services\Reporting\PickupPaceService;
 use App\Services\Reporting\ReportingPeriod;
 use App\Services\Reporting\RoomTypePerformanceService;
 use App\Services\Reporting\StayRevenueAllocator;
-use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
-use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -576,80 +575,19 @@ class ReportsController extends Controller
         ]);
     }
 
-    /** Raport TVSH: VAT-inclusive breakdown (gross/net/vat) for room + F&B revenue, with per-month rows. */
-    public function vat(Request $request, VatConfiguration $vatConfiguration): Response
+    /** TVSH & Faturat Fiskale: fiscal coverage, provider failures and VAT from actual fiscal documents. */
+    public function vat(Request $request, FiscalVatReportService $fiscalVatReport): Response
     {
         [$from, $to] = $this->range($request);
-        $roomRate = $vatConfiguration->accommodationRate();
-        $productRate = $vatConfiguration->productRate();
-
-        // Room revenue — by check_in_date (excl cancelled). Fetch dates+amounts, group by month in PHP (cross-DB safe).
-        $rooms = Reservation::whereBetween('check_in_date', [$from, $to])
-            ->where('status', '!=', 'cancelled')
-            ->get(['check_in_date', 'total_amount']);
-
-        // POS revenue — completed, non-refunded orders by business date.
-        $pos = $this->posBusinessRange(PosOrder::where('status', 'completed')->whereNull('refunded_at'), $from, $to)
-            ->get(['business_date', 'paid_at', 'created_at', 'total_amount']);
-
-        $monthly = [];
-        $add = function (string $month, string $type, float $amount) use (&$monthly) {
-            if (! isset($monthly[$month])) {
-                $monthly[$month] = ['room' => 0.0, 'product' => 0.0];
-            }
-            $monthly[$month][$type] += $amount;
-        };
-
-        foreach ($rooms as $r) {
-            $month = substr((string) ($r->check_in_date instanceof CarbonInterface ? $r->check_in_date->toDateString() : $r->check_in_date), 0, 7);
-            $add($month, 'room', (float) $r->total_amount);
-        }
-        foreach ($pos as $o) {
-            $date = $o->business_date ?? $o->paid_at ?? $o->created_at;
-            $month = substr((string) ($date instanceof CarbonInterface ? $date->toDateString() : $date), 0, 7);
-            $add($month, 'product', (float) $o->total_amount);
-        }
-
-        $roomRevenue = (float) $rooms->sum('total_amount');
-        $posRevenue = (float) $pos->sum('total_amount');
-        $gross = $roomRevenue + $posRevenue;
-        $vat = round(
-            $vatConfiguration->taxPortion($roomRevenue, $roomRate)
-            + $vatConfiguration->taxPortion($posRevenue, $productRate),
-            2,
-        );
-        $net = round($gross - $vat, 2);
-
-        ksort($monthly);
-        $rows = [];
-        foreach ($monthly as $month => $amounts) {
-            $g = round($amounts['room'] + $amounts['product'], 2);
-            $v = round(
-                $vatConfiguration->taxPortion($amounts['room'], $roomRate)
-                + $vatConfiguration->taxPortion($amounts['product'], $productRate),
-                2,
-            );
-            $rows[] = [
-                'month' => $month,
-                'gross' => $g,
-                'vat' => $v,
-                'net' => round($g - $v, 2),
-            ];
-        }
+        $analytics = $fiscalVatReport->summary(new ReportingPeriod($from, $to));
 
         return Inertia::render('Reports/Vat', [
             'filters' => ['from' => $from, 'to' => $to],
-            'summary' => [
-                'gross' => round($gross, 2),
-                'net' => $net,
-                'vat' => $vat,
-                'vat_status' => $vatConfiguration->status(),
-                'room_rate' => $roomRate,
-                'product_rate' => $productRate,
-                'room_revenue' => round($roomRevenue, 2),
-                'pos_revenue' => round($posRevenue, 2),
-            ],
-            'rows' => $rows,
+            'analytics' => $analytics,
+            'summary' => $analytics['summary'],
+            'rows' => $analytics['documents'],
+            'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
+            'canViewPos' => (bool) $request->user()?->can('view_pos_orders'),
             'currency' => $this->currency(),
         ]);
     }

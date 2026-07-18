@@ -91,8 +91,8 @@ const groups = [
         reports: [
             { name: translate('admin.generated.k_9510fd30116d'), desc: translate('admin.generated.k_958f73cee249'), to: 'reports.outstanding', icon: ReceiptText },
             { name: translate('admin.reports.catalog.zReport'), desc: translate('admin.generated.k_bf9a4f411063'), to: 'reports.shifts', icon: WalletCards },
-            { name: translate('admin.generated.k_176dd4832014'), desc: translate('admin.generated.k_d0dd07049135'), to: 'reports.payments', icon: HandCoins },
-            { name: translate('admin.reports.catalog.vat'), desc: translate('admin.generated.k_a1af7e68c583'), to: 'reports.vat', icon: Percent },
+            { name: translate('reports360.paymentReconciliation.title'), desc: translate('reports360.paymentReconciliation.short'), to: 'reports.payments', icon: HandCoins },
+            { name: translate('reports360.fiscalVat.title'), desc: translate('reports360.fiscalVat.short'), to: 'reports.vat', icon: Percent },
             { name: translate('admin.generated.k_c1b454fb69dd'), desc: translate('admin.generated.k_c2bfd6b01875'), to: 'reports.discounts', icon: CircleDollarSign },
         ],
     },
