@@ -4702,6 +4702,29 @@
         "eight_plus": "8+ nights"
       }
     },
+    "discountCashFlow": {
+      "title": "Discounts, Refunds & Cash Flow",
+      "short": "Impact of discounts, refunds and actual cash movements.",
+      "category": "Finance & cash",
+      "discounts": "Discounts",
+      "refunds": "Refunds",
+      "inflow": "Inflow",
+      "outflow": "Outflow",
+      "net": "Net cash flow",
+      "transactions": "transactions",
+      "cashFlow": "Daily cash flow",
+      "ledgerOnly": "Actual ledger movements only",
+      "discountSources": "Discounts by source",
+      "topReasons": "Top reasons",
+      "activity": "Discounts and refunds",
+      "type": "Type",
+      "reference": "Reference",
+      "reason": "Reason",
+      "date": "Date",
+      "amount": "Amount",
+      "discount": "Discount",
+      "refund": "Refund"
+    },
     "fiscalVat": {
       "title": "VAT & Fiscal Invoices",
       "short": "Fiscalization control and VAT from actual documents.",

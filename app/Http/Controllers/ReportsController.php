@@ -16,6 +16,7 @@ use App\Services\Reporting\BookingBehaviorService;
 use App\Services\Reporting\BudgetTargetService;
 use App\Services\Reporting\CancellationRiskService;
 use App\Services\Reporting\ChannelPerformanceService;
+use App\Services\Reporting\DiscountRefundCashFlowService;
 use App\Services\Reporting\FiscalVatReportService;
 use App\Services\Reporting\HotelKpiService;
 use App\Services\Reporting\OutstandingBalanceService;
@@ -1007,33 +1008,17 @@ class ReportsController extends Controller
         ]);
     }
 
-    /** Discounts given (folio_items type=discount) in a date range. */
-    public function discounts(Request $request): Response
+    /** Discounts, refunds and real ledger cash flow in a date range. */
+    public function discounts(Request $request, DiscountRefundCashFlowService $report): Response
     {
         [$from, $to] = $this->range($request);
-
-        $rows = FolioItem::where('type', 'discount')
-            ->whereBetween('charge_date', [$from, $to])
-            ->with([
-                'reservation:id,guest_id,room_id',
-                'reservation.guest:id,first_name,last_name',
-                'reservation.room:id,room_number',
-            ])
-            ->orderByDesc('charge_date')->orderByDesc('id')->get()
-            ->map(fn ($f) => [
-                'id' => $f->id,
-                'reservation_id' => $f->reservation_id,
-                'guest' => trim("{$f->reservation?->guest?->first_name} {$f->reservation?->guest?->last_name}") ?: '—',
-                'room' => $f->reservation?->room?->room_number,
-                'description' => $f->description,
-                'date' => $f->charge_date?->toDateString(),
-                'amount' => (float) $f->amount,
-            ]);
+        $analytics = $report->summary(new ReportingPeriod($from, $to));
 
         return Inertia::render('Reports/Discounts', [
             'filters' => ['from' => $from, 'to' => $to],
-            'rows' => $rows,
-            'total' => round((float) $rows->sum('amount'), 2),
+            'analytics' => $analytics,
+            'canViewReservations' => $request->user()?->can('view_reservations') ?? false,
+            'canViewPos' => $request->user()?->can('view_pos_orders') ?? false,
             'currency' => $this->currency(),
         ]);
     }

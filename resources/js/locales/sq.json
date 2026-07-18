@@ -4702,6 +4702,29 @@
         "eight_plus": "8+ net"
       }
     },
+    "discountCashFlow": {
+      "title": "Ulje, Rimbursime & Cash Flow",
+      "short": "Ndikimi i uljeve, rimbursimeve dhe lëvizjeve reale të parasë.",
+      "category": "Financë & arka",
+      "discounts": "Ulje",
+      "refunds": "Rimbursime",
+      "inflow": "Hyrje",
+      "outflow": "Dalje",
+      "net": "Cash flow neto",
+      "transactions": "transaksione",
+      "cashFlow": "Cash flow ditor",
+      "ledgerOnly": "Vetëm lëvizje reale në ledger",
+      "discountSources": "Uljet sipas burimit",
+      "topReasons": "Arsyet kryesore",
+      "activity": "Uljet dhe rimbursimet",
+      "type": "Lloji",
+      "reference": "Referenca",
+      "reason": "Arsyeja",
+      "date": "Data",
+      "amount": "Shuma",
+      "discount": "Ulje",
+      "refund": "Rimbursim"
+    },
     "fiscalVat": {
       "title": "TVSH & Faturat Fiskale",
       "short": "Kontrolli i fiskalizimit dhe TVSH nga dokumentet reale.",

@@ -93,7 +93,7 @@ const groups = [
             { name: translate('admin.reports.catalog.zReport'), desc: translate('admin.generated.k_bf9a4f411063'), to: 'reports.shifts', icon: WalletCards },
             { name: translate('reports360.paymentReconciliation.title'), desc: translate('reports360.paymentReconciliation.short'), to: 'reports.payments', icon: HandCoins },
             { name: translate('reports360.fiscalVat.title'), desc: translate('reports360.fiscalVat.short'), to: 'reports.vat', icon: Percent },
-            { name: translate('admin.generated.k_c1b454fb69dd'), desc: translate('admin.generated.k_c2bfd6b01875'), to: 'reports.discounts', icon: CircleDollarSign },
+            { name: translate('reports360.discountCashFlow.title'), desc: translate('reports360.discountCashFlow.short'), to: 'reports.discounts', icon: CircleDollarSign },
         ],
     },
     {
