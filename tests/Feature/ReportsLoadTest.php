@@ -65,6 +65,7 @@ class ReportsLoadTest extends TestCase
             'reports.posHourly' => 'Reports/PosHourly',
             'reports.posPaymentMix' => 'Reports/PosPaymentMix',
             'reports.posVoids' => 'Reports/PosPaymentMix',
+            'reports.stockValuation' => 'Reports/StockValuation',
             'reports.roomStatus' => 'Reports/RoomStatus',
             'reports.housekeepingReport' => 'Reports/Housekeeping',
             'reports.maintenanceSla' => 'Reports/MaintenanceSla',

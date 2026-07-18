@@ -5010,6 +5010,36 @@
       "cost": "Kosto e vlerësuar",
       "margin": "Marzhi"
     },
+    "stockValuation": {
+      "group": "Inventar & furnizim",
+      "title": "Vlera & Konsumi i Stokut",
+      "short": "Vlera e stokut, hyrjet, konsumi dhe artikujt në risk.",
+      "category": "POS & inventari",
+      "stockValue": "Vlera e stokut",
+      "consumedValue": "Kosto e konsumuar",
+      "receivedValue": "Hyrje në stok",
+      "atRisk": "Artikuj në risk",
+      "negative": "me stok negativ",
+      "byWarehouse": "Vlera sipas magazinës",
+      "topConsumption": "Konsumi kryesor",
+      "itemDetail": "Gjendja sipas artikullit",
+      "items": "artikuj",
+      "item": "Artikulli",
+      "opening": "Hapja",
+      "received": "Hyrje",
+      "consumed": "Konsum",
+      "ending": "Gjendja",
+      "unitCost": "Kosto/njësi",
+      "value": "Vlera",
+      "cover": "Mbulimi",
+      "days": "ditë",
+      "status": {
+        "healthy": "Në rregull",
+        "low": "Stok i ulët",
+        "out": "Pa stok",
+        "negative": "Stok negativ"
+      }
+    },
     "cancellationRisk": {
       "title": "Anulime & No-Show",
       "short": "Humbjet dhe rezervimet që kërkojnë veprim.",

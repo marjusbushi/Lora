@@ -34,6 +34,7 @@ use App\Services\Reporting\ReportingPeriod;
 use App\Services\Reporting\RoomReadinessService;
 use App\Services\Reporting\RoomTypePerformanceService;
 use App\Services\Reporting\StayRevenueAllocator;
+use App\Services\Reporting\StockValuationReportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -726,6 +727,17 @@ class ReportsController extends Controller
         [$from, $to] = $this->range($request);
 
         return Inertia::render('Reports/PosPaymentMix', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
+            'currency' => $this->currency(),
+        ]);
+    }
+
+    public function stockValuation(Request $request, StockValuationReportService $report): Response
+    {
+        [$from, $to] = $this->range($request);
+
+        return Inertia::render('Reports/StockValuation', [
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),

@@ -5010,6 +5010,36 @@
       "cost": "Est. cost",
       "margin": "Margin"
     },
+    "stockValuation": {
+      "group": "Inventory & supply",
+      "title": "Stock Value & Consumption",
+      "short": "Stock value, receipts, consumption and items at risk.",
+      "category": "POS & inventory",
+      "stockValue": "Stock value",
+      "consumedValue": "Consumed cost",
+      "receivedValue": "Stock received",
+      "atRisk": "Items at risk",
+      "negative": "with negative stock",
+      "byWarehouse": "Value by warehouse",
+      "topConsumption": "Top consumption",
+      "itemDetail": "Stock by item",
+      "items": "items",
+      "item": "Item",
+      "opening": "Opening",
+      "received": "Received",
+      "consumed": "Consumed",
+      "ending": "Ending",
+      "unitCost": "Unit cost",
+      "value": "Value",
+      "cover": "Coverage",
+      "days": "days",
+      "status": {
+        "healthy": "Healthy",
+        "low": "Low stock",
+        "out": "Out of stock",
+        "negative": "Negative stock"
+      }
+    },
     "cancellationRisk": {
       "title": "Cancellations & No-Show",
       "short": "Losses and reservations requiring action.",

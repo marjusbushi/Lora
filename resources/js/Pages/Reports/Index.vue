@@ -32,6 +32,7 @@ import {
     Users,
     Utensils,
     WalletCards,
+    Warehouse,
     Wrench,
 } from 'lucide-vue-next';
 
@@ -124,6 +125,15 @@ const groups = [
         reports: [
             { name: translate('reports360.posPerformance.title'), desc: translate('reports360.posPerformance.short'), to: 'reports.posSales', icon: ShoppingBasket },
             { name: translate('reports360.posControls.title'), desc: translate('reports360.posControls.short'), to: 'reports.posPaymentMix', icon: CreditCard },
+        ],
+    },
+    {
+        key: 'inventory',
+        name: translate('reports360.stockValuation.group'),
+        category: 'operations',
+        icon: Warehouse,
+        reports: [
+            { name: translate('reports360.stockValuation.title'), desc: translate('reports360.stockValuation.short'), to: 'reports.stockValuation', icon: Warehouse },
         ],
     },
 ];
