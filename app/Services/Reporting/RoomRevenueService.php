@@ -5,6 +5,7 @@ namespace App\Services\Reporting;
 use App\Models\FolioItem;
 use App\Models\Reservation;
 use Carbon\CarbonPeriod;
+use Illuminate\Support\Collection;
 
 final class RoomRevenueService
 {
@@ -18,7 +19,10 @@ final class RoomRevenueService
         $byRoomType = [];
 
         $reservations = Reservation::query()
-            ->with('room:id,room_type_id')
+            ->with([
+                'room:id,room_type_id',
+                'folioItems:id,reservation_id,pos_order_id,type,amount',
+            ])
             ->where('status', '!=', 'cancelled')
             ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
@@ -27,40 +31,17 @@ final class RoomRevenueService
 
         foreach ($reservations as $reservation) {
             $typeId = $reservation->room?->room_type_id;
+            $netRoomRevenue = round((float) $reservation->total_amount * $this->discountFactor($reservation), 2);
             foreach ($this->allocator->allocate(
                 $reservation->check_in_date,
                 $reservation->check_out_date,
-                $reservation->total_amount,
+                $netRoomRevenue,
                 $period,
             ) as $date => $amount) {
                 $daily->put($date, round((float) $daily->get($date, 0) + $amount, 2));
                 if ($typeId) {
                     $this->addToRoomType($byRoomType, (int) $typeId, $date, $amount);
                 }
-            }
-        }
-
-        $discounts = FolioItem::query()
-            ->with('reservation.room:id,room_type_id')
-            ->where('type', 'discount')
-            ->whereNull('pos_order_id')
-            ->whereHas('reservation', fn ($query) => $query
-                ->where('status', '!=', 'cancelled')
-                ->whereNull('no_show_at'))
-            ->whereBetween('charge_date', [$period->from->toDateString(), $period->to->toDateString()])
-            ->get(['id', 'reservation_id', 'amount', 'charge_date']);
-
-        foreach ($discounts as $discount) {
-            $date = $discount->charge_date?->toDateString();
-            if (! $date || ! $daily->has($date)) {
-                continue;
-            }
-
-            $amount = -abs((float) $discount->amount);
-            $daily->put($date, round((float) $daily->get($date) + $amount, 2));
-            $typeId = $discount->reservation?->room?->room_type_id;
-            if ($typeId) {
-                $this->addToRoomType($byRoomType, (int) $typeId, $date, $amount);
             }
         }
 
@@ -74,6 +55,38 @@ final class RoomRevenueService
             'daily' => $daily->all(),
             'by_room_type' => $byRoomType,
         ];
+    }
+
+    /** @param array<int> $reservationIds @return array<int,float> */
+    public function discountFactors(array $reservationIds): array
+    {
+        if ($reservationIds === []) {
+            return [];
+        }
+
+        return Reservation::query()
+            ->with('folioItems:id,reservation_id,pos_order_id,type,amount')
+            ->whereIn('id', $reservationIds)
+            ->get(['id', 'total_amount'])
+            ->mapWithKeys(fn (Reservation $reservation) => [
+                $reservation->id => $this->discountFactor($reservation),
+            ])->all();
+    }
+
+    private function discountFactor(Reservation $reservation): float
+    {
+        /** @var Collection<int,FolioItem> $items */
+        $items = $reservation->folioItems;
+        $charges = (float) $reservation->total_amount
+            + (float) $items->whereNotIn('type', ['discount', 'room'])->sum('amount');
+        $discounts = (float) $items
+            ->where('type', 'discount')
+            ->whereNull('pos_order_id')
+            ->sum('amount');
+
+        return $charges > 0
+            ? max(0, min(1, ($charges - $discounts) / $charges))
+            : 1.0;
     }
 
     /** @param array<int,array{total:float,daily:array<string,float>}> $byRoomType */

@@ -46,6 +46,13 @@ class RoomTypePerformanceServiceTest extends TestCase
             'description' => 'Stay discount',
             'amount' => 20,
             'type' => 'discount',
+            'charge_date' => '2026-07-05',
+        ]);
+        FolioItem::create([
+            'reservation_id' => $reservation->id,
+            'description' => 'Spa',
+            'amount' => 30,
+            'type' => 'extra',
             'charge_date' => '2026-07-01',
         ]);
 
@@ -73,16 +80,16 @@ class RoomTypePerformanceServiceTest extends TestCase
         $standardRow = collect($summary['rows'])->firstWhere('type_id', $standard->id);
         $deluxeRow = collect($summary['rows'])->firstWhere('type_id', $deluxe->id);
 
-        $this->assertSame(180.0, $standardRow['room_revenue']);
+        $this->assertSame(187.88, $standardRow['room_revenue']);
         $this->assertSame(2, $standardRow['occupied_room_nights']);
         $this->assertSame(2, $standardRow['sellable_room_nights']);
         $this->assertSame(100.0, $standardRow['occupancy']);
-        $this->assertSame(90.0, $standardRow['adr']);
-        $this->assertSame(90.0, $standardRow['revpar']);
+        $this->assertSame(93.94, $standardRow['adr']);
+        $this->assertSame(93.94, $standardRow['revpar']);
 
         $this->assertSame(0, $deluxeRow['sellable_room_nights']);
         $this->assertSame(2, $deluxeRow['blocked_room_nights']);
-        $this->assertSame(180.0, $summary['kpis']['room_revenue']);
+        $this->assertSame(187.88, $summary['kpis']['room_revenue']);
         $this->assertSame(100.0, $summary['kpis']['occupancy']);
         $this->assertSame(
             app(DepartmentRevenueService::class)->summary(new ReportingPeriod('2026-07-01', '2026-07-02'))['summary']['rooms'],

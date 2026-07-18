@@ -43,17 +43,7 @@ final class DepartmentRevenueService
             ->whereHas('reservation', fn ($query) => $query->where('status', '!=', 'cancelled')->whereNull('no_show_at'))
             ->whereBetween('charge_date', [$period->from->toDateString(), $period->to->toDateString()])
             ->whereNotIn('type', ['room', 'discount'])
-            ->get(['id', 'type', 'amount', 'charge_date']);
-        foreach ($folioRows as $item) {
-            $date = $item->charge_date?->toDateString();
-            if (! $date || ! isset($daily[$date])) {
-                continue;
-            }
-            $amount = round((float) $item->amount, 2);
-            $row = $daily->get($date);
-            $row['other'] = round($row['other'] + $amount, 2);
-            $daily->put($date, $row);
-        }
+            ->get(['id', 'reservation_id', 'type', 'amount', 'charge_date']);
 
         $orders = PosOrder::query()
             ->where('status', 'completed')
@@ -63,24 +53,47 @@ final class DepartmentRevenueService
                     ->orWhere(fn ($legacy) => $legacy->whereNull('business_date')->whereNull('paid_at')->whereBetween('created_at', [$period->from->startOfDay(), $period->to->endOfDay()]));
             })
             ->get(['id', 'total_amount', 'business_date', 'paid_at', 'created_at']);
-        foreach ($orders as $order) {
-            $date = ($order->business_date ?? $order->paid_at ?? $order->created_at)?->toDateString();
-            if ($date && isset($daily[$date])) {
-                $row = $daily->get($date);
-                $row['pos'] = round($row['pos'] + (float) $order->total_amount, 2);
-                $daily->put($date, $row);
-            }
-        }
-
         $refunds = PosOrder::query()
             ->whereNotNull('refunded_at')
             ->whereBetween('refunded_at', [$period->from->startOfDay(), $period->to->endOfDay()])
             ->get(['id', 'total_amount', 'refunded_at']);
+        $linkedPosReservations = FolioItem::query()
+            ->whereIn('pos_order_id', $orders->pluck('id')->merge($refunds->pluck('id'))->unique())
+            ->whereNotNull('reservation_id')
+            ->pluck('reservation_id', 'pos_order_id');
+        $factors = $this->roomRevenue->discountFactors(
+            $folioRows->pluck('reservation_id')->merge($linkedPosReservations->values())->unique()->values()->all(),
+        );
+
+        foreach ($folioRows as $item) {
+            $date = $item->charge_date?->toDateString();
+            if (! $date || ! isset($daily[$date])) {
+                continue;
+            }
+            $amount = round((float) $item->amount * ($factors[$item->reservation_id] ?? 1), 2);
+            $row = $daily->get($date);
+            $row['other'] = round($row['other'] + $amount, 2);
+            $daily->put($date, $row);
+        }
+
+        foreach ($orders as $order) {
+            $date = ($order->business_date ?? $order->paid_at ?? $order->created_at)?->toDateString();
+            if ($date && isset($daily[$date])) {
+                $row = $daily->get($date);
+                $reservationId = $linkedPosReservations->get($order->id);
+                $amount = (float) $order->total_amount * ($factors[$reservationId] ?? 1);
+                $row['pos'] = round($row['pos'] + $amount, 2);
+                $daily->put($date, $row);
+            }
+        }
+
         foreach ($refunds as $order) {
             $date = $order->refunded_at?->toDateString();
             if ($date && isset($daily[$date])) {
                 $row = $daily->get($date);
-                $row['pos'] = round($row['pos'] - (float) $order->total_amount, 2);
+                $reservationId = $linkedPosReservations->get($order->id);
+                $amount = (float) $order->total_amount * ($factors[$reservationId] ?? 1);
+                $row['pos'] = round($row['pos'] - $amount, 2);
                 $daily->put($date, $row);
             }
         }

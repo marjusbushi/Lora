@@ -95,15 +95,15 @@ class HotelKpiServiceTest extends TestCase
 
         $summary = app(HotelKpiService::class)->summary(new ReportingPeriod('2026-07-01', '2026-07-02'));
 
-        $this->assertSame(190.0, $summary['kpis']['room_revenue']);
+        $this->assertSame(191.3, $summary['kpis']['room_revenue']);
         $this->assertSame(30.0, $summary['kpis']['pos_revenue']);
-        $this->assertSame(30.0, $summary['kpis']['other_revenue']);
+        $this->assertSame(28.7, $summary['kpis']['other_revenue']);
         $this->assertSame(250.0, $summary['kpis']['total_revenue']);
-        $this->assertSame(95.0, $summary['kpis']['adr']);
-        $this->assertSame(95.0, $summary['kpis']['revpar']);
+        $this->assertSame(95.65, $summary['kpis']['adr']);
+        $this->assertSame(95.65, $summary['kpis']['revpar']);
         $this->assertSame(125.0, $summary['kpis']['trevpar']);
-        $this->assertSame(170.0, $summary['daily']['2026-07-01']['total_revenue']);
-        $this->assertSame(80.0, $summary['daily']['2026-07-02']['total_revenue']);
+        $this->assertSame(174.35, $summary['daily']['2026-07-01']['total_revenue']);
+        $this->assertSame(75.65, $summary['daily']['2026-07-02']['total_revenue']);
     }
 
     public function test_occupancy_comparison_is_reported_in_percentage_points(): void

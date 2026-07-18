@@ -57,11 +57,11 @@ class DepartmentRevenueServiceTest extends TestCase
 
         $report = app(DepartmentRevenueService::class)->withComparison(new ReportingPeriod('2026-07-01', '2026-07-04'));
 
-        $this->assertSame(280.0, $report['current']['summary']['rooms']);
+        $this->assertSame(284.21, $report['current']['summary']['rooms']);
         $this->assertSame(40.0, $report['current']['summary']['pos']);
-        $this->assertSame(30.0, $report['current']['summary']['other']);
-        $this->assertSame(350.0, $report['current']['summary']['total']);
-        $this->assertSame(80.0, collect($report['current']['departments'])->firstWhere('department', 'rooms')['share']);
+        $this->assertSame(28.42, $report['current']['summary']['other']);
+        $this->assertSame(352.63, $report['current']['summary']['total']);
+        $this->assertSame(80.6, collect($report['current']['departments'])->firstWhere('department', 'rooms')['share']);
         $this->assertNull($report['changes']['total']);
     }
 }
