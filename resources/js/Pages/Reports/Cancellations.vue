@@ -22,6 +22,7 @@ const daily = computed(() => current.value.daily || []);
 const channels = computed(() => current.value.channels || []);
 const losses = computed(() => current.value.losses || []);
 const atRisk = computed(() => current.value.at_risk || []);
+const riskLevels = computed(() => current.value.risk_levels || {});
 const changes = computed(() => props.analytics.changes || {});
 const maxDailyLoss = computed(() => Math.max(1, ...daily.value.flatMap((day) => [day.cancelled_value || 0, day.no_show_value || 0])));
 
@@ -35,6 +36,7 @@ const trend = (value) => value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
 const changeText = (key, suffix = '%') => changes.value[key] == null
     ? translate('reports360.noComparison')
     : `${changes.value[key] > 0 ? '+' : ''}${num(changes.value[key])}${suffix}`;
+const riskVariant = (level) => ({ critical: 'error', high: 'warning', medium: 'info' }[level] || 'neutral');
 
 const kpis = computed(() => [
     {
@@ -127,6 +129,16 @@ const kpis = computed(() => [
                         <span class="text-body-sm text-neutral-600">{{ $t('reports360.cancellationRisk.needsAction') }}</span>
                         <Badge :variant="summary.at_risk_count ? 'error' : 'success'">{{ summary.at_risk_count || 0 }}</Badge>
                     </div>
+                    <div class="grid grid-cols-2 gap-3 px-5 py-3">
+                        <div class="rounded-lg bg-error-50 px-3 py-2">
+                            <span class="block text-tiny text-error-700">{{ $t('reports360.cancellationRisk.critical') }}</span>
+                            <b class="text-body text-error-800">{{ riskLevels.critical || 0 }}</b>
+                        </div>
+                        <div class="rounded-lg bg-warning-50 px-3 py-2">
+                            <span class="block text-tiny text-warning-700">{{ $t('reports360.cancellationRisk.high') }}</span>
+                            <b class="text-body text-warning-800">{{ riskLevels.high || 0 }}</b>
+                        </div>
+                    </div>
                 </div>
                 <div class="border-t border-neutral-200 px-5 py-3 text-tiny text-neutral-500">
                     {{ $t('reports360.cancellationRisk.cancelledValue') }} <b class="ml-1 text-primary-900">{{ money(summary.cancelled_value) }}</b>
@@ -189,6 +201,8 @@ const kpis = computed(() => [
                             <th class="px-4 py-3">{{ $t('reports360.cancellationRisk.room') }}</th>
                             <th class="px-4 py-3">Check-in</th>
                             <th class="px-4 py-3">{{ $t('reports360.channel') }}</th>
+                            <th class="px-4 py-3">{{ $t('reports360.cancellationRisk.riskScore') }}</th>
+                            <th class="px-4 py-3">{{ $t('reports360.cancellationRisk.action') }}</th>
                             <th class="px-5 py-3 text-right">{{ $t('reports360.cancellationRisk.value') }}</th>
                         </tr>
                     </thead>
@@ -201,7 +215,15 @@ const kpis = computed(() => [
                             <td class="px-4 py-3 text-body-sm text-neutral-600">{{ row.room || '—' }}</td>
                             <td class="px-4 py-3 text-body-sm text-neutral-600">{{ row.check_in }}</td>
                             <td class="px-4 py-3 text-body-sm text-neutral-600">{{ channelMeta(row.channel).label }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm font-semibold text-error-700">{{ money(row.value) }}</td>
+                            <td class="px-4 py-3">
+                                <Badge :variant="riskVariant(row.risk_level)">{{ row.risk_score }} · {{ $t(`reports360.cancellationRisk.levels.${row.risk_level}`) }}</Badge>
+                                <div class="mt-1 max-w-56 text-tiny text-neutral-500">{{ row.risk_drivers.map((driver) => $t(`reports360.cancellationRisk.drivers.${driver}`)).join(' · ') }}</div>
+                            </td>
+                            <td class="px-4 py-3 text-body-sm font-medium text-primary-900">{{ $t(`reports360.cancellationRisk.actions.${row.recommended_action}`) }}</td>
+                            <td class="px-5 py-3 text-right">
+                                <b class="block text-body-sm text-error-700">{{ money(row.value) }}</b>
+                                <span v-if="row.balance > 0" class="text-tiny text-neutral-500">{{ $t('reports360.cancellationRisk.balance') }} {{ money(row.balance) }}</span>
+                            </td>
                         </tr>
                     </tbody>
                 </table>

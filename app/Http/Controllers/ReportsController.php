@@ -483,7 +483,7 @@ class ReportsController extends Controller
         ]);
     }
 
-    /** Anulime & No-Show: cancellation rate + value, plus unresolved past-arrival candidates. */
+    /** Anulime & No-Show: realized losses plus a deterministic operational risk score. */
     public function cancellations(Request $request, CancellationRiskService $cancellationRisk): Response
     {
         $request->validate([
@@ -506,6 +506,9 @@ class ReportsController extends Controller
         $period = new ReportingPeriod($from, $to);
         $analytics = $cancellationRisk->withComparisons($period);
         $current = $analytics['current'];
+        $overdueArrivals = collect($current['at_risk'])
+            ->filter(fn (array $row) => in_array('arrival_overdue', $row['risk_drivers'], true))
+            ->values();
 
         // Preserve the original report contract used by dashboard action links.
         // In that contract, "no show" means unresolved past-arrival candidates.
@@ -514,8 +517,8 @@ class ReportsController extends Controller
             'cancelled_value' => $current['summary']['cancelled_value'],
             'total_count' => $current['summary']['total_count'],
             'cancellation_rate' => $current['summary']['cancellation_rate'],
-            'no_show_count' => $current['summary']['at_risk_count'],
-            'no_show_value' => $current['summary']['at_risk_value'],
+            'no_show_count' => $overdueArrivals->count(),
+            'no_show_value' => round((float) $overdueArrivals->sum('value'), 2),
         ];
 
         return Inertia::render('Reports/Cancellations', [
@@ -523,7 +526,7 @@ class ReportsController extends Controller
             'analytics' => $analytics,
             'summary' => $legacySummary,
             'cancelled' => collect($current['losses'])->where('type', 'cancelled')->values(),
-            'noShows' => $current['at_risk'],
+            'noShows' => $overdueArrivals,
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'currency' => $this->currency(),
         ]);

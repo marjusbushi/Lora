@@ -4989,7 +4989,33 @@
       "room": "Dhoma",
       "value": "Vlera",
       "lossDetails": "Detajet e humbjeve",
-      "type": "Lloji"
+      "type": "Lloji",
+      "critical": "Kritik",
+      "high": "I lartë",
+      "riskScore": "Risku",
+      "action": "Veprimi",
+      "balance": "Bilanci",
+      "levels": {
+        "critical": "Kritik",
+        "high": "I lartë",
+        "medium": "Mesatar",
+        "low": "I ulët"
+      },
+      "drivers": {
+        "arrival_overdue": "Mbërritja ka kaluar",
+        "pending_confirmation": "Në pritje të konfirmimit",
+        "unpaid": "Pa pagesë",
+        "partial_payment": "Pagesë e pjesshme",
+        "high_risk_channel": "Normë e lartë incidentesh në kanal",
+        "elevated_channel_risk": "Risk i rritur nga kanali",
+        "long_lead_time": "Rezervim shumë herët",
+        "arrival_soon": "Mbërritje brenda 3 ditësh"
+      },
+      "actions": {
+        "resolve_arrival": "Zgjidh statusin e mbërritjes",
+        "secure_payment": "Siguro pagesën",
+        "reconfirm": "Rikonfirmo rezervimin"
+      }
     },
     "outstandingAging": {
       "title": "Bilance të papaguara & Aging",

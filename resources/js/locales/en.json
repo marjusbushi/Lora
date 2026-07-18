@@ -4989,7 +4989,33 @@
       "room": "Room",
       "value": "Value",
       "lossDetails": "Loss details",
-      "type": "Type"
+      "type": "Type",
+      "critical": "Critical",
+      "high": "High",
+      "riskScore": "Risk",
+      "action": "Next action",
+      "balance": "Balance",
+      "levels": {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "drivers": {
+        "arrival_overdue": "Arrival overdue",
+        "pending_confirmation": "Pending confirmation",
+        "unpaid": "Unpaid",
+        "partial_payment": "Partial payment",
+        "high_risk_channel": "High channel incident rate",
+        "elevated_channel_risk": "Elevated channel risk",
+        "long_lead_time": "Long lead time",
+        "arrival_soon": "Arrival within 3 days"
+      },
+      "actions": {
+        "resolve_arrival": "Resolve arrival status",
+        "secure_payment": "Secure payment",
+        "reconfirm": "Reconfirm booking"
+      }
     },
     "outstandingAging": {
       "title": "Outstanding balances & Aging",
