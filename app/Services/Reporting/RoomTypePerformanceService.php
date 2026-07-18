@@ -8,7 +8,7 @@ use App\Models\RoomType;
 final class RoomTypePerformanceService
 {
     public function __construct(
-        private readonly StayRevenueAllocator $revenueAllocator,
+        private readonly RoomRevenueService $roomRevenue,
         private readonly SellableInventoryCalculator $inventoryCalculator,
         private readonly KpiCalculator $kpiCalculator,
         private readonly MaintenanceDowntimeService $maintenanceDowntime,
@@ -33,25 +33,25 @@ final class RoomTypePerformanceService
             ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
             ->whereDate('check_out_date', '>', $period->from->toDateString())
-            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount']);
+            ->get(['id', 'room_id', 'check_in_date', 'check_out_date']);
 
         $blocks = collect($this->maintenanceDowntime->forRooms($roomIds, $period));
+        $roomRevenue = $this->roomRevenue->summary($period);
 
-        $rows = $types->map(function (RoomType $type) use ($reservations, $blocks, $period) {
+        $rows = $types->map(function (RoomType $type) use ($reservations, $blocks, $period, $roomRevenue) {
             $typeRoomIds = $type->rooms->pluck('id')->map(fn ($id) => (int) $id);
             $typeReservations = $reservations->whereIn('room_id', $typeRoomIds);
-            $revenueByDate = [];
+            $revenueByDate = $roomRevenue['by_room_type'][$type->id]['daily'] ?? [];
             $occupiedByDate = [];
 
             foreach ($typeReservations as $reservation) {
-                foreach ($this->revenueAllocator->allocate(
-                    $reservation->check_in_date,
-                    $reservation->check_out_date,
-                    $reservation->total_amount,
-                    $period,
-                ) as $date => $amount) {
-                    $revenueByDate[$date] = ($revenueByDate[$date] ?? 0.0) + $amount;
-                    $occupiedByDate[$date][(string) $reservation->room_id] = true;
+                for ($date = $reservation->check_in_date->toImmutable(); $date->lt($reservation->check_out_date); $date = $date->addDay()) {
+                    if (! $period->contains($date)) {
+                        continue;
+                    }
+
+                    $key = $date->toDateString();
+                    $occupiedByDate[$key][(string) $reservation->room_id] = true;
                 }
             }
 
@@ -120,10 +120,12 @@ final class RoomTypePerformanceService
         $changes = [];
 
         foreach (['room_revenue', 'occupancy', 'adr', 'revpar'] as $key) {
-            $changes[$key] = $this->kpiCalculator->change(
-                (float) $current['kpis'][$key],
-                (float) $previousPeriod['kpis'][$key],
-            );
+            $changes[$key] = $key === 'occupancy'
+                ? round((float) $current['kpis'][$key] - (float) $previousPeriod['kpis'][$key], 1)
+                : $this->kpiCalculator->change(
+                    (float) $current['kpis'][$key],
+                    (float) $previousPeriod['kpis'][$key],
+                );
         }
 
         return [

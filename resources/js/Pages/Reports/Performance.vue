@@ -30,7 +30,7 @@ const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(g
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const trendText = (key) => changes.value[key] === null || changes.value[key] === undefined
     ? translate('reports360.noComparison')
-    : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}%`;
+    : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}${key === 'occupancy' ? ' pp' : '%'}`;
 const trend = (key) => changes.value[key] > 0 ? 'up' : changes.value[key] < 0 ? 'down' : 'flat';
 const occupancyDelta = (row) => {
     const previous = previousRows.value.get(row.type_id)?.occupancy;
