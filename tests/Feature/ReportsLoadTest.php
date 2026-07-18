@@ -80,6 +80,15 @@ class ReportsLoadTest extends TestCase
             ->assertRedirect(route('reports.channels'))
             ->assertSessionHasErrors('to');
 
+        $this->actingAs($admin)->from(route('reports.bookingBehavior'))
+            ->get(route('reports.bookingBehavior', ['from' => '2026-07-31', 'to' => '2026-07-01']))
+            ->assertRedirect(route('reports.bookingBehavior'))
+            ->assertSessionHasErrors('to');
+
+        $this->actingAs($admin)
+            ->get(route('reports.bookingBehavior', ['to' => today()->toDateString()]))
+            ->assertOk();
+
         $this->actingAs($admin)->from(route('reports.pace'))
             ->get(route('reports.pace', ['from' => today()->subDay()->toDateString(), 'to' => today()->toDateString()]))
             ->assertRedirect(route('reports.pace'))

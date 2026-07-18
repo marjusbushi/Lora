@@ -3584,7 +3584,7 @@
         "pace": "Tempo & Pickup",
         "channels": "Direct vs OTA",
         "cancellations": "Anulime & No-Show",
-        "bookingBehavior": "Sjellja e rezervimit",
+        "bookingBehavior": "Lead Time & Qëndrimi",
         "arrivals": "Manifesti i mbërritjeve",
         "arrivalsDesc": "Mysafirët që priten të mbërrijnë.",
         "departures": "Manifesti i nisjeve",
@@ -4668,6 +4668,39 @@
       "byChannel": "Performanca sipas kanalit",
       "share": "Pesha",
       "bookings": "Rezervime"
+    },
+    "bookingBehavior": {
+      "title": "Lead Time & Qëndrimi",
+      "short": "Koha e rezervimit dhe kohëzgjatja e qëndrimit.",
+      "category": "Rezervime & kanale",
+      "bookings": "Rezervime",
+      "avgLead": "Lead time mesatar",
+      "medianLead": "Lead time median",
+      "avgStay": "Qëndrimi mesatar",
+      "sameDayShare": "Rezervime same-day",
+      "days": "ditë",
+      "bookingWindow": "Dritarja e rezervimit",
+      "stayLength": "Kohëzgjatja e qëndrimit",
+      "byChannel": "Sjellja sipas kanalit",
+      "share": "Pesha",
+      "longStay": "5+ net",
+      "leadBuckets": {
+        "same_day": "Same-day",
+        "one_to_three": "1–3 ditë",
+        "four_to_seven": "4–7 ditë",
+        "eight_to_fourteen": "8–14 ditë",
+        "fifteen_to_thirty": "15–30 ditë",
+        "thirty_one_to_sixty": "31–60 ditë",
+        "sixty_one_plus": "61+ ditë"
+      },
+      "losBuckets": {
+        "zero_nights": "0 net / day-use",
+        "one_night": "1 natë",
+        "two_nights": "2 net",
+        "three_to_four": "3–4 net",
+        "five_to_seven": "5–7 net",
+        "eight_plus": "8+ net"
+      }
     }
   },
   "financeSuppliers": {

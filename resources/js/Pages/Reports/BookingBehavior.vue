@@ -1,74 +1,155 @@
 <script setup>
+import { computed } from 'vue';
 import { getIntlLocale, translate } from '@/i18n';
-import ReportShell from '@/Components/UI/ReportShell.vue';
-import Card from '@/Components/UI/Card.vue';
-import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import { channelMeta } from '@/channels';
-import { CalendarClock, CalendarDays, Radio, ReceiptText } from 'lucide-vue-next';
+import ReportShell from '@/Components/UI/ReportShell.vue';
+import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import ReportBarList from '@/Components/UI/ReportBarList.vue';
+import Card from '@/Components/UI/Card.vue';
+import { CalendarClock, CalendarDays, Percent, ReceiptText } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
-    rows: { type: Array, default: () => [] },
-    summary: { type: Object, default: () => ({}) },
-    currency: { type: String, default: '€' },
+    analytics: { type: Object, default: () => ({}) },
 });
 
-const num = (v, d = 1) =>
-    Number(v ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: d, maximumFractionDigits: d });
+const current = computed(() => props.analytics.current || {});
+const summary = computed(() => current.value.summary || {});
+const channels = computed(() => current.value.channels || []);
+const changes = computed(() => props.analytics.changes || {});
 
-const kpis = [
-    { label: translate('admin.generated.k_ac37d93af823'), value: () => Number(props.summary.count ?? 0).toLocaleString(getIntlLocale()), tone: 'accent', icon: ReceiptText },
-    { label: translate('admin.generated.k_11a7c4b7e29a'), value: () => translate('admin.generated.k_33a75341c2fc', { p0: num(props.summary.avg_lead) }), tone: 'info', icon: CalendarClock, detail: translate('admin.generated.k_a9d37ddb00c3') },
-    { label: translate('admin.generated.k_bdb3594cf5ce'), value: () => translate('admin.generated.k_a29cd28bca85', { p0: num(props.summary.avg_los) }), tone: 'success', icon: CalendarDays },
-    { label: translate('admin.generated.k_b9a24a6bf88d'), value: () => props.rows.length, tone: 'neutral', icon: Radio },
-];
+const num = (value, digits = 1) => Number(value ?? 0).toLocaleString(getIntlLocale(), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+});
+const pct = (value) => `${num(value)}%`;
+const trend = (value) => value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
+const changeText = (key, suffix) => changes.value[key] == null
+    ? translate('reports360.noComparison')
+    : `${changes.value[key] > 0 ? '+' : ''}${num(changes.value[key])}${suffix}`;
+
+const leadBuckets = computed(() => (current.value.lead_buckets || []).map((row) => ({
+    key: row.key,
+    label: translate(`reports360.bookingBehavior.leadBuckets.${row.key}`),
+    value: row.count,
+    display: `${row.count} · ${pct(row.share)}`,
+    barClass: 'bg-info-500',
+})));
+const losBuckets = computed(() => (current.value.los_buckets || []).map((row) => ({
+    key: row.key,
+    label: translate(`reports360.bookingBehavior.losBuckets.${row.key}`),
+    value: row.count,
+    display: `${row.count} · ${pct(row.share)}`,
+    barClass: 'bg-accent-500',
+})));
+
+const kpis = computed(() => [
+    {
+        label: translate('reports360.bookingBehavior.bookings'),
+        value: Number(summary.value.count || 0).toLocaleString(getIntlLocale()),
+        tone: 'accent',
+        icon: ReceiptText,
+        trend: trend(changes.value.count),
+        trendText: changeText('count', '%'),
+    },
+    {
+        label: translate('reports360.bookingBehavior.avgLead'),
+        value: `${num(summary.value.avg_lead)} ${translate('reports360.bookingBehavior.days')}`,
+        tone: 'info',
+        icon: CalendarClock,
+        trend: trend(changes.value.avg_lead),
+        trendText: changeText('avg_lead', ` ${translate('reports360.bookingBehavior.days')}`),
+    },
+    {
+        label: translate('reports360.bookingBehavior.avgStay'),
+        value: `${num(summary.value.avg_los)} ${translate('reports360.nights')}`,
+        tone: 'success',
+        icon: CalendarDays,
+        trend: trend(changes.value.avg_los),
+        trendText: changeText('avg_los', ` ${translate('reports360.nights')}`),
+    },
+    {
+        label: translate('reports360.bookingBehavior.sameDayShare'),
+        value: pct(summary.value.same_day_share),
+        tone: 'warning',
+        icon: Percent,
+        trend: trend(changes.value.same_day_share),
+        trendText: changeText('same_day_share', 'pp'),
+    },
+]);
 </script>
 
 <template>
-    <ReportShell :title="$t('admin.generated.k_e2fe2271837d')" route-name="reports.bookingBehavior" :filters="filters">
+    <ReportShell
+        :title="$t('reports360.bookingBehavior.title')"
+        route-name="reports.bookingBehavior"
+        :filters="filters"
+        :description="$t('reports360.bookingBehavior.short')"
+        :category="$t('reports360.bookingBehavior.category')"
+    >
         <ReportKpiGrid :items="kpis" />
 
-        <!-- Per-channel table -->
-        <Card class="mt-6 overflow-hidden !p-0">
-            <table v-if="rows.length" class="w-full">
-                <thead class="bg-neutral-50">
-                    <tr>
-                        <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('admin.generated.k_a3c21020059c') }}</th>
-                        <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('admin.generated.k_3258357672d4') }}</th>
-                        <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('admin.generated.k_649262b23015') }}</th>
-                        <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('admin.generated.k_f2f63bf0304c') }}</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-neutral-100">
-                    <tr v-for="row in rows" :key="row.channel">
-                        <td class="px-5 py-3 text-body-sm">
-                            <span class="inline-flex items-center gap-2">
-                                <span
-                                    class="h-2.5 w-2.5 rounded-full"
-                                    :style="{ backgroundColor: channelMeta(row.channel).color }"
-                                />
-                                {{ channelMeta(row.channel).label }}
-                            </span>
-                        </td>
-                        <td class="px-5 py-3 text-body-sm text-right">
-                            {{ Number(row.count ?? 0).toLocaleString(getIntlLocale()) }}
-                        </td>
-                        <td class="px-5 py-3 text-body-sm text-right">{{ num(row.avg_lead) }}</td>
-                        <td class="px-5 py-3 text-body-sm text-right">{{ num(row.avg_los) }}</td>
-                    </tr>
-                </tbody>
-                <tfoot class="bg-neutral-50 border-t-2 font-semibold">
-                    <tr>
-                        <td class="px-5 py-3 text-body-sm">{{ $t('admin.generated.k_648d30da28dc') }}</td>
-                        <td class="px-5 py-3 text-body-sm text-right">
-                            {{ Number(summary.count ?? 0).toLocaleString(getIntlLocale()) }}
-                        </td>
-                        <td class="px-5 py-3 text-body-sm text-right">{{ num(summary.avg_lead) }}</td>
-                        <td class="px-5 py-3 text-body-sm text-right">{{ num(summary.avg_los) }}</td>
-                    </tr>
-                </tfoot>
-            </table>
-            <div v-else class="px-6 py-10 text-center text-body-sm text-neutral-500">{{ $t('admin.generated.k_628aad7f2829') }}</div>
+        <div class="mt-4 grid gap-4 xl:grid-cols-2">
+            <ReportBarList
+                :title="$t('reports360.bookingBehavior.bookingWindow')"
+                :rows="leadBuckets"
+            />
+            <ReportBarList
+                :title="$t('reports360.bookingBehavior.stayLength')"
+                :rows="losBuckets"
+            />
+        </div>
+
+        <Card class="mt-4" :padding="false">
+            <div class="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
+                <h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.bookingBehavior.byChannel') }}</h2>
+                <span class="text-tiny text-neutral-500">
+                    {{ $t('reports360.bookingBehavior.medianLead') }}: {{ num(summary.median_lead) }} {{ $t('reports360.bookingBehavior.days') }}
+                </span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-neutral-200">
+                    <thead class="bg-neutral-50 text-left text-label text-neutral-600">
+                        <tr>
+                            <th class="px-5 py-3">{{ $t('reports360.channel') }}</th>
+                            <th class="px-4 py-3 text-right">{{ $t('reports360.bookingBehavior.share') }}</th>
+                            <th class="px-4 py-3 text-right">{{ $t('reports360.bookingBehavior.bookings') }}</th>
+                            <th class="px-4 py-3 text-right">{{ $t('reports360.bookingBehavior.avgLead') }}</th>
+                            <th class="px-4 py-3 text-right">{{ $t('reports360.bookingBehavior.medianLead') }}</th>
+                            <th class="px-4 py-3 text-right">{{ $t('reports360.bookingBehavior.avgStay') }}</th>
+                            <th class="px-5 py-3 text-right">{{ $t('reports360.bookingBehavior.longStay') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-neutral-100">
+                        <tr v-for="row in channels" :key="row.channel" class="hover:bg-neutral-50">
+                            <td class="px-5 py-3">
+                                <span class="inline-flex items-center gap-2 text-body-sm font-medium text-primary-900">
+                                    <i class="h-2 w-2 rounded-full" :style="{ backgroundColor: channelMeta(row.channel).color }" />
+                                    {{ channelMeta(row.channel).label }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ pct(row.share) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ row.count }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ num(row.avg_lead) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ num(row.median_lead) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ num(row.avg_los) }}</td>
+                            <td class="px-5 py-3 text-right text-body-sm font-semibold text-primary-900">{{ pct(row.long_stay_share) }}</td>
+                        </tr>
+                    </tbody>
+                    <tfoot v-if="channels.length" class="border-t-2 border-neutral-200 bg-neutral-50">
+                        <tr>
+                            <td class="px-5 py-3 text-body-sm font-semibold text-primary-900">{{ $t('reports360.revenuePerformance.total') }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold">100%</td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ summary.count }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ num(summary.avg_lead) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ num(summary.median_lead) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ num(summary.avg_los) }}</td>
+                            <td class="px-5 py-3 text-right text-body-sm font-semibold">{{ pct(summary.long_stay_share) }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <div v-if="!channels.length" class="px-5 py-10 text-center text-body-sm text-neutral-400">{{ $t('reports360.noData') }}</div>
+            </div>
         </Card>
     </ReportShell>
 </template>

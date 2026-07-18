@@ -11,6 +11,7 @@ use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Services\BaseCurrency;
+use App\Services\Reporting\BookingBehaviorService;
 use App\Services\Reporting\BudgetTargetService;
 use App\Services\Reporting\ChannelPerformanceService;
 use App\Services\Reporting\HotelKpiService;
@@ -845,72 +846,19 @@ class ReportsController extends Controller
         ]);
     }
 
-    public function bookingBehavior(Request $request): Response
+    public function bookingBehavior(Request $request, BookingBehaviorService $bookingBehavior): Response
     {
-        [$from, $to, $days] = $this->range($request);
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+        ]);
 
-        // Non-cancelled reservations whose check-in falls inside the selected range.
-        $reservations = Reservation::query()
-            ->whereDate('check_in_date', '>=', $from)
-            ->whereDate('check_in_date', '<=', $to)
-            ->where('status', '!=', 'cancelled')
-            ->get(['channel', 'check_in_date', 'check_out_date', 'created_at']);
-
-        // Normalize legacy null/manual/direct into the single user-facing direct channel.
-        // Diffs are computed in PHP so the query stays SQLite + MySQL safe.
-        $groups = [];
-        $totalLead = 0;
-        $totalLos = 0;
-        $totalCount = 0;
-
-        foreach ($reservations as $r) {
-            $channel = Reservation::normalizeChannel($r->channel);
-
-            $createdDate = Carbon::parse($r->created_at)->startOfDay();
-            $checkInDate = Carbon::parse($r->check_in_date)->startOfDay();
-            // Lead time in days, never negative (same-day or back-dated -> 0).
-            $lead = max(0, $createdDate->diffInDays($checkInDate, false));
-
-            // Length of stay in nights.
-            $los = max(0, Carbon::parse($r->check_in_date)->startOfDay()
-                ->diffInDays(Carbon::parse($r->check_out_date)->startOfDay(), false));
-
-            if (! isset($groups[$channel])) {
-                $groups[$channel] = ['channel' => $channel, 'count' => 0, 'lead_sum' => 0, 'los_sum' => 0];
-            }
-            $groups[$channel]['count']++;
-            $groups[$channel]['lead_sum'] += $lead;
-            $groups[$channel]['los_sum'] += $los;
-
-            $totalLead += $lead;
-            $totalLos += $los;
-            $totalCount++;
-        }
-
-        $rows = collect($groups)
-            ->map(function ($g) {
-                return [
-                    'channel' => $g['channel'],
-                    'count' => $g['count'],
-                    'avg_lead' => $g['count'] > 0 ? round($g['lead_sum'] / $g['count'], 1) : 0,
-                    'avg_los' => $g['count'] > 0 ? round($g['los_sum'] / $g['count'], 1) : 0,
-                ];
-            })
-            ->sortByDesc('count')
-            ->values()
-            ->all();
-
-        $summary = [
-            'count' => $totalCount,
-            'avg_lead' => $totalCount > 0 ? round($totalLead / $totalCount, 1) : 0,
-            'avg_los' => $totalCount > 0 ? round($totalLos / $totalCount, 1) : 0,
-        ];
+        [$from, $to] = $this->range($request);
+        $period = new ReportingPeriod($from, $to);
 
         return Inertia::render('Reports/BookingBehavior', [
-            'filters' => ['from' => $from, 'to' => $to],
-            'rows' => $rows,
-            'summary' => $summary,
-            'currency' => $this->currency(),
+            'filters' => $period->toArray(),
+            'analytics' => $bookingBehavior->withComparisons($period),
         ]);
     }
 
