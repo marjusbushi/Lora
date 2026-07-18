@@ -38,14 +38,17 @@ class HotelKpiServiceTest extends TestCase
             'channel' => 'direct',
         ]);
 
-        MaintenanceIssue::create([
+        $issue = MaintenanceIssue::create([
             'room_id' => $blockedRoom->id,
             'reported_by' => $user->id,
             'title' => 'Blocked room',
             'room_blocked' => true,
             'status' => 'in_progress',
-            'created_at' => '2026-07-01 08:00:00',
         ]);
+        $issue->forceFill([
+            'created_at' => '2026-07-01 08:00:00',
+            'updated_at' => '2026-07-01 08:00:00',
+        ])->saveQuietly();
 
         $summary = app(HotelKpiService::class)->summary(new ReportingPeriod('2026-07-01', '2026-07-02'));
 

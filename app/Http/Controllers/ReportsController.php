@@ -10,12 +10,12 @@ use App\Models\PosOrder;
 use App\Models\PosShift;
 use App\Models\Reservation;
 use App\Models\Room;
-use App\Models\RoomType;
 use App\Services\BaseCurrency;
 use App\Services\Reporting\BudgetTargetService;
 use App\Services\Reporting\HotelKpiService;
 use App\Services\Reporting\OutstandingBalanceService;
 use App\Services\Reporting\ReportingPeriod;
+use App\Services\Reporting\RoomTypePerformanceService;
 use App\Services\Reporting\StayRevenueAllocator;
 use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
@@ -801,67 +801,18 @@ class ReportsController extends Controller
     }
 
     /** ADR / RevPAR / Mbushja: per room type for a date range — nights, revenue, ADR, occupancy %, RevPAR. */
-    public function performance(Request $request): Response
-    {
-        [$from, $to, $days] = $this->range($request);
-
-        // Rooms inventory per room type (cross-DB safe: simple group by + count).
-        $roomsByType = Room::select('room_type_id', DB::raw('count(*) as rooms_count'))
-            ->groupBy('room_type_id')
-            ->pluck('rooms_count', 'room_type_id');
-
-        // Every room type (so types with inventory but no bookings still show up).
-        $types = RoomType::orderBy('name')->get(['id', 'name']);
-
-        // Non-cancelled reservations arriving in range, with their room + room type.
-        $reservations = Reservation::whereBetween('check_in_date', [$from, $to])
-            ->where('status', '!=', 'cancelled')
-            ->with(['room:id,room_type_id', 'room.roomType:id,name'])
-            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount']);
-
-        // Group reservation aggregates by room_type_id in PHP.
-        $aggByType = $reservations->groupBy(fn ($r) => $r->room?->room_type_id)
-            ->map(fn ($group) => [
-                'nights' => (int) $group->sum(fn ($r) => $r->nights),
-                'revenue' => (float) $group->sum('total_amount'),
-            ]);
-
-        $rows = $types->map(function ($t) use ($roomsByType, $aggByType, $days) {
-            $roomsCount = (int) ($roomsByType[$t->id] ?? 0);
-            $agg = $aggByType[$t->id] ?? ['nights' => 0, 'revenue' => 0.0];
-            $nights = (int) $agg['nights'];
-            $revenue = (float) $agg['revenue'];
-            $availableRoomNights = $roomsCount * $days;
-
-            return [
-                'type' => $t->name,
-                'rooms_count' => $roomsCount,
-                'nights' => $nights,
-                'revenue' => round($revenue, 2),
-                'adr' => $nights ? round($revenue / $nights, 2) : 0,
-                'available_room_nights' => $availableRoomNights,
-                'occupancy' => $availableRoomNights ? round($nights / $availableRoomNights * 100, 1) : 0,
-                'revpar' => $availableRoomNights ? round($revenue / $availableRoomNights, 2) : 0,
-            ];
-        })->values();
-
-        // Totals across all types.
-        $totalRooms = (int) $rows->sum('rooms_count');
-        $totalNights = (int) $rows->sum('nights');
-        $totalRevenue = (float) $rows->sum('revenue');
-        $totalAvailable = $totalRooms * $days;
+    public function performance(
+        Request $request,
+        RoomTypePerformanceService $performance,
+        BudgetTargetService $budgetTargets,
+    ): Response {
+        [$from, $to] = $this->range($request);
+        $period = new ReportingPeriod($from, $to);
 
         return Inertia::render('Reports/Performance', [
             'filters' => ['from' => $from, 'to' => $to],
-            'rows' => $rows,
-            'totals' => [
-                'rooms_count' => $totalRooms,
-                'nights' => $totalNights,
-                'revenue' => round($totalRevenue, 2),
-                'adr' => $totalNights ? round($totalRevenue / $totalNights, 2) : 0,
-                'occupancy' => $totalAvailable ? round($totalNights / $totalAvailable * 100, 1) : 0,
-                'revpar' => $totalAvailable ? round($totalRevenue / $totalAvailable, 2) : 0,
-            ],
+            'analytics' => $performance->withComparisons($period),
+            'budget' => $budgetTargets->forPeriod($period),
             'currency' => $this->currency(),
         ]);
     }

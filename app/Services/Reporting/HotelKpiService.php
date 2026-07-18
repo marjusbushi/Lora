@@ -2,7 +2,6 @@
 
 namespace App\Services\Reporting;
 
-use App\Models\MaintenanceIssue;
 use App\Models\PosOrder;
 use App\Models\Reservation;
 use App\Models\Room;
@@ -13,6 +12,7 @@ final class HotelKpiService
         private readonly StayRevenueAllocator $revenueAllocator,
         private readonly SellableInventoryCalculator $inventoryCalculator,
         private readonly KpiCalculator $kpiCalculator,
+        private readonly MaintenanceDowntimeService $maintenanceDowntime,
     ) {}
 
     /**
@@ -60,34 +60,8 @@ final class HotelKpiService
             }
         }
 
-        $blocks = MaintenanceIssue::query()
-            ->where('room_blocked', true)
-            ->whereNotNull('room_id')
-            ->where('created_at', '<=', $period->to->endOfDay())
-            ->where(function ($query) use ($period) {
-                $query->whereNull('resolved_at')
-                    ->orWhere('resolved_at', '>', $period->from->startOfDay());
-            })
-            ->get(['room_id', 'created_at', 'resolved_at'])
-            ->map(fn (MaintenanceIssue $issue) => [
-                'room_id' => $issue->room_id,
-                'starts_at' => $issue->created_at->toDateTimeString(),
-                'ends_at' => $issue->resolved_at?->toDateTimeString(),
-            ])
-            ->all();
-
-        $blockedRoomIds = collect($blocks)->pluck('room_id')->map(fn ($id) => (string) $id)->all();
-        Room::query()
-            ->where('status', 'maintenance')
-            ->whereNotIn('id', $blockedRoomIds)
-            ->pluck('id')
-            ->each(function ($roomId) use (&$blocks, $period) {
-                $blocks[] = [
-                    'room_id' => $roomId,
-                    'starts_at' => $period->from->toDateTimeString(),
-                    'ends_at' => null,
-                ];
-            });
+        $roomIds = Room::query()->pluck('id');
+        $blocks = $this->maintenanceDowntime->forRooms($roomIds, $period);
 
         $inventory = $this->inventoryCalculator->calculate(Room::count(), $blocks, $period);
         $daily = [];

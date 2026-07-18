@@ -4617,7 +4617,19 @@
     "noAlerts": "No active alerts.",
     "budgetGap": "Below target",
     "outstanding": "Outstanding",
-    "highDemand": "High demand"
+    "highDemand": "High demand",
+    "revenuePerformance": {
+      "title": "ADR / RevPAR / Occupancy",
+      "short": "Room performance based on stay nights.",
+      "category": "Revenue & performance",
+      "targets": "Actual / Target",
+      "byRoomType": "Performance by room type",
+      "roomType": "Room type",
+      "rooms": "Rooms",
+      "soldNights": "Sold nights",
+      "sellableNights": "Sellable nights",
+      "total": "Total"
+    }
   },
   "financeSuppliers": {
     "categories": {

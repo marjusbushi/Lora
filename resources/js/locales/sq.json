@@ -4617,7 +4617,19 @@
     "noAlerts": "Nuk ka sinjale aktive.",
     "budgetGap": "Nën target",
     "outstanding": "Pa arkëtuar",
-    "highDemand": "Kërkesë e lartë"
+    "highDemand": "Kërkesë e lartë",
+    "revenuePerformance": {
+      "title": "ADR / RevPAR / Mbushja",
+      "short": "Performanca e dhomave sipas netëve të qëndrimit.",
+      "category": "Të ardhura & performanca",
+      "targets": "Rezultati / Targeti",
+      "byRoomType": "Performanca sipas tipit të dhomës",
+      "roomType": "Tipi i dhomës",
+      "rooms": "Dhoma",
+      "soldNights": "Net të shitura",
+      "sellableNights": "Net të disponueshme",
+      "total": "Total"
+    }
   },
   "financeSuppliers": {
     "categories": {
