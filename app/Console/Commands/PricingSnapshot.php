@@ -7,6 +7,8 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomInventorySnapshot;
 use App\Models\RoomType;
+use App\Services\Reporting\ReportingPeriod;
+use App\Services\Reporting\StayRevenueAllocator;
 use App\Tenancy\TenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -26,7 +28,7 @@ class PricingSnapshot extends Command
 
     protected $description = 'Record on-the-books occupancy per future stay date and room type';
 
-    public function handle(): int
+    public function handle(StayRevenueAllocator $revenueAllocator): int
     {
         if (! $this->ensureTenantContext()) {
             return self::FAILURE;
@@ -42,22 +44,32 @@ class PricingSnapshot extends Command
 
         // Every active reservation touching the window, mapped to its room's type.
         // Same night semantics as SmartPricing: check_in <= night < check_out
-        // (the checkout day is free). Cancelled and checked_out don't hold future nights.
-        $reservations = Reservation::whereNotIn('status', ['cancelled', 'checked_out'])
+        // (the checkout day is free). Only live on-the-books stays hold future nights.
+        $reservations = Reservation::whereIn('status', ['confirmed', 'checked_in', 'pending'])
+            ->whereNull('no_show_at')
             ->whereDate('check_out_date', '>', $today)
             ->whereDate('check_in_date', '<=', $horizon)
             ->with('room:id,room_type_id')
-            ->get(['id', 'room_id', 'check_in_date', 'check_out_date']);
+            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount']);
 
         $rows = [];
         $now = now();
         $tenantId = app(TenantContext::class)->requireId();
+        $snapshotPeriod = new ReportingPeriod($today->toDateString(), $horizon->toDateString());
 
         foreach ($types as $typeId) {
             $typeRooms = $rooms->get($typeId, collect());
             $total = $typeRooms->count();
             $outOfOrder = $typeRooms->where('status', 'maintenance')->count();
             $typeReservations = $reservations->filter(fn ($r) => $r->room?->room_type_id === $typeId);
+            $revenueByReservation = $typeReservations->mapWithKeys(fn ($reservation) => [
+                $reservation->id => $revenueAllocator->allocate(
+                    $reservation->check_in_date,
+                    $reservation->check_out_date,
+                    $reservation->total_amount,
+                    $snapshotPeriod,
+                ),
+            ]);
 
             for ($d = $today->copy(); $d->lte($horizon); $d->addDay()) {
                 $night = $d->toDateString();
@@ -65,6 +77,10 @@ class PricingSnapshot extends Command
                     ->filter(fn ($r) => $r->check_in_date?->toDateString() <= $night
                         && $r->check_out_date?->toDateString() > $night)
                     ->pluck('room_id')->unique()->count();
+                $bookedRevenue = $typeReservations
+                    ->filter(fn ($r) => $r->check_in_date?->toDateString() <= $night
+                        && $r->check_out_date?->toDateString() > $night)
+                    ->sum(fn ($r) => $revenueByReservation[$r->id][$night] ?? 0);
 
                 $rows[] = [
                     'tenant_id' => $tenantId,
@@ -74,6 +90,7 @@ class PricingSnapshot extends Command
                     'total_rooms' => $total,
                     'out_of_order' => $outOfOrder,
                     'booked' => $booked,
+                    'booked_revenue' => round($bookedRevenue, 2),
                     'available' => max(0, $total - $outOfOrder - $booked),
                     'created_at' => $now,
                     'updated_at' => $now,
@@ -85,7 +102,7 @@ class PricingSnapshot extends Command
             RoomInventorySnapshot::upsert(
                 $chunk,
                 ['tenant_id', 'snapshot_date', 'stay_date', 'room_type_id'],
-                ['total_rooms', 'out_of_order', 'booked', 'available', 'updated_at'],
+                ['total_rooms', 'out_of_order', 'booked', 'booked_revenue', 'available', 'updated_at'],
             );
         }
 

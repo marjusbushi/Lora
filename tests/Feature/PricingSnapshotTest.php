@@ -58,6 +58,9 @@ class PricingSnapshotTest extends TestCase
         $this->assertSame(1, $row($d1)->booked, 'night 1: only r1');
         $this->assertSame(2, $row($d2)->booked, 'night 2: r1 + r2');
         $this->assertSame(0, $row($d3)->booked, 'checkout day is free');
+        $this->assertSame('50.00', $row($d1)->booked_revenue, 'night 1 revenue: half of r1');
+        $this->assertSame('150.00', $row($d2)->booked_revenue, 'night 2 revenue: r1 + r2');
+        $this->assertSame('0.00', $row($d3)->booked_revenue, 'checkout day has no revenue');
         $this->assertSame(3, $row($d1)->total_rooms);
         $this->assertSame(1, $row($d1)->out_of_order, 'maintenance room counted out of order');
         $this->assertSame(1, $row($d1)->available, '3 total - 1 ooo - 1 booked');

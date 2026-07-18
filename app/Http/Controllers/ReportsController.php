@@ -14,6 +14,7 @@ use App\Services\BaseCurrency;
 use App\Services\Reporting\BudgetTargetService;
 use App\Services\Reporting\HotelKpiService;
 use App\Services\Reporting\OutstandingBalanceService;
+use App\Services\Reporting\PickupPaceService;
 use App\Services\Reporting\ReportingPeriod;
 use App\Services\Reporting\RoomTypePerformanceService;
 use App\Services\Reporting\StayRevenueAllocator;
@@ -490,71 +491,26 @@ class ReportsController extends Controller
         ]);
     }
 
-    /** Tempo & Pickup: on-the-books forward view — bookings, nights, revenue by horizon + next-14-day arrivals. */
-    public function pace(Request $request): Response
+    /** Tempo & Pickup: real on-the-books movement against nightly historical snapshots. */
+    public function pace(Request $request, PickupPaceService $pickupPace): Response
     {
-        $today = now()->startOfDay();
-        $activeStatuses = ['confirmed', 'checked_in', 'pending'];
+        $today = Carbon::today();
+        $latest = $today->copy()->addDays(364);
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:'.$today->toDateString(), 'before_or_equal:'.$latest->toDateString()],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:'.$today->toDateString(), 'after_or_equal:from', 'before_or_equal:'.$latest->toDateString()],
+        ]);
 
-        $horizonDays = [7, 14, 30, 60, 90];
-        $horizons = [];
-
-        foreach ($horizonDays as $n) {
-            $to = $today->copy()->addDays($n)->toDateString();
-
-            $bucket = Reservation::whereIn('status', $activeStatuses)
-                ->whereBetween('check_in_date', [$today->toDateString(), $to])
-                ->get(['check_in_date', 'check_out_date', 'total_amount']);
-
-            $bookings = $bucket->count();
-            $nights = (int) $bucket->sum(fn ($r) => $r->nights);
-            $revenue = round((float) $bucket->sum('total_amount'), 2);
-
-            $horizons[] = [
-                'days' => $n,
-                'until' => $to,
-                'bookings' => $bookings,
-                'nights' => $nights,
-                'revenue' => $revenue,
-                'adr' => $nights ? round($revenue / $nights, 2) : 0,
-            ];
+        $from = Carbon::parse($request->input('from', $today->toDateString()));
+        $to = Carbon::parse($request->input('to', $today->copy()->addDays(29)->toDateString()));
+        if ($to->lt($from)) {
+            $to = $from->copy();
         }
-
-        // Next 14 days: distinct rooms occupied per day (overlap) + revenue arriving that day.
-        $windowEnd = $today->copy()->addDays(14);
-
-        $overlapping = Reservation::whereIn('status', $activeStatuses)
-            ->whereDate('check_in_date', '<', $windowEnd->toDateString())
-            ->whereDate('check_out_date', '>', $today->toDateString())
-            ->get(['room_id', 'check_in_date', 'check_out_date', 'total_amount']);
-
-        $arrivals = Reservation::whereIn('status', $activeStatuses)
-            ->whereBetween('check_in_date', [$today->toDateString(), $windowEnd->copy()->subDay()->toDateString()])
-            ->get(['check_in_date', 'total_amount'])
-            ->groupBy(fn ($r) => $r->check_in_date->toDateString());
-
-        $next14 = [];
-        for ($i = 0; $i < 14; $i++) {
-            $day = $today->copy()->addDays($i);
-            $dayStr = $day->toDateString();
-
-            $rooms = $overlapping->filter(function ($r) use ($dayStr) {
-                return $r->check_in_date->toDateString() <= $dayStr
-                    && $r->check_out_date->toDateString() > $dayStr;
-            })->pluck('room_id')->unique()->count();
-
-            $arrivingRevenue = round((float) ($arrivals[$dayStr] ?? collect())->sum('total_amount'), 2);
-
-            $next14[] = [
-                'date' => $dayStr,
-                'rooms' => $rooms,
-                'revenue' => $arrivingRevenue,
-            ];
-        }
+        $period = new ReportingPeriod($from->toDateString(), $to->toDateString());
 
         return Inertia::render('Reports/Pace', [
-            'horizons' => $horizons,
-            'next14' => $next14,
+            'filters' => $period->toArray(),
+            'analytics' => $pickupPace->summary($period),
             'currency' => $this->currency(),
         ]);
     }

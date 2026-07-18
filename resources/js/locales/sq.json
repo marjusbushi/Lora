@@ -4629,6 +4629,31 @@
       "soldNights": "Net të shitura",
       "sellableNights": "Net të disponueshme",
       "total": "Total"
+    },
+    "pickupPace": {
+      "title": "Tempo & Pickup",
+      "short": "Ndryshimi real i netëve dhe të ardhurave on-the-books.",
+      "category": "Të ardhura & performanca",
+      "onBooksNights": "Net on-the-books",
+      "onBooksRevenue": "Të ardhura on-the-books",
+      "pickup7": "Pickup 7-ditor",
+      "pickup30Revenue": "Pickup 30-ditor",
+      "dailyPace": "Ritmi sipas datës së qëndrimit",
+      "today": "Sot",
+      "reference": "{days} ditë më parë",
+      "buildingHistory": "Historiku po ndërtohet nga snapshot-et ditore.",
+      "history": "Historiku",
+      "availableSnapshots": "Horizonte aktive",
+      "historySince": "Historik që nga",
+      "defaultBaseline": "Baza e grafikut",
+      "historyNote": "Horizontet aktivizohen automatikisht kur plotësohet historiku.",
+      "byHorizon": "Pickup sipas horizontit",
+      "horizon": "Horizonti",
+      "snapshot": "Snapshot",
+      "referenceNights": "Net referencë",
+      "next7": "7 ditët e ardhshme",
+      "next30": "30 ditët e ardhshme",
+      "next90": "90 ditët e ardhshme"
     }
   },
   "financeSuppliers": {

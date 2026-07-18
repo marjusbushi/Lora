@@ -14,6 +14,7 @@ const props = defineProps({
     filters: { type: Object, default: null },
     description: { type: String, default: '' },
     category: { type: String, default: '' },
+    presetMode: { type: String, default: 'historical' },
 });
 
 const reportMeta = {
@@ -92,10 +93,16 @@ function setPreset(preset) {
     let start = new Date(today);
     let end = new Date(today);
 
-    if (preset === '7d') start.setDate(today.getDate() - 6);
-    if (preset === '30d') start.setDate(today.getDate() - 29);
-    if (preset === 'month') start = new Date(today.getFullYear(), today.getMonth(), 1);
-    if (preset === 'last-month') {
+    if (props.presetMode === 'future') {
+        if (preset === '7d') end.setDate(today.getDate() + 6);
+        if (preset === '30d') end.setDate(today.getDate() + 29);
+        if (preset === '90d') end.setDate(today.getDate() + 89);
+    } else {
+        if (preset === '7d') start.setDate(today.getDate() - 6);
+        if (preset === '30d') start.setDate(today.getDate() - 29);
+    }
+    if (props.presetMode !== 'future' && preset === 'month') start = new Date(today.getFullYear(), today.getMonth(), 1);
+    if (props.presetMode !== 'future' && preset === 'last-month') {
         start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
         end = new Date(today.getFullYear(), today.getMonth(), 0);
     }
@@ -177,7 +184,13 @@ function exportCsv() {
                         <p class="text-tiny text-neutral-500">{{ periodLabel }}</p>
                     </div>
                 </div>
-                <div class="flex flex-wrap gap-1.5">
+                <div v-if="presetMode === 'future'" class="flex flex-wrap gap-1.5">
+                    <button type="button" class="report-preset" @click="setPreset('today')">{{ $t('admin.generated.k_d424d0615255') }}</button>
+                    <button type="button" class="report-preset" @click="setPreset('7d')">{{ $t('reports360.pickupPace.next7') }}</button>
+                    <button type="button" class="report-preset" @click="setPreset('30d')">{{ $t('reports360.pickupPace.next30') }}</button>
+                    <button type="button" class="report-preset" @click="setPreset('90d')">{{ $t('reports360.pickupPace.next90') }}</button>
+                </div>
+                <div v-else class="flex flex-wrap gap-1.5">
                     <button type="button" class="report-preset" @click="setPreset('today')">{{ $t('admin.generated.k_d424d0615255') }}</button>
                     <button type="button" class="report-preset" @click="setPreset('7d')">{{ $t('admin.generated.k_1d2401a568d7') }}</button>
                     <button type="button" class="report-preset" @click="setPreset('30d')">{{ $t('admin.generated.k_233faf245b46') }}</button>

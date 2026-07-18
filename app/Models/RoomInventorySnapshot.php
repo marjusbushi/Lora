@@ -16,6 +16,7 @@ class RoomInventorySnapshot extends TenantModel
         'total_rooms',
         'out_of_order',
         'booked',
+        'booked_revenue',
         'available',
     ];
 
@@ -27,6 +28,7 @@ class RoomInventorySnapshot extends TenantModel
             'total_rooms' => 'integer',
             'out_of_order' => 'integer',
             'booked' => 'integer',
+            'booked_revenue' => 'decimal:2',
             'available' => 'integer',
         ];
     }

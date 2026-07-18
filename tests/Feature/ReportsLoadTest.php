@@ -1,4 +1,5 @@
 <?php
+
 namespace Tests\Feature;
 
 use App\Models\FolioItem;
@@ -73,5 +74,15 @@ class ReportsLoadTest extends TestCase
                 ->assertOk()
                 ->assertInertia(fn (AssertableInertia $p) => $p->component($component));
         }
+
+        $this->actingAs($admin)->from(route('reports.pace'))
+            ->get(route('reports.pace', ['from' => today()->subDay()->toDateString(), 'to' => today()->toDateString()]))
+            ->assertRedirect(route('reports.pace'))
+            ->assertSessionHasErrors('from');
+
+        $this->actingAs($admin)->from(route('reports.pace'))
+            ->get(route('reports.pace', ['from' => today()->toDateString(), 'to' => today()->addDays(365)->toDateString()]))
+            ->assertRedirect(route('reports.pace'))
+            ->assertSessionHasErrors('to');
     }
 }

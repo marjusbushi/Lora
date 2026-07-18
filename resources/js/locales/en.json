@@ -4629,6 +4629,31 @@
       "soldNights": "Sold nights",
       "sellableNights": "Sellable nights",
       "total": "Total"
+    },
+    "pickupPace": {
+      "title": "Pace & Pickup",
+      "short": "Actual movement in on-the-books nights and revenue.",
+      "category": "Revenue & performance",
+      "onBooksNights": "On-the-books nights",
+      "onBooksRevenue": "On-the-books revenue",
+      "pickup7": "7-day pickup",
+      "pickup30Revenue": "30-day pickup",
+      "dailyPace": "Pace by stay date",
+      "today": "Today",
+      "reference": "{days} days ago",
+      "buildingHistory": "History is building from daily snapshots.",
+      "history": "History",
+      "availableSnapshots": "Active horizons",
+      "historySince": "History since",
+      "defaultBaseline": "Chart baseline",
+      "historyNote": "Horizons activate automatically as history becomes available.",
+      "byHorizon": "Pickup by horizon",
+      "horizon": "Horizon",
+      "snapshot": "Snapshot",
+      "referenceNights": "Reference nights",
+      "next7": "Next 7 days",
+      "next30": "Next 30 days",
+      "next90": "Next 90 days"
     }
   },
   "financeSuppliers": {
