@@ -45,6 +45,12 @@ class PosController extends Controller
 
     public function index(Request $request): Response
     {
+        $view = match ($request->route()?->getName()) {
+            'pos.orders' => 'orders',
+            'pos.receipts' => 'receipts',
+            'pos.shifts' => 'shifts',
+            default => 'sale',
+        };
         $query = PosOrder::select(
             'id', 'reservation_id', 'table_number', 'status',
             'payment_method', 'subtotal_amount', 'discount_amount', 'discount_reason', 'is_complimentary',
@@ -53,6 +59,14 @@ class PosController extends Controller
         )
             ->with(['createdBy:id,name', 'items.menuItem:id,name', 'payments', 'fiscalDocument'])
             ->orderByDesc('created_at');
+
+        if (! $request->filled('status') && ! $request->integer('order_id')) {
+            if ($view === 'orders') {
+                $query->where('status', 'open');
+            } elseif ($view === 'receipts') {
+                $query->where('status', '!=', 'open');
+            }
+        }
 
         if ($request->filled('status')) {
             if ($request->status === 'refunded') {
@@ -76,6 +90,39 @@ class PosController extends Controller
 
         // Current user's open cash-drawer shift (per-user model), with live running totals.
         $shift = PosShift::currentFor(auth()->id());
+
+        $shiftHistory = $view === 'shifts'
+            ? PosShift::with(['user:id,name', 'closedBy:id,name'])
+                ->orderByDesc('opened_at')
+                ->limit(30)
+                ->get()
+                ->map(function (PosShift $item) use ($shift) {
+                    $live = $item->id === $shift?->id ? $item->liveTotals() : null;
+                    $cash = $live['cash'] ?? (float) $item->cash_sales;
+                    $card = $live['card'] ?? (float) $item->card_sales;
+                    $room = $live['room_charge'] ?? (float) $item->room_charge_sales;
+
+                    return [
+                        'id' => $item->id,
+                        'status' => $item->status,
+                        'user_name' => $item->user?->name,
+                        'closed_by_name' => $item->closedBy?->name,
+                        'opened_at' => $item->opened_at?->toIso8601String(),
+                        'closed_at' => $item->closed_at?->toIso8601String(),
+                        'opening_float' => (float) $item->opening_float,
+                        'expected_cash' => $live ? round((float) $item->opening_float + $cash, 2) : (float) $item->expected_cash,
+                        'counted_cash' => $item->counted_cash === null ? null : (float) $item->counted_cash,
+                        'over_short' => $item->over_short === null ? null : (float) $item->over_short,
+                        'cash_sales' => $cash,
+                        'card_sales' => $card,
+                        'room_charge_sales' => $room,
+                        'total_sales' => round($cash + $card + $room, 2),
+                        'total_orders' => $live ? (int) $item->orders()->where('status', 'completed')->count() : (int) $item->total_orders,
+                        'closing_note' => $item->closing_note,
+                    ];
+                })->values()
+            : collect();
+
         $currentShift = null;
         if ($shift) {
             $totals = $shift->liveTotals();
@@ -146,7 +193,7 @@ class PosController extends Controller
                 });
             });
 
-        $orders = $query->paginate(15)->through(fn (PosOrder $order) => [
+        $orders = $query->paginate(15)->withQueryString()->through(fn (PosOrder $order) => [
             'id' => $order->id,
             'reservation_id' => $order->reservation_id,
             'table_number' => $order->table_number,
@@ -183,10 +230,12 @@ class PosController extends Controller
         ]);
 
         return Inertia::render('Pos/Index', [
+            'view' => $view,
             'orders' => $orders,
             'menu' => $menu,
             'activeReservations' => $activeReservations,
             'filters' => $request->only('status', 'order_id'),
+            'shiftHistory' => $shiftHistory,
             'currentShift' => $currentShift,
             'canOpenShift' => $request->user()->can('open_pos_shift'),
             'canCloseShift' => $request->user()->can('close_pos_shift'),
@@ -216,6 +265,7 @@ class PosController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.menu_item_id' => ['required', TenantRule::exists('menu_items')],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:50'],
+            'continue_to_payment' => ['nullable', 'boolean'],
         ]);
 
         // No order without an open cash-drawer shift for the acting user.
@@ -254,6 +304,11 @@ class PosController extends Controller
             return $order;
         });
 
+        if ($request->boolean('continue_to_payment')) {
+            return redirect()->route('pos.index', ['order_id' => $order->id, 'action' => 'pay'])
+                ->with('success', "Porosia #{$order->id} u krijua — vazhdo me pagesën.");
+        }
+
         return back()->with('success', "Porosia #{$order->id} u krijua — ".BaseCurrency::symbol().$order->total_amount);
     }
 
@@ -265,6 +320,7 @@ class PosController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.menu_item_id' => ['required', TenantRule::exists('menu_items')],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:50'],
+            'continue_to_payment' => ['nullable', 'boolean'],
         ]);
 
         if ($posOrder->status !== 'open') {
@@ -310,6 +366,11 @@ class PosController extends Controller
         });
 
         AuditLog::record('pos.update', $posOrder, ['amount' => $posOrder->fresh()->total_amount]);
+
+        if ($request->boolean('continue_to_payment')) {
+            return redirect()->route('pos.index', ['order_id' => $posOrder->id, 'action' => 'pay'])
+                ->with('success', "Porosia #{$posOrder->id} u përditësua — vazhdo me pagesën.");
+        }
 
         return back()->with('success', "Porosia #{$posOrder->id} u përditësua.");
     }
@@ -444,7 +505,8 @@ class PosController extends Controller
 
         // Payment is intentionally independent from the external fiscal provider.
         // The operator can print a non-fiscal receipt immediately and fiscalize later.
-        return back()->with('success', 'Pagesa u regjistrua. Fatura mund të printohet ose fiskalizohet veçmas.');
+        return redirect()->route('pos.index', ['order_id' => $posOrder->id, 'action' => 'receipt'])
+            ->with('success', 'Pagesa u regjistrua. Fatura mund të printohet ose fiskalizohet veçmas.');
     }
 
     public function fiscalize(PosOrder $posOrder): RedirectResponse

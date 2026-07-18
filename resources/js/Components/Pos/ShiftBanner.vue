@@ -5,12 +5,13 @@ const props = defineProps({
     shift: { type: Object, default: null },
     canOpen: { type: Boolean, default: false },
     canClose: { type: Boolean, default: false },
+    currency: { type: String, default: 'EUR' },
 });
 
 defineEmits(['open', 'close']);
 
 function money(v) {
-    return `€${Number(v ?? 0).toFixed(2)}`;
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: props.currency }).format(Number(v ?? 0));
 }
 </script>
 

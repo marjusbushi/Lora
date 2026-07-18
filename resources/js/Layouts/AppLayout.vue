@@ -9,6 +9,10 @@ import { Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 import { ChevronDown, LogOut, Settings, UserRound } from 'lucide-vue-next';
 
+defineProps({
+    immersive: { type: Boolean, default: false },
+});
+
 // Persist the collapsed state so it survives Inertia navigations
 // (AppLayout re-mounts per page, so we restore from localStorage).
 const sidebarCollapsed = ref(
@@ -151,7 +155,18 @@ const allNavItems = computed(() => [
     { label: t('admin.sidebar.messages'), href: '/pms/messages', match: '/pms/messages', icon: icons.messages, permission: 'view_reservations', module: 'channel_manager' },
     { label: t('admin.sidebar.housekeeping'), href: '/pms/housekeeping', icon: icons.housekeeping, permission: 'view_housekeeping', module: 'housekeeping' },
     { label: t('maintenance.title'), href: '/pms/maintenance', icon: icons.maintenance, permission: 'view_maintenance' },
-    { label: t('admin.sidebar.pos'), href: '/pms/pos', icon: icons.pos, permission: 'view_pos_orders', module: 'pos' },
+    {
+        label: t('admin.sidebar.pos'),
+        icon: icons.pos,
+        permission: 'view_pos_orders',
+        module: 'pos',
+        children: [
+            { label: 'Shitje', href: '/pms/pos' },
+            { label: 'Porositë', href: '/pms/pos/orders' },
+            { label: 'Shitjet & kuponët', href: '/pms/pos/receipts' },
+            { label: 'Turnet', href: '/pms/pos/shifts' },
+        ],
+    },
     {
         label: t('admin.sidebar.finance'),
         icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="M20 7V6a2 2 0 0 0-2-2H5a3 3 0 0 0 0 6h15v8a2 2 0 0 1-2 2H5a3 3 0 0 1-3-3V7"/><path d="M16 14h4"/></svg>',
@@ -201,9 +216,9 @@ const globalSearchLinks = computed(() => navItems.value.flatMap((item) => {
 </script>
 
 <template>
-    <div class="flex min-h-screen bg-neutral-50">
+    <div :class="['flex bg-neutral-50', immersive ? 'h-screen overflow-hidden' : 'min-h-screen']">
         <!-- Desktop sidebar -->
-        <div class="hidden lg:block">
+        <div v-if="!immersive" class="hidden lg:block">
             <Sidebar
                 :items="navItems"
                 :collapsed="sidebarCollapsed"
@@ -212,7 +227,7 @@ const globalSearchLinks = computed(() => navItems.value.flatMap((item) => {
         </div>
 
         <!-- Mobile overlay -->
-        <Teleport to="body">
+        <Teleport v-if="!immersive" to="body">
             <Transition
                 enter-active-class="duration-200 ease-out"
                 enter-from-class="opacity-0"
@@ -238,7 +253,7 @@ const globalSearchLinks = computed(() => navItems.value.flatMap((item) => {
         <!-- Main content -->
         <div class="flex-1 flex flex-col min-w-0">
             <!-- Top bar -->
-            <header class="flex items-center justify-between h-16 px-4 sm:px-6 bg-white border-b border-neutral-200 sticky top-0 z-30">
+            <header v-if="!immersive" class="flex items-center justify-between h-16 px-4 sm:px-6 bg-white border-b border-neutral-200 sticky top-0 z-30">
                 <!-- Mobile hamburger -->
                 <button
                     class="lg:hidden rounded-md p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100"
@@ -299,7 +314,7 @@ const globalSearchLinks = computed(() => navItems.value.flatMap((item) => {
             </header>
 
             <!-- Page content -->
-            <main class="flex-1 p-4 sm:p-6">
+            <main :class="immersive ? 'min-h-0 flex-1 overflow-hidden p-0' : 'flex-1 p-4 sm:p-6'">
                 <slot />
             </main>
         </div>

@@ -1,6 +1,6 @@
 <script setup>
 import { getIntlLocale, i18n, translate } from '@/i18n';
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, nextTick, onMounted } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -13,13 +13,15 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ShiftBanner from '@/Components/Pos/ShiftBanner.vue';
 import PosReceipt from '@/Components/Invoices/PosReceipt.vue';
-import { Minus, Pencil, Plus, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, X } from 'lucide-vue-next';
+import { ArrowLeft, Banknote, Clock3, Maximize2, Minus, Pencil, Plus, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, X } from 'lucide-vue-next';
 
 const props = defineProps({
+    view: { type: String, default: 'sale' },
     orders: Object,
     menu: Array,
     activeReservations: Array,
     filters: Object,
+    shiftHistory: { type: Array, default: () => [] },
     stats: Object,
     currentShift: { type: Object, default: null },
     canOpenShift: { type: Boolean, default: false },
@@ -29,7 +31,6 @@ const props = defineProps({
 });
 
 const toasts = ref(null);
-const showPayModal = ref(false);
 const showOrdersPanel = ref(Boolean(props.filters?.order_id));
 const selectedOrder = ref(null);
 const editingOrderId = ref(null);
@@ -39,6 +40,9 @@ const fiscalizingOrder = ref(null);
 const activeCategory = ref(props.menu?.[0]?.id || null);
 const searchQuery = ref('');
 const serviceMode = ref('table');
+const checkoutStep = ref('cart');
+const touchMode = ref(false);
+const orderSaving = ref(false);
 
 // Cart
 const cart = ref([]);
@@ -255,29 +259,45 @@ function clearCart() {
     editingOrderId.value = null;
 }
 
-function submitOrder() {
+function submitOrder(payNow = false) {
     if (!cart.value.length) return;
     if (!hasOpenShift.value) { toasts.value?.error(translate('admin.generated.k_d4d2e4579cbb')); return; }
     const form = useForm({
         table_number: serviceMode.value === 'table' ? tableNumber.value || null : null,
         reservation_id: serviceMode.value === 'room' ? selectedReservation.value || null : null,
         items: cart.value.map((c) => ({ menu_item_id: c.id, quantity: c.qty })),
+        continue_to_payment: payNow,
     });
 
     const submittedTotal = cartTotal.value;
     const isEditing = Boolean(editingOrderId.value);
+    const editedOrderId = editingOrderId.value;
+    orderSaving.value = true;
     const options = {
-        onSuccess: () => {
+        preserveScroll: true,
+        onSuccess: (page) => {
+            const savedOrderId = Number(page.props.filters?.order_id || editedOrderId || 0);
+            const savedOrder = page.props.orders?.data?.find((order) => Number(order.id) === savedOrderId);
             clearCart();
-            toasts.value?.success(`${isEditing ? 'Porosia u përditësua' : 'Porosia u krijua'} — ${money(submittedTotal)}`);
+            if (payNow && savedOrder) {
+                openPay(savedOrder);
+                toasts.value?.success(`Porosia #${savedOrder.id} u ruajt. Zgjidh pagesën.`);
+            } else {
+                toasts.value?.success(`${isEditing ? 'Porosia u përditësua' : 'Porosia u ruajt e hapur'} — ${money(submittedTotal)}`);
+            }
         },
         onError: (errors) => toasts.value?.error(errors.inventory || errors.order || 'Porosia nuk u ruajt.'),
+        onFinish: () => { orderSaving.value = false; },
     };
     if (editingOrderId.value) form.put(route('pos.update', editingOrderId.value), options);
     else form.post(route('pos.store'), options);
 }
 
 function editOrder(order) {
+    if (props.view !== 'sale') {
+        router.visit(route('pos.index', { order_id: order.id, action: 'edit' }));
+        return;
+    }
     const allMenuItems = (props.menu || []).flatMap(category => category.items || []);
     cart.value = order.items.map(line => {
         const menuItem = allMenuItems.find(item => Number(item.id) === Number(line.menu_item_id));
@@ -301,6 +321,10 @@ function editOrder(order) {
 }
 
 function openPay(order) {
+    if (props.view !== 'sale') {
+        router.visit(route('pos.index', { order_id: order.id, action: 'pay' }));
+        return;
+    }
     if (!hasOpenShift.value) { toasts.value?.error(translate('admin.generated.k_d4d2e4579cbb')); return; }
     selectedOrder.value = order;
     paymentMethod.value = '';
@@ -309,7 +333,13 @@ function openPay(order) {
     discountReason.value = '';
     splitCashAmount.value = '';
     selectedPayReservation.value = order.reservation_id || '';
-    showPayModal.value = true;
+    checkoutStep.value = 'payment';
+    showOrdersPanel.value = false;
+}
+
+function closePayment() {
+    checkoutStep.value = 'cart';
+    selectedOrder.value = null;
 }
 
 function submitPay() {
@@ -332,9 +362,10 @@ function submitPay() {
     }, {
         preserveScroll: true,
         onSuccess: (page) => {
-            showPayModal.value = false;
+            checkoutStep.value = 'cart';
             const finalized = page.props.orders?.data?.find((order) => Number(order.id) === Number(orderId));
             if (finalized) openReceipt(finalized);
+            selectedOrder.value = null;
             const error = page.props.flash?.error;
             if (error) toasts.value?.error(error);
             else toasts.value?.success(translate('admin.generated.k_4d1af80f8706'));
@@ -424,24 +455,52 @@ function orderPaymentLabel(order) {
 function formatTime(d) {
     return new Date(d).toLocaleTimeString(getIntlLocale(), { hour: '2-digit', minute: '2-digit' });
 }
+
+function formatDateTime(d) {
+    if (!d) return '—';
+    return new Date(d).toLocaleString(getIntlLocale(), { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function toggleTouchMode() {
+    touchMode.value = !touchMode.value;
+}
+
+onMounted(() => {
+    if (props.view !== 'sale' || !props.filters?.order_id) return;
+    const order = props.orders?.data?.find((item) => Number(item.id) === Number(props.filters.order_id));
+    if (!order) return;
+    const action = new URLSearchParams(window.location.search).get('action');
+    if (action === 'edit') editOrder(order);
+    if (action === 'pay' && order.status === 'open') openPay(order);
+    if (action === 'receipt' && order.status === 'completed') openReceipt(order);
+});
 </script>
 
 <template>
-    <AppLayout>
+    <AppLayout :immersive="touchMode && view === 'sale'">
+        <div :class="touchMode && view === 'sale' ? 'flex h-full min-h-0 flex-col gap-3 bg-neutral-100 p-3' : ''">
         <ShiftBanner
+            v-if="view === 'sale' || view === 'shifts'"
             :shift="currentShift"
             :can-open="canOpenShift"
             :can-close="canCloseShift"
-            class="mb-4"
+            :currency="receiptSettings.currency"
+            :class="touchMode && view === 'sale' ? 'shrink-0' : 'mb-4'"
             @open="showOpenShift = true"
             @close="openCloseModal"
         />
-        <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between" :class="touchMode && view === 'sale' && '!mb-0 shrink-0'">
             <div>
-                <h1 class="text-h2 text-primary-900">POS Bar/Restaurant</h1>
-                <p class="mt-1 text-body-sm text-neutral-500">Shërbim i shpejtë në banak, tavolinë ose dhomë.</p>
+                <div class="flex items-center gap-3">
+                    <h1 class="text-h2 text-primary-900">{{ view === 'sale' ? 'Shitje POS' : view === 'orders' ? 'Porositë' : view === 'receipts' ? 'Shitjet & kuponët' : 'Turnet POS' }}</h1>
+                    <span v-if="touchMode && view === 'sale'" class="rounded-full bg-accent-100 px-3 py-1 text-tiny font-bold uppercase tracking-wide text-accent-800">Touch Mode</span>
+                </div>
+                <p v-if="!touchMode || view !== 'sale'" class="mt-1 text-body-sm text-neutral-500">{{ view === 'sale' ? 'Porosia dhe pagesa përfundojnë në një ekran.' : view === 'orders' ? 'Ndrysho, arkëto ose anulo porositë ende të hapura.' : view === 'receipts' ? 'Historiku i shitjeve, kuponëve dhe rimbursimeve.' : 'Hapja, mbyllja dhe kontrolli i arkës sipas turnit.' }}</p>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
+            <div v-if="view === 'sale'" class="flex flex-wrap items-center gap-2">
+                <Button variant="outline" class="h-[58px]" @click="toggleTouchMode">
+                    <Maximize2 class="h-4 w-4" /> {{ touchMode ? 'Dil nga Touch Mode' : 'Hap Touch Mode' }}
+                </Button>
                 <div class="rounded-xl border border-neutral-200 bg-white px-4 py-2 shadow-card">
                     <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">Hapur</p>
                     <p class="text-h4 text-warning-700">{{ stats.open }}</p>
@@ -459,9 +518,12 @@ function formatTime(d) {
                     <span class="rounded-md bg-warning-50 px-1.5 py-0.5 text-tiny font-semibold text-warning-700">{{ stats.open }}</span>
                 </Button>
             </div>
+            <div v-else class="flex items-center gap-2">
+                <Button variant="primary" :href="route('pos.index')"><ShoppingCart class="h-4 w-4" /> Hap shitjen</Button>
+            </div>
         </div>
 
-        <div class="flex h-full flex-col gap-5 xl:flex-row">
+        <div v-if="view === 'sale'" class="flex min-h-0 flex-col gap-5 xl:flex-row" :class="touchMode && 'flex-1 gap-3 overflow-hidden'">
             <!-- LEFT: Menu area -->
             <div class="flex-1 min-w-0">
                 <!-- Orders Panel (toggle) -->
@@ -533,7 +595,7 @@ function formatTime(d) {
                 </Teleport>
 
                 <!-- Menu Cards -->
-                <div class="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card">
+                <div class="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card" :class="touchMode && 'flex h-full min-h-0 flex-col'">
                     <div class="flex flex-col gap-3 border-b border-neutral-200 p-4 sm:flex-row sm:items-center">
                         <div class="relative flex-1">
                             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
@@ -583,13 +645,13 @@ function formatTime(d) {
 
                     <!-- Item grid -->
                     <div
-                        class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4"
-                        :class="{ 'opacity-50 pointer-events-none': !hasOpenShift }"
+                        class="grid grid-cols-2 gap-3 overflow-y-auto p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4"
+                        :class="[touchMode && 'min-h-0 flex-1 content-start', { 'opacity-50 pointer-events-none': !hasOpenShift }]"
                     >
                         <button
                             v-for="item in activeMenuItems"
                             :key="item.id"
-                            class="group relative overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-accent-300 hover:shadow-lg"
+                            class="group relative min-h-36 overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-accent-300 hover:shadow-lg touch-manipulation"
                             :class="(!item.is_available || (item.inventory_tracked && item.available_portions !== null && item.available_portions <= 0)) && 'pointer-events-none opacity-60'"
                             @click="addToCart(item)"
                         >
@@ -631,8 +693,63 @@ function formatTime(d) {
             </div>
 
             <!-- RIGHT: Cart sidebar -->
-            <div class="shrink-0 xl:w-[390px]">
-                <div class="flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card xl:sticky xl:top-20 xl:h-[calc(100vh-7rem)] xl:min-h-[560px]">
+            <div class="shrink-0" :class="touchMode ? 'xl:w-[430px]' : 'xl:w-[390px]'">
+                <div class="flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card" :class="touchMode ? 'h-full min-h-0' : 'xl:sticky xl:top-20 xl:h-[calc(100vh-7rem)] xl:min-h-[560px]'">
+                    <template v-if="checkoutStep === 'payment' && selectedOrder">
+                        <div class="flex items-center justify-between border-b border-neutral-200 px-4 py-4">
+                            <div class="flex items-center gap-3">
+                                <button type="button" class="grid h-11 w-11 place-items-center rounded-xl border border-neutral-200 text-neutral-600 hover:bg-neutral-50" @click="closePayment"><ArrowLeft class="h-5 w-5" /></button>
+                                <div><p class="text-tiny font-bold uppercase tracking-wide text-accent-700">Hapi 2 · Pagesa</p><h3 class="text-h4 text-primary-900">Porosia #{{ selectedOrder.id }}</h3></div>
+                            </div>
+                            <span class="rounded-lg bg-success-50 px-3 py-1.5 text-small font-bold text-success-700">Gati për arkëtim</span>
+                        </div>
+
+                        <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+                            <div class="rounded-2xl bg-primary-950 px-5 py-6 text-center text-white">
+                                <p class="text-small font-semibold uppercase tracking-widest text-neutral-300">Për t'u paguar</p>
+                                <p class="mt-1 text-4xl font-bold tracking-tight">{{ money(paymentTotal) }}</p>
+                                <p v-if="paymentDiscount > 0" class="mt-2 text-small text-success-300">Ulje {{ money(paymentDiscount) }} nga {{ money(paymentSubtotal) }}</p>
+                            </div>
+
+                            <div>
+                                <p class="mb-2 text-label text-neutral-600">Ulje / komplimentare</p>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button v-for="option in [{ value: 'none', label: 'Pa ulje' }, { value: 'percent', label: 'Përqindje' }, { value: 'fixed', label: 'Shumë fikse' }, { value: 'complimentary', label: 'Komplimentare' }]" :key="option.value" type="button" class="min-h-12 rounded-xl border px-3 py-2 text-small font-semibold touch-manipulation" :class="discountType === option.value ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-600'" @click="discountType = option.value">{{ option.label }}</button>
+                                </div>
+                                <TextInput v-if="discountType === 'percent' || discountType === 'fixed'" v-model="discountValue" class="mt-3" type="number" min="0" :max="discountType === 'percent' ? 100 : paymentSubtotal" step="0.01" :placeholder="discountType === 'percent' ? 'P.sh. 10%' : 'Shuma e uljes'" />
+                                <TextInput v-if="paymentDiscount > 0" v-model="discountReason" class="mt-3" placeholder="Arsyeja e uljes · e detyrueshme" />
+                            </div>
+
+                            <div v-if="paymentTotal > 0">
+                                <p class="mb-2 text-label text-neutral-600">Mënyra e pagesës</p>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button v-for="opt in [...paymentOptions, { value: 'split', label: 'Cash + Kartë' }]" :key="opt.value" type="button" class="min-h-20 rounded-xl border-2 p-3 text-center transition touch-manipulation" :class="paymentMethod === opt.value ? 'border-accent-500 bg-accent-50 text-accent-800' : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'" @click="paymentMethod = opt.value">
+                                        <span class="block text-2xl">{{ opt.value === 'cash' ? '💵' : opt.value === 'card' ? '💳' : opt.value === 'split' ? '💵＋💳' : '🏨' }}</span>
+                                        <span class="mt-1 block text-body-sm font-bold">{{ opt.label }}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div v-if="paymentMethod === 'split'" class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                                <FormGroup label="Shuma cash"><TextInput v-model="splitCashAmount" type="number" min="0" :max="paymentTotal" step="0.01" placeholder="0.00" /></FormGroup>
+                                <div class="mt-3 flex items-center justify-between text-body-sm"><span class="text-neutral-500">Pjesa me kartë</span><strong>{{ money(splitCard) }}</strong></div>
+                            </div>
+
+                            <div v-if="paymentMethod === 'room_charge'">
+                                <label class="mb-1.5 block text-label text-neutral-600">Dhoma / mysafiri</label>
+                                <Select v-model="selectedPayReservation" :options="reservationOptions" placeholder="Zgjidh rezervimin aktiv" />
+                            </div>
+
+                            <p class="rounded-xl border border-info-200 bg-info-50 px-3 py-2.5 text-small text-info-800">Cash → Arka, Kartë → Banka, Dhomë → Folio. Nuk kërkohet kalim në Financë.</p>
+                        </div>
+
+                        <div class="space-y-2 border-t border-neutral-200 bg-neutral-50 p-4">
+                            <Button variant="primary" size="lg" class="min-h-14 w-full text-lg" :disabled="(paymentTotal > 0 && !paymentMethod) || (paymentMethod === 'room_charge' && !selectedPayReservation) || (paymentDiscount > 0 && !discountReason.trim()) || (paymentMethod === 'split' && (splitCash <= 0 || splitCard <= 0))" @click="submitPay">Konfirmo pagesën · {{ money(paymentTotal) }}</Button>
+                            <button type="button" class="min-h-11 w-full rounded-lg text-body-sm font-semibold text-neutral-500 hover:bg-white" @click="closePayment">Kthehu te porosia</button>
+                        </div>
+                    </template>
+
+                    <template v-else>
                     <!-- Cart header -->
                     <div class="border-b border-neutral-200 px-4 py-4">
                         <div class="flex items-center justify-between">
@@ -664,9 +781,9 @@ function formatTime(d) {
                                     <p class="text-body-sm text-primary-900 font-medium truncate">{{ item.name }}</p>
                                     <p class="text-small text-neutral-400">{{ money(item.price) }} / copë</p>
                                     <div class="mt-1.5 flex items-center gap-1 shrink-0">
-                                        <button class="grid h-7 w-7 place-items-center rounded-md border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50" @click="updateQty(i, -1)"><Minus class="h-3.5 w-3.5" /></button>
+                                        <button class="grid h-10 w-10 place-items-center rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 touch-manipulation" @click="updateQty(i, -1)"><Minus class="h-4 w-4" /></button>
                                         <span class="w-7 text-center text-body-sm font-semibold text-primary-900">{{ item.qty }}</span>
-                                        <button class="grid h-7 w-7 place-items-center rounded-md border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50" @click="updateQty(i, 1)"><Plus class="h-3.5 w-3.5" /></button>
+                                        <button class="grid h-10 w-10 place-items-center rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 touch-manipulation" @click="updateQty(i, 1)"><Plus class="h-4 w-4" /></button>
                                     </div>
                                 </div>
                                 <p class="text-body-sm font-semibold text-primary-900">{{ money(item.price * item.qty) }}</p>
@@ -686,73 +803,114 @@ function formatTime(d) {
                             <span class="text-label text-neutral-500">{{ $t('admin.generated.k_85f1cb8f5091') }}</span>
                             <span class="text-h3 text-primary-900">{{ money(cartTotal) }}</span>
                         </div>
-                        <Button variant="primary" size="lg" class="w-full" :disabled="!hasOpenShift || (serviceMode === 'room' && !selectedReservation)" @click="submitOrder">
-                            {{ editingOrderId ? 'Ruaj ndryshimet' : 'Krijo porosinë' }} · {{ money(cartTotal) }}
-                        </Button>
-                        <p class="text-center text-tiny text-neutral-400">{{ editingOrderId ? 'Stoku i rezervuar përditësohet bashkë me rreshtat.' : 'Porosia krijohet e hapur dhe rezervon stokun menjëherë.' }}</p>
+                        <div class="grid grid-cols-[0.85fr_1.4fr] gap-2">
+                            <Button variant="outline" size="lg" class="min-h-14" :loading="orderSaving" :disabled="!hasOpenShift || (serviceMode === 'room' && !selectedReservation)" @click="submitOrder(false)">Ruaj hapur</Button>
+                            <Button variant="primary" size="lg" class="min-h-14 text-lg" :loading="orderSaving" :disabled="!hasOpenShift || (serviceMode === 'room' && !selectedReservation)" @click="submitOrder(true)">Paguaj · {{ money(cartTotal) }}</Button>
+                        </div>
+                        <p v-if="editingOrderId" class="text-center text-tiny font-semibold text-accent-700">Po ndryshon porosinë #{{ editingOrderId }}</p>
+                        <p v-else class="text-center text-tiny text-neutral-400">
+                            “Ruaj hapur” e lë porosinë për më vonë; “Paguaj” vazhdon direkt te arkëtimi.
+                        </p>
                     </div>
+                    </template>
                 </div>
             </div>
         </div>
 
-        <!-- Payment Modal -->
-        <Modal :show="showPayModal" title="Arkëto porosinë" max-width="md" @close="showPayModal = false">
-            <div class="space-y-4">
-                <div class="rounded-xl border border-neutral-200 bg-neutral-50 py-5 text-center">
-                    <p class="text-small font-semibold uppercase tracking-wide text-neutral-400">Porosia #{{ selectedOrder?.id }}</p>
-                    <p class="mt-1 text-h1 text-primary-900">{{ money(paymentTotal) }}</p>
-                    <p v-if="paymentDiscount > 0" class="mt-1 text-small text-success-700">Ulje {{ money(paymentDiscount) }} nga {{ money(paymentSubtotal) }}</p>
-                </div>
+        <Card v-else-if="view === 'orders' || view === 'receipts'" :padding="false" class="overflow-hidden">
+            <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <p class="mb-2 text-label text-neutral-600">Ulje / komplimentare</p>
-                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        <button v-for="option in [{ value: 'none', label: 'Pa ulje' }, { value: 'percent', label: 'Përqindje' }, { value: 'fixed', label: 'Shumë fikse' }, { value: 'complimentary', label: 'Komplimentare' }]" :key="option.value" type="button" class="rounded-lg border px-3 py-2 text-small font-semibold" :class="discountType === option.value ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-600'" @click="discountType = option.value">{{ option.label }}</button>
-                    </div>
-                    <div v-if="discountType === 'percent' || discountType === 'fixed'" class="mt-3">
-                        <TextInput v-model="discountValue" type="number" min="0" :max="discountType === 'percent' ? 100 : paymentSubtotal" step="0.01" :placeholder="discountType === 'percent' ? 'P.sh. 10%' : 'Shuma e uljes'" />
-                    </div>
-                    <div v-if="paymentDiscount > 0" class="mt-3">
-                        <TextInput v-model="discountReason" placeholder="Arsyeja e uljes / komplimentares · e detyrueshme" />
-                    </div>
+                    <h2 class="text-h4 text-primary-900">{{ view === 'orders' ? 'Porositë e hapura' : 'Regjistri i shitjeve POS' }}</h2>
+                    <p class="mt-1 text-small text-neutral-500">{{ view === 'orders' ? 'Këtu menaxhohen vetëm porositë që presin ndryshim ose pagesë.' : 'Kuponë, pagesa, anulime dhe rimbursime në një regjistër.' }}</p>
                 </div>
-
-                <div v-if="paymentTotal > 0" class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <button
-                        v-for="opt in [...paymentOptions, { value: 'split', label: 'Cash + Kartë' }]"
-                        :key="opt.value"
-                        :class="[
-                            'rounded-xl border-2 p-4 text-center transition-all duration-150',
-                            paymentMethod === opt.value
-                                ? 'border-accent-500 bg-accent-50 text-accent-700'
-                                : 'border-neutral-200 hover:border-neutral-300 text-neutral-600',
-                        ]"
-                        @click="paymentMethod = opt.value"
-                    >
-                        <span class="text-2xl block mb-1">{{ opt.value === 'cash' ? '💵' : opt.value === 'card' ? '💳' : opt.value === 'split' ? '💵＋💳' : '🏨' }}</span>
-                        <span class="text-body-sm font-medium">{{ opt.label }}</span>
-                    </button>
+                <div v-if="view === 'receipts'" class="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" :href="route('pos.receipts')">Të gjitha</Button>
+                    <Button variant="outline" size="sm" :href="route('pos.receipts', { status: 'completed' })">Të paguara</Button>
+                    <Button variant="outline" size="sm" :href="route('pos.receipts', { status: 'refunded' })">Të rimbursuara</Button>
+                    <Button variant="outline" size="sm" :href="route('pos.receipts', { status: 'cancelled' })">Të anuluara</Button>
                 </div>
-
-                <div v-if="paymentMethod === 'split'" class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                    <FormGroup label="Shuma cash">
-                        <TextInput v-model="splitCashAmount" type="number" min="0" :max="paymentTotal" step="0.01" placeholder="0.00" />
-                    </FormGroup>
-                    <div class="mt-3 flex items-center justify-between text-body-sm"><span class="text-neutral-500">Pjesa me kartë</span><strong class="text-primary-900">{{ money(splitCard) }}</strong></div>
-                </div>
-
-                <!-- Room picker (when charging to a room) -->
-                <div v-if="paymentMethod === 'room_charge'">
-                    <label class="block text-label text-neutral-600 mb-1.5">{{ $t('admin.generated.k_66a76c99d2ff') }}</label>
-                    <Select v-model="selectedPayReservation" :options="reservationOptions" :placeholder="$t('admin.generated.k_b6c2dcec536d')" />
-                    <p v-if="!reservationOptions.length" class="text-small text-error-500 mt-1">{{ $t('admin.generated.k_0732d0e36b56') }}</p>
-                </div>
-                <p class="rounded-lg border border-info-200 bg-info-50 px-3 py-2.5 text-small text-info-800">Cash regjistrohet në Arka, karta në Banka; pagesa në dhomë kalon në folion e rezervimit.</p>
             </div>
-            <template #footer>
-                <Button variant="outline" @click="showPayModal = false">{{ $t('admin.generated.k_182fb16b9fb0') }}</Button>
-                <Button variant="primary" :disabled="(paymentTotal > 0 && !paymentMethod) || (paymentMethod === 'room_charge' && !selectedPayReservation) || (paymentDiscount > 0 && !discountReason.trim()) || (paymentMethod === 'split' && (splitCash <= 0 || splitCard <= 0))" @click="submitPay">Konfirmo · {{ money(paymentTotal) }}</Button>
-            </template>
-        </Modal>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-neutral-200">
+                    <thead class="bg-neutral-50">
+                        <tr>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">Porosia</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">Ora / data</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">Tavolina / dhoma</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">Artikujt</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">Pagesa</th>
+                            <th class="px-5 py-3 text-right text-label text-neutral-600">Totali</th>
+                            <th class="px-5 py-3 text-right text-label text-neutral-600">Veprime</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-neutral-100 bg-white">
+                        <tr v-for="order in orders.data" :key="order.id" class="hover:bg-neutral-50">
+                            <td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ order.id }}</td>
+                            <td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(order.paid_at || order.created_at) }}</td>
+                            <td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ order.reservation_id ? `Dhoma · Rez. #${order.reservation_id}` : order.table_number ? `Tavolina ${order.table_number}` : 'Banak' }}</td>
+                            <td class="max-w-64 px-5 py-3.5 text-body-sm text-neutral-600"><span class="line-clamp-2">{{ order.items?.map(i => `${i.quantity}× ${i.menu_item?.name}`).join(', ') || '—' }}</span></td>
+                            <td class="px-5 py-3.5"><Badge :variant="statusBadge[order.effective_status]?.variant" dot size="sm">{{ statusBadge[order.effective_status]?.label }}</Badge></td>
+                            <td class="px-5 py-3.5"><Badge variant="neutral" size="sm">{{ orderPaymentLabel(order) }}</Badge></td>
+                            <td class="whitespace-nowrap px-5 py-3.5 text-right text-body-sm font-bold text-primary-900">{{ money(order.total_amount) }}</td>
+                            <td class="px-5 py-3.5 text-right">
+                                <div v-if="order.status === 'open'" class="flex justify-end gap-2">
+                                    <Button size="sm" variant="outline" @click="editOrder(order)"><Pencil class="h-3.5 w-3.5" /> Ndrysho</Button>
+                                    <Button size="sm" variant="primary" @click="openPay(order)">Paguaj</Button>
+                                    <Button size="sm" variant="ghost" class="text-error-600" @click="openCancel(order)">Anulo</Button>
+                                </div>
+                                <div v-else class="flex flex-wrap justify-end gap-2">
+                                    <Button v-if="canFiscalize(order)" size="sm" variant="outline" :loading="fiscalizingOrder === order.id" @click="fiscalizeReceipt(order)">Fiskalizo</Button>
+                                    <Button size="sm" variant="outline" @click="openReceipt(order)"><ReceiptText class="h-3.5 w-3.5" /> Kuponi</Button>
+                                    <Button v-if="order.status === 'completed' && !order.refunded_at" size="sm" variant="ghost" class="text-error-600" :disabled="!hasOpenShift" @click="openRefund(order)"><RotateCcw class="h-3.5 w-3.5" /> Rimburso</Button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div v-if="!orders.data?.length" class="px-6 py-16 text-center">
+                <ReceiptText class="mx-auto h-9 w-9 text-neutral-300" />
+                <p class="mt-3 font-semibold text-primary-900">{{ view === 'orders' ? 'Nuk ka porosi të hapura' : 'Nuk ka shitje për këtë filtër' }}</p>
+                <p class="mt-1 text-body-sm text-neutral-500">{{ view === 'orders' ? 'Porositë e ruajtura shfaqen automatikisht këtu.' : 'Ndrysho filtrin ose regjistro shitjen e parë.' }}</p>
+            </div>
+            <div v-if="orders.last_page > 1" class="flex items-center justify-between border-t border-neutral-200 px-5 py-4">
+                <p class="text-small text-neutral-500">{{ orders.from }}–{{ orders.to }} nga {{ orders.total }}</p>
+                <div class="flex items-center gap-2">
+                    <Button size="sm" variant="outline" :disabled="!orders.prev_page_url" @click="router.visit(orders.prev_page_url, { preserveScroll: true })">Para</Button>
+                    <span class="min-w-16 text-center text-small font-semibold text-neutral-600">{{ orders.current_page }} / {{ orders.last_page }}</span>
+                    <Button size="sm" variant="outline" :disabled="!orders.next_page_url" @click="router.visit(orders.next_page_url, { preserveScroll: true })">Pas</Button>
+                </div>
+            </div>
+        </Card>
+
+        <div v-else-if="view === 'shifts'" class="space-y-5">
+            <div class="grid gap-4 md:grid-cols-3">
+                <Card>
+                    <div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-success-50 text-success-700"><Banknote class="h-5 w-5" /></span><div><p class="text-small text-neutral-500">Arka e pritshme</p><p class="text-h3 text-primary-900">{{ money(currentShift?.expected_cash || 0) }}</p></div></div>
+                </Card>
+                <Card>
+                    <div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-info-50 text-info-700"><ReceiptText class="h-5 w-5" /></span><div><p class="text-small text-neutral-500">Porosi në turn</p><p class="text-h3 text-primary-900">{{ currentShift?.completed_orders || 0 }}</p></div></div>
+                </Card>
+                <Card>
+                    <div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-warning-50 text-warning-700"><Clock3 class="h-5 w-5" /></span><div><p class="text-small text-neutral-500">Statusi</p><p class="text-h4 text-primary-900">{{ currentShift ? 'Turn i hapur' : 'Pa turn aktiv' }}</p></div></div>
+                </Card>
+            </div>
+
+            <Card :padding="false" class="overflow-hidden">
+                <div class="border-b border-neutral-200 px-5 py-4"><h2 class="text-h4 text-primary-900">Historiku i turneve</h2><p class="mt-1 text-small text-neutral-500">30 turnet e fundit dhe diferencat e numërimit të arkës.</p></div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-neutral-200">
+                        <thead class="bg-neutral-50"><tr><th class="px-5 py-3 text-left text-label text-neutral-600">Turni</th><th class="px-5 py-3 text-left text-label text-neutral-600">Punonjësi</th><th class="px-5 py-3 text-left text-label text-neutral-600">Hapur</th><th class="px-5 py-3 text-left text-label text-neutral-600">Mbyllur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Shitjet</th><th class="px-5 py-3 text-right text-label text-neutral-600">Cash i pritur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Diferenca</th><th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th></tr></thead>
+                        <tbody class="divide-y divide-neutral-100 bg-white">
+                            <tr v-for="shift in shiftHistory" :key="shift.id" class="hover:bg-neutral-50"><td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ shift.id }}</td><td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ shift.user_name || '—' }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.opened_at) }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.closed_at) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-semibold">{{ money(shift.total_sales) }}</td><td class="px-5 py-3.5 text-right text-body-sm">{{ money(shift.expected_cash) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-bold" :class="Math.abs(Number(shift.over_short || 0)) < 0.01 ? 'text-success-700' : 'text-error-700'">{{ shift.over_short === null ? '—' : money(shift.over_short) }}</td><td class="px-5 py-3.5"><Badge :variant="shift.status === 'open' ? 'success' : 'neutral'" dot size="sm">{{ shift.status === 'open' ? 'Hapur' : 'Mbyllur' }}</Badge></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-if="!shiftHistory.length" class="px-6 py-14 text-center text-body-sm text-neutral-500">Nuk ka ende turne të regjistruara.</div>
+            </Card>
+        </div>
+        </div>
 
         <Modal :show="showCancelModal" title="Anulo porosinë" max-width="sm" @close="showCancelModal = false">
             <div class="space-y-3">

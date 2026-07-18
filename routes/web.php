@@ -307,6 +307,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     // POS Bar/Restaurant
     Route::middleware(['module:pos', 'permission:view_pos_orders'])->group(function () {
         Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
+        Route::get('/pos/orders', [PosController::class, 'index'])->defaults('view', 'orders')->name('pos.orders');
+        Route::get('/pos/receipts', [PosController::class, 'index'])->defaults('view', 'receipts')->name('pos.receipts');
+        Route::get('/pos/shifts', [PosController::class, 'index'])->defaults('view', 'shifts')->name('pos.shifts');
         Route::post('/pos', [PosController::class, 'store'])->middleware('permission:create_pos_orders')->name('pos.store');
         Route::put('/pos/{posOrder}', [PosController::class, 'update'])->middleware('permission:update_pos_orders')->name('pos.update');
         Route::post('/pos/{posOrder}/complete', [PosController::class, 'complete'])->middleware('permission:update_pos_orders')->name('pos.complete');
