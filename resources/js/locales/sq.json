@@ -4590,6 +4590,35 @@
       "copy151": "Hap menunë"
     }
   },
+  "reports360": {
+    "executiveDashboard": "Dashboard Ekzekutiv",
+    "executiveShort": "Performanca dhe sinjalet kryesore.",
+    "noComparison": "Pa krahasim",
+    "totalRevenue": "Të ardhura totale",
+    "occupancy": "Okupanca",
+    "dailyRevenue": "Të ardhurat ditore",
+    "currentPeriod": "Periudha aktuale",
+    "previousPeriod": "Periudha e kaluar",
+    "noData": "Nuk ka të dhëna",
+    "roomRevenue": "Dhoma",
+    "posRevenue": "POS",
+    "netRoomRevenue": "Neto dhoma",
+    "budget": "Targeti",
+    "completed": "e realizuar",
+    "budgetMissing": "Nuk ka target për këtë periudhë.",
+    "forecast30": "Parashikimi 30-ditor",
+    "revenue": "Të ardhura",
+    "channelPerformance": "Performanca sipas kanalit",
+    "openReport": "Hap raportin",
+    "channel": "Kanali",
+    "nights": "Net",
+    "netRevenue": "Neto",
+    "alerts": "Sinjale",
+    "noAlerts": "Nuk ka sinjale aktive.",
+    "budgetGap": "Nën target",
+    "outstanding": "Pa arkëtuar",
+    "highDemand": "Kërkesë e lartë"
+  },
   "financeSuppliers": {
     "categories": {
       "manage": "Menaxho kategoritë",

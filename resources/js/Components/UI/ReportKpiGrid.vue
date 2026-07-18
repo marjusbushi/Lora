@@ -2,9 +2,16 @@
 import Card from '@/Components/UI/Card.vue';
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-vue-next';
 
-defineProps({
+const props = defineProps({
     items: { type: Array, default: () => [] },
+    columns: { type: Number, default: 4 },
 });
+
+const gridColumns = {
+    3: 'xl:grid-cols-3',
+    4: 'xl:grid-cols-4',
+    5: 'xl:grid-cols-5',
+};
 
 function valueOf(value) {
     return typeof value === 'function' ? value() : value;
@@ -32,7 +39,7 @@ function trendIcon(trend) {
 </script>
 
 <template>
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div :class="['grid grid-cols-1 gap-3 sm:grid-cols-2', gridColumns[props.columns] || gridColumns[4]]">
         <Card
             v-for="item in items"
             :key="item.label"

@@ -40,6 +40,8 @@
 
 ## Faza 0 — Foundation
 
+**Statusi: përfunduar dhe në staging.**
+
 1. Katalogu i KPI-ve: formula, burimi, timezone, currency dhe exclusions.
 2. Komponentët standard: `ReportShell`, `ReportFilterBar`, `KpiGrid`, charts, alerts dhe data table.
 3. Query/service layer i përbashkët për period comparison, budget dhe forecast.
@@ -48,6 +50,8 @@
 **Dalja:** standardi teknik dhe vizual që përdoret nga çdo modul.
 
 ## Faza 1 — Executive Dashboard
+
+**Statusi: implementuar; në pritje të review në staging.**
 
 - Revenue, Occupancy, ADR, RevPAR, TRevPAR.
 - Krahasim me periudhën e kaluar dhe vitin e kaluar.

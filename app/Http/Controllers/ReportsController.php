@@ -12,6 +12,11 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Services\BaseCurrency;
+use App\Services\Reporting\BudgetTargetService;
+use App\Services\Reporting\HotelKpiService;
+use App\Services\Reporting\OutstandingBalanceService;
+use App\Services\Reporting\ReportingPeriod;
+use App\Services\Reporting\StayRevenueAllocator;
 use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
 use Carbon\CarbonInterface;
@@ -32,57 +37,94 @@ class ReportsController extends Controller
     }
 
     /** Executive summary: revenue (room+F&B), occupancy, ADR, RevPAR, VAT, commission. */
-    public function executive(Request $request, VatConfiguration $vatConfiguration): Response
-    {
-        [$from, $to, $days] = $this->range($request);
+    public function executive(
+        Request $request,
+        HotelKpiService $hotelKpis,
+        BudgetTargetService $budgetTargets,
+        OutstandingBalanceService $outstandingBalances,
+        StayRevenueAllocator $revenueAllocator,
+    ): Response {
+        [$from, $to] = $this->range($request);
+        $period = new ReportingPeriod($from, $to);
+        $analytics = $hotelKpis->withComparisons($period);
+        $budget = $budgetTargets->forPeriod($period);
+        $outstanding = $outstandingBalances->summary();
+        $forecastPeriod = new ReportingPeriod(today()->toDateString(), today()->addDays(29)->toDateString());
+        $forecast = $hotelKpis->summary($forecastPeriod);
 
-        $reservations = Reservation::whereBetween('check_in_date', [$from, $to])
+        $channelRows = Reservation::query()
             ->where('status', '!=', 'cancelled')
-            ->get(['id', 'check_in_date', 'check_out_date', 'status', 'total_amount', 'commission_amount']);
+            ->whereNull('no_show_at')
+            ->whereDate('check_in_date', '<=', $period->to->toDateString())
+            ->whereDate('check_out_date', '>', $period->from->toDateString())
+            ->get(['id', 'channel', 'check_in_date', 'check_out_date', 'total_amount', 'commission_amount'])
+            ->groupBy(fn (Reservation $reservation) => Reservation::normalizeChannel($reservation->channel))
+            ->map(function ($reservations, string $channel) use ($period, $revenueAllocator) {
+                $revenue = 0.0;
+                $commission = 0.0;
+                $nights = 0;
 
-        $roomRevenue = (float) $reservations->sum('total_amount');
-        $nightsSold = (int) $reservations->sum(fn ($r) => $r->nights);
-        $commission = (float) $reservations->sum('commission_amount');
+                foreach ($reservations as $reservation) {
+                    $allocatedRevenue = $revenueAllocator->allocate(
+                        $reservation->check_in_date,
+                        $reservation->check_out_date,
+                        $reservation->total_amount,
+                        $period,
+                    );
+                    $revenue += array_sum($allocatedRevenue);
+                    $nights += count($allocatedRevenue);
+                    $commission += array_sum($revenueAllocator->allocate(
+                        $reservation->check_in_date,
+                        $reservation->check_out_date,
+                        $reservation->commission_amount ?? 0,
+                        $period,
+                    ));
+                }
 
-        $posRevenue = (float) PosOrder::where('status', 'completed')
-            ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"])->sum('total_amount');
-        $posCount = PosOrder::where('status', 'completed')
-            ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"])->count();
+                return [
+                    'channel' => $channel,
+                    'bookings' => $reservations->count(),
+                    'nights' => $nights,
+                    'revenue' => round($revenue, 2),
+                    'commission' => round($commission, 2),
+                    'net' => round($revenue - $commission, 2),
+                ];
+            })
+            ->sortByDesc('revenue')
+            ->values();
 
-        $totalRevenue = $roomRevenue + $posRevenue;
-        $roomsCount = Room::count();
-        $availableRoomNights = $roomsCount * $days;
-        $vat = round(
-            $vatConfiguration->taxPortion($roomRevenue, $vatConfiguration->accommodationRate())
-            + $vatConfiguration->taxPortion($posRevenue, $vatConfiguration->productRate()),
-            2,
-        );
+        $peakForecast = collect($forecast['daily'])
+            ->map(fn (array $day, string $date) => [
+                'date' => $date,
+                'occupancy' => $day['sellable_room_nights'] > 0
+                    ? round($day['occupied_room_nights'] / $day['sellable_room_nights'] * 100, 1)
+                    : 0,
+            ])
+            ->sortByDesc('occupancy')
+            ->first();
 
-        $byStatus = Reservation::whereBetween('check_in_date', [$from, $to])
-            ->select('status', DB::raw('count(*) as count'), DB::raw('sum(total_amount) as revenue'))
-            ->groupBy('status')->get()
-            ->map(fn ($r) => ['status' => $r->status, 'count' => (int) $r->count, 'revenue' => (float) $r->revenue]);
+        $alerts = collect();
+        if ($budget['revenue_target'] && $analytics['current']['kpis']['total_revenue'] < $budget['revenue_target']) {
+            $alerts->push([
+                'kind' => 'budget',
+                'value' => round($budget['revenue_target'] - $analytics['current']['kpis']['total_revenue'], 2),
+            ]);
+        }
+        if ($outstanding['total'] > 0) {
+            $alerts->push(['kind' => 'outstanding', 'value' => $outstanding['total'], 'count' => $outstanding['count']]);
+        }
+        if (($peakForecast['occupancy'] ?? 0) >= 85) {
+            $alerts->push(['kind' => 'demand', 'value' => $peakForecast['occupancy'], 'date' => $peakForecast['date']]);
+        }
 
         return Inertia::render('Reports/Executive', [
             'filters' => ['from' => $from, 'to' => $to],
-            'summary' => [
-                'room_revenue' => round($roomRevenue, 2),
-                'pos_revenue' => round($posRevenue, 2),
-                'total_revenue' => round($totalRevenue, 2),
-                'commission' => round($commission, 2),
-                'net_room_revenue' => round($roomRevenue - $commission, 2),
-                'vat' => $vat,
-                'net_revenue' => round($totalRevenue - $vat, 2),
-                'reservation_count' => $reservations->count(),
-                'pos_count' => $posCount,
-                'nights_sold' => $nightsSold,
-                'rooms_count' => $roomsCount,
-                'days' => $days,
-                'occupancy' => $availableRoomNights ? round($nightsSold / $availableRoomNights * 100, 1) : 0,
-                'adr' => $nightsSold ? round($roomRevenue / $nightsSold, 2) : 0,
-                'revpar' => $availableRoomNights ? round($roomRevenue / $availableRoomNights, 2) : 0,
-            ],
-            'byStatus' => $byStatus,
+            'analytics' => $analytics,
+            'budget' => $budget,
+            'forecast' => $forecast,
+            'outstanding' => $outstanding,
+            'channels' => $channelRows,
+            'alerts' => $alerts,
             'currency' => $this->currency(),
         ]);
     }

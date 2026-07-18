@@ -4590,6 +4590,35 @@
       "copy151": "Open menu"
     }
   },
+  "reports360": {
+    "executiveDashboard": "Executive Dashboard",
+    "executiveShort": "Key performance and alerts.",
+    "noComparison": "No comparison",
+    "totalRevenue": "Total revenue",
+    "occupancy": "Occupancy",
+    "dailyRevenue": "Daily revenue",
+    "currentPeriod": "Current period",
+    "previousPeriod": "Previous period",
+    "noData": "No data",
+    "roomRevenue": "Rooms",
+    "posRevenue": "POS",
+    "netRoomRevenue": "Net room revenue",
+    "budget": "Target",
+    "completed": "completed",
+    "budgetMissing": "No target for this period.",
+    "forecast30": "30-day forecast",
+    "revenue": "Revenue",
+    "channelPerformance": "Channel performance",
+    "openReport": "Open report",
+    "channel": "Channel",
+    "nights": "Nights",
+    "netRevenue": "Net revenue",
+    "alerts": "Alerts",
+    "noAlerts": "No active alerts.",
+    "budgetGap": "Below target",
+    "outstanding": "Outstanding",
+    "highDemand": "High demand"
+  },
   "financeSuppliers": {
     "categories": {
       "manage": "Manage categories",

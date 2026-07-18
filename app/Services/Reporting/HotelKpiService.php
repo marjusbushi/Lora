@@ -29,10 +29,11 @@ final class HotelKpiService
             ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
             ->whereDate('check_out_date', '>', $period->from->toDateString())
-            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount']);
+            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount', 'commission_amount']);
 
         $revenueByDate = [];
         $occupiedRoomsByDate = [];
+        $commissionByDate = [];
 
         foreach ($reservations as $reservation) {
             $allocation = $this->revenueAllocator->allocate(
@@ -47,6 +48,15 @@ final class HotelKpiService
                 if ($reservation->room_id) {
                     $occupiedRoomsByDate[$date][(string) $reservation->room_id] = true;
                 }
+            }
+
+            foreach ($this->revenueAllocator->allocate(
+                $reservation->check_in_date,
+                $reservation->check_out_date,
+                $reservation->commission_amount ?? 0,
+                $period,
+            ) as $date => $amount) {
+                $commissionByDate[$date] = ($commissionByDate[$date] ?? 0.0) + $amount;
             }
         }
 
@@ -83,6 +93,7 @@ final class HotelKpiService
         $daily = [];
         $roomRevenue = 0.0;
         $occupiedRoomNights = 0;
+        $commission = 0.0;
 
         foreach ($inventory['by_date'] as $date => $dayInventory) {
             $dayRevenue = round((float) ($revenueByDate[$date] ?? 0), 2);
@@ -94,6 +105,7 @@ final class HotelKpiService
             ];
             $roomRevenue += $dayRevenue;
             $occupiedRoomNights += $dayOccupied;
+            $commission += (float) ($commissionByDate[$date] ?? 0);
         }
 
         $posRevenue = (float) PosOrder::query()
@@ -110,7 +122,12 @@ final class HotelKpiService
                     $occupiedRoomNights,
                     $inventory['sellable_room_nights'],
                 ),
-                ['pos_revenue' => round($posRevenue, 2)],
+                [
+                    'pos_revenue' => round($posRevenue, 2),
+                    'commission' => round($commission, 2),
+                    'net_room_revenue' => round($roomRevenue - $commission, 2),
+                    'reservation_count' => $reservations->count(),
+                ],
             ),
             'daily' => $daily,
         ];
