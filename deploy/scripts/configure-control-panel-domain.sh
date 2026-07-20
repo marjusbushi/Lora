@@ -13,10 +13,19 @@ if [[ ! -f "$TEMPLATE" ]]; then
     exit 1
 fi
 
-php_fpm_socket="$(find /run/php -maxdepth 1 -type s -name 'php*-fpm.sock' -print | sort -V | tail -n 1)"
+if [[ -n "${PHP_FPM_SOCKET:-}" ]]; then
+    php_fpm_socket="$PHP_FPM_SOCKET"
+else
+    php_fpm_socket="$(find /run/php -maxdepth 1 -type s -name 'php*-fpm.sock' -print | sort -V | tail -n 1)"
+fi
 
-if [[ -z "$php_fpm_socket" ]]; then
-    echo "No PHP-FPM socket found in /run/php." >&2
+if [[ ! "$php_fpm_socket" =~ ^/run/php/php[0-9]+([.][0-9]+)?-fpm[.]sock$ ]]; then
+    echo "Invalid PHP-FPM socket path: $php_fpm_socket" >&2
+    exit 1
+fi
+
+if [[ -z "${PHP_FPM_SOCKET:-}" && ! -S "$php_fpm_socket" ]]; then
+    echo "No live PHP-FPM socket found at $php_fpm_socket." >&2
     exit 1
 fi
 
@@ -58,9 +67,6 @@ set_env_value() {
 set_env_value "LORA_CONTROL_PANEL_URL" "https://$DOMAIN"
 set_env_value "LORA_CONTROL_PANEL_HOSTS" "$DOMAIN"
 set_env_value "LORA_DEDICATED_CONTROL_PANEL_HOSTS" "$DOMAIN"
-
-cd "$APP_ROOT"
-php artisan config:cache
 
 nginx -t
 systemctl reload nginx

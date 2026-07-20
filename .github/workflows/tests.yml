@@ -6,6 +6,7 @@ on:
       - main
       - staging
       - 'feat/**'
+      - 'agent/**'
   pull_request:
     branches:
       - staging
@@ -33,12 +34,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Prepare test environment
+        run: touch .env
 
       - name: PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # 2.37.0
         with:
-          php-version: '8.4'
+          php-version: '8.4.23'
           extensions: mbstring, pdo_mysql
           coverage: none
 
@@ -49,9 +53,9 @@ jobs:
         run: touch database/testing.sqlite
 
       - name: Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version: '22'
+          node-version: '22.20.0'
           cache: npm
 
       - name: Frontend dependencies
@@ -64,7 +68,7 @@ jobs:
         run: npm run build
 
       - name: Test application
-        run: php artisan test --compact
+        run: php artisan test --compact --fail-on-warning --fail-on-risky
 
   mysql-migrations:
     runs-on: ubuntu-latest
@@ -72,7 +76,7 @@ jobs:
 
     services:
       mysql:
-        image: mysql:8.4
+        image: mysql:8.4@sha256:c592c15aaf4a1961e15d82eb31ea5987dda862d1c4b1e93424438c0e91dc1f8d
         env:
           MYSQL_DATABASE: testing
           MYSQL_ROOT_PASSWORD: root
@@ -101,12 +105,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Prepare test environment
+        run: touch .env
 
       - name: PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # 2.37.0
         with:
-          php-version: '8.4'
+          php-version: '8.4.23'
           extensions: mbstring, pdo_mysql
           coverage: none
 
@@ -116,13 +123,137 @@ jobs:
       - name: Verify MySQL migrations
         run: php artisan migrate:fresh --force
 
+  mysql-tenancy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+        env:
+          MYSQL_DATABASE: testing_tenancy
+          MYSQL_USER: lora
+          MYSQL_PASSWORD: lora
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ulora -plora"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:4Cq6c8e+3Yi8oFv3NgTQ8zrThm3nZI2uv8Y4OUYHiRw=
+      APP_URL: http://localhost
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: testing_tenancy
+      DB_USERNAME: lora
+      DB_PASSWORD: lora
+      DB_CACHE_CONNECTION: mysql
+      SESSION_CONNECTION: mysql
+      DB_QUEUE_CONNECTION: mysql
+      CACHE_STORE: database
+      SESSION_DRIVER: database
+      QUEUE_CONNECTION: database
+      MAIL_MAILER: array
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Prepare test environment
+        run: touch .env
+
+      - name: PHP
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # 2.37.0
+        with:
+          php-version: '8.4.23'
+          extensions: mbstring, pdo_mysql
+          coverage: none
+
+      - name: Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '22.20.0'
+          cache: npm
+
+      - name: Frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Enable application-owned trigger DDL
+        run: mysql -h 127.0.0.1 -P 3306 -uroot -proot -e 'SET GLOBAL log_bin_trust_function_creators = 1'
+
+      - name: Test tenancy on production-like MySQL
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PUSH_BEFORE_SHA: ${{ github.event.before || '' }}
+        run: |
+          set -Eeuo pipefail
+          tenancy_tests=(
+            tests/Feature/TenantDatabaseIntegrityTest.php
+            tests/Feature/TenantIntegrityCommandTest.php
+            tests/Feature/TenantDomainRoutingTest.php
+            tests/Feature/TenantHandoffTest.php
+            tests/Feature/TenantIsolationTest.php
+            tests/Feature/TenantMutationIsolationTest.php
+            tests/Feature/TenantInfrastructureIsolationTest.php
+            tests/Feature/TenantAccessControlTest.php
+            tests/Feature/GuestMessagingTest.php
+            tests/Feature/ChannexBookingImportTest.php
+            tests/Feature/ControlPanelIsolationTest.php
+            tests/Feature/TenantUserInvitationTest.php
+            tests/Feature/LoraAiMcpTest.php
+          )
+          tests=()
+          baseline=
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            baseline="$PR_BASE_SHA"
+          elif [[ "$PUSH_BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            && [[ "$PUSH_BEFORE_SHA" != 0000000000000000000000000000000000000000 ]]; then
+            baseline="$PUSH_BEFORE_SHA"
+          fi
+          control_plane_bootstrapped=false
+          if [[ -n "$baseline" ]] \
+            && git cat-file -e "$baseline:.github/workflows/production-release-rehearsal.yml" 2>/dev/null; then
+            control_plane_bootstrapped=true
+          fi
+          for test_path in "${tenancy_tests[@]}"; do
+            if [[ -f "$test_path" ]]; then
+              tests+=("$test_path")
+            elif [[ "$control_plane_bootstrapped" == true ]] \
+              || { [[ -n "$baseline" ]] \
+                && git cat-file -e "$baseline:$test_path" 2>/dev/null; }; then
+              echo "Required tenancy test is missing after control-plane bootstrap: $test_path" >&2
+              exit 1
+            fi
+          done
+          if [[ "${#tests[@]}" -eq 0 ]]; then
+            echo 'Bootstrap transition: running MySQL migration smoke until the release adds tenancy tests.'
+            php artisan migrate:fresh --force
+          else
+            php artisan test --compact --fail-on-warning --fail-on-risky "${tests[@]}"
+          fi
+
   mysql-upgrade:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     services:
       mysql:
-        image: mysql:8.4
+        image: mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
         env:
           MYSQL_DATABASE: testing_upgrade
           MYSQL_ROOT_PASSWORD: root
@@ -150,16 +281,37 @@ jobs:
       MAIL_MAILER: array
 
     steps:
+      - name: Resolve target branch schema
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -Eeuo pipefail
+          target=staging
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+            target="$BASE_SHA"
+          elif [[ "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            && [[ "$BEFORE_SHA" != 0000000000000000000000000000000000000000 ]]; then
+            target="$BEFORE_SHA"
+          fi
+          printf 'ref=%s\n' "$target" >> "$GITHUB_OUTPUT"
+
       - name: Checkout target branch schema
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.event.before || 'staging' }}
+          ref: ${{ steps.target.outputs.ref }}
           fetch-depth: 0
 
+      - name: Prepare target environment
+        run: touch .env
+
       - name: PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # 2.37.0
         with:
-          php-version: '8.4'
+          php-version: '8.4.23'
           extensions: mbstring, pdo_mysql
           coverage: none
 
@@ -173,10 +325,13 @@ jobs:
         run: php artisan db:seed --force
 
       - name: Checkout candidate code
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           clean: true
+
+      - name: Prepare candidate environment
+        run: touch .env
 
       - name: Refresh candidate Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress

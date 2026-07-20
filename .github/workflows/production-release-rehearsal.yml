@@ -1,0 +1,591 @@
+name: Production Release Rehearsal
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact 40-character commit currently at the tip of main
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: production-release-rehearsal
+  cancel-in-progress: false
+
+env:
+  REHEARSAL_CANDIDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.event.pull_request.head.sha }}
+  REHEARSAL_HARNESS_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.event.pull_request.base.sha }}
+  REHEARSAL_PR_NUMBER: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || '' }}
+
+jobs:
+  production-preflight:
+    name: Production rehearsal SSH bootstrap
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request_target' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.label.name == 'production-preflight' ||
+      github.event.label.name == 'production-rehearsal'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production-rehearsal
+    outputs:
+      preflight: ${{ steps.remote-preflight.outputs.stdout }}
+      production_sha: ${{ steps.parse-preflight.outputs.production_sha }}
+    steps:
+      - name: Checkout trusted rehearsal harness
+        id: checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ env.REHEARSAL_HARNESS_SHA }}
+          persist-credentials: false
+
+      - name: Validate trusted harness and pinned host fingerprint
+        env:
+          CANDIDATE_SHA: ${{ env.REHEARSAL_CANDIDATE }}
+          HARNESS_SHA: ${{ env.REHEARSAL_HARNESS_SHA }}
+          SERVER_FINGERPRINT: ${{ secrets.SERVER_FINGERPRINT }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HARNESS_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$HARNESS_SHA" ]]
+          [[ "$SERVER_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}=?$ ]]
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            [[ "$EVENT_REF" == 'refs/heads/main' ]]
+            [[ "$EVENT_SHA" == "$CANDIDATE_SHA" ]]
+          fi
+          bash -n ops/backup/run-release-rehearsal.sh
+
+      - name: Run pinned-host preflight
+        id: remote-preflight
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        env:
+          LORA_REHEARSAL_MODE: preflight
+          LORA_REHEARSAL_CANDIDATE: ${{ env.REHEARSAL_CANDIDATE }}
+          LORA_REHEARSAL_PR_NUMBER: ${{ env.REHEARSAL_PR_NUMBER }}
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          command_timeout: 20m
+          envs: LORA_REHEARSAL_MODE,LORA_REHEARSAL_CANDIDATE,LORA_REHEARSAL_PR_NUMBER
+          script_path: ops/backup/run-release-rehearsal.sh
+          capture_stdout: true
+
+      - name: Publish preflight result
+        id: parse-preflight
+        env:
+          PREFLIGHT_OUTPUT: ${{ steps.remote-preflight.outputs.stdout }}
+          EXPECTED_CANDIDATE: ${{ env.REHEARSAL_CANDIDATE }}
+        run: |
+          set -Eeuo pipefail
+          clean_output="$(printf '%s\n' "$PREFLIGHT_OUTPUT" | tr -d '\r')"
+          [[ "$(grep -c '^PREFLIGHT=passed$' <<< "$clean_output")" -eq 1 ]]
+          [[ "$(grep -c '^CANDIDATE_SHA=' <<< "$clean_output")" -eq 1 ]]
+          [[ "$(grep -c '^PRODUCTION_SHA=' <<< "$clean_output")" -eq 1 ]]
+          candidate_sha="$(sed -n 's/^CANDIDATE_SHA=//p' <<< "$clean_output")"
+          production_sha="$(sed -n 's/^PRODUCTION_SHA=//p' <<< "$clean_output")"
+          [[ "$candidate_sha" == "$EXPECTED_CANDIDATE" ]]
+          [[ "$production_sha" =~ ^[0-9a-f]{40}$ ]]
+          printf 'production_sha=%s\n' "$production_sha" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Production rehearsal preflight'
+            echo
+            echo '```text'
+            printf '%s\n' "$PREFLIGHT_OUTPUT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  production-rehearsal:
+    name: Restore, upgrade, and exact rollback
+    needs: production-preflight
+    if: >-
+      needs.production-preflight.result == 'success' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.label.name == 'production-rehearsal' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    environment: production-rehearsal
+    steps:
+      - name: Checkout exact pull request head
+        id: checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ env.REHEARSAL_HARNESS_SHA }}
+          persist-credentials: false
+
+      - name: Validate exact candidate and pinned host fingerprint
+        id: fingerprint
+        env:
+          CANDIDATE_SHA: ${{ env.REHEARSAL_CANDIDATE }}
+          HARNESS_SHA: ${{ env.REHEARSAL_HARNESS_SHA }}
+          SERVER_FINGERPRINT: ${{ secrets.SERVER_FINGERPRINT }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HARNESS_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$HARNESS_SHA" ]]
+          [[ "$SERVER_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}=?$ ]]
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            [[ "$EVENT_REF" == 'refs/heads/main' ]]
+            [[ "$EVENT_SHA" == "$CANDIDATE_SHA" ]]
+          fi
+          bash -n ops/backup/run-release-rehearsal.sh
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
+      - name: Require all four CI checks on the exact candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ env.REHEARSAL_CANDIDATE }}
+          HARNESS_SHA: ${{ env.REHEARSAL_HARNESS_SHA }}
+          PR_NUMBER: ${{ env.REHEARSAL_PR_NUMBER }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            checks_sha="$CANDIDATE_SHA"
+            expected_event=push
+            current_main="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+            [[ "$current_main" == "$CANDIDATE_SHA" ]]
+          else
+            expected_event=pull_request
+            checks_sha="$CANDIDATE_SHA"
+            pr_json="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+            current_head="$(jq -r '.head.sha' <<< "$pr_json")"
+            current_base="$(jq -r '.base.sha' <<< "$pr_json")"
+            merge_sha="$(jq -r '.merge_commit_sha' <<< "$pr_json")"
+            [[ "$current_head" == "$CANDIDATE_SHA" ]]
+            [[ "$current_base" == "$HARNESS_SHA" ]]
+            [[ "$merge_sha" =~ ^[0-9a-f]{40}$ ]]
+            candidate_tree="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/git/commits/${CANDIDATE_SHA}" --jq '.tree.sha')"
+            checks_tree="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/git/commits/${merge_sha}" --jq '.tree.sha')"
+            if [[ "$candidate_tree" != "$checks_tree" ]]; then
+              echo 'PR head is not up to date with main; checked tree differs from rehearsal tree.' >&2
+              exit 1
+            fi
+
+            trusted_paths=(
+              .github/CODEOWNERS
+              .github/workflows/deploy.yml
+              .github/workflows/production-release-rehearsal.yml
+              .github/workflows/tests.yml
+              deploy/scripts/configure-control-panel-domain.sh
+              deploy/nginx/admin.lorapms.com.conf
+              deploy/nginx/fastcgi-buffers.conf
+              ops/backup/lora-backup.service
+              ops/backup/run-offsite-backup.sh
+              ops/backup/run-release-rehearsal.sh
+            )
+            for trusted_path in "${trusted_paths[@]}"; do
+              candidate_blob="$(gh api \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2022-11-28' \
+                "repos/${GITHUB_REPOSITORY}/contents/${trusted_path}?ref=${CANDIDATE_SHA}" \
+                --jq '.sha')"
+              trusted_blob="$(gh api \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2022-11-28' \
+                "repos/${GITHUB_REPOSITORY}/contents/${trusted_path}?ref=${HARNESS_SHA}" \
+                --jq '.sha')"
+              if [[ "$candidate_blob" != "$trusted_blob" ]]; then
+                echo "Trusted control-plane file changed in this PR; bootstrap it separately: $trusted_path" >&2
+                exit 1
+              fi
+            done
+          fi
+          [[ "$checks_sha" =~ ^[0-9a-f]{40}$ ]]
+
+          trusted_workflow_id="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/tests.yml" --jq '.id')"
+          [[ "$trusted_workflow_id" =~ ^[1-9][0-9]*$ ]]
+
+          runs_json="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/tests.yml/runs?event=${expected_event}&status=completed&per_page=100")"
+
+          run_record="$(jq -c \
+            --arg sha "$checks_sha" \
+            --arg event "$expected_event" \
+            --arg pr "$PR_NUMBER" \
+            --argjson workflow_id "$trusted_workflow_id" '
+              [.workflow_runs[]
+                | select(.head_sha == $sha)
+                | select(.event == $event)
+                | select(.workflow_id == $workflow_id)
+                | select(.conclusion == "success")
+                | select($event != "push" or .head_branch == "main")
+                | select(
+                    $event == "push"
+                    or any(.pull_requests[]?; (.number | tostring) == $pr)
+                  )]
+              | sort_by(.run_attempt, .id)
+              | last // empty
+            ' <<< "$runs_json")"
+          [[ -n "$run_record" ]]
+          run_id="$(jq -r '.id' <<< "$run_record")"
+          run_attempt="$(jq -r '.run_attempt' <<< "$run_record")"
+          [[ "$run_id" =~ ^[1-9][0-9]*$ ]]
+          [[ "$run_attempt" =~ ^[1-9][0-9]*$ ]]
+
+          jobs_json="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/attempts/${run_attempt}/jobs?per_page=100")"
+
+          for required in application mysql-migrations mysql-tenancy mysql-upgrade; do
+            result="$(jq -r --arg name "$required" '
+              [.jobs[] | select(.name == $name)]
+              | if length != 1 then "invalid-count|" + (length | tostring)
+                else (.[0].status + "|" + (.[0].conclusion // "")) end
+            ' <<< "$jobs_json")"
+            if [[ "$result" != 'completed|success' ]]; then
+              echo "Required job $required is not successful in trusted Tests run $run_id: $result" >&2
+              exit 1
+            fi
+            echo "Required trusted job passed: $required"
+          done
+
+      - name: Checkout production baseline dependency source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ needs.production-preflight.outputs.production_sha }}
+          path: dependency-baseline
+          persist-credentials: false
+
+      - name: Checkout candidate dependency source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ env.REHEARSAL_CANDIDATE }}
+          path: dependency-candidate
+          persist-credentials: false
+
+      - name: Prepare PHP dependency builder
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # 2.37.0
+        with:
+          php-version: '8.4.23'
+          coverage: none
+
+      - name: Build verified release artifacts away from production
+        id: dependency-artifacts
+        env:
+          BASELINE_SHA: ${{ needs.production-preflight.outputs.production_sha }}
+          CANDIDATE_SHA: ${{ env.REHEARSAL_CANDIDATE }}
+          PHP_IMAGE: serversideup/php:8.4-cli@sha256:7b669c4fbb70ca392cdbfa61b0aee6f95530445a67f2a814c0692c992971de2c
+          NODE_IMAGE: node:22.20.0-bookworm-slim@sha256:b21fe589dfbe5cc39365d0544b9be3f1f33f55f3c86c87a76ff65a02f8f5848e
+        run: |
+          set -Eeuo pipefail
+          build_vendor() {
+            local kind="$1"
+            local source="$2"
+            local expected_sha="$3"
+            local archive="$RUNNER_TEMP/lora-${kind}-vendor.tar.gz"
+            local uid
+            local gid
+            local path
+
+            [[ "$(git -C "$source" rev-parse HEAD)" == "$expected_sha" ]]
+            [[ -f "$source/composer.lock" && ! -L "$source/composer.lock" ]]
+            uid="$(id -u)"
+            gid="$(id -g)"
+            docker run --rm \
+              --name "lora-release-composer-${kind}-${expected_sha:0:12}" \
+              --network bridge \
+              --read-only \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --pids-limit 256 \
+              --memory 1g \
+              --memory-swap 1g \
+              --cpus 2 \
+              --user "$uid:$gid" \
+              --log-driver none \
+              --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=268435456,uid=$uid,gid=$gid,mode=0700" \
+              --env HOME=/tmp \
+              --env COMPOSER_HOME=/tmp/composer \
+              --env SHOW_WELCOME_MESSAGE=false \
+              --mount "type=bind,source=$PWD/$source,target=/workspace" \
+              --workdir /workspace \
+              --entrypoint /usr/bin/composer \
+              --pull never \
+              "$PHP_IMAGE" install --no-dev --no-interaction --prefer-dist --no-progress \
+              --no-audit --no-scripts --no-plugins --optimize-autoloader
+            [[ -d "$source/vendor" && ! -L "$source/vendor" ]]
+            while IFS= read -r -d '' path; do
+              [[ "$path" != *$'\n'* && "$path" != *$'\r'* ]]
+              [[ -f "$path" || -d "$path" ]]
+              [[ ! -L "$path" ]]
+            done < <(find "$source/vendor" -print0)
+            tar --create --gzip --file="$archive" --directory="$source" vendor
+            [[ -s "$archive" ]]
+            [[ "$(stat -c %s "$archive")" -le 1073741824 ]]
+            printf '%s_sha256=%s\n' "$kind" "$(sha256sum "$archive" | awk '{print $1}')" \
+              >> "$GITHUB_OUTPUT"
+          }
+
+          build_assets() {
+            local source="$RUNNER_TEMP/lora-candidate-node-source"
+            local archive="$RUNNER_TEMP/lora-candidate-assets.tar.gz"
+            local build_id="${CANDIDATE_SHA:0:12}"
+            local uid
+            local gid
+            local path
+
+            [[ "$(git -C dependency-candidate rev-parse HEAD)" == "$CANDIDATE_SHA" ]]
+            if git -C dependency-candidate ls-files -s | grep -q '^120000 '; then
+              echo 'Tracked symbolic links are prohibited in the release source.' >&2
+              exit 1
+            fi
+            install -d -m 0700 "$source"
+            git -C dependency-candidate archive --format=tar "$CANDIDATE_SHA" \
+              | tar --extract --no-same-owner --directory="$source"
+            [[ -f "$source/package-lock.json" && ! -L "$source/package-lock.json" ]]
+            [[ -f "$source/package.json" && ! -L "$source/package.json" ]]
+            uid="$(id -u)"
+            gid="$(id -g)"
+
+            docker pull "$NODE_IMAGE" >/dev/null
+            docker image inspect "$NODE_IMAGE" >/dev/null
+            docker run --rm \
+              --name "lora-release-npm-${CANDIDATE_SHA:0:12}" \
+              --network bridge \
+              --read-only \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --pids-limit 256 \
+              --memory 2g \
+              --memory-swap 2g \
+              --cpus 2 \
+              --user "$uid:$gid" \
+              --log-driver none \
+              --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=536870912,uid=$uid,gid=$gid,mode=0700" \
+              --env HOME=/tmp \
+              --env npm_config_cache=/tmp/npm \
+              --mount "type=bind,source=$source,target=/workspace" \
+              --workdir /workspace \
+              --entrypoint /usr/local/bin/npm \
+              "$NODE_IMAGE" ci --ignore-scripts --no-audit --no-fund
+            docker run --rm \
+              --name "lora-release-assets-${CANDIDATE_SHA:0:12}" \
+              --network none \
+              --read-only \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --pids-limit 256 \
+              --memory 2g \
+              --memory-swap 2g \
+              --cpus 2 \
+              --user "$uid:$gid" \
+              --log-driver none \
+              --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=536870912,uid=$uid,gid=$gid,mode=0700" \
+              --env HOME=/tmp \
+              --env npm_config_cache=/tmp/npm \
+              --env "VITE_BUILD_ID=$CANDIDATE_SHA" \
+              --mount "type=bind,source=$source,target=/workspace" \
+              --workdir /workspace \
+              --entrypoint /usr/local/bin/npm \
+              "$NODE_IMAGE" run build -- --mode=production
+
+            [[ -d "$source/public/build" && ! -L "$source/public/build" ]]
+            while IFS= read -r -d '' path; do
+              [[ "$path" != *$'\n'* && "$path" != *$'\r'* ]]
+              [[ -f "$path" || -d "$path" ]]
+              [[ ! -L "$path" ]]
+            done < <(find "$source/public/build" -print0)
+            EXPECTED_BUILD_ID="$build_id" RELEASE_ROOT="$source" php -d memory_limit=64M -r '
+              $buildId = (string) getenv("EXPECTED_BUILD_ID");
+              $root = (string) getenv("RELEASE_ROOT");
+              if (preg_match("/^[0-9a-f]{12}$/D", $buildId) !== 1) {
+                  throw new RuntimeException("Invalid expected Vite build id.");
+              }
+              $manifest = json_decode(
+                  (string) file_get_contents($root."/public/build/manifest.json"),
+                  true,
+                  flags: JSON_THROW_ON_ERROR,
+              );
+              foreach (["resources/css/app.css", "resources/js/app.js"] as $required) {
+                  if (! isset($manifest[$required]) || ! is_array($manifest[$required])) {
+                      throw new RuntimeException("Missing Vite entry: ".$required);
+                  }
+              }
+              $pattern = "/-".preg_quote($buildId, "/")."(?:[0-9]+)?\\.[^\\/]+$/D";
+              $outputs = [];
+              foreach ($manifest as $entry) {
+                  if (! is_array($entry)) {
+                      throw new RuntimeException("Invalid Vite manifest entry.");
+                  }
+                  if (isset($entry["file"])) {
+                      $outputs[] = $entry["file"];
+                  }
+                  foreach (["css", "assets"] as $key) {
+                      foreach (($entry[$key] ?? []) as $output) {
+                          $outputs[] = $output;
+                      }
+                  }
+              }
+              if ($outputs === []) {
+                  throw new RuntimeException("Vite manifest has no outputs.");
+              }
+              foreach (array_unique($outputs) as $output) {
+                  if (! is_string($output)
+                      || str_starts_with($output, "/")
+                      || preg_match("#(?:^|/)\\.\\.(?:/|$)#", $output) === 1
+                      || preg_match($pattern, $output) !== 1
+                      || ! is_file($root."/public/build/".$output)) {
+                      throw new RuntimeException("Unexpected Vite output: ".json_encode($output));
+                  }
+              }
+            '
+            tar --create --gzip --file="$archive" --directory="$source" public/build
+            [[ -s "$archive" ]]
+            [[ "$(stat -c %s "$archive")" -le 536870912 ]]
+            printf 'assets_sha256=%s\n' "$(sha256sum "$archive" | awk '{print $1}')" \
+              >> "$GITHUB_OUTPUT"
+          }
+
+          docker pull "$PHP_IMAGE" >/dev/null
+          docker image inspect "$PHP_IMAGE" >/dev/null
+          build_vendor baseline dependency-baseline "$BASELINE_SHA"
+          build_assets
+          build_vendor candidate dependency-candidate "$CANDIDATE_SHA"
+
+      - name: Upload verified dependency artifacts to the rehearsal inbox
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_FINGERPRINT: ${{ secrets.SERVER_FINGERPRINT }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          CANDIDATE_SHA: ${{ env.REHEARSAL_CANDIDATE }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SERVER_IP" =~ ^[A-Za-z0-9.:-]+$ ]]
+          [[ "$SERVER_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}=?$ ]]
+
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/lora-rehearsal-ssh.XXXXXXXX")"
+          trap 'rm -rf -- "$ssh_dir"' EXIT
+          key_file="$ssh_dir/id"
+          scanned_keys="$ssh_dir/scanned"
+          verified_keys="$ssh_dir/verified"
+          one_key="$ssh_dir/one-key"
+          install -m 0600 /dev/null "$key_file"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$key_file"
+          ssh-keyscan -T 10 -t ed25519,rsa "$SERVER_IP" > "$scanned_keys"
+          install -m 0600 /dev/null "$verified_keys"
+          while IFS= read -r key_line; do
+            [[ -n "$key_line" ]] || continue
+            printf '%s\n' "$key_line" > "$one_key"
+            fingerprint="$(ssh-keygen -lf "$one_key" -E sha256 | awk 'NR == 1 {print $2}')"
+            if [[ "$fingerprint" == "$SERVER_FINGERPRINT" ]]; then
+              printf '%s\n' "$key_line" >> "$verified_keys"
+            fi
+          done < "$scanned_keys"
+          [[ -s "$verified_keys" ]]
+
+          ssh_options=(
+            -i "$key_file"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$verified_keys"
+          )
+          remote_dir="/var/lib/lora-backup/rehearsal-inbox/$CANDIDATE_SHA"
+          ssh "${ssh_options[@]}" "root@$SERVER_IP" \
+            "install -d -o root -g root -m 0700 '$remote_dir'"
+          scp "${ssh_options[@]}" \
+            "$RUNNER_TEMP/lora-baseline-vendor.tar.gz" \
+            "root@$SERVER_IP:$remote_dir/baseline-vendor.tar.gz"
+          scp "${ssh_options[@]}" \
+            "$RUNNER_TEMP/lora-candidate-vendor.tar.gz" \
+            "root@$SERVER_IP:$remote_dir/candidate-vendor.tar.gz"
+          scp "${ssh_options[@]}" \
+            "$RUNNER_TEMP/lora-candidate-assets.tar.gz" \
+            "root@$SERVER_IP:$remote_dir/candidate-assets.tar.gz"
+          ssh "${ssh_options[@]}" "root@$SERVER_IP" \
+            "chown root:root '$remote_dir/baseline-vendor.tar.gz' '$remote_dir/candidate-vendor.tar.gz' '$remote_dir/candidate-assets.tar.gz' && chmod 0600 '$remote_dir/baseline-vendor.tar.gz' '$remote_dir/candidate-vendor.tar.gz' '$remote_dir/candidate-assets.tar.gz'"
+
+      - name: Run production release rehearsal
+        id: rehearsal
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        env:
+          LORA_REHEARSAL_MODE: run
+          LORA_REHEARSAL_CANDIDATE: ${{ env.REHEARSAL_CANDIDATE }}
+          LORA_REHEARSAL_PR_NUMBER: ${{ env.REHEARSAL_PR_NUMBER }}
+          LORA_REHEARSAL_BASELINE_SHA: ${{ needs.production-preflight.outputs.production_sha }}
+          LORA_REHEARSAL_BASELINE_VENDOR_SHA256: ${{ steps.dependency-artifacts.outputs.baseline_sha256 }}
+          LORA_REHEARSAL_CANDIDATE_VENDOR_SHA256: ${{ steps.dependency-artifacts.outputs.candidate_sha256 }}
+          LORA_REHEARSAL_CANDIDATE_ASSETS_SHA256: ${{ steps.dependency-artifacts.outputs.assets_sha256 }}
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          command_timeout: 300m
+          envs: LORA_REHEARSAL_MODE,LORA_REHEARSAL_CANDIDATE,LORA_REHEARSAL_PR_NUMBER,LORA_REHEARSAL_BASELINE_SHA,LORA_REHEARSAL_BASELINE_VENDOR_SHA256,LORA_REHEARSAL_CANDIDATE_VENDOR_SHA256,LORA_REHEARSAL_CANDIDATE_ASSETS_SHA256
+          script_path: ops/backup/run-release-rehearsal.sh
+          capture_stdout: true
+
+      - name: Cleanup encrypted rehearsal resources
+        if: >-
+          always() &&
+          steps.checkout.outcome == 'success' &&
+          steps.fingerprint.outputs.ready == 'true'
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        env:
+          LORA_REHEARSAL_MODE: cleanup
+          LORA_REHEARSAL_CANDIDATE: ${{ env.REHEARSAL_CANDIDATE }}
+          LORA_REHEARSAL_PR_NUMBER: ${{ env.REHEARSAL_PR_NUMBER }}
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          command_timeout: 20m
+          envs: LORA_REHEARSAL_MODE,LORA_REHEARSAL_CANDIDATE,LORA_REHEARSAL_PR_NUMBER
+          script_path: ops/backup/run-release-rehearsal.sh
+
+      - name: Publish rehearsal result
+        if: success()
+        env:
+          REHEARSAL_OUTPUT: ${{ steps.rehearsal.outputs.stdout }}
+        run: |
+          set -Eeuo pipefail
+          {
+            echo '### Production release rehearsal'
+            echo
+            echo '```text'
+            printf '%s\n' "$REHEARSAL_OUTPUT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
