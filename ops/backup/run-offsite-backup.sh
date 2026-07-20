@@ -12,6 +12,9 @@ readonly SCHEDULER_FILE="${LORA_SCHEDULER_FILE:-/etc/cron.d/villamucho-scheduler
 readonly SCHEDULER_HOLD="${STATE_PATH}/villamucho-scheduler.backup-paused"
 readonly MYSQL_CONFIG_FILE="${LORA_BACKUP_MYSQL_CONFIG:-/etc/lora-backup/mysql.cnf}"
 readonly RESTIC_CACHE_PATH="${LORA_RESTIC_CACHE_PATH:-/var/cache/restic}"
+readonly PASSPORT_KEY_DIR="/etc/lora-passport"
+readonly PASSPORT_PRIVATE_KEY="${PASSPORT_KEY_DIR}/oauth-private.key"
+readonly PASSPORT_PUBLIC_KEY="${PASSPORT_KEY_DIR}/oauth-public.key"
 readonly WRITER_FENCE_SENTINEL="/run/lora-backup-writers-enabled"
 readonly RELEASE_HANDOFF_REQUEST="${STATE_PATH}/release-handoff.request"
 readonly RELEASE_HANDOFF_READY="${STATE_PATH}/release-handoff.ready"
@@ -49,6 +52,8 @@ restic_json=''
 snapshot_id=''
 snapshot_created_utc=''
 upload_completed_utc=''
+passport_key_state=not-required
+passport_public_fingerprint=not-required
 initial_storage_sync_duration=1h
 final_storage_sync_duration=30m
 restic_backup_duration=90m
@@ -76,6 +81,70 @@ require_root_only_file() {
     mode="$(stat -c '%a' "${path}")"
     [[ "${owner}" == "root" ]] || fail "${label} must be owned by root"
     (( (8#${mode} & 8#077) == 0 )) || fail "${label} must not be accessible by group/others"
+}
+
+passport_pair_fingerprint() {
+    local private_key="$1"
+    local public_key="$2"
+    local private_fingerprint
+    local public_fingerprint
+
+    [[ -f "${private_key}" && ! -L "${private_key}" ]] \
+        || fail "Passport private key is not a regular file: ${private_key}"
+    [[ -f "${public_key}" && ! -L "${public_key}" ]] \
+        || fail "Passport public key is not a regular file: ${public_key}"
+    (( $(stat -c %s "${private_key}") >= 512 \
+        && $(stat -c %s "${private_key}") <= 32768 )) \
+        || fail "Passport private key size is outside the accepted range"
+    (( $(stat -c %s "${public_key}") >= 256 \
+        && $(stat -c %s "${public_key}") <= 32768 )) \
+        || fail "Passport public key size is outside the accepted range"
+    openssl pkey -in "${private_key}" -check -noout >/dev/null 2>&1 \
+        || fail "Passport private key is invalid"
+    openssl pkey -pubin -in "${public_key}" -noout >/dev/null 2>&1 \
+        || fail "Passport public key is invalid"
+    private_fingerprint="$(
+        openssl pkey -in "${private_key}" -pubout -outform DER 2>/dev/null \
+            | sha256sum | awk '{print $1}'
+    )" || fail "Passport private-key fingerprint could not be calculated"
+    public_fingerprint="$(
+        openssl pkey -pubin -in "${public_key}" -pubout -outform DER 2>/dev/null \
+            | sha256sum | awk '{print $1}'
+    )" || fail "Passport public-key fingerprint could not be calculated"
+    [[ "${private_fingerprint}" =~ ^[0-9a-f]{64}$ \
+        && "${private_fingerprint}" == "${public_fingerprint}" ]] \
+        || fail "Passport private/public keys do not form the same key pair"
+    printf '%s\n' "${public_fingerprint}"
+}
+
+assert_live_passport_key_pair() {
+    local fingerprint
+
+    [[ -d "${PASSPORT_KEY_DIR}" && ! -L "${PASSPORT_KEY_DIR}" ]] \
+        || fail "Passport key directory is missing or unsafe"
+    [[ "$(stat -c '%U:%G:%a' "${PASSPORT_KEY_DIR}")" == "root:${app_group}:750" ]] \
+        || fail "Passport key directory must be root:${app_group} 0750"
+    [[ "$(stat -c '%U:%G:%a' "${PASSPORT_PRIVATE_KEY}")" == "root:${app_group}:440" ]] \
+        || fail "Passport private key must be root:${app_group} 0440"
+    [[ "$(stat -c '%U:%G:%a' "${PASSPORT_PUBLIC_KEY}")" == "root:${app_group}:440" ]] \
+        || fail "Passport public key must be root:${app_group} 0440"
+    fingerprint="$(passport_pair_fingerprint \
+        "${PASSPORT_PRIVATE_KEY}" "${PASSPORT_PUBLIC_KEY}")"
+    [[ "${fingerprint}" =~ ^[0-9a-f]{64}$ ]] \
+        || fail "Passport key-pair fingerprint is invalid"
+    printf '%s\n' "${fingerprint}"
+}
+
+assert_passport_runtime_configuration() {
+    run_as_app_bounded 2m php -r '
+        require "vendor/autoload.php";
+        $app = require "bootstrap/app.php";
+        $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+        if (config("passport.private_key") !== "file:///etc/lora-passport/oauth-private.key"
+            || config("passport.public_key") !== "file:///etc/lora-passport/oauth-public.key") {
+            throw new RuntimeException("Production Passport key URIs are not pinned to /etc/lora-passport");
+        }
+    '
 }
 
 root_0600_file_is_safe() {
@@ -1161,12 +1230,21 @@ require_root_only_file "${RESTIC_PASSWORD_FILE}" "Restic password file"
 
 for binary in \
     awk bash chmod chown date df du env find findmnt flock git grep hostname id install mktemp mv mysql \
-    mount mountpoint mysqldump pgrep php restic rm rmdir rsync runuser seq sha256sum sleep sort ss stat sync systemctl timeout tr umount wc xargs; do
+    mount mountpoint mysqldump openssl pgrep php restic rm rmdir rsync runuser seq sha256sum sleep sort ss stat sync systemctl timeout tr umount wc xargs; do
     command -v "${binary}" >/dev/null 2>&1 || fail "required binary is missing: ${binary}"
 done
 app_group="$(id -gn "${APP_USER}")"
 [[ -n "${app_group}" ]] || fail "application primary group could not be determined"
 assert_repository_security
+if grep -Fq '"name": "laravel/passport"' "${APP_PATH}/composer.lock" \
+    || [[ -e "${PASSPORT_PRIVATE_KEY}" || -L "${PASSPORT_PRIVATE_KEY}" \
+        || -e "${PASSPORT_PUBLIC_KEY}" || -L "${PASSPORT_PUBLIC_KEY}" ]]; then
+    passport_key_state=present
+    passport_public_fingerprint="$(assert_live_passport_key_pair)"
+fi
+if grep -Fq '"name": "laravel/passport"' "${APP_PATH}/composer.lock"; then
+    assert_passport_runtime_configuration
+fi
 
 [[ ! -L "${STATE_PATH}" ]] || fail "backup state path must not be a symbolic link"
 install -d -o root -g root -m 0700 "${STATE_PATH}"
@@ -1238,6 +1316,7 @@ cd "${APP_PATH}"
 
 private_storage="${APP_PATH}/storage/app/private"
 public_storage="${APP_PATH}/storage/app/public"
+checksum_files=(application-key.txt database.sql integrity.json metadata.txt storage-SHA256SUMS)
 assert_storage_sources_safe
 assert_snapshot_capacity
 install -d -o root -g root -m 0700 \
@@ -1304,6 +1383,23 @@ assert_writer_fence
 
 assert_database_event_scheduler_disabled
 
+if [[ "${passport_key_state}" == present ]]; then
+    current_passport_fingerprint="$(assert_live_passport_key_pair)"
+    [[ "${current_passport_fingerprint}" == "${passport_public_fingerprint}" ]] \
+        || fail "Passport key pair changed while the backup was being prepared"
+    install -d -o root -g root -m 0700 "${run_dir}/passport"
+    install -o root -g root -m 0600 \
+        "${PASSPORT_PRIVATE_KEY}" "${run_dir}/passport/oauth-private.key"
+    install -o root -g root -m 0600 \
+        "${PASSPORT_PUBLIC_KEY}" "${run_dir}/passport/oauth-public.key"
+    copied_passport_fingerprint="$(passport_pair_fingerprint \
+        "${run_dir}/passport/oauth-private.key" \
+        "${run_dir}/passport/oauth-public.key")"
+    [[ "${copied_passport_fingerprint}" == "${passport_public_fingerprint}" ]] \
+        || fail "Passport backup copy differs from the live key pair"
+    checksum_files+=(passport/oauth-private.key passport/oauth-public.key)
+fi
+
 run_as_app_bounded "${integrity_check_duration}" \
     php artisan tenants:verify-integrity "${integrity_options[@]}"
 [[ -f "${integrity_work}" && ! -L "${integrity_work}" ]] \
@@ -1341,9 +1437,10 @@ timeout --signal=TERM --kill-after=2m "${checksum_duration}" \
     printf 'storage_verification=%s\n' "${storage_verification}"
     printf 'mysql_event_scheduler=%s\n' "${mysql_event_scheduler_state}"
     printf 'application_key_escrow=restic-encrypted\n'
+    printf 'passport_keys=%s\n' "${passport_key_state}"
+    printf 'passport_public_key_sha256=%s\n' "${passport_public_fingerprint}"
 } > "${run_dir}/metadata.txt"
 
-checksum_files=(application-key.txt database.sql integrity.json metadata.txt storage-SHA256SUMS)
 (
     cd "${run_dir}"
     sha256sum "${checksum_files[@]}" > SHA256SUMS
