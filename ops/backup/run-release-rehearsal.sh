@@ -17,6 +17,13 @@ readonly APP_USER="${LORA_APP_USER:-www-data}"
 readonly STATE_PATH="${LORA_BACKUP_STATE_PATH:-/var/lib/lora-backup}"
 readonly CONFIG_FILE="${LORA_BACKUP_CONFIG:-/etc/lora-backup/restic.env}"
 readonly MYSQL_CONFIG_FILE="${LORA_BACKUP_MYSQL_CONFIG:-/etc/lora-backup/mysql.cnf}"
+readonly PASSPORT_KEY_DIR="/etc/lora-passport"
+readonly PASSPORT_PRIVATE_KEY="${PASSPORT_KEY_DIR}/oauth-private.key"
+readonly PASSPORT_PUBLIC_KEY="${PASSPORT_KEY_DIR}/oauth-public.key"
+readonly PASSPORT_PRIVATE_URI="file://${PASSPORT_PRIVATE_KEY}"
+readonly PASSPORT_PUBLIC_URI="file://${PASSPORT_PUBLIC_KEY}"
+readonly LEGACY_PASSPORT_PRIVATE_KEY="${APP_PATH}/storage/oauth-private.key"
+readonly LEGACY_PASSPORT_PUBLIC_KEY="${APP_PATH}/storage/oauth-public.key"
 readonly LOCK_PATH="${STATE_PATH}/production-release.lock"
 readonly REHEARSAL_STATE_PATH="${STATE_PATH}/rehearsals"
 readonly MYSQL_IMAGE="mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b"
@@ -24,7 +31,7 @@ readonly APP_RUNTIME_IMAGE="serversideup/php:8.4-cli@sha256:7b669c4fbb70ca392cdb
 readonly REHEARSAL_DATABASE="lora_rehearsal"
 readonly REHEARSAL_DB_USER="lora_rehearsal"
 readonly MINIMUM_DOCKER_VERSION="28.0.0"
-readonly BACKUP_SCRIPT_SHA="65f90f0d4ed30fdd3123ca4fb526ec1f5016013538623cdffc7b9f5fdb781645"
+readonly BACKUP_SCRIPT_SHA="36a1615ed56848cd252661f34263f9c797194240c17fdc331f2f32873a4a7c78"
 readonly BACKUP_SERVICE_SHA="12c9a39973ca26d371b78992000128179463146f2f140089494e1ab04da5d5c6"
 readonly INSTALLED_BACKUP_SCRIPT="/usr/local/sbin/lora-offsite-backup"
 readonly INSTALLED_BACKUP_SERVICE="/etc/systemd/system/lora-backup.service"
@@ -72,6 +79,8 @@ PRODUCTION_DB_LOWER_CASE_TABLE_NAMES=''
 PRODUCTION_DB_CONNECTION_CHARACTER_SET=''
 PRODUCTION_DB_CONNECTION_COLLATION=''
 BACKUP_BOOTSTRAP_DIR=''
+CANDIDATE_REQUIRES_PASSPORT=false
+PASSPORT_PUBLIC_FINGERPRINT=not-required
 
 require_root_only_file() {
     local path="$1"
@@ -87,11 +96,283 @@ require_root_only_file() {
     (( (8#${mode} & 8#077) == 0 )) || fail "${label} must not be accessible by group/others"
 }
 
+passport_pair_fingerprint() {
+    local private_key="$1"
+    local public_key="$2"
+    local private_fingerprint
+    local public_fingerprint
+
+    [[ -f "${private_key}" && ! -L "${private_key}" ]] \
+        || fail "Passport private key is not a regular file: ${private_key}"
+    [[ -f "${public_key}" && ! -L "${public_key}" ]] \
+        || fail "Passport public key is not a regular file: ${public_key}"
+    (( $(stat -c %s "${private_key}") >= 512 \
+        && $(stat -c %s "${private_key}") <= 32768 )) \
+        || fail 'Passport private key size is outside the accepted range'
+    (( $(stat -c %s "${public_key}") >= 256 \
+        && $(stat -c %s "${public_key}") <= 32768 )) \
+        || fail 'Passport public key size is outside the accepted range'
+    openssl pkey -in "${private_key}" -check -noout >/dev/null 2>&1 \
+        || fail 'Passport private key is invalid'
+    openssl pkey -pubin -in "${public_key}" -noout >/dev/null 2>&1 \
+        || fail 'Passport public key is invalid'
+    private_fingerprint="$(
+        openssl pkey -in "${private_key}" -pubout -outform DER 2>/dev/null \
+            | sha256sum | awk '{print $1}'
+    )" || fail 'Passport private-key fingerprint could not be calculated'
+    public_fingerprint="$(
+        openssl pkey -pubin -in "${public_key}" -pubout -outform DER 2>/dev/null \
+            | sha256sum | awk '{print $1}'
+    )" || fail 'Passport public-key fingerprint could not be calculated'
+    [[ "${private_fingerprint}" =~ ^[0-9a-f]{64}$ \
+        && "${private_fingerprint}" == "${public_fingerprint}" ]] \
+        || fail 'Passport private/public keys do not form the same key pair'
+    printf '%s\n' "${public_fingerprint}"
+}
+
+candidate_requires_passport() {
+    local state
+
+    state="$(
+        git -C "${APP_PATH}" show "${CANDIDATE_SHA}:composer.lock" \
+            | php -r '
+                $lock = json_decode(stream_get_contents(STDIN), true, flags: JSON_THROW_ON_ERROR);
+                $packages = array_merge($lock["packages"] ?? [], $lock["packages-dev"] ?? []);
+                foreach ($packages as $package) {
+                    if (($package["name"] ?? null) === "laravel/passport") {
+                        echo "required";
+                        exit(0);
+                    }
+                }
+                echo "not-required";
+            '
+    )" || fail 'candidate Passport dependency state could not be verified'
+    [[ "${state}" == required ]]
+}
+
+assert_live_passport_key_pair() {
+    local app_group
+    local fingerprint
+
+    app_group="$(id -gn "${APP_USER}")"
+    [[ -n "${app_group}" ]] || fail 'application primary group could not be determined'
+    [[ -d "${PASSPORT_KEY_DIR}" && ! -L "${PASSPORT_KEY_DIR}" ]] \
+        || fail 'Passport key directory is missing or unsafe'
+    [[ "$(stat -c '%U:%G:%a' "${PASSPORT_KEY_DIR}")" == "root:${app_group}:750" ]] \
+        || fail "Passport key directory must be root:${app_group} 0750"
+    [[ "$(stat -c '%U:%G:%a' "${PASSPORT_PRIVATE_KEY}")" == "root:${app_group}:440" ]] \
+        || fail "Passport private key must be root:${app_group} 0440"
+    [[ "$(stat -c '%U:%G:%a' "${PASSPORT_PUBLIC_KEY}")" == "root:${app_group}:440" ]] \
+        || fail "Passport public key must be root:${app_group} 0440"
+    fingerprint="$(passport_pair_fingerprint \
+        "${PASSPORT_PRIVATE_KEY}" "${PASSPORT_PUBLIC_KEY}")"
+    [[ "${fingerprint}" =~ ^[0-9a-f]{64}$ ]] \
+        || fail 'Passport key-pair fingerprint is invalid'
+    printf '%s\n' "${fingerprint}"
+}
+
+legacy_passport_pair_fingerprint() {
+    local path
+    local owner
+    local mode
+
+    for path in "${LEGACY_PASSPORT_PRIVATE_KEY}" "${LEGACY_PASSPORT_PUBLIC_KEY}"; do
+        [[ -f "${path}" && ! -L "${path}" ]] \
+            || fail "legacy Passport key is not a regular file: ${path}"
+        owner="$(stat -c %U "${path}")"
+        mode="$(stat -c %a "${path}")"
+        [[ "${owner}" == root || "${owner}" == "${APP_USER}" ]] \
+            || fail "legacy Passport key has an unexpected owner: ${path}"
+        case "${mode}" in
+            400|440|600|640|660) ;;
+            *) fail "legacy Passport key permissions are unsafe: ${path}" ;;
+        esac
+    done
+    passport_pair_fingerprint \
+        "${LEGACY_PASSPORT_PRIVATE_KEY}" "${LEGACY_PASSPORT_PUBLIC_KEY}"
+}
+
+assert_live_passport_environment() {
+    local env_file="${APP_PATH}/.env"
+    local app_group
+    local private_count
+    local public_count
+
+    app_group="$(id -gn "${APP_USER}")"
+    [[ -f "${env_file}" && ! -L "${env_file}" ]] \
+        || fail 'production .env is missing or unsafe'
+    [[ "$(stat -c '%U:%G:%a' "${env_file}")" == "root:${app_group}:640" ]] \
+        || fail "production .env must be root:${app_group} 0640"
+    private_count="$(grep -c '^PASSPORT_PRIVATE_KEY=' "${env_file}" || true)"
+    public_count="$(grep -c '^PASSPORT_PUBLIC_KEY=' "${env_file}" || true)"
+    [[ "${private_count}" == 1 && "${public_count}" == 1 ]] \
+        || fail 'production .env must define each Passport key URI exactly once'
+    grep -Fqx "PASSPORT_PRIVATE_KEY=${PASSPORT_PRIVATE_URI}" "${env_file}" \
+        || fail 'production Passport private-key URI is not pinned'
+    grep -Fqx "PASSPORT_PUBLIC_KEY=${PASSPORT_PUBLIC_URI}" "${env_file}" \
+        || fail 'production Passport public-key URI is not pinned'
+}
+
+update_live_passport_environment() {
+    local env_file="${APP_PATH}/.env"
+    local app_group
+
+    app_group="$(id -gn "${APP_USER}")"
+    [[ -f "${env_file}" && ! -L "${env_file}" ]] \
+        || fail 'production .env is missing or unsafe'
+    [[ "$(stat -c '%U:%G:%a' "${env_file}")" == "root:${app_group}:640" ]] \
+        || fail "production .env must be root:${app_group} 0640"
+    (
+        env_tmp=''
+        cleanup_passport_env_tmp() {
+            [[ -z "${env_tmp}" ]] || rm -f -- "${env_tmp}"
+        }
+        trap cleanup_passport_env_tmp EXIT
+
+        env_tmp="$(mktemp "${APP_PATH}/.env.passport.XXXXXXXX")" \
+            || fail 'temporary Passport environment file could not be created'
+        if ! awk -v private_uri="${PASSPORT_PRIVATE_URI}" -v public_uri="${PASSPORT_PUBLIC_URI}" '
+            BEGIN { private_count = 0; public_count = 0 }
+            /^PASSPORT_PRIVATE_KEY=/ {
+                private_count++
+                if (private_count == 1) print "PASSPORT_PRIVATE_KEY=" private_uri
+                next
+            }
+            /^PASSPORT_PUBLIC_KEY=/ {
+                public_count++
+                if (public_count == 1) print "PASSPORT_PUBLIC_KEY=" public_uri
+                next
+            }
+            { print }
+            END {
+                if (private_count == 0) print "PASSPORT_PRIVATE_KEY=" private_uri
+                if (public_count == 0) print "PASSPORT_PUBLIC_KEY=" public_uri
+                if (private_count > 1 || public_count > 1) exit 42
+            }
+        ' "${env_file}" > "${env_tmp}"; then
+            fail 'production .env contains duplicate Passport key settings'
+        fi
+        chown root:"${app_group}" "${env_tmp}"
+        chmod 0640 "${env_tmp}"
+        sync "${env_tmp}"
+        mv --no-target-directory "${env_tmp}" "${env_file}"
+        env_tmp=''
+        sync "${env_file}" "${APP_PATH}"
+    )
+    assert_live_passport_environment
+}
+
+ensure_live_passport_key_pair() {
+    local app_group
+    local legacy_fingerprint=''
+    local private_exists=false
+    local public_exists=false
+    local legacy_private_exists=false
+    local legacy_public_exists=false
+
+    app_group="$(id -gn "${APP_USER}")"
+    [[ -n "${app_group}" ]] || fail 'application primary group could not be determined'
+    if [[ -e "${PASSPORT_KEY_DIR}" || -L "${PASSPORT_KEY_DIR}" ]]; then
+        [[ -d "${PASSPORT_KEY_DIR}" && ! -L "${PASSPORT_KEY_DIR}" \
+            && "$(stat -c '%U:%G:%a' "${PASSPORT_KEY_DIR}")" == "root:${app_group}:750" ]] \
+            || fail "Passport key directory must be root:${app_group} 0750"
+    else
+        install -d -o root -g "${app_group}" -m 0750 "${PASSPORT_KEY_DIR}"
+    fi
+
+    [[ -e "${PASSPORT_PRIVATE_KEY}" || -L "${PASSPORT_PRIVATE_KEY}" ]] \
+        && private_exists=true
+    [[ -e "${PASSPORT_PUBLIC_KEY}" || -L "${PASSPORT_PUBLIC_KEY}" ]] \
+        && public_exists=true
+    [[ "${private_exists}" == "${public_exists}" ]] \
+        || fail 'partial Passport key state refuses automatic regeneration'
+    [[ -e "${LEGACY_PASSPORT_PRIVATE_KEY}" || -L "${LEGACY_PASSPORT_PRIVATE_KEY}" ]] \
+        && legacy_private_exists=true
+    [[ -e "${LEGACY_PASSPORT_PUBLIC_KEY}" || -L "${LEGACY_PASSPORT_PUBLIC_KEY}" ]] \
+        && legacy_public_exists=true
+    [[ "${legacy_private_exists}" == "${legacy_public_exists}" ]] \
+        || fail 'partial legacy Passport key state refuses automatic regeneration'
+    if [[ "${legacy_private_exists}" == true ]]; then
+        legacy_fingerprint="$(legacy_passport_pair_fingerprint)"
+        [[ "${legacy_fingerprint}" =~ ^[0-9a-f]{64}$ ]] \
+            || fail 'legacy Passport key-pair fingerprint is invalid'
+    fi
+
+    if [[ "${private_exists}" == false ]]; then
+        (
+            stage_dir=''
+            private_stage="${PASSPORT_KEY_DIR}/.oauth-private.key.$$"
+            public_stage="${PASSPORT_KEY_DIR}/.oauth-public.key.$$"
+            private_installed=false
+            pair_installed=false
+            cleanup_passport_key_stage() {
+                [[ -z "${stage_dir}" ]] || rm -rf -- "${stage_dir}"
+                [[ -z "${private_stage}" ]] || rm -f -- "${private_stage}"
+                [[ -z "${public_stage}" ]] || rm -f -- "${public_stage}"
+                if [[ "${private_installed}" == true && "${pair_installed}" != true ]]; then
+                    rm -f -- "${PASSPORT_PRIVATE_KEY}"
+                fi
+            }
+            trap cleanup_passport_key_stage EXIT
+
+            [[ ! -e "${private_stage}" && ! -L "${private_stage}" \
+                && ! -e "${public_stage}" && ! -L "${public_stage}" ]] \
+                || fail 'stale Passport key staging files already exist'
+            stage_dir="$(mktemp -d /run/lora-passport-bootstrap.XXXXXXXX)" \
+                || fail 'Passport key staging directory could not be created'
+            chmod 0700 "${stage_dir}"
+            if [[ "${legacy_private_exists}" == true ]]; then
+                install -o root -g root -m 0600 \
+                    "${LEGACY_PASSPORT_PRIVATE_KEY}" "${stage_dir}/oauth-private.key"
+                install -o root -g root -m 0600 \
+                    "${LEGACY_PASSPORT_PUBLIC_KEY}" "${stage_dir}/oauth-public.key"
+            else
+                openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 \
+                    -out "${stage_dir}/oauth-private.key"
+                openssl pkey -in "${stage_dir}/oauth-private.key" -pubout \
+                    -out "${stage_dir}/oauth-public.key"
+            fi
+            staged_fingerprint="$(passport_pair_fingerprint \
+                "${stage_dir}/oauth-private.key" "${stage_dir}/oauth-public.key")"
+            [[ "${staged_fingerprint}" =~ ^[0-9a-f]{64}$ ]] \
+                || fail 'staged Passport key pair is invalid'
+            if [[ "${legacy_private_exists}" == true ]]; then
+                [[ "${staged_fingerprint}" == "${legacy_fingerprint}" ]] \
+                    || fail 'legacy Passport key pair changed while it was being adopted'
+                [[ "$(legacy_passport_pair_fingerprint)" == "${legacy_fingerprint}" ]] \
+                    || fail 'legacy Passport key pair changed while it was being adopted'
+            fi
+            install -o root -g "${app_group}" -m 0440 \
+                "${stage_dir}/oauth-private.key" "${private_stage}"
+            install -o root -g "${app_group}" -m 0440 \
+                "${stage_dir}/oauth-public.key" "${public_stage}"
+            sync "${private_stage}" "${public_stage}" "${PASSPORT_KEY_DIR}"
+            mv --no-target-directory "${private_stage}" "${PASSPORT_PRIVATE_KEY}"
+            private_stage=''
+            private_installed=true
+            mv --no-target-directory "${public_stage}" "${PASSPORT_PUBLIC_KEY}"
+            public_stage=''
+            pair_installed=true
+            sync "${PASSPORT_PRIVATE_KEY}" "${PASSPORT_PUBLIC_KEY}" "${PASSPORT_KEY_DIR}"
+            rm -rf -- "${stage_dir}"
+            stage_dir=''
+        )
+    fi
+
+    PASSPORT_PUBLIC_FINGERPRINT="$(assert_live_passport_key_pair)"
+    if [[ "${legacy_private_exists}" == true ]]; then
+        [[ "$(legacy_passport_pair_fingerprint)" == "${legacy_fingerprint}" \
+            && "${PASSPORT_PUBLIC_FINGERPRINT}" == "${legacy_fingerprint}" ]] \
+            || fail 'canonical and legacy Passport key pairs do not match'
+    fi
+    update_live_passport_environment
+}
+
 require_commands() {
     local binary
     for binary in \
         awk bash certbot chmod chown cmp cryptsetup cut date df docker fallocate find findmnt \
-        flock git grep head hostname install mkfs.ext4 mktemp mount mountpoint mysql mysqldump nginx php restic \
+        flock git grep head hostname install mkfs.ext4 mktemp mount mountpoint mysql mysqldump nginx openssl php restic \
         rsync runuser sed sha256sum sleep sort stat sync systemctl tar tr umount wc xargs; do
         command -v "${binary}" >/dev/null 2>&1 || fail "required binary is missing: ${binary}"
     done
@@ -988,6 +1269,21 @@ validate_isolated_app_key() {
     '
 }
 
+validate_isolated_passport_runtime() {
+    local checkout="$1"
+
+    php_container "${checkout}" -r '
+        require "vendor/autoload.php";
+        $app = require "bootstrap/app.php";
+        $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+        if (config("passport.private_key") !== null || config("passport.public_key") !== null) {
+            throw new RuntimeException("Rehearsal Passport must use its restored local key files.");
+        }
+        $app->make(League\OAuth2\Server\AuthorizationServer::class);
+        $app->make(League\OAuth2\Server\ResourceServer::class);
+    '
+}
+
 preflight_mode() {
     local production_sha
     local backup_host
@@ -1062,7 +1358,10 @@ run_mode() {
     local minimum_bytes=$((8 * 1024 * 1024 * 1024))
     local restored_root
     local restored_run
+    local restored_passport_fingerprint
     local metadata_sha
+    local metadata_passport_state
+    local metadata_passport_fingerprint
     local source_repo
     local baseline_checkout
     local candidate_checkout
@@ -1140,6 +1439,12 @@ run_mode() {
     load_production_db_fingerprint
 
     install_trusted_backup_harness
+    if candidate_requires_passport; then
+        CANDIDATE_REQUIRES_PASSPORT=true
+        ensure_live_passport_key_pair
+        [[ "${PASSPORT_PUBLIC_FINGERPRINT}" =~ ^[0-9a-f]{64}$ ]] \
+            || fail 'live Passport key fingerprint was not established'
+    fi
 
     load_restic_environment
     backup_host="$(backup_hostname)"
@@ -1217,6 +1522,22 @@ run_mode() {
         || fail 'restored application recovery key is invalid'
     [[ -d "${restored_run}/storage/app/private" ]] || fail 'private storage was not restored'
     [[ -d "${restored_run}/storage/app/public" ]] || fail 'public storage was not restored'
+    if [[ "${CANDIDATE_REQUIRES_PASSPORT}" == true ]]; then
+        require_root_only_file \
+            "${restored_run}/passport/oauth-private.key" \
+            'restored Passport private key'
+        require_root_only_file \
+            "${restored_run}/passport/oauth-public.key" \
+            'restored Passport public key'
+        [[ "$(stat -c '%U:%G:%a' "${restored_run}/passport/oauth-private.key")" == root:root:600 \
+            && "$(stat -c '%U:%G:%a' "${restored_run}/passport/oauth-public.key")" == root:root:600 ]] \
+            || fail 'restored Passport keys must be root:root 0600'
+        restored_passport_fingerprint="$(passport_pair_fingerprint \
+            "${restored_run}/passport/oauth-private.key" \
+            "${restored_run}/passport/oauth-public.key")"
+        [[ "${restored_passport_fingerprint}" == "${PASSPORT_PUBLIC_FINGERPRINT}" ]] \
+            || fail 'restored Passport key pair differs from the live production pair'
+    fi
     (
         cd "${restored_run}"
         sha256sum --quiet -c SHA256SUMS
@@ -1231,6 +1552,21 @@ run_mode() {
     )
     metadata_sha="$(sed -n 's/^git_commit=//p' "${restored_run}/metadata.txt")"
     [[ "${metadata_sha}" == "${production_sha}" ]] || fail 'backup metadata does not match the production commit'
+    metadata_passport_state="$(sed -n 's/^passport_keys=//p' "${restored_run}/metadata.txt")"
+    metadata_passport_fingerprint="$(sed -n 's/^passport_public_key_sha256=//p' \
+        "${restored_run}/metadata.txt")"
+    if [[ "${CANDIDATE_REQUIRES_PASSPORT}" == true ]]; then
+        [[ "${metadata_passport_state}" == present \
+            && "${metadata_passport_fingerprint}" == "${PASSPORT_PUBLIC_FINGERPRINT}" \
+            && "${metadata_passport_fingerprint}" == "${restored_passport_fingerprint}" ]] \
+            || fail 'backup metadata does not bind the restored Passport key pair'
+    else
+        [[ "${metadata_passport_state}" == not-required \
+            && "${metadata_passport_fingerprint}" == not-required ]] \
+            || [[ "${metadata_passport_state}" == present \
+                && "${metadata_passport_fingerprint}" =~ ^[0-9a-f]{64}$ ]] \
+            || fail 'backup metadata contains an invalid Passport key state'
+    fi
     source_repo="${WORKSPACE}/source"
     baseline_checkout="${WORKSPACE}/baseline"
     candidate_checkout="${WORKSPACE}/candidate"
@@ -1327,6 +1663,14 @@ run_mode() {
             "${restored_run}/storage/app/private/" "${checkout}/storage/app/private/"
         rsync -aH --delete --numeric-ids --one-file-system \
             "${restored_run}/storage/app/public/" "${checkout}/storage/app/public/"
+        if [[ "${CANDIDATE_REQUIRES_PASSPORT}" == true ]]; then
+            install -o 33 -g 33 -m 0400 \
+                "${restored_run}/passport/oauth-private.key" \
+                "${checkout}/storage/oauth-private.key"
+            install -o 33 -g 33 -m 0400 \
+                "${restored_run}/passport/oauth-public.key" \
+                "${checkout}/storage/oauth-public.key"
+        fi
     done
     chown -R 33:33 "${baseline_checkout}" "${candidate_checkout}"
     install_dependency_artifact "${baseline_checkout}" baseline "${BASELINE_VENDOR_SHA256}"
@@ -1359,6 +1703,9 @@ run_mode() {
 
     validate_isolated_app_key "${candidate_checkout}"
     artisan "${candidate_checkout}" package:discover --ansi
+    if [[ "${CANDIDATE_REQUIRES_PASSPORT}" == true ]]; then
+        validate_isolated_passport_runtime "${candidate_checkout}"
+    fi
     assert_isolated_database "${candidate_checkout}"
     assert_isolated_database_fingerprint "${candidate_checkout}"
     artisan "${candidate_checkout}" tenants:verify-integrity \
@@ -1419,6 +1766,7 @@ run_mode() {
         printf 'mysql_fingerprint_sha256=%s\n' "${mysql_fingerprint_hash}"
         printf 'vendor_sha256=%s\n' "${CANDIDATE_VENDOR_SHA256}"
         printf 'assets_sha256=%s\n' "${CANDIDATE_ASSETS_SHA256}"
+        printf 'passport_public_key_sha256=%s\n' "${PASSPORT_PUBLIC_FINGERPRINT}"
         printf 'completed_utc=%s\n' "$(date --utc +'%Y-%m-%dT%H:%M:%SZ')"
     } > "${marker_tmp}"
     chown root:root "${marker_tmp}"
