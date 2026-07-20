@@ -14,6 +14,8 @@ use InvalidArgumentException;
  */
 class FinancePayment extends TenantModel
 {
+    private ?float $frozenAmountBase = null;
+
     protected $fillable = [
         'direction', 'account_id', 'counter_account_id', 'amount', 'currency',
         'fx_rate', 'amount_base', 'method', 'source', 'bill_id', 'invoice_id',
@@ -32,6 +34,12 @@ class FinancePayment extends TenantModel
         // amount_base is a DERIVED invariant in the tenant's functional
         // currency, so callers cannot send a contradictory value.
         static::saving(function (FinancePayment $p) {
+            if ($p->frozenAmountBase !== null) {
+                $p->amount_base = round($p->frozenAmountBase, 2);
+
+                return;
+            }
+
             if (strtoupper((string) $p->currency) === BaseCurrency::code()) {
                 $p->amount_base = $p->amount;
             } else {
@@ -41,6 +49,14 @@ class FinancePayment extends TenantModel
                 $p->amount_base = round((float) $p->amount / (float) $p->fx_rate, 2);
             }
         });
+    }
+
+    /** Preserve an already-audited operational snapshot without FX re-rounding. */
+    public function withFrozenAmountBase(float $amount): static
+    {
+        $this->frozenAmountBase = $amount;
+
+        return $this;
     }
 
     public function account()

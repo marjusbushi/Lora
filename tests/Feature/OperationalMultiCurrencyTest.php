@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\FinancePayment;
 use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\Payment;
@@ -91,5 +92,26 @@ class OperationalMultiCurrencyTest extends TestCase
             'gross' => 210.0,
             'outstanding' => 0.0,
         ], ReservationMoney::totals($reservation->fresh()));
+    }
+
+    public function test_finance_ledger_preserves_the_exact_frozen_base_amount(): void
+    {
+        $this->configureAllAccountingWithEurPricing();
+        Setting::set('financial.fx_all_per_eur', 101.2345, 'number');
+        $reservation = $this->reservation();
+
+        $payment = Payment::create([
+            'reservation_id' => $reservation->id,
+            'amount' => 200,
+            'currency' => 'EUR',
+            'method' => 'card',
+            'created_by' => $reservation->created_by,
+        ]);
+        $ledger = FinancePayment::where('sourceable_type', Payment::class)
+            ->where('sourceable_id', $payment->id)
+            ->sole();
+
+        $this->assertSame('20246.90', $payment->amount_base);
+        $this->assertSame($payment->amount_base, $ledger->amount_base);
     }
 }
