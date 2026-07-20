@@ -202,7 +202,7 @@ jobs:
           PUSH_BEFORE_SHA: ${{ github.event.before || '' }}
         run: |
           set -Eeuo pipefail
-          tenancy_tests=(
+          bootstrap_required_tenancy_tests=(
             tests/Feature/TenantDatabaseIntegrityTest.php
             tests/Feature/TenantIntegrityCommandTest.php
             tests/Feature/TenantDomainRoutingTest.php
@@ -214,6 +214,8 @@ jobs:
             tests/Feature/GuestMessagingTest.php
             tests/Feature/ChannexBookingImportTest.php
             tests/Feature/ControlPanelIsolationTest.php
+          )
+          release_tenancy_tests=(
             tests/Feature/TenantUserInvitationTest.php
             tests/Feature/LoraAiMcpTest.php
           )
@@ -230,13 +232,22 @@ jobs:
             && git cat-file -e "$baseline:.github/workflows/production-release-rehearsal.yml" 2>/dev/null; then
             control_plane_bootstrapped=true
           fi
-          for test_path in "${tenancy_tests[@]}"; do
+          for test_path in "${bootstrap_required_tenancy_tests[@]}"; do
             if [[ -f "$test_path" ]]; then
               tests+=("$test_path")
             elif [[ "$control_plane_bootstrapped" == true ]] \
               || { [[ -n "$baseline" ]] \
                 && git cat-file -e "$baseline:$test_path" 2>/dev/null; }; then
               echo "Required tenancy test is missing after control-plane bootstrap: $test_path" >&2
+              exit 1
+            fi
+          done
+          for test_path in "${release_tenancy_tests[@]}"; do
+            if [[ -f "$test_path" ]]; then
+              tests+=("$test_path")
+            elif [[ -n "$baseline" ]] \
+              && git cat-file -e "$baseline:$test_path" 2>/dev/null; then
+              echo "Required released tenancy test is missing: $test_path" >&2
               exit 1
             fi
           done
