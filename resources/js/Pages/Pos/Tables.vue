@@ -214,8 +214,8 @@ onMounted(() => {
 <template>
     <AppLayout :immersive="true">
         <div class="flex h-full min-h-0 flex-col gap-3 bg-neutral-100 p-3">
-            <div class="flex shrink-0 flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-card xl:flex-row xl:items-center xl:justify-between">
-                <div>
+            <div class="grid shrink-0 gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-card xl:grid-cols-[minmax(220px,auto)_minmax(0,1fr)] xl:items-center">
+                <div class="shrink-0">
                     <p class="text-small font-semibold text-accent-700">POS Bar/Restorant / Shitje</p>
                     <div class="mt-0.5 flex flex-wrap items-center gap-3">
                         <h1 class="text-h2 text-primary-900">Tavolinat</h1>
@@ -224,15 +224,16 @@ onMounted(() => {
                         </Badge>
                     </div>
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <PosSalespersonSwitcher v-if="posSettings.salesperson_enabled" :current="currentSalesperson" :salespeople="salespeople" />
-                    <Button v-if="posSettings.service_mode === 'hybrid'" size="lg" variant="outline" :href="route('pos.index', { direct: 1 })">Shitje direkte</Button>
-                    <div v-if="selectedTable" class="mr-1 rounded-lg bg-neutral-100 px-3 py-2 text-body-sm font-bold text-primary-900">
+                <div class="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-1 xl:justify-end xl:pb-0">
+                    <PosSalespersonSwitcher v-if="posSettings.salesperson_enabled" dense :current="currentSalesperson" :salespeople="salespeople" />
+                    <div v-if="selectedTable" class="inline-flex h-12 shrink-0 items-center rounded-lg bg-neutral-100 px-3 text-body-sm font-bold whitespace-nowrap text-primary-900">
                         {{ selectedTable.name }} · {{ selectedOrder ? money(selectedOrder.total_amount) : 'E lirë' }}
                     </div>
-                    <Button size="lg" variant="primary" :disabled="!selectedTable" @click="openOrder"><Plus class="h-5 w-5" /> Porosi</Button>
-                    <Button size="lg" variant="outline" :disabled="!selectedOrder" @click="showSummaryModal = true"><FileText class="h-5 w-5" /> Përmbledhje</Button>
-                    <Button size="lg" variant="success" :disabled="!selectedOrder" @click="openPayment"><Banknote class="h-5 w-5" /> Paguaj</Button>
+                    <Button class="h-12 shrink-0 whitespace-nowrap" variant="primary" :disabled="!selectedTable" @click="openOrder"><Plus class="h-5 w-5" /> Porosi</Button>
+                    <Button class="h-12 shrink-0 whitespace-nowrap" variant="outline" :disabled="!selectedOrder" @click="showSummaryModal = true"><FileText class="h-5 w-5" /> Përmbledhje</Button>
+                    <Button class="h-12 shrink-0 whitespace-nowrap" variant="success" :disabled="!selectedOrder" @click="openPayment"><Banknote class="h-5 w-5" /> Paguaj</Button>
+                    <span v-if="posSettings.service_mode === 'hybrid'" class="mx-1 h-8 w-px shrink-0 bg-neutral-200" aria-hidden="true"></span>
+                    <Button v-if="posSettings.service_mode === 'hybrid'" class="h-12 shrink-0 whitespace-nowrap" variant="ghost" :href="route('pos.index', { direct: 1 })">Shitje direkte</Button>
                 </div>
             </div>
 

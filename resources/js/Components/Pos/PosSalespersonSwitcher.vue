@@ -10,6 +10,7 @@ const props = defineProps({
     salespeople: { type: Array, default: () => [] },
     orderId: { type: Number, default: null },
     compact: { type: Boolean, default: false },
+    dense: { type: Boolean, default: false },
 });
 const show = ref(false);
 const selectedId = ref(null);
@@ -36,8 +37,8 @@ function submit() {
 
 <template>
     <button v-if="compact" type="button" class="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-small font-semibold text-accent-700 transition hover:border-accent-300 hover:bg-accent-50" @click="open">Ndrysho</button>
-    <button v-else type="button" class="flex h-14 min-w-44 items-center gap-3 rounded-xl border border-neutral-200 bg-white px-3.5 text-left shadow-card transition hover:border-accent-300 hover:bg-accent-50" @click="open">
-        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent-50 text-accent-700"><UserRound class="h-4 w-4" /></span>
+    <button v-else type="button" class="flex shrink-0 items-center rounded-xl border border-neutral-200 bg-white text-left shadow-card transition hover:border-accent-300 hover:bg-accent-50" :class="dense ? 'h-12 min-w-40 gap-2 px-3' : 'h-14 min-w-44 gap-3 px-3.5'" @click="open">
+        <span class="grid shrink-0 place-items-center rounded-lg bg-accent-50 text-accent-700" :class="dense ? 'h-8 w-8' : 'h-9 w-9'"><UserRound class="h-4 w-4" /></span>
         <span class="min-w-0 flex-1"><span class="block text-tiny font-semibold uppercase tracking-wide text-neutral-400">Salesperson</span><strong class="block truncate text-body-sm text-primary-900">{{ current?.name || 'Zgjidh' }}</strong></span>
         <ChevronDown class="h-4 w-4 shrink-0 text-neutral-400" />
     </button>
