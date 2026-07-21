@@ -31,6 +31,11 @@ readonly APP_RUNTIME_IMAGE="serversideup/php:8.4-cli@sha256:7b669c4fbb70ca392cdb
 readonly REHEARSAL_DATABASE="lora_rehearsal"
 readonly REHEARSAL_DB_USER="lora_rehearsal"
 readonly MINIMUM_DOCKER_VERSION="28.0.0"
+readonly LUKS_KEYFILE_BYTES=64
+readonly LUKS_PBKDF_MEMORY_KIB=131072
+readonly LUKS_PBKDF_PARALLEL=1
+readonly LUKS_PBKDF_TIME_COST=5
+readonly LUKS_MINIMUM_FREE_MEMORY_KIB=524288
 readonly BACKUP_SCRIPT_SHA="a15ddb3014899d9982b2d6c1e7462b7f8f51b562dbc87e8213062ae876b5b5f0"
 readonly BACKUP_SERVICE_SHA="324ac6ee746ec39aa5d97e9e71381cad62be001bc77fce25130a0f6200435682"
 readonly INSTALLED_BACKUP_SCRIPT="/usr/local/sbin/lora-offsite-backup"
@@ -538,6 +543,39 @@ latest_snapshot_id() {
             }
             echo $latestId;
         '
+}
+
+verify_luks_header() {
+    local image="$1"
+
+    cryptsetup isLuks --type luks2 "${image}" \
+        || fail 'encrypted rehearsal workspace is not LUKS2'
+    cryptsetup luksDump --dump-json-metadata "${image}" 2>/dev/null \
+        | env \
+            EXPECTED_MEMORY_KIB="${LUKS_PBKDF_MEMORY_KIB}" \
+            EXPECTED_PARALLEL="${LUKS_PBKDF_PARALLEL}" \
+            EXPECTED_TIME_COST="${LUKS_PBKDF_TIME_COST}" \
+            php -r '
+                $metadata = json_decode(stream_get_contents(STDIN), true, flags: JSON_THROW_ON_ERROR);
+                $keyslots = $metadata["keyslots"] ?? null;
+                if (! is_array($keyslots) || array_keys($keyslots) !== [0]) {
+                    exit(1);
+                }
+                $keyslot = $keyslots[0];
+                $kdf = is_array($keyslot) ? ($keyslot["kdf"] ?? null) : null;
+                if (! is_array($kdf)
+                    || ($keyslot["type"] ?? null) !== "luks2"
+                    || ($keyslot["key_size"] ?? null) !== 64
+                    || ($kdf["type"] ?? null) !== "argon2id"
+                    || ($kdf["memory"] ?? null) !== (int) getenv("EXPECTED_MEMORY_KIB")
+                    || ($kdf["cpus"] ?? null) !== (int) getenv("EXPECTED_PARALLEL")
+                    || ($kdf["time"] ?? null) !== (int) getenv("EXPECTED_TIME_COST")
+                    || ! is_string($kdf["salt"] ?? null)
+                    || strlen($kdf["salt"]) < 16) {
+                    exit(1);
+                }
+            ' \
+        || fail 'encrypted rehearsal workspace has unexpected LUKS2 keyslot parameters'
 }
 
 snapshot_restore_bytes() {
@@ -1395,6 +1433,7 @@ run_mode() {
     local filesystem_bytes
     local reserve_bytes=$((10 * 1024 * 1024 * 1024))
     local minimum_bytes=$((8 * 1024 * 1024 * 1024))
+    local free_memory_kib
     local restored_root
     local restored_run
     local restored_passport_fingerprint
@@ -1524,11 +1563,41 @@ run_mode() {
     docker image inspect "${MYSQL_IMAGE}" >/dev/null
     docker image inspect "${APP_RUNTIME_IMAGE}" >/dev/null
 
+    free_memory_kib="$(awk '$1 == "MemFree:" {print $2}' /proc/meminfo)"
+    [[ "${free_memory_kib}" =~ ^[1-9][0-9]*$ ]] \
+        || fail 'could not determine free physical memory for LUKS2'
+    (( free_memory_kib >= LUKS_MINIMUM_FREE_MEMORY_KIB )) \
+        || fail 'insufficient free physical memory for bounded LUKS2 Argon2id'
+
     fallocate -l "${luks_bytes}" "${LUKS_IMAGE}"
-    head -c 64 /dev/urandom > "${KEY_PATH}"
+    head -c "${LUKS_KEYFILE_BYTES}" /dev/urandom > "${KEY_PATH}"
     chmod 0600 "${KEY_PATH}"
-    cryptsetup luksFormat --type luks2 --batch-mode --key-file "${KEY_PATH}" "${LUKS_IMAGE}"
-    cryptsetup open --key-file "${KEY_PATH}" "${LUKS_IMAGE}" "${MAPPER_NAME}"
+    [[ "$(stat -c %s "${KEY_PATH}")" == "${LUKS_KEYFILE_BYTES}" ]] \
+        || fail 'LUKS2 key file has an unexpected size'
+    # The key contains 512 bits from /dev/urandom. Bound Argon2id explicitly so
+    # cryptsetup does not benchmark against a 1 GiB default on this no-swap host.
+    cryptsetup luksFormat \
+        --type luks2 \
+        --batch-mode \
+        --cipher aes-xts-plain64 \
+        --key-size 512 \
+        --pbkdf argon2id \
+        --pbkdf-memory "${LUKS_PBKDF_MEMORY_KIB}" \
+        --pbkdf-parallel "${LUKS_PBKDF_PARALLEL}" \
+        --pbkdf-force-iterations "${LUKS_PBKDF_TIME_COST}" \
+        --key-file "${KEY_PATH}" \
+        --keyfile-size "${LUKS_KEYFILE_BYTES}" \
+        "${LUKS_IMAGE}" \
+        || fail 'could not format the bounded LUKS2 rehearsal workspace'
+    verify_luks_header "${LUKS_IMAGE}"
+    cryptsetup open \
+        --type luks2 \
+        --key-slot 0 \
+        --disable-external-tokens \
+        --key-file "${KEY_PATH}" \
+        --keyfile-size "${LUKS_KEYFILE_BYTES}" \
+        "${LUKS_IMAGE}" "${MAPPER_NAME}" \
+        || fail 'could not open the bounded LUKS2 rehearsal workspace'
     mkfs.ext4 -q -F "/dev/mapper/${MAPPER_NAME}"
     install -d -m 0700 "${MOUNT_PATH}"
     mount -o nodev,nosuid,noexec "/dev/mapper/${MAPPER_NAME}" "${MOUNT_PATH}"
