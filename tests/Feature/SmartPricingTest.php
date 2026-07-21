@@ -131,8 +131,9 @@ class SmartPricingTest extends TestCase
         $row = $this->rowFor(SmartPricing::suggestions(60), $type, $date);
         $this->assertNotNull($row);
         $this->assertEquals(20, $row['occupancy_pct']);
-        $this->assertEquals(-11.2, $row['adjustment_pct']); // 0.925 × 0.96 - 1
-        $this->assertEquals(88.8, $row['suggested_price']);
+        $this->assertEquals(-11.0, $row['adjustment_pct']); // 88.8 raw → 89 commercial
+        $this->assertEquals(88.8, $row['calculated_price']);
+        $this->assertEquals(89.0, $row['suggested_price']);
         $keys = collect($row['factors'])->pluck('key');
         $this->assertTrue($keys->contains('occupancy'));
         $this->assertTrue($keys->contains('lead_time'));
@@ -149,8 +150,9 @@ class SmartPricingTest extends TestCase
 
         $row = $this->rowFor(SmartPricing::suggestions(60), $type, $date);
         $this->assertNotNull($row);
-        $this->assertEquals(-18.6, $row['adjustment_pct']);
-        $this->assertEquals(81.4, $row['suggested_price']);
+        $this->assertEquals(-21.0, $row['adjustment_pct']);
+        $this->assertEquals(81.4, $row['calculated_price']);
+        $this->assertEquals(79.0, $row['suggested_price']);
     }
 
     private function admin(): User
