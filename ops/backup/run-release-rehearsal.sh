@@ -1750,17 +1750,35 @@ run_mode() {
         --collation-server="${PRODUCTION_DB_COLLATION}" \
         --lower-case-table-names="${PRODUCTION_DB_LOWER_CASE_TABLE_NAMES}" >/dev/null
 
+    # The official MySQL entrypoint starts a temporary --skip-networking server
+    # before it creates MYSQL_DATABASE and execs the final server. A socket-level
+    # mysqladmin ping can therefore succeed too early. Require an authenticated
+    # TCP query against the target database so only the final server is accepted.
     for attempt in $(seq 1 120); do
-        if docker exec "${CONTAINER_NAME}" mysqladmin \
-            --defaults-extra-file=/run/secrets/mysql-client.cnf ping --silent >/dev/null 2>&1; then
+        if docker exec "${CONTAINER_NAME}" mysql \
+            --defaults-extra-file=/run/secrets/mysql-client.cnf \
+            --protocol=TCP \
+            --host=127.0.0.1 \
+            --connect-timeout=2 \
+            --database="${REHEARSAL_DATABASE}" \
+            --batch \
+            --skip-column-names \
+            --execute='SELECT 1' >/dev/null 2>&1; then
             break
         fi
+        [[ "$(docker inspect "${CONTAINER_NAME}" --format '{{.State.Running}}')" == true ]] \
+            || fail 'isolated MySQL exited before becoming ready'
         (( attempt < 120 )) || fail 'isolated MySQL did not become ready'
         sleep 1
     done
     docker exec -i "${CONTAINER_NAME}" mysql \
-        --defaults-extra-file=/run/secrets/mysql-client.cnf "${REHEARSAL_DATABASE}" \
-        < "${restored_run}/database.sql"
+        --defaults-extra-file=/run/secrets/mysql-client.cnf \
+        --protocol=TCP \
+        --host=127.0.0.1 \
+        --connect-timeout=5 \
+        --database="${REHEARSAL_DATABASE}" \
+        < "${restored_run}/database.sql" \
+        || fail 'restored database could not be imported into isolated MySQL'
 
     mysql_exec -e \
         "CREATE USER '${REHEARSAL_DB_USER}'@'%' IDENTIFIED BY '${mysql_app_password}'; GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES, TRIGGER ON ${REHEARSAL_DATABASE}.* TO '${REHEARSAL_DB_USER}'@'%'; FLUSH PRIVILEGES;"
