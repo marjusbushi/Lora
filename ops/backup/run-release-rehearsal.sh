@@ -81,6 +81,10 @@ PRODUCTION_DB_SQL_MODE=''
 PRODUCTION_DB_CHARACTER_SET=''
 PRODUCTION_DB_COLLATION=''
 PRODUCTION_DB_LOWER_CASE_TABLE_NAMES=''
+PRODUCTION_DB_LOG_BIN=''
+PRODUCTION_DB_LOG_BIN_TRUST_FUNCTION_CREATORS=''
+PRODUCTION_DB_LOG_BIN_OPTION=''
+PRODUCTION_DB_LOG_BIN_TRUST_OPTION=''
 PRODUCTION_DB_CONNECTION_CHARACTER_SET=''
 PRODUCTION_DB_CONNECTION_COLLATION=''
 BACKUP_BOOTSTRAP_DIR=''
@@ -632,6 +636,8 @@ production_db_fingerprint() {
                 ."@@global.character_set_server AS character_set_server, "
                 ."@@global.collation_server AS collation_server, "
                 ."@@global.lower_case_table_names AS lower_case_table_names, "
+                ."@@global.log_bin AS log_bin, "
+                ."@@global.log_bin_trust_function_creators AS log_bin_trust_function_creators, "
                 ."@@session.character_set_connection AS character_set_connection, "
                 ."@@session.collation_connection AS collation_connection"
             );
@@ -642,6 +648,8 @@ production_db_fingerprint() {
             printf("character_set_server=%s\n", (string) $row->character_set_server);
             printf("collation_server=%s\n", (string) $row->collation_server);
             printf("lower_case_table_names=%s\n", (string) $row->lower_case_table_names);
+            printf("log_bin=%d\n", (int) $row->log_bin);
+            printf("log_bin_trust_function_creators=%d\n", (int) $row->log_bin_trust_function_creators);
             printf("character_set_connection=%s\n", (string) $row->character_set_connection);
             printf("collation_connection=%s\n", (string) $row->collation_connection);
         '
@@ -663,7 +671,7 @@ load_production_db_fingerprint() {
 
     PRODUCTION_DB_FINGERPRINT="$(production_db_fingerprint)"
     line_count="$(wc -l <<< "${PRODUCTION_DB_FINGERPRINT}" | tr -d ' ')"
-    [[ "${line_count}" == 9 ]] || fail 'production database fingerprint is incomplete'
+    [[ "${line_count}" == 11 ]] || fail 'production database fingerprint is incomplete'
     grep -Eq '^database=[A-Za-z0-9_]+$' <<< "${PRODUCTION_DB_FINGERPRINT}" \
         || fail 'production database schema identity is invalid'
     grep -Eq '^server_uuid=[0-9a-f-]{36}$' <<< "${PRODUCTION_DB_FINGERPRINT}" \
@@ -678,6 +686,10 @@ load_production_db_fingerprint() {
         || fail 'production database collation fingerprint is invalid'
     grep -Eq '^lower_case_table_names=[012]$' <<< "${PRODUCTION_DB_FINGERPRINT}" \
         || fail 'production database lower_case_table_names fingerprint is invalid'
+    grep -Eq '^log_bin=[01]$' <<< "${PRODUCTION_DB_FINGERPRINT}" \
+        || fail 'production database log_bin fingerprint is invalid'
+    grep -Eq '^log_bin_trust_function_creators=[01]$' <<< "${PRODUCTION_DB_FINGERPRINT}" \
+        || fail 'production database log_bin_trust_function_creators fingerprint is invalid'
     grep -Eq '^character_set_connection=[a-z0-9_]+$' <<< "${PRODUCTION_DB_FINGERPRINT}" \
         || fail 'production database connection character set fingerprint is invalid'
     grep -Eq '^collation_connection=[a-z0-9_]+$' <<< "${PRODUCTION_DB_FINGERPRINT}" \
@@ -698,6 +710,22 @@ load_production_db_fingerprint() {
     PRODUCTION_DB_CHARACTER_SET="$(sed -n 's/^character_set_server=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
     PRODUCTION_DB_COLLATION="$(sed -n 's/^collation_server=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
     PRODUCTION_DB_LOWER_CASE_TABLE_NAMES="$(sed -n 's/^lower_case_table_names=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
+    PRODUCTION_DB_LOG_BIN="$(sed -n 's/^log_bin=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
+    PRODUCTION_DB_LOG_BIN_TRUST_FUNCTION_CREATORS="$(sed -n 's/^log_bin_trust_function_creators=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
+    if [[ "${PRODUCTION_DB_LOG_BIN}" == 1 \
+        && "${PRODUCTION_DB_LOG_BIN_TRUST_FUNCTION_CREATORS}" == 0 ]]; then
+        fail 'production binary logging policy does not permit least-privileged trigger migrations'
+    fi
+    if [[ "${PRODUCTION_DB_LOG_BIN}" == 1 ]]; then
+        PRODUCTION_DB_LOG_BIN_OPTION='--log-bin=mysql-bin'
+    else
+        PRODUCTION_DB_LOG_BIN_OPTION='--skip-log-bin'
+    fi
+    if [[ "${PRODUCTION_DB_LOG_BIN_TRUST_FUNCTION_CREATORS}" == 1 ]]; then
+        PRODUCTION_DB_LOG_BIN_TRUST_OPTION='--log-bin-trust-function-creators=ON'
+    else
+        PRODUCTION_DB_LOG_BIN_TRUST_OPTION='--log-bin-trust-function-creators=OFF'
+    fi
     PRODUCTION_DB_CONNECTION_CHARACTER_SET="$(sed -n 's/^character_set_connection=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
     PRODUCTION_DB_CONNECTION_COLLATION="$(sed -n 's/^collation_connection=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
 }
@@ -1124,6 +1152,8 @@ assert_isolated_database_fingerprint() {
             ."@@global.character_set_server AS character_set_server, "
             ."@@global.collation_server AS collation_server, "
             ."@@global.lower_case_table_names AS lower_case_table_names, "
+            ."@@global.log_bin AS log_bin, "
+            ."@@global.log_bin_trust_function_creators AS log_bin_trust_function_creators, "
             ."@@session.character_set_connection AS character_set_connection, "
             ."@@session.collation_connection AS collation_connection"
         );
@@ -1132,11 +1162,13 @@ assert_isolated_database_fingerprint() {
         printf("character_set_server=%s\n", (string) $row->character_set_server);
         printf("collation_server=%s\n", (string) $row->collation_server);
         printf("lower_case_table_names=%s\n", (string) $row->lower_case_table_names);
+        printf("log_bin=%d\n", (int) $row->log_bin);
+        printf("log_bin_trust_function_creators=%d\n", (int) $row->log_bin_trust_function_creators);
         printf("character_set_connection=%s\n", (string) $row->character_set_connection);
         printf("collation_connection=%s\n", (string) $row->collation_connection);
     ')"
     isolated_line_count="$(wc -l <<< "${actual}" | tr -d ' ')"
-    [[ "${isolated_line_count}" == 7 ]] \
+    [[ "${isolated_line_count}" == 9 ]] \
         || fail 'isolated database fingerprint is incomplete'
     isolated_version="$(sed -n 's/^version=//p' <<< "${actual}")"
     isolated_upstream_version="$(mysql_upstream_version "${isolated_version}")" \
@@ -1473,6 +1505,8 @@ preflight_mode() {
     assert_production_toolchain
     assert_production_runtime
     assert_production_migrations_current
+    PRODUCTION_DB_UUID="$(production_db_uuid)"
+    load_production_db_fingerprint
     backup_host="$(backup_hostname)"
     latest_snapshot="$(latest_snapshot_id "${backup_host}")"
     if [[ -n "${latest_snapshot}" ]]; then
@@ -1830,7 +1864,9 @@ run_mode() {
         --sql-mode="${PRODUCTION_DB_SQL_MODE}" \
         --character-set-server="${PRODUCTION_DB_CHARACTER_SET}" \
         --collation-server="${PRODUCTION_DB_COLLATION}" \
-        --lower-case-table-names="${PRODUCTION_DB_LOWER_CASE_TABLE_NAMES}" >/dev/null
+        --lower-case-table-names="${PRODUCTION_DB_LOWER_CASE_TABLE_NAMES}" \
+        "${PRODUCTION_DB_LOG_BIN_OPTION}" \
+        "${PRODUCTION_DB_LOG_BIN_TRUST_OPTION}" >/dev/null
 
     # The official MySQL entrypoint starts a temporary --skip-networking server
     # before it creates MYSQL_DATABASE and execs the final server. A socket-level

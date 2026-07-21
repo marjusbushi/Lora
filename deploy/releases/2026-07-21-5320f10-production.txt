@@ -1,0 +1,3 @@
+application_baseline_sha=b00b52e20a77e07d2de091af4ccc2e79eaef0c6b
+rehearsal_harness_sha=5320f108746c2506bca26d8faea26c4b23deb89e
+purpose=Mirror the production binary logging policy for trigger migration rehearsal.

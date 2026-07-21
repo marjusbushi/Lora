@@ -167,6 +167,8 @@ production_database_fingerprint() {
         ."@@global.character_set_server AS character_set_server, "
         ."@@global.collation_server AS collation_server, "
         ."@@global.lower_case_table_names AS lower_case_table_names, "
+        ."@@global.log_bin AS log_bin, "
+        ."@@global.log_bin_trust_function_creators AS log_bin_trust_function_creators, "
         ."@@session.character_set_connection AS character_set_connection, "
         ."@@session.collation_connection AS collation_connection"
     );
@@ -177,6 +179,8 @@ production_database_fingerprint() {
     printf("character_set_server=%s\n", (string) $row->character_set_server);
     printf("collation_server=%s\n", (string) $row->collation_server);
     printf("lower_case_table_names=%s\n", (string) $row->lower_case_table_names);
+    printf("log_bin=%d\n", (int) $row->log_bin);
+    printf("log_bin_trust_function_creators=%d\n", (int) $row->log_bin_trust_function_creators);
     printf("character_set_connection=%s\n", (string) $row->character_set_connection);
     printf("collation_connection=%s\n", (string) $row->collation_connection);
   '
@@ -1476,6 +1480,10 @@ PHP_FPM_SOCKET="$php_fpm_socket" \
   bash deploy/scripts/configure-control-panel-domain.sh
 assert_app_filesystem_security
 assert_production_config
+assert_production_database_privileges
+current_mysql_fingerprint="$(production_database_fingerprint)"
+[ "$(printf '%s' "$current_mysql_fingerprint" | sha256sum | awk '{print $1}')" = "$rehearsal_mysql_fingerprint_sha256" ] \
+  || fail "production MySQL settings changed before migrations."
 
 run_as_app php artisan migrate --force
 assert_no_pending_migrations
