@@ -5208,6 +5208,15 @@
       }
     }
   },
+  "smartPricing": {
+    "rounding": {
+      "title": "Commercial rounding",
+      "standard": "5/9 endings below 100 · steps of 5 from 100+",
+      "all": "Steps of 100 ALL",
+      "exact": "No commercial rounding",
+      "tooltip": "Applies only to engine and AI recommendations; manual prices are not changed."
+    }
+  },
   "financeSuppliers": {
     "categories": {
       "manage": "Manage categories",

@@ -13,6 +13,7 @@ use App\Models\RateOverride;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Services\AiPricing;
+use App\Services\CommercialPriceRounding;
 use App\Services\MarketRates;
 use App\Services\OtaPricingPrograms;
 use App\Services\PricingCurrency;
@@ -69,6 +70,7 @@ class SmartPricingController extends Controller
             ])->values(),
             'strategy' => PricingEngine::strategy(),
             'currency' => PricingCurrency::symbol(),
+            'roundingPolicy' => CommercialPriceRounding::policy(),
             'otaPrograms' => OtaPricingPrograms::settings(),
             'aiConfigured' => AiPricing::configured(),
             // Page-level OTA sync pulse (pushes are per-type full-window, so a

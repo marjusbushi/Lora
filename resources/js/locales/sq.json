@@ -5208,6 +5208,15 @@
       }
     }
   },
+  "smartPricing": {
+    "rounding": {
+      "title": "Rrumbullakim komercial",
+      "standard": "Mbarim 5/9 nën 100 · hapa 5 nga 100+",
+      "all": "Hapa prej 100 Lek",
+      "exact": "Pa rrumbullakim komercial",
+      "tooltip": "Aplikohet vetëm mbi sugjerimet e motorit dhe AI; çmimet manuale nuk ndryshojnë."
+    }
+  },
   "financeSuppliers": {
     "categories": {
       "manage": "Menaxho kategoritë",

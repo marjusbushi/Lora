@@ -171,7 +171,8 @@ class PricingEngineTest extends TestCase
         $dow = collect($row['factors'])->firstWhere('key', 'dow');
         $this->assertNotNull($dow);
         $this->assertEquals(8.0, $dow['pct']);
-        $this->assertEquals(round(100 * 1.30 * 1.08, 2), $row['suggested_price']);
+        $this->assertEquals(round(100 * 1.30 * 1.08, 2), $row['calculated_price']);
+        $this->assertEquals(140.0, $row['suggested_price']);
     }
 
     public function test_event_uplift_applies_and_is_never_scaled_by_strategy(): void
@@ -214,7 +215,8 @@ class PricingEngineTest extends TestCase
 
         $row = $this->rowFor($type, $date);
 
-        $this->assertEquals(132.0, $row['suggested_price']); // 100 × 1.20 × 1.10
+        $this->assertEquals(132.0, $row['calculated_price']); // 100 × 1.20 × 1.10
+        $this->assertEquals(130.0, $row['suggested_price']);
         $this->assertCount(2, collect($row['factors'])->where('key', 'event'));
     }
 
@@ -227,7 +229,7 @@ class PricingEngineTest extends TestCase
         $this->book($b, $date->toDateString());
 
         $bySetting = [];
-        foreach (['kujdesshem' => 118.0, 'balancuar' => 130.0, 'agresiv' => 142.0] as $strategy => $expected) {
+        foreach (['kujdesshem' => 120.0, 'balancuar' => 130.0, 'agresiv' => 140.0] as $strategy => $expected) {
             Setting::set('pricing.strategy', $strategy);
             $bySetting[$strategy] = $this->rowFor($type, $date)['suggested_price'];
             $this->assertEquals($expected, $bySetting[$strategy], "strategy {$strategy}");
@@ -291,6 +293,11 @@ class PricingEngineTest extends TestCase
         $row = $this->rowFor($type, $date);
         $this->assertFalse($row['actionable'], '0.39% move is below the 1% floor');
         $this->assertEquals(129.50, $row['suggested_price'], 'non-actionable → shows current');
+        $this->assertEquals(130.0, $row['guarded_price'], 'the calculated guardrail result remains auditable');
+        $this->assertEquals(129.50, $row['rounding']['before']);
+        $this->assertEquals(129.50, $row['rounding']['after']);
+        $this->assertFalse($row['rounding']['applied']);
+        $this->assertSame('not_actionable', $row['rounding']['rule']);
         $this->assertStringContainsString('i vogël', $row['quiet_reason']);
 
         // But a real gap (129.50 → 120 override → 8.3%) stays actionable.
@@ -311,6 +318,20 @@ class PricingEngineTest extends TestCase
         $this->assertEquals($row['current_price'], $row['suggested_price']);
         $this->assertEmpty($row['factors'], 'suppressed demand factors must leave the breakdown too');
         $this->assertStringContainsString('E largët', $row['quiet_reason']);
+    }
+
+    public function test_neutral_day_does_not_rewrite_an_owner_base_rate_just_to_round_it(): void
+    {
+        $type = $this->type(102);
+        $this->rooms($type, 3);
+
+        $far = $this->weekdayAfter(30);
+        $row = $this->rowFor($type, $far);
+
+        $this->assertFalse($row['actionable']);
+        $this->assertEquals(102.0, $row['suggested_price']);
+        $this->assertFalse($row['rounding']['applied']);
+        $this->assertSame('no_price_signal', $row['rounding']['rule']);
     }
 
     /** Review fix: a booked room flipping to maintenance must NOT read as demand cooling. */
@@ -398,11 +419,13 @@ class PricingEngineTest extends TestCase
 
         $row = $this->rowFor($type, $far);
         $this->assertTrue($row['actionable']);
-        $this->assertEquals(80.0, $row['suggested_price'], 'owner intent is never suppressed');
+        $this->assertEquals(80.0, $row['calculated_price'], 'owner intent is never suppressed');
+        $this->assertEquals(79.0, $row['suggested_price'], 'the final offer follows the commercial ending rule');
 
         $product = collect($row['factors'])->reduce(fn ($p, $f) => $p * (1 + $f['pct'] / 100), 1.0);
-        $this->assertEquals($row['suggested_price'], round($row['reference'] * $product, 2),
-            'the breakdown must multiply out to the shown price');
+        $this->assertEquals($row['calculated_price'], round($row['reference'] * $product, 2),
+            'the breakdown must multiply out to the pre-rounding price');
+        $this->assertTrue($row['rounding']['applied']);
     }
 
     /** Review fix: a far-future empty FRIDAY must not morph into a +8% raise. */

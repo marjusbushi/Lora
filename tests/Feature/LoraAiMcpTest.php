@@ -28,6 +28,8 @@ use App\Models\Setting;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
 use App\Models\User;
+use App\Services\AiPriceGuardrails;
+use App\Services\CommercialPriceRounding;
 use App\Services\PricingEngine;
 use App\Services\TenantBillingService;
 use App\Services\TenantRoleService;
@@ -295,6 +297,8 @@ class LoraAiMcpTest extends TestCase
 
         $engineDay = PricingEngine::forRange($type, now()->addDay()->startOfDay(), now()->addDay()->startOfDay())[$date];
         $chatGptPrice = round((float) $engineDay['suggested_price'] * 1.05, 2);
+        $limits = AiPriceGuardrails::limits($type, $engineDay);
+        $commercialPrice = CommercialPriceRounding::apply($chatGptPrice, $limits['min'], $limits['max'])['after'];
 
         LoraHotelServer::actingAs($superAdmin, 'api')
             ->tool(GetPricingCalendarTool::class, [
@@ -324,7 +328,8 @@ class LoraAiMcpTest extends TestCase
             ])->assertOk()
             ->assertStructuredContent(fn ($json) => $json
                 ->where('preview.proposal_source', 'chatgpt')
-                ->where('preview.days.0.price', $chatGptPrice)
+                ->where('preview.days.0.price', (int) $commercialPrice)
+                ->where('preview.days.0.calculated_price', $chatGptPrice)
                 ->where('requires_explicit_confirmation', true)
                 ->etc());
 
@@ -341,7 +346,7 @@ class LoraAiMcpTest extends TestCase
                 ->where('count', 1)
                 ->etc());
 
-        $this->assertSame($chatGptPrice, (float) RateOverride::query()->whereDate('date', $date)->sole()->price);
+        $this->assertSame($commercialPrice, (float) RateOverride::query()->whereDate('date', $date)->sole()->price);
     }
 
     public function test_super_admin_can_check_room_availability_for_the_bound_hotel(): void
