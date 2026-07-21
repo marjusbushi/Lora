@@ -1,0 +1,2 @@
+application_baseline_sha=b00b52e20a77e07d2de091af4ccc2e79eaef0c6b
+purpose=Promote the verified staging release after the ECDSA rehearsal bootstrap.

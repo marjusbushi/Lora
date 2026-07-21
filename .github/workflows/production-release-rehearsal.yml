@@ -502,7 +502,7 @@ jobs:
           one_key="$ssh_dir/one-key"
           install -m 0600 /dev/null "$key_file"
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$key_file"
-          ssh-keyscan -T 10 -t ed25519,rsa "$SERVER_IP" > "$scanned_keys"
+          ssh-keyscan -T 10 -t ecdsa,ed25519,rsa "$SERVER_IP" > "$scanned_keys"
           install -m 0600 /dev/null "$verified_keys"
           while IFS= read -r key_line; do
             [[ -n "$key_line" ]] || continue
