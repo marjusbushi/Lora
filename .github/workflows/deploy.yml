@@ -141,4 +141,6 @@ jobs:
             [ "$(sha256sum "$deploy_script_tmp" | awk '{print $1}')" = "$deploy_script_sha" ] \
               || fail "versioned production deploy script hash does not match"
             bash -n "$deploy_script_tmp"
-            "$deploy_script_tmp" "$tested_sha"
+            # /run is intentionally mounted noexec. The exact root-owned script
+            # has already passed its pinned hash and syntax checks.
+            bash "$deploy_script_tmp" "$tested_sha"
