@@ -91,12 +91,12 @@ final class PickupPaceService
             ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
             ->whereDate('check_out_date', '>', $period->from->toDateString())
-            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount']);
+            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount_base']);
         $discountFactors = $this->roomRevenue->discountFactors($reservations->pluck('id')->all());
 
         foreach ($reservations as $reservation) {
             $recognizedRoomRevenue = round(
-                (float) $reservation->total_amount * ($discountFactors[$reservation->id] ?? 1),
+                (float) $reservation->total_amount_base * ($discountFactors[$reservation->id] ?? 1),
                 2,
             );
             foreach ($this->revenueAllocator->allocate(

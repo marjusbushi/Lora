@@ -28,7 +28,7 @@ final class OutstandingBalanceService
             ->with(['room:id,room_number', 'guest:id,first_name,last_name,phone'])
             ->get([
                 'id', 'room_id', 'guest_id', 'status', 'channel', 'check_in_date',
-                'check_out_date', 'total_amount',
+                'check_out_date', 'total_amount_base',
             ]);
 
         if ($stays->isEmpty()) {
@@ -40,8 +40,8 @@ final class OutstandingBalanceService
             ->whereIn('reservation_id', $ids)
             ->select(
                 'reservation_id',
-                DB::raw("SUM(CASE WHEN type NOT IN ('discount', 'room') THEN amount ELSE 0 END) as charges"),
-                DB::raw("SUM(CASE WHEN type = 'discount' THEN amount ELSE 0 END) as discounts"),
+                DB::raw("SUM(CASE WHEN type NOT IN ('discount', 'room') THEN amount_base ELSE 0 END) as charges"),
+                DB::raw("SUM(CASE WHEN type = 'discount' THEN amount_base ELSE 0 END) as discounts"),
             )
             ->groupBy('reservation_id')
             ->get()
@@ -51,8 +51,8 @@ final class OutstandingBalanceService
             ->notVoided()
             ->select(
                 'reservation_id',
-                DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit') THEN amount WHEN type = 'refund' THEN -ABS(amount) ELSE 0 END) as paid"),
-                DB::raw("SUM(CASE WHEN type = 'writeoff' THEN amount ELSE 0 END) as written_off"),
+                DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit') THEN amount_base WHEN type = 'refund' THEN -ABS(amount_base) ELSE 0 END) as paid"),
+                DB::raw("SUM(CASE WHEN type = 'writeoff' THEN amount_base ELSE 0 END) as written_off"),
             )
             ->groupBy('reservation_id')
             ->get()
@@ -61,7 +61,7 @@ final class OutstandingBalanceService
         $rows = $stays->map(function (Reservation $reservation) use ($folio, $payments, $asOf) {
             $items = $folio->get($reservation->id);
             $gross = round(max(0,
-                (float) $reservation->total_amount
+                (float) $reservation->total_amount_base
                 + (float) ($items?->charges ?? 0)
                 - (float) ($items?->discounts ?? 0),
             ), 2);

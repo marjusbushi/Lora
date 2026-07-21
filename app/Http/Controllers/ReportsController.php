@@ -250,7 +250,7 @@ class ReportsController extends Controller
             ->with(['room:id,room_number,room_type_id', 'room.roomType:id,name', 'guest:id,first_name,last_name,phone'])
             ->get([
                 'id', 'room_id', 'guest_id', 'status',
-                'check_in_date', 'check_out_date', 'total_amount',
+                'check_in_date', 'check_out_date', 'total_amount_base',
                 'adults', 'children', 'channel', 'notes',
             ]);
 
@@ -258,17 +258,17 @@ class ReportsController extends Controller
 
         $folio = FolioItem::whereIn('reservation_id', $ids)
             ->select('reservation_id',
-                DB::raw("SUM(CASE WHEN type NOT IN ('discount','room') THEN amount ELSE 0 END) as charges"),
-                DB::raw("SUM(CASE WHEN type = 'discount' THEN amount ELSE 0 END) as discounts"))
+                DB::raw("SUM(CASE WHEN type NOT IN ('discount','room') THEN amount_base ELSE 0 END) as charges"),
+                DB::raw("SUM(CASE WHEN type = 'discount' THEN amount_base ELSE 0 END) as discounts"))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
         $pay = Payment::whereIn('reservation_id', $ids)
             ->notVoided()
-            ->select('reservation_id', DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit', 'writeoff') THEN amount WHEN type = 'refund' THEN -ABS(amount) ELSE 0 END) as paid"))
+            ->select('reservation_id', DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit', 'writeoff') THEN amount_base WHEN type = 'refund' THEN -ABS(amount_base) ELSE 0 END) as paid"))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
         $rows = $arrivals->map(function ($r) use ($folio, $pay) {
-            $gross = round((float) $r->total_amount
+            $gross = round((float) $r->total_amount_base
                 + (float) ($folio[$r->id]->charges ?? 0)
                 - (float) ($folio[$r->id]->discounts ?? 0), 2);
             $paid = (float) ($pay[$r->id]->paid ?? 0);
@@ -319,19 +319,19 @@ class ReportsController extends Controller
         $stays = Reservation::whereBetween('check_out_date', [$from, $to])
             ->whereIn('status', ['checked_in', 'checked_out'])
             ->with(['room:id,room_number', 'guest:id,first_name,last_name,phone'])
-            ->get(['id', 'room_id', 'guest_id', 'status', 'check_in_date', 'check_out_date', 'total_amount']);
+            ->get(['id', 'room_id', 'guest_id', 'status', 'check_in_date', 'check_out_date', 'total_amount_base']);
 
         $ids = $stays->pluck('id')->all();
 
         $folio = FolioItem::whereIn('reservation_id', $ids)
             ->select('reservation_id',
-                DB::raw("SUM(CASE WHEN type NOT IN ('discount','room') THEN amount ELSE 0 END) as charges"),
-                DB::raw("SUM(CASE WHEN type = 'discount' THEN amount ELSE 0 END) as discounts"))
+                DB::raw("SUM(CASE WHEN type NOT IN ('discount','room') THEN amount_base ELSE 0 END) as charges"),
+                DB::raw("SUM(CASE WHEN type = 'discount' THEN amount_base ELSE 0 END) as discounts"))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
         $pay = Payment::whereIn('reservation_id', $ids)
             ->notVoided()
-            ->select('reservation_id', DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit', 'writeoff') THEN amount WHEN type = 'refund' THEN -ABS(amount) ELSE 0 END) as paid"))
+            ->select('reservation_id', DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit', 'writeoff') THEN amount_base WHEN type = 'refund' THEN -ABS(amount_base) ELSE 0 END) as paid"))
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
         $openPos = PosOrder::whereIn('reservation_id', $ids)
@@ -340,7 +340,7 @@ class ReportsController extends Controller
             ->groupBy('reservation_id')->get()->keyBy('reservation_id');
 
         $rows = $stays->map(function ($r) use ($folio, $pay, $openPos) {
-            $gross = round((float) $r->total_amount + (float) ($folio[$r->id]->charges ?? 0) - (float) ($folio[$r->id]->discounts ?? 0), 2);
+            $gross = round((float) $r->total_amount_base + (float) ($folio[$r->id]->charges ?? 0) - (float) ($folio[$r->id]->discounts ?? 0), 2);
             $paid = (float) ($pay[$r->id]->paid ?? 0);
 
             return [

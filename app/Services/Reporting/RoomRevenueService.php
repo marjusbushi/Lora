@@ -21,17 +21,17 @@ final class RoomRevenueService
         $reservations = Reservation::query()
             ->with([
                 'room:id,room_type_id',
-                'folioItems:id,reservation_id,pos_order_id,type,amount',
+                'folioItems:id,reservation_id,pos_order_id,type,amount_base',
             ])
             ->where('status', '!=', 'cancelled')
             ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
             ->whereDate('check_out_date', '>', $period->from->toDateString())
-            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount']);
+            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount_base']);
 
         foreach ($reservations as $reservation) {
             $typeId = $reservation->room?->room_type_id;
-            $netRoomRevenue = round((float) $reservation->total_amount * $this->discountFactor($reservation), 2);
+            $netRoomRevenue = round((float) $reservation->total_amount_base * $this->discountFactor($reservation), 2);
             foreach ($this->allocator->allocate(
                 $reservation->check_in_date,
                 $reservation->check_out_date,
@@ -65,9 +65,9 @@ final class RoomRevenueService
         }
 
         return Reservation::query()
-            ->with('folioItems:id,reservation_id,pos_order_id,type,amount')
+            ->with('folioItems:id,reservation_id,pos_order_id,type,amount_base')
             ->whereIn('id', $reservationIds)
-            ->get(['id', 'total_amount'])
+            ->get(['id', 'total_amount_base'])
             ->mapWithKeys(fn (Reservation $reservation) => [
                 $reservation->id => $this->discountFactor($reservation),
             ])->all();
@@ -77,12 +77,12 @@ final class RoomRevenueService
     {
         /** @var Collection<int,FolioItem> $items */
         $items = $reservation->folioItems;
-        $charges = (float) $reservation->total_amount
-            + (float) $items->whereNotIn('type', ['discount', 'room'])->sum('amount');
+        $charges = (float) $reservation->total_amount_base
+            + (float) $items->whereNotIn('type', ['discount', 'room'])->sum('amount_base');
         $discounts = (float) $items
             ->where('type', 'discount')
             ->whereNull('pos_order_id')
-            ->sum('amount');
+            ->sum('amount_base');
 
         return $charges > 0
             ? max(0, min(1, ($charges - $discounts) / $charges))

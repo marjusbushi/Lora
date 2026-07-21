@@ -41,7 +41,7 @@ class PokPayments
         }
 
         $expected = round((float) $reservation->total_amount, 2);
-        $currency = BaseCurrency::code();
+        $currency = strtoupper((string) ($reservation->currency ?: PricingCurrency::code()));
         $paid = $order['isCompleted']
             && ! $order['isCanceled']
             && ! $order['isRefunded']

@@ -24,6 +24,7 @@ use App\Services\BillDocumentAiExtractor;
 use App\Services\CurrencyRates;
 use App\Services\GeminiClient;
 use App\Services\InventoryLedger;
+use App\Services\ReservationMoney;
 use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
 use App\Tenancy\TenantRule;
@@ -51,6 +52,7 @@ class FinanceController extends Controller
     public function __construct(
         private readonly InventoryLedger $inventoryLedger,
         private readonly VatConfiguration $vatConfiguration,
+        private readonly ReservationMoney $reservationMoney,
     ) {}
 
     public function index(Request $request): Response
@@ -1774,7 +1776,8 @@ class FinanceController extends Controller
         $folioItems = $reservation->folioItems->whereNotIn('type', ['discount', 'room']);
         $discount = $document
             ? (float) ($payload['invoice_discount_value'] ?? 0)
-            : (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
+            : (float) $reservation->folioItems->where('type', 'discount')
+                ->sum(fn (FolioItem $item) => $this->reservationMoney->folioAmount($reservation, $item));
         $lines = ! empty($payload['lines'])
             ? $this->normalizeSalesInvoiceLines($payload['lines'])
             : $this->hotelInvoiceLines($reservation, $folioItems);
@@ -1804,8 +1807,8 @@ class FinanceController extends Controller
             ],
             'status' => $status,
             'payment_method' => strtolower((string) $paymentMethod),
-            'currency' => $document?->currency ?: BaseCurrency::code(),
-            'exchange_rate' => $document?->exchange_rate !== null ? (float) $document->exchange_rate : BaseCurrency::rate('ALL'),
+            'currency' => $document?->currency ?: $this->reservationMoney->currency($reservation),
+            'exchange_rate' => $document?->exchange_rate !== null ? (float) $document->exchange_rate : $this->reservationMoney->exchangeRate($reservation),
             'subtotal' => round((float) collect($lines)->sum('total'), 2),
             'discount' => round($discount, 2),
             'total' => $document ? (float) $document->total : $calculatedTotal,
@@ -1883,12 +1886,12 @@ class FinanceController extends Controller
 
         foreach ($folioItems as $item) {
             $quantity = max(0.0001, (float) ($item->inventory_quantity ?: 1));
-            $total = round((float) $item->amount, 2);
+            $total = $this->reservationMoney->folioAmount($reservation, $item);
             $lines[] = [
                 'name' => $item->description ?: 'Shërbim hoteli',
                 'quantity' => $quantity,
                 'unit' => $item->inventory_quantity ? 'copë' : 'shërbim',
-                'unit_price' => $item->unit_price !== null ? (float) $item->unit_price : round($total / $quantity, 2),
+                'unit_price' => round($total / $quantity, 2),
                 'vat_rate' => $item->vat_rate !== null ? (float) $item->vat_rate : $this->vatConfiguration->productRate(),
                 'total' => $total,
             ];

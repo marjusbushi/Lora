@@ -206,7 +206,9 @@ class ReservationFiscalizationService
             $this->vatConfiguration->accommodationRate(),
             $this->vatConfiguration->productRate(),
         );
-        $discount = round((float) $reservation->folioItems->where('type', 'discount')->sum('amount'), 2);
+        $discount = round((float) $reservation->folioItems
+            ->where('type', 'discount')
+            ->sum(fn ($item) => ReservationMoney::folioAmount($reservation, $item)), 2);
         $total = round(collect($lines)->sum('total') - $discount, 2);
         if ($total <= 0) {
             throw ValidationException::withMessages([
@@ -216,14 +218,14 @@ class ReservationFiscalizationService
 
         $paid = round((float) $reservation->payments
             ->reject(fn ($payment) => $payment->is_voided)
-            ->sum('amount'), 2);
+            ->sum(fn ($payment) => ReservationMoney::paymentAmount($reservation, $payment)), 2);
         if (abs($paid - $total) > 0.005) {
             throw ValidationException::withMessages([
                 'fiscalization' => 'Pagesat e rezervimit nuk përputhen me totalin e faturës.',
             ]);
         }
 
-        $currency = strtoupper((string) ($this->tenantContext->tenant()?->currency ?: 'EUR'));
+        $currency = ReservationMoney::currency($reservation);
         if (! preg_match('/^[A-Z]{3}$/', $currency)) {
             $currency = 'EUR';
         }
@@ -239,7 +241,9 @@ class ReservationFiscalizationService
         ];
 
         if ($currency !== 'ALL') {
-            $exchangeRate = BaseCurrency::rate('ALL');
+            $exchangeRate = BaseCurrency::code() === 'ALL'
+                ? (float) $reservation->exchange_rate
+                : CurrencyRates::between($currency, 'ALL');
             if ($exchangeRate === null || $exchangeRate <= 0) {
                 throw ValidationException::withMessages([
                     'fiscalization' => "Kursi ALL/{$currency} mungon. Vendose te Settings → Monedhat përpara fiskalizimit.",
@@ -355,7 +359,7 @@ class ReservationFiscalizationService
         }
 
         foreach ($reservation->folioItems->whereNotIn('type', ['discount', 'room']) as $item) {
-            $amount = round((float) $item->amount, 2);
+            $amount = ReservationMoney::folioAmount($reservation, $item);
             if ($amount <= 0) {
                 continue;
             }

@@ -63,7 +63,7 @@ const searchQuery = ref(props.filters?.search || '');
 const perPage = ref(Number(props.filters?.per_page || props.reservations?.per_page || 25));
 const sortBy = ref(props.filters?.sort || 'latest');
 
-const totalOutstanding = computed(() => props.reservations.data.reduce((sum, row) => sum + Math.max(0, Number(row.outstanding_amount || 0)), 0));
+const totalOutstanding = computed(() => props.reservations.data.reduce((sum, row) => sum + Math.max(0, Number(row.outstanding_amount_base || 0)), 0));
 const statCards = computed(() => [
     { label: 'Rezervime totale', value: props.stats.total, tone: 'text-primary-900' },
     { label: 'Mbërritje sot', value: props.stats.arrivals_today || 0, tone: 'text-info-700' },
@@ -148,8 +148,8 @@ function formatDate(value) {
     if (!value) return '—';
     return new Date(`${value}T12:00:00`).toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short', year: 'numeric' });
 }
-function money(value) {
-    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currencyCode }).format(Number(value || 0));
+function money(value, currency = currencyCode) {
+    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currency || currencyCode }).format(Number(value || 0));
 }
 function isLatest(reservation) {
     return props.latestReservationId != null && Number(reservation.id) === Number(props.latestReservationId);
@@ -220,7 +220,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                             <td class="px-5 py-3.5"><p class="text-body-sm text-neutral-700">{{ formatDate(res.check_in_date) }} → {{ formatDate(res.check_out_date) }}</p><p class="text-small text-neutral-400">{{ res.nights }} net · {{ res.adults }} të rritur<span v-if="res.children"> · {{ res.children }} fëmijë</span></p></td>
                             <td class="px-5 py-3.5"><p class="text-body-sm font-medium capitalize text-neutral-700">{{ channelLabels[res.channel] || res.channel || 'Direct' }}</p><p v-if="res.channel_ref" class="text-small text-neutral-400">{{ res.channel_ref }}</p></td>
                             <td class="px-5 py-3.5"><Badge :variant="statusMeta[res.status]?.variant" dot>{{ statusMeta[res.status]?.label }}</Badge></td>
-                            <td class="px-5 py-3.5 text-right"><p class="font-semibold text-primary-900">{{ money(res.gross_amount) }}</p><p class="text-small" :class="res.outstanding_amount > 0 ? 'text-warning-700' : 'text-success-700'">{{ res.outstanding_amount > 0 ? `${money(res.outstanding_amount)} mbetur` : 'Paguar' }}</p></td>
+                            <td class="px-5 py-3.5 text-right"><p class="font-semibold text-primary-900">{{ money(res.gross_amount, res.currency) }}</p><p class="text-small" :class="res.outstanding_amount > 0 ? 'text-warning-700' : 'text-success-700'">{{ res.outstanding_amount > 0 ? `${money(res.outstanding_amount, res.currency)} mbetur` : 'Paguar' }}</p></td>
                             <td class="px-5 py-3.5 text-right" @click.stop>
                                 <div class="flex items-center justify-end gap-1.5">
                                     <Button v-if="canUpdate && res.status === 'confirmed'" size="sm" variant="primary" @click="doCheckIn(res)">Check-in</Button>

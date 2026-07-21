@@ -55,25 +55,34 @@ class FinanceLedger
         $currency = strtoupper((string) ($payment->currency ?: $baseCurrency));
         $method = in_array($payment->method, ['cash', 'card', 'bank', 'pok', 'ota'], true) ? $payment->method : 'card';
 
-        return FinancePayment::updateOrCreate(
-            ['sourceable_type' => Payment::class, 'sourceable_id' => $payment->id],
-            [
-                'direction' => $type === 'refund' ? 'out' : 'in',
-                'account_id' => self::accountFor($method)->id,
-                'amount' => $payment->amount,
-                'currency' => $currency,
-                'fx_rate' => $currency === $baseCurrency ? null : $this->fxRate($currency),
-                'method' => $method,
-                'source' => 'auto',
-                'description' => match ($type) {
-                    'deposit' => 'Depozitë folio — rezervimi #'.$payment->reservation_id,
-                    'refund' => 'Rimbursim folio — rezervimi #'.$payment->reservation_id,
-                    default => 'Pagesë folio — rezervimi #'.$payment->reservation_id,
-                },
-                'paid_at' => $payment->created_at ?? now(),
-                'created_by' => $payment->created_by,
-            ],
-        );
+        $ledger = FinancePayment::firstOrNew([
+            'sourceable_type' => Payment::class,
+            'sourceable_id' => $payment->id,
+        ]);
+        $ledger->fill([
+            'direction' => $type === 'refund' ? 'out' : 'in',
+            'account_id' => self::accountFor($method)->id,
+            'amount' => $payment->amount,
+            'currency' => $currency,
+            // FinancePayment uses source units per 1 base unit; Payment stores
+            // the inverse (base units per 1 source unit). Reuse the frozen
+            // snapshot instead of silently taking today's rate.
+            'fx_rate' => $currency === $baseCurrency
+                ? null
+                : round(1 / (float) ($payment->exchange_rate ?: 1 / $this->fxRate($currency)), 6),
+            'method' => $method,
+            'source' => 'auto',
+            'description' => match ($type) {
+                'deposit' => 'Depozitë folio — rezervimi #'.$payment->reservation_id,
+                'refund' => 'Rimbursim folio — rezervimi #'.$payment->reservation_id,
+                default => 'Pagesë folio — rezervimi #'.$payment->reservation_id,
+            },
+            'paid_at' => $payment->created_at ?? now(),
+            'created_by' => $payment->created_by,
+        ]);
+        $ledger->withFrozenAmountBase((float) $payment->amount_base)->save();
+
+        return $ledger;
     }
 
     /** Mirror one POS tender/refund. Room charges stay in the guest folio, not Arka/Banka. */

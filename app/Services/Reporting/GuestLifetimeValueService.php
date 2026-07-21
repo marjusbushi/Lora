@@ -17,7 +17,7 @@ final class GuestLifetimeValueService
             ->with(['reservations' => fn ($query) => $query
                 ->whereIn('status', ['pending', 'confirmed', 'checked_in', 'checked_out'])
                 ->whereNull('no_show_at')
-                ->select('id', 'guest_id', 'check_in_date', 'check_out_date', 'status', 'total_amount', 'commission_amount')])
+                ->select('id', 'guest_id', 'check_in_date', 'check_out_date', 'status', 'total_amount_base', 'commission_amount_base')])
             ->get(['id', 'first_name', 'last_name', 'email', 'phone']);
 
         $realizedIds = $guests->pluck('reservations')->flatten()
@@ -25,7 +25,7 @@ final class GuestLifetimeValueService
             ->pluck('id');
         $folioItems = FolioItem::query()
             ->whereIn('reservation_id', $realizedIds)
-            ->get(['reservation_id', 'pos_order_id', 'type', 'amount']);
+            ->get(['reservation_id', 'pos_order_id', 'type', 'amount_base']);
         $folioByReservation = $folioItems->groupBy('reservation_id');
         $folioPosIds = $folioItems->pluck('pos_order_id')->filter()->unique();
         $directPosByReservation = PosOrder::query()
@@ -45,14 +45,14 @@ final class GuestLifetimeValueService
             $upcoming = $guest->reservations
                 ->whereIn('status', ['pending', 'confirmed'])
                 ->filter(fn (Reservation $reservation) => $reservation->check_in_date?->greaterThanOrEqualTo(today()));
-            $gross = (float) $realized->sum(fn (Reservation $reservation) => (float) $reservation->total_amount * $this->realizedFactor($reservation));
-            $commission = (float) $realized->sum(fn (Reservation $reservation) => (float) $reservation->commission_amount * $this->realizedFactor($reservation));
+            $gross = (float) $realized->sum(fn (Reservation $reservation) => (float) $reservation->total_amount_base * $this->realizedFactor($reservation));
+            $commission = (float) $realized->sum(fn (Reservation $reservation) => (float) $reservation->commission_amount_base * $this->realizedFactor($reservation));
             $reservationIds = $realized->pluck('id');
             $folioValue = $reservationIds->sum(function (int $reservationId) use ($folioByReservation) {
                 return $folioByReservation->get($reservationId, collect())->sum(fn (FolioItem $item) => match ($item->type) {
                     'room' => 0.0,
-                    'discount' => -abs((float) $item->amount),
-                    default => (float) $item->amount,
+                    'discount' => -abs((float) $item->amount_base),
+                    default => (float) $item->amount_base,
                 });
             });
             $directPosValue = $reservationIds->sum(function (int $reservationId) use ($directPosByReservation) {
@@ -85,7 +85,7 @@ final class GuestLifetimeValueService
                 'last_visit' => $lastVisit?->toDateString(),
                 'days_since_last' => $lastVisit ? (int) $lastVisit->startOfDay()->diffInDays(today()) : null,
                 'upcoming_stays' => $upcoming->count(),
-                'upcoming_value' => round((float) $upcoming->sum('total_amount'), 2),
+                'upcoming_value' => round((float) $upcoming->sum('total_amount_base'), 2),
                 'segment' => $this->segment($stays),
             ];
         })->filter()->values();

@@ -29,7 +29,7 @@ final class HotelKpiService
             ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
             ->whereDate('check_out_date', '>', $period->from->toDateString())
-            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount', 'commission_amount']);
+            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount_base', 'commission_amount_base']);
 
         $occupiedRoomsByDate = [];
         $commissionByDate = [];
@@ -51,7 +51,7 @@ final class HotelKpiService
             foreach ($this->revenueAllocator->allocate(
                 $reservation->check_in_date,
                 $reservation->check_out_date,
-                $reservation->commission_amount ?? 0,
+                $reservation->commission_amount_base ?? 0,
                 $period,
             ) as $date => $amount) {
                 $commissionByDate[$date] = ($commissionByDate[$date] ?? 0.0) + $amount;

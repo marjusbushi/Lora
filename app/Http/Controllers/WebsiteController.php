@@ -9,11 +9,11 @@ use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\WebsiteSearchLog;
-use App\Services\BaseCurrency;
 use App\Services\DirectBookingPricing;
 use App\Services\PokClient;
 use App\Services\PokConfiguration;
 use App\Services\PokPayments;
+use App\Services\PricingCurrency;
 use App\Services\PublicRoomPricing;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
@@ -332,7 +332,7 @@ class WebsiteController extends Controller
         $pok = app(PokClient::class);
         if ($pok->configured() && (float) $reservation->total_amount > 0) {
             try {
-                $order = $pok->createOrder((float) $reservation->total_amount, BaseCurrency::code(), [
+                $order = $pok->createOrder((float) $reservation->total_amount, PricingCurrency::code(), [
                     'webhook' => route('website.pay.webhook'),
                     // Return to the payment page — it re-verifies with POK and forwards a paid
                     // booking to confirmation (works for BOTH the embedded flow and the hosted-page fallback).
@@ -403,7 +403,7 @@ class WebsiteController extends Controller
             'orderId' => $reservation->pok_order_id,
             'env' => app(PokConfiguration::class)->get('production', false) ? 'production' : 'staging',
             'amount' => (float) $reservation->total_amount,
-            'currency' => BaseCurrency::symbol(),
+            'currency' => PricingCurrency::symbol(),
             'guestName' => session('book_guest_name'),
             'confirmUrl' => route('website.pay.confirm', $token),
             // Pre-fill POK's card form from the PERSISTED guest (survives refresh + POK round-trip),

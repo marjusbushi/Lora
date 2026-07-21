@@ -28,6 +28,7 @@ use App\Services\FatureAlConfiguration;
 use App\Services\IntegrationCatalog;
 use App\Services\MarketRates;
 use App\Services\PosSalespersonService;
+use App\Services\PricingCurrency;
 use App\Services\PricingRulesVersion;
 use App\Services\VatConfiguration;
 use App\Support\TenantStorage;
@@ -65,6 +66,7 @@ class SettingsController extends Controller
             // make the form display a currency that operations do not use.
             'currency' => BaseCurrency::code(),
             'base_currency_locked' => $tenant ? BaseCurrency::isLocked($tenant) : true,
+            'pricing_currency' => PricingCurrency::code(),
         ]);
 
         // Never ship the raw AI key to the browser — expose only a masked hint + a configured flag.
@@ -225,6 +227,7 @@ class SettingsController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'timezone' => ['required', 'string', 'max:50'],
             'currency' => ['required', 'string', Rule::in(config('lora.tenant_currencies'))],
+            'pricing_currency' => ['nullable', 'string', Rule::in(config('lora.tenant_currencies'))],
             'check_in_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
             'check_out_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
             'logo' => ['nullable', 'image', 'mimes:jpeg,png,webp', 'max:3072'],
@@ -240,9 +243,16 @@ class SettingsController extends Controller
         /** @var Tenant $tenant */
         $tenant = app(TenantContext::class)->tenant() ?? abort(404);
         $currency = strtoupper((string) $request->input('currency'));
+        $pricingCurrency = strtoupper((string) $request->input('pricing_currency', PricingCurrency::code()));
         BaseCurrency::assertCanChange($tenant, $currency);
 
-        DB::transaction(function () use ($request, $tenant, $currency) {
+        if ($pricingCurrency !== $currency && ! CurrencyRates::between($pricingCurrency, $currency)) {
+            throw ValidationException::withMessages([
+                'pricing_currency' => "Kursi {$pricingCurrency}/{$currency} mungon. Përditëso kurset te Monedhat përpara aktivizimit.",
+            ]);
+        }
+
+        DB::transaction(function () use ($request, $tenant, $currency, $pricingCurrency) {
             foreach ([
                 'name', 'address', 'phone', 'email', 'timezone', 'check_in_time', 'check_out_time',
                 'hero_eyebrow_sq', 'hero_eyebrow_en',
@@ -253,6 +263,7 @@ class SettingsController extends Controller
             }
 
             Setting::set('hotel.currency', $currency);
+            Setting::set('pricing.currency', $pricingCurrency);
             Setting::set('financial.default_currency_symbol', BaseCurrency::symbol($currency));
 
             $tenant->forceFill([

@@ -104,6 +104,7 @@ class ChannexBookingImporter
             $kept = [];
             $firstRoom = true;
             $paymentCollect = $rev['payment_collect'] ?? null; // 'ota' = prepaid online, 'property' = pay at hotel
+            $bookingCurrency = strtoupper((string) ($rev['currency'] ?? PricingCurrency::code()));
 
             foreach ($rooms as $room) {
                 $channexRoomTypeId = $room['room_type_id'] ?? null;
@@ -128,7 +129,17 @@ class ChannexBookingImporter
                 }
                 $taken[] = $physical->id;
 
-                $existed = Reservation::where('channel', $channel)->where('channel_ref', $ref)->where('room_id', $physical->id)->exists();
+                $existing = Reservation::where('channel', $channel)->where('channel_ref', $ref)->where('room_id', $physical->id)->first();
+                $existed = $existing !== null;
+                $exchangeRate = $existing && strtoupper((string) $existing->currency) === $bookingCurrency
+                    ? (float) $existing->exchange_rate
+                    : null;
+                $amountSnapshot = MoneySnapshot::make((float) ($room['amount'] ?? 0), $bookingCurrency, $exchangeRate);
+                $commissionSnapshot = MoneySnapshot::make(
+                    $firstRoom ? (float) ($rev['ota_commission'] ?? 0) : 0,
+                    $bookingCurrency,
+                    $amountSnapshot['exchange_rate'],
+                );
                 $values = [
                     'guest_id' => $guest->id,
                     'created_by' => $creator,
@@ -137,7 +148,11 @@ class ChannexBookingImporter
                     'status' => 'confirmed',
                     'channex_booking_id' => $rev['booking_id'] ?? null,
                     'total_amount' => (float) ($room['amount'] ?? 0),
+                    'currency' => $bookingCurrency,
+                    'exchange_rate' => $amountSnapshot['exchange_rate'],
+                    'total_amount_base' => $amountSnapshot['amount_base'],
                     'commission_amount' => $firstRoom ? (float) ($rev['ota_commission'] ?? 0) : 0,
+                    'commission_amount_base' => $commissionSnapshot['amount_base'],
                     'adults' => max(1, min(255, (int) ($room['occupancy']['adults'] ?? 1))),
                     'children' => max(0, min(255, (int) ($room['occupancy']['children'] ?? 0))),
                     'booking_group_id' => $groupId,
@@ -165,7 +180,14 @@ class ChannexBookingImporter
                 if ($paymentCollect === 'ota') {
                     $res->payments()->updateOrCreate(
                         ['method' => 'ota'],
-                        ['amount' => (float) ($room['amount'] ?? 0), 'type' => 'payment', 'created_by' => $creator],
+                        [
+                            'amount' => (float) ($room['amount'] ?? 0),
+                            'currency' => $bookingCurrency,
+                            'exchange_rate' => $amountSnapshot['exchange_rate'],
+                            'amount_base' => $amountSnapshot['amount_base'],
+                            'type' => 'payment',
+                            'created_by' => $creator,
+                        ],
                     );
                 } else {
                     // Not prepaid (or a prior prepaid booking changed to pay-at-hotel) ->

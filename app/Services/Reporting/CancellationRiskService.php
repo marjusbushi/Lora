@@ -23,12 +23,12 @@ final class CancellationRiskService
             ->with([
                 'room:id,room_number',
                 'guest:id,first_name,last_name',
-                'folioItems:id,reservation_id,pos_order_id,type,amount',
-                'payments' => fn ($query) => $query->notVoided()->select('id', 'reservation_id', 'amount', 'type'),
+                'folioItems:id,reservation_id,pos_order_id,type,amount_base',
+                'payments' => fn ($query) => $query->notVoided()->select('id', 'reservation_id', 'amount_base', 'type'),
             ])
             ->get([
                 'id', 'room_id', 'guest_id', 'channel', 'status', 'check_in_date',
-                'check_out_date', 'total_amount', 'no_show_at', 'created_at',
+                'check_out_date', 'total_amount_base', 'no_show_at', 'created_at',
             ]);
         $discountFactors = $this->roomRevenue->discountFactors($reservations->pluck('id')->all());
 
@@ -38,19 +38,19 @@ final class CancellationRiskService
             $channel = Reservation::normalizeChannel($reservation->channel);
             $paid = round((float) $reservation->payments
                 ->sum(fn ($payment) => match ($payment->type ?? 'payment') {
-                    'payment', 'deposit' => (float) $payment->amount,
-                    'refund' => -abs((float) $payment->amount),
+                    'payment', 'deposit' => (float) $payment->amount_base,
+                    'refund' => -abs((float) $payment->amount_base),
                     default => 0.0,
                 }), 2);
             $additionalCharges = (float) $reservation->folioItems
                 ->whereNotIn('type', ['discount', 'room'])
-                ->sum('amount');
+                ->sum('amount_base');
             $discounts = (float) $reservation->folioItems
                 ->where('type', 'discount')
-                ->sum('amount');
-            $billTotal = round(max(0, (float) $reservation->total_amount + $additionalCharges - $discounts), 2);
+                ->sum('amount_base');
+            $billTotal = round(max(0, (float) $reservation->total_amount_base + $additionalCharges - $discounts), 2);
             $value = round(
-                (float) $reservation->total_amount * ($discountFactors[$reservation->id] ?? 1),
+                (float) $reservation->total_amount_base * ($discountFactors[$reservation->id] ?? 1),
                 2,
             );
             $balance = round(max(0, $billTotal - $paid), 2);

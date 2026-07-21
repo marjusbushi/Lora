@@ -8,8 +8,11 @@ use App\Models\Guest;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
+use App\Models\Setting;
+use App\Models\Tenant;
 use App\Models\User;
 use App\Services\ChannexBookingImporter;
+use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -97,6 +100,26 @@ class ChannexBookingImportTest extends TestCase
         $this->assertEquals(30.0, (float) $res->commission_amount);
         $this->assertSame('2026-06-20 09:30:00', $res->booked_at->format('Y-m-d H:i:s'));
         $this->assertSame($type->id, Room::find($res->room_id)->room_type_id);
+    }
+
+    public function test_eur_booking_freezes_all_accounting_amounts(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $tenant->update(['currency' => 'ALL']);
+        app(TenantContext::class)->set($tenant->fresh());
+        Setting::set('pricing.currency', 'EUR');
+        Setting::set('financial.fx_all_per_eur', 100, 'number');
+        $this->studio();
+
+        app(ChannexBookingImporter::class)->importRevision($this->revision(['payment_collect' => 'ota']));
+
+        $reservation = Reservation::query()->sole();
+        $payment = $reservation->payments()->sole();
+        $this->assertSame('EUR', $reservation->currency);
+        $this->assertSame('20000.00', $reservation->total_amount_base);
+        $this->assertSame('3000.00', $reservation->commission_amount_base);
+        $this->assertSame('EUR', $payment->currency);
+        $this->assertSame('20000.00', $payment->amount_base);
     }
 
     public function test_reimport_updates_in_place_without_duplicating(): void

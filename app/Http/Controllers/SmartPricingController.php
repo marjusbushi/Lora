@@ -13,9 +13,9 @@ use App\Models\RateOverride;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Services\AiPricing;
-use App\Services\BaseCurrency;
 use App\Services\MarketRates;
 use App\Services\OtaPricingPrograms;
+use App\Services\PricingCurrency;
 use App\Services\PricingEngine;
 use App\Services\PricingRulesVersion;
 use App\Services\RoomPricing;
@@ -68,7 +68,7 @@ class SmartPricingController extends Controller
                 'max_price' => $t->max_price !== null ? (float) $t->max_price : null,
             ])->values(),
             'strategy' => PricingEngine::strategy(),
-            'currency' => BaseCurrency::symbol(),
+            'currency' => PricingCurrency::symbol(),
             'otaPrograms' => OtaPricingPrograms::settings(),
             'aiConfigured' => AiPricing::configured(),
             // Page-level OTA sync pulse (pushes are per-type full-window, so a

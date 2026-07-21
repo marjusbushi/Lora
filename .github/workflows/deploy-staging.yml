@@ -1,0 +1,57 @@
+name: Prepare staging MCP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-mcp-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Prepare OAuth and MCP via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_SERVER_IP }}
+          username: root
+          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          script: |
+            set -Eeuo pipefail
+
+            app_dir=/home/forge/staging.lorapms.com/current
+
+            if [ ! -L "$app_dir" ] || [ ! -f "$app_dir/artisan" ]; then
+              echo "The active Forge release could not be identified at $app_dir." >&2
+              exit 1
+            fi
+
+            cd "$app_dir"
+            site_user="$(stat -Lc '%U' artisan)"
+            site_group="$(stat -Lc '%G' artisan)"
+
+            run_artisan() {
+              sudo -u "$site_user" -- php artisan "$@"
+            }
+
+            run_artisan migrate --force
+
+            if [ ! -s storage/oauth-private.key ] || [ ! -s storage/oauth-public.key ]; then
+              run_artisan passport:keys --force
+            fi
+
+            chown "$site_user:$site_group" storage/oauth-private.key storage/oauth-public.key
+            chmod 0600 storage/oauth-private.key
+            chmod 0600 storage/oauth-public.key
+
+            run_artisan config:cache
+            run_artisan route:cache
+            run_artisan view:cache
+            run_artisan queue:restart
+
+            echo "Staging MCP prepared at $(date --iso-8601=seconds)"

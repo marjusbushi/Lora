@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Observers\ReservationObserver;
+use App\Services\MoneySnapshot;
+use App\Services\PricingCurrency;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -42,9 +44,14 @@ class Reservation extends TenantModel
         'check_out_date',
         'status',
         'total_amount',
+        'currency',
+        'exchange_rate',
+        'total_amount_base',
         'rate_before_discount',
+        'rate_before_discount_base',
         'direct_discount_pct',
         'direct_discount_amount',
+        'direct_discount_amount_base',
         'adults',
         'children',
         'notes',
@@ -53,6 +60,7 @@ class Reservation extends TenantModel
         'channex_booking_id',
         'booking_group_id',
         'commission_amount',
+        'commission_amount_base',
         'payment_collect',
         'pok_order_id',
         'paid_at',
@@ -72,6 +80,22 @@ class Reservation extends TenantModel
     {
         static::saving(function (Reservation $reservation) {
             $reservation->channel = static::normalizeChannel($reservation->channel);
+
+            $reservation->currency = strtoupper((string) ($reservation->currency ?: PricingCurrency::code()));
+            if (! $reservation->exchange_rate) {
+                $reservation->exchange_rate = MoneySnapshot::make(1, $reservation->currency)['exchange_rate'];
+            }
+
+            foreach ([
+                'total_amount' => 'total_amount_base',
+                'rate_before_discount' => 'rate_before_discount_base',
+                'direct_discount_amount' => 'direct_discount_amount_base',
+                'commission_amount' => 'commission_amount_base',
+            ] as $source => $base) {
+                if ($reservation->{$source} !== null && ($reservation->isDirty($source) || $reservation->{$base} === null)) {
+                    $reservation->{$base} = round((float) $reservation->{$source} * (float) $reservation->exchange_rate, 2);
+                }
+            }
         });
 
         static::creating(function (Reservation $reservation) {
@@ -108,9 +132,15 @@ class Reservation extends TenantModel
             'check_out_date' => 'date:Y-m-d',
             'booked_at' => 'datetime',
             'total_amount' => 'decimal:2',
+            'exchange_rate' => 'decimal:6',
+            'total_amount_base' => 'decimal:2',
             'rate_before_discount' => 'decimal:2',
+            'rate_before_discount_base' => 'decimal:2',
             'direct_discount_pct' => 'decimal:2',
             'direct_discount_amount' => 'decimal:2',
+            'direct_discount_amount_base' => 'decimal:2',
+            'commission_amount' => 'decimal:2',
+            'commission_amount_base' => 'decimal:2',
             'paid_at' => 'datetime',
             'no_show_at' => 'datetime',
             'early_check_in' => 'boolean',

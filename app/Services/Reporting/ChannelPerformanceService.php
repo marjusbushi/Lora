@@ -20,7 +20,7 @@ final class ChannelPerformanceService
             ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
             ->whereDate('check_out_date', '>', $period->from->toDateString())
-            ->get(['id', 'channel', 'check_in_date', 'check_out_date', 'total_amount', 'commission_amount']);
+            ->get(['id', 'channel', 'check_in_date', 'check_out_date', 'total_amount_base', 'commission_amount_base']);
         $discountFactors = $this->roomRevenue->discountFactors($reservations->pluck('id')->all());
 
         $daily = [];
@@ -43,7 +43,7 @@ final class ChannelPerformanceService
 
                 foreach ($channelReservations as $reservation) {
                     $recognizedRoomRevenue = round(
-                        (float) $reservation->total_amount * ($discountFactors[$reservation->id] ?? 1),
+                        (float) $reservation->total_amount_base * ($discountFactors[$reservation->id] ?? 1),
                         2,
                     );
                     $revenueByDate = $this->revenueAllocator->allocate(
@@ -55,7 +55,7 @@ final class ChannelPerformanceService
                     $commissionByDate = $this->revenueAllocator->allocate(
                         $reservation->check_in_date,
                         $reservation->check_out_date,
-                        $reservation->commission_amount ?? 0,
+                        $reservation->commission_amount_base ?? 0,
                         $period,
                     );
                     $gross += array_sum($revenueByDate);

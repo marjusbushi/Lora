@@ -2,11 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ResolvesTenantContext;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Services\ChannelSync;
 use App\Services\ChannexClient;
-use App\Console\Concerns\ResolvesTenantContext;
+use App\Services\PricingCurrency;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
@@ -128,7 +129,7 @@ class ChannexBootstrapRooms extends Command
                 if (! $channexRoomTypeId) {
                     continue;
                 }
-                $rpId = $channex->createRatePlan($channexRoomTypeId, $occ, $planTitle);
+                $rpId = $channex->createRatePlan($channexRoomTypeId, $occ, $planTitle, PricingCurrency::code());
                 if ($rpId) {
                     $rpCreated++;
                 } else {

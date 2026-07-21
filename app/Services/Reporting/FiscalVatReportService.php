@@ -52,9 +52,9 @@ final class FiscalVatReportService
             ->with([
                 'guest:id,first_name,last_name',
                 'room:id,room_number',
-                'folioItems:id,reservation_id,type,amount',
+                'folioItems:id,reservation_id,type,amount_base',
             ])
-            ->get(['id', 'guest_id', 'room_id', 'check_out_date', 'total_amount']);
+            ->get(['id', 'guest_id', 'room_id', 'check_out_date', 'total_amount_base']);
 
         $posOrders = $this->posOrdersFor($period, $fiscalPosIds->all())
             ->where('total_amount', '>', 0)
@@ -246,9 +246,9 @@ final class FiscalVatReportService
 
     private function reservationGross(Reservation $reservation): float
     {
-        $charges = (float) $reservation->total_amount
-            + (float) $reservation->folioItems->whereNotIn('type', ['discount', 'room'])->sum('amount');
-        $discounts = (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
+        $charges = (float) $reservation->total_amount_base
+            + (float) $reservation->folioItems->whereNotIn('type', ['discount', 'room'])->sum('amount_base');
+        $discounts = (float) $reservation->folioItems->where('type', 'discount')->sum('amount_base');
 
         return round(max(0, $charges - $discounts), 2);
     }

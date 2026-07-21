@@ -73,8 +73,8 @@ final class GuestMovementService
             ->whereIn('reservation_id', $ids)
             ->select(
                 'reservation_id',
-                DB::raw("SUM(CASE WHEN type NOT IN ('discount','room') THEN amount ELSE 0 END) as charges"),
-                DB::raw("SUM(CASE WHEN type = 'discount' THEN amount ELSE 0 END) as discounts"),
+                DB::raw("SUM(CASE WHEN type NOT IN ('discount','room') THEN amount_base ELSE 0 END) as charges"),
+                DB::raw("SUM(CASE WHEN type = 'discount' THEN amount_base ELSE 0 END) as discounts"),
             )
             ->groupBy('reservation_id')
             ->get()
@@ -82,7 +82,7 @@ final class GuestMovementService
         $payments = Payment::query()
             ->whereIn('reservation_id', $ids)
             ->notVoided()
-            ->select('reservation_id', DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit', 'writeoff') THEN amount WHEN type = 'refund' THEN -ABS(amount) ELSE 0 END) as paid"))
+            ->select('reservation_id', DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit', 'writeoff') THEN amount_base WHEN type = 'refund' THEN -ABS(amount_base) ELSE 0 END) as paid"))
             ->groupBy('reservation_id')
             ->pluck('paid', 'reservation_id');
 
@@ -91,7 +91,7 @@ final class GuestMovementService
 
     private function row(Reservation $reservation, Collection $folio, Collection $payments): array
     {
-        $gross = (float) $reservation->total_amount
+        $gross = (float) $reservation->total_amount_base
             + (float) ($folio[$reservation->id]->charges ?? 0)
             - (float) ($folio[$reservation->id]->discounts ?? 0);
 

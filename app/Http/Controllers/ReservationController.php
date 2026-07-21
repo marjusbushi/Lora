@@ -19,10 +19,10 @@ use App\Models\Setting;
 use App\Models\Warehouse;
 use App\Services\AuditTimeline;
 use App\Services\BaseCurrency;
-use App\Services\CurrencyRates;
 use App\Services\FatureAlConfiguration;
 use App\Services\InventoryLedger;
 use App\Services\ReservationConflictService;
+use App\Services\ReservationMoney;
 use App\Services\RoomPricing;
 use App\Services\TenantBillingService;
 use App\Services\VatConfiguration;
@@ -188,11 +188,11 @@ class ReservationController extends Controller
 
         $reservations = Reservation::select(
             'id', 'room_id', 'guest_id', 'check_in_date', 'check_out_date', 'status',
-            'total_amount', 'adults', 'children', 'channel', 'channel_ref', 'created_via',
+            'total_amount', 'currency', 'exchange_rate', 'adults', 'children', 'channel', 'channel_ref', 'created_via',
             'payment_collect', 'notes', 'eta', 'booking_group_id', 'created_at'
         )
             ->with('guest:id,first_name,last_name,phone,email,nationality')
-            ->withSum(['payments as paid_amount' => fn ($query) => $query->notVoided()], 'amount')
+            ->withSum(['payments as paid_amount_base' => fn ($query) => $query->notVoided()], 'amount_base')
             ->whereNotIn('status', ['cancelled'])
             ->where('check_in_date', '<=', $endDate)
             ->where('check_out_date', '>=', $startDate)
@@ -207,6 +207,7 @@ class ReservationController extends Controller
                 'check_out_date' => $r->check_out_date->toDateString(),
                 'status' => $r->status,
                 'total_amount' => $r->total_amount,
+                'currency' => $r->currency,
                 'adults' => $r->adults,
                 'children' => $r->children,
                 'channel' => $r->channel,
@@ -215,7 +216,7 @@ class ReservationController extends Controller
                 'payment_collect' => $r->payment_collect,
                 'notes' => $r->notes,
                 'eta' => $r->eta,
-                'paid_amount' => round((float) $r->paid_amount, 2),
+                'paid_amount' => round((float) $r->paid_amount_base / max((float) $r->exchange_rate, 0.000001), 2),
                 'booking_group_id' => $r->booking_group_id,
                 'created_at' => $r->created_at?->toIso8601String(),
                 'guest' => $r->guest ? [
@@ -260,12 +261,11 @@ class ReservationController extends Controller
 
         // Balance = room charge + folio charges - discounts - payments.
         // total_amount stays the ROOM charge; the live balance is computed here.
-        $roomCharge = (float) $reservation->total_amount;
-        // total_amount already represents the room charge ("Qendrimi ne dhome"); any type='room'
-        // folio lines (e.g. per-night room lines) would double-count it, so exclude them everywhere.
-        $folioCharges = (float) $reservation->folioItems->whereNotIn('type', ['discount', 'room'])->sum('amount');
-        $discounts = (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
-        $gross = round($roomCharge + $folioCharges - $discounts, 2);
+        $totals = ReservationMoney::totals($reservation);
+        $roomCharge = $totals['room'];
+        $folioCharges = $totals['charges'];
+        $discounts = $totals['discounts'];
+        $gross = $totals['gross'];
 
         // Prices are VAT-inclusive. Discounts are distributed proportionally so
         // the 6% accommodation and 20% product bases stay mathematically correct.
@@ -279,14 +279,14 @@ class ReservationController extends Controller
         );
         foreach ($reservation->folioItems->whereNotIn('type', ['discount', 'room']) as $folioItem) {
             $taxAmount += $vatConfiguration->taxPortion(
-                (float) $folioItem->amount * $discountFactor,
+                ReservationMoney::folioAmount($reservation, $folioItem) * $discountFactor,
                 $vatConfiguration->folioRate($folioItem->vat_rate),
             );
         }
         $taxAmount = round($taxAmount, 2);
 
-        $paid = (float) $reservation->payments->reject(fn ($p) => $p->is_voided)->sum('amount');
-        $outstanding = round($gross - $paid, 2);
+        $paid = $totals['paid'];
+        $outstanding = $totals['outstanding'];
 
         $openPosOrders = PosOrder::where('reservation_id', $reservation->id)
             ->where('status', 'open')
@@ -402,7 +402,9 @@ class ReservationController extends Controller
                         'id' => $i->id,
                         'description' => $i->description,
                         'type' => $i->type,
-                        'amount' => (float) $i->amount,
+                        'amount' => ReservationMoney::folioAmount($reservation, $i),
+                        'original_amount' => (float) $i->amount,
+                        'original_currency' => $i->currency,
                         'vat_rate' => $i->vat_rate !== null ? (float) $i->vat_rate : null,
                         'charge_date' => $i->charge_date?->toDateString(),
                     ]),
@@ -418,7 +420,9 @@ class ReservationController extends Controller
             ],
             'payments' => $reservation->payments->map(fn ($p) => [
                 'id' => $p->id,
-                'amount' => (float) $p->amount,
+                'amount' => ReservationMoney::paymentAmount($reservation, $p),
+                'original_amount' => (float) $p->amount,
+                'original_currency' => $p->currency,
                 'method' => $p->method,
                 'date' => $p->created_at?->toDateString(),
             ]),
@@ -427,7 +431,7 @@ class ReservationController extends Controller
             'inventoryEnabled' => $inventoryEnabled,
             'inventoryItems' => $inventoryItems,
             'inventoryWarehouses' => $inventoryWarehouses,
-            'currency' => BaseCurrency::symbol(),
+            'currency' => BaseCurrency::symbol(ReservationMoney::currency($reservation)),
             'invoicePrint' => [
                 'hotel_name' => Setting::get('hotel.name', $tenant?->name ?: 'Hotel'),
                 'legal_name' => $fiscalAccount['company'] ?? null,
@@ -436,10 +440,10 @@ class ReservationController extends Controller
                 'address' => Setting::get('hotel.address'),
                 'phone' => Setting::get('hotel.phone'),
                 'email' => Setting::get('hotel.email'),
-                'currency' => strtoupper((string) ($tenant?->currency ?: 'EUR')),
+                'currency' => ReservationMoney::currency($reservation),
                 'exchange_rate' => $fiscalDocument?->exchange_rate !== null
                     ? (float) $fiscalDocument->exchange_rate
-                    : CurrencyRates::rate('ALL'),
+                    : (float) $reservation->exchange_rate,
                 'operator' => request()->user()?->name,
                 'vat_status' => $vatConfiguration->status(),
                 'accommodation_vat_rate' => $vatConfiguration->accommodationRate(),
@@ -509,10 +513,8 @@ class ReservationController extends Controller
         }
 
         if ($data['type'] === 'discount') {
-            $charges = (float) $reservation->total_amount
-                + (float) $reservation->folioItems()->whereNotIn('type', ['discount', 'room'])->sum('amount');
-            $discounts = (float) $reservation->folioItems()->where('type', 'discount')->sum('amount');
-            $maximumDiscount = max(0, round($charges - $discounts, 2));
+            $totals = ReservationMoney::totals($reservation);
+            $maximumDiscount = max(0, round($totals['room'] + $totals['charges'] - $totals['discounts'], 2));
 
             if ((float) $data['amount'] > $maximumDiscount) {
                 throw ValidationException::withMessages([
@@ -524,6 +526,8 @@ class ReservationController extends Controller
         $reservation->folioItems()->create([
             'description' => $data['description'],
             'amount' => $data['amount'],
+            'currency' => ReservationMoney::currency($reservation),
+            'exchange_rate' => ReservationMoney::exchangeRate($reservation),
             'type' => $data['type'],
             'charge_date' => $data['charge_date'] ?? today(),
         ]);
@@ -635,11 +639,7 @@ class ReservationController extends Controller
                 ]);
             }
 
-            $charges = (float) $lockedReservation->total_amount
-                + (float) $lockedReservation->folioItems()->whereNotIn('type', ['discount', 'room'])->sum('amount');
-            $discounts = (float) $lockedReservation->folioItems()->where('type', 'discount')->sum('amount');
-            $paid = (float) $lockedReservation->payments()->notVoided()->sum('amount');
-            $outstanding = round($charges - $discounts - $paid, 2);
+            $outstanding = ReservationMoney::totals($lockedReservation)['outstanding'];
 
             if ($outstanding <= 0) {
                 throw ValidationException::withMessages([
@@ -649,14 +649,15 @@ class ReservationController extends Controller
 
             if ((float) $data['amount'] > $outstanding) {
                 throw ValidationException::withMessages([
-                    'amount' => 'Pagesa nuk mund të jetë më e madhe se shuma e mbetur prej '.number_format($outstanding, 2).' '.BaseCurrency::code().'.',
+                    'amount' => 'Pagesa nuk mund të jetë më e madhe se shuma e mbetur prej '.number_format($outstanding, 2).' '.ReservationMoney::currency($lockedReservation).'.',
                 ]);
             }
 
             return $lockedReservation->payments()->create([
                 'amount' => $data['amount'],
                 'method' => $data['method'],
-                'currency' => BaseCurrency::code(),
+                'currency' => ReservationMoney::currency($lockedReservation),
+                'exchange_rate' => ReservationMoney::exchangeRate($lockedReservation),
                 'created_by' => auth()->id(),
             ]);
         });
@@ -1088,11 +1089,7 @@ class ReservationController extends Controller
         // Live outstanding balance — same formula as the folio view: room charge + extra folio
         // charges − discounts − payments already taken (voided ones excluded, per Payment::notVoided).
         $reservation->loadMissing('folioItems', 'payments');
-        $roomCharge = (float) $reservation->total_amount;
-        $folioCharges = (float) $reservation->folioItems->whereNotIn('type', ['discount', 'room'])->sum('amount');
-        $discounts = (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
-        $paid = (float) $reservation->payments->reject(fn ($p) => $p->is_voided)->sum('amount');
-        $outstanding = round($roomCharge + $folioCharges - $discounts - $paid, 2);
+        $outstanding = ReservationMoney::totals($reservation)['outstanding'];
 
         // MANDATORY payment before check-out: a guest who still owes cannot leave. Enforced HERE at
         // the backend so NO path can bypass it — the reservation list and calendar both POST an empty
@@ -1101,7 +1098,7 @@ class ReservationController extends Controller
         // OTA prepaid stay) checks out straight through.
         if ($outstanding > 0.005 && empty($data['settle_method'])) {
             throw ValidationException::withMessages([
-                'settle_method' => 'Klienti ka '.number_format($outstanding, 2).' '.BaseCurrency::code().' pa paguar — regjistro pagesën para check-out.',
+                'settle_method' => 'Klienti ka '.number_format($outstanding, 2).' '.ReservationMoney::currency($reservation).' pa paguar — regjistro pagesën para check-out.',
             ]);
         }
 
@@ -1118,7 +1115,8 @@ class ReservationController extends Controller
                 $reservation->payments()->create([
                     'amount' => $outstanding,
                     'method' => $data['settle_method'],
-                    'currency' => BaseCurrency::code(),
+                    'currency' => ReservationMoney::currency($reservation),
+                    'exchange_rate' => ReservationMoney::exchangeRate($reservation),
                     'created_by' => auth()->id(),
                 ]);
                 AuditLog::record('payment.record', $reservation, [
@@ -1196,6 +1194,7 @@ class ReservationController extends Controller
             ->select(
                 'id', 'room_id', 'guest_id', 'check_in_date', 'check_out_date',
                 'status', 'total_amount', 'adults', 'children', 'channel', 'channel_ref',
+                'currency', 'exchange_rate', 'total_amount_base',
                 'payment_collect', 'notes', 'created_via', 'created_at'
             )
             ->with([
@@ -1203,20 +1202,23 @@ class ReservationController extends Controller
                 'room.roomType:id,name',
                 'guest:id,first_name,last_name,email,phone',
             ])
-            ->withSum(['payments as paid_amount' => fn ($query) => $query->notVoided()], 'amount')
-            ->withSum(['folioItems as extra_charges' => fn ($query) => $query->whereNotIn('type', ['discount', 'room'])], 'amount')
-            ->withSum(['folioItems as discount_amount' => fn ($query) => $query->where('type', 'discount')], 'amount');
+            ->withSum(['payments as paid_amount_base' => fn ($query) => $query->notVoided()], 'amount_base')
+            ->withSum(['folioItems as extra_charges_base' => fn ($query) => $query->whereNotIn('type', ['discount', 'room'])], 'amount_base')
+            ->withSum(['folioItems as discount_amount_base_sum' => fn ($query) => $query->where('type', 'discount')], 'amount_base');
     }
 
     private function reservationListRow(Reservation $reservation, Request $request): array
     {
-        $gross = round(
-            (float) $reservation->total_amount
-            + (float) $reservation->extra_charges
-            - (float) $reservation->discount_amount,
+        $rate = (float) ($reservation->exchange_rate ?: 1);
+        $grossBase = round(
+            (float) ($reservation->total_amount_base ?? ((float) $reservation->total_amount * $rate))
+            + (float) $reservation->extra_charges_base
+            - (float) $reservation->discount_amount_base_sum,
             2
         );
-        $paid = round((float) $reservation->paid_amount, 2);
+        $paidBase = round((float) $reservation->paid_amount_base, 2);
+        $gross = round($grossBase / $rate, 2);
+        $paid = round($paidBase / $rate, 2);
 
         return [
             'id' => $reservation->id,
@@ -1227,9 +1229,11 @@ class ReservationController extends Controller
             'nights' => $reservation->nights,
             'status' => $reservation->status,
             'total_amount' => (float) $reservation->total_amount,
+            'currency' => $reservation->currency ?: BaseCurrency::code(),
             'gross_amount' => $gross,
             'paid_amount' => $paid,
             'outstanding_amount' => round($gross - $paid, 2),
+            'outstanding_amount_base' => round($grossBase - $paidBase, 2),
             'adults' => $reservation->adults,
             'children' => $reservation->children,
             'channel' => $reservation->channel,

@@ -169,7 +169,7 @@ class DashboardController extends Controller
             ? Reservation::query()
                 ->where('status', 'checked_in')
                 ->whereDate('check_out_date', '<=', $today)
-                ->get(['id', 'total_amount'])
+                ->get(['id', 'total_amount_base'])
             : collect();
         $dueBalances = $this->balancesFor($dueStays);
         $positiveDueBalances = $dueBalances->filter(fn (float $balance) => $balance > 0.009);
@@ -773,8 +773,8 @@ class DashboardController extends Controller
             ->whereIn('reservation_id', $ids)
             ->select(
                 'reservation_id',
-                DB::raw("SUM(CASE WHEN type NOT IN ('discount', 'room') THEN amount ELSE 0 END) as charges"),
-                DB::raw("SUM(CASE WHEN type = 'discount' THEN amount ELSE 0 END) as discounts"),
+                DB::raw("SUM(CASE WHEN type NOT IN ('discount', 'room') THEN amount_base ELSE 0 END) as charges"),
+                DB::raw("SUM(CASE WHEN type = 'discount' THEN amount_base ELSE 0 END) as discounts"),
             )
             ->groupBy('reservation_id')
             ->get()
@@ -782,7 +782,7 @@ class DashboardController extends Controller
         $payments = Payment::query()
             ->whereIn('reservation_id', $ids)
             ->notVoided()
-            ->select('reservation_id', DB::raw('SUM(amount) as paid'))
+            ->select('reservation_id', DB::raw('SUM(amount_base) as paid'))
             ->groupBy('reservation_id')
             ->get()
             ->keyBy('reservation_id');
@@ -790,7 +790,7 @@ class DashboardController extends Controller
         return $reservations->mapWithKeys(function (Reservation $reservation) use ($folio, $payments) {
             $items = $folio->get($reservation->id);
             $paid = $payments->get($reservation->id);
-            $balance = (float) $reservation->total_amount
+            $balance = (float) $reservation->total_amount_base
                 + (float) ($items?->charges ?? 0)
                 - (float) ($items?->discounts ?? 0)
                 - (float) ($paid?->paid ?? 0);

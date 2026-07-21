@@ -20,10 +20,10 @@ final class PaymentReconciliationService
 
         $payments = Payment::query()
             ->whereBetween('created_at', [$start, $end])
-            ->get(['id', 'reservation_id', 'amount', 'method', 'type', 'is_voided', 'created_at']);
+            ->get(['id', 'reservation_id', 'amount', 'amount_base', 'method', 'type', 'is_voided', 'created_at']);
         $supportedPmsMethods = ['cash', 'card'];
         $activePayments = $payments->filter(fn (Payment $payment) => ! $payment->is_voided
-            && (float) $payment->amount > 0
+            && (float) $payment->amount_base > 0
             && in_array($payment->method, $supportedPmsMethods, true)
             && in_array($payment->type ?? 'payment', ['payment', 'deposit'], true));
         $refunds = $payments->filter(fn (Payment $payment) => ! $payment->is_voided
@@ -85,8 +85,8 @@ final class PaymentReconciliationService
         foreach ($activePayments as $payment) {
             $expectedSources++;
             $ledger = $paymentLedger->get($payment->id);
-            $expected = round((float) $payment->amount, 2);
-            $actual = $ledger && $ledger->direction === 'in' ? round((float) $ledger->amount, 2) : 0.0;
+            $expected = round((float) $payment->amount_base, 2);
+            $actual = $ledger && $ledger->direction === 'in' ? round((float) $ledger->amount_base, 2) : 0.0;
 
             if ($ledger && abs($expected - $actual) < 0.01) {
                 $matchedSources++;
@@ -109,8 +109,8 @@ final class PaymentReconciliationService
         foreach ($refunds as $refund) {
             $expectedSources++;
             $ledger = $paymentLedger->get($refund->id);
-            $expected = round((float) $refund->amount, 2);
-            $actual = $ledger && $ledger->direction === 'out' ? round((float) $ledger->amount, 2) : 0.0;
+            $expected = round((float) $refund->amount_base, 2);
+            $actual = $ledger && $ledger->direction === 'out' ? round((float) $ledger->amount_base, 2) : 0.0;
 
             if ($ledger && abs($expected - $actual) < 0.01) {
                 $matchedSources++;
@@ -259,8 +259,8 @@ final class PaymentReconciliationService
                 'cash' => $cash,
                 'card' => $card,
                 'room_charge' => $roomCharge,
-                'refunds' => round((float) $refunds->sum('amount') + (float) $posPayments->where('direction', 'out')->sum('amount'), 2),
-                'voided' => round((float) $voided->sum('amount'), 2),
+                'refunds' => round((float) $refunds->sum('amount_base') + (float) $posPayments->where('direction', 'out')->sum('amount'), 2),
+                'voided' => round((float) $voided->sum('amount_base'), 2),
                 'transaction_count' => $activePayments->count()
                     + $refunds->count()
                     + $posPayments->whereIn('method', ['cash', 'card'])->count()
@@ -316,8 +316,8 @@ final class PaymentReconciliationService
     private function paymentAmount(Collection $payments, Collection $refunds, string $method): float
     {
         return round(
-            (float) $payments->where('method', $method)->sum('amount')
-            - (float) $refunds->where('method', $method)->sum('amount'),
+            (float) $payments->where('method', $method)->sum('amount_base')
+            - (float) $refunds->where('method', $method)->sum('amount_base'),
             2,
         );
     }
@@ -349,13 +349,13 @@ final class PaymentReconciliationService
         foreach ($payments as $payment) {
             $key = $payment->created_at->toDateString();
             if (isset($daily[$key]) && in_array($payment->method, ['cash', 'card'], true)) {
-                $daily[$key]['pms_'.$payment->method] += (float) $payment->amount;
+                $daily[$key]['pms_'.$payment->method] += (float) $payment->amount_base;
             }
         }
         foreach ($refunds as $refund) {
             $key = $refund->created_at->toDateString();
             if (isset($daily[$key]) && in_array($refund->method, ['cash', 'card'], true)) {
-                $daily[$key]['pms_'.$refund->method] -= (float) $refund->amount;
+                $daily[$key]['pms_'.$refund->method] -= (float) $refund->amount_base;
             }
         }
         foreach ($posPayments as $payment) {

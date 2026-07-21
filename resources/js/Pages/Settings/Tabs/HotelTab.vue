@@ -16,6 +16,7 @@ const form = useForm({
     email: props.settings.email || '',
     timezone: props.settings.timezone || 'Europe/Tirane',
     currency: props.settings.currency || 'EUR',
+    pricing_currency: props.settings.pricing_currency || props.settings.currency || 'EUR',
     check_in_time: props.settings.check_in_time || '14:00',
     check_out_time: props.settings.check_out_time || '11:00',
     hero_eyebrow_sq: props.settings.hero_eyebrow_sq || '',
@@ -74,6 +75,10 @@ function submit() {
                 <FormGroup :label="$t('currencySettings.baseCurrencyLabel')" :error="form.errors.currency" required>
                     <Select v-model="form.currency" :options="currencyOptions" :error="form.errors.currency" :disabled="settings.base_currency_locked" />
                     <p v-if="settings.base_currency_locked" class="mt-1 text-tiny text-neutral-400">{{ $t('currencySettings.baseCurrencyLocked') }}</p>
+                </FormGroup>
+                <FormGroup label="Monedha e çmimeve" :error="form.errors.pricing_currency" required>
+                    <Select v-model="form.pricing_currency" :options="currencyOptions" :error="form.errors.pricing_currency" />
+                    <p class="mt-1 text-tiny text-neutral-400">Smart Pricing, web, OTA dhe rezervimet.</p>
                 </FormGroup>
             </div>
 

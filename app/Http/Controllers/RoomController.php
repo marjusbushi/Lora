@@ -10,6 +10,7 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
+use App\Services\ReservationMoney;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -347,13 +348,9 @@ class RoomController extends Controller
             return null;
         }
 
-        $roomCharge = (float) $reservation->total_amount;
-        $folioCharges = (float) $reservation->folioItems
-            ->whereNotIn('type', ['discount', 'room'])
-            ->sum('amount');
-        $discounts = (float) $reservation->folioItems->where('type', 'discount')->sum('amount');
-        $paid = (float) $reservation->payments->sum('amount');
-        $outstanding = round($roomCharge + $folioCharges - $discounts - $paid, 2);
+        $totals = ReservationMoney::totals($reservation);
+        $roomCharge = $totals['room'];
+        $outstanding = $totals['outstanding'];
 
         $guest = $reservation->guest ? [
             'id' => $reservation->guest->id,
@@ -376,6 +373,7 @@ class RoomController extends Controller
             'children' => (int) ($reservation->children ?? 0),
             'channel' => $reservation->channel,
             'total_amount' => round($roomCharge, 2),
+            'currency' => ReservationMoney::currency($reservation),
             'outstanding_balance' => $outstanding,
             'outstanding' => $outstanding,
             'guest' => $guest,

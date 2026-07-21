@@ -44,14 +44,14 @@ final class DiscountRefundCashFlowService
                     ->orWhere(fn ($legacy) => $legacy->whereNull('booked_at')->whereBetween('created_at', [$start, $end]));
             })
             ->with(['guest:id,first_name,last_name', 'room:id,room_number'])
-            ->get(['id', 'guest_id', 'room_id', 'direct_discount_amount', 'booked_at', 'created_at']);
+            ->get(['id', 'guest_id', 'room_id', 'direct_discount_amount_base', 'booked_at', 'created_at']);
 
         $pmsRefunds = Payment::query()
             ->where('type', 'refund')
             ->notVoided()
             ->whereBetween('created_at', [$start, $end])
             ->with(['reservation:id,guest_id,room_id', 'reservation.guest:id,first_name,last_name', 'reservation.room:id,room_number'])
-            ->get(['id', 'reservation_id', 'amount', 'method', 'created_at']);
+            ->get(['id', 'reservation_id', 'amount_base', 'method', 'created_at']);
         $posRefunds = PosOrderPayment::query()
             ->where('direction', 'out')
             ->whereBetween('paid_at', [$start, $end])
@@ -63,16 +63,16 @@ final class DiscountRefundCashFlowService
             ->whereIn('direction', ['in', 'out'])
             ->get(['id', 'direction', 'amount_base', 'method', 'description', 'paid_at', 'invoice_id', 'bill_id']);
 
-        $pmsDiscountTotal = (float) $folioDiscounts->sum('amount') + (float) $directDiscounts->sum('direct_discount_amount');
+        $pmsDiscountTotal = (float) $folioDiscounts->sum('amount_base') + (float) $directDiscounts->sum('direct_discount_amount_base');
         $discountTotal = round($pmsDiscountTotal + (float) $posDiscounts->sum('discount_amount'), 2);
-        $refundTotal = round((float) $pmsRefunds->sum('amount') + (float) $posRefunds->sum('amount'), 2);
+        $refundTotal = round((float) $pmsRefunds->sum('amount_base') + (float) $posRefunds->sum('amount'), 2);
         $inflow = round((float) $ledger->where('direction', 'in')->sum('amount_base'), 2);
         $outflow = round((float) $ledger->where('direction', 'out')->sum('amount_base'), 2);
 
         $activity = collect()
             ->concat($folioDiscounts->map(fn (FolioItem $item) => [
                 'key' => 'folio-'.$item->id, 'kind' => 'discount', 'source' => 'pms',
-                'date' => $item->charge_date?->toDateString(), 'amount' => round((float) $item->amount, 2),
+                'date' => $item->charge_date?->toDateString(), 'amount' => round((float) $item->amount_base, 2),
                 'reason' => $item->description ?: '—', 'method' => null,
                 'reference' => 'RES-'.$item->reservation_id, 'link_kind' => 'reservation', 'link_id' => $item->reservation_id,
                 'counterparty' => trim(($item->reservation?->guest?->first_name ?? '').' '.($item->reservation?->guest?->last_name ?? '')) ?: '—',
@@ -80,7 +80,7 @@ final class DiscountRefundCashFlowService
             ->concat($directDiscounts->map(fn (Reservation $reservation) => [
                 'key' => 'direct-discount-'.$reservation->id, 'kind' => 'discount', 'source' => 'pms',
                 'date' => ($reservation->booked_at ?? $reservation->created_at)?->toDateString(),
-                'amount' => round((float) $reservation->direct_discount_amount, 2),
+                'amount' => round((float) $reservation->direct_discount_amount_base, 2),
                 'reason' => 'Ulje rezervimi direkt', 'method' => null,
                 'reference' => 'RES-'.$reservation->id, 'link_kind' => 'reservation', 'link_id' => $reservation->id,
                 'counterparty' => trim(($reservation->guest?->first_name ?? '').' '.($reservation->guest?->last_name ?? '')) ?: '—',
@@ -94,7 +94,7 @@ final class DiscountRefundCashFlowService
             ]))
             ->concat($pmsRefunds->map(fn (Payment $payment) => [
                 'key' => 'pms-refund-'.$payment->id, 'kind' => 'refund', 'source' => 'pms',
-                'date' => $payment->created_at?->toDateString(), 'amount' => round((float) $payment->amount, 2),
+                'date' => $payment->created_at?->toDateString(), 'amount' => round((float) $payment->amount_base, 2),
                 'reason' => 'Refund', 'method' => $payment->method,
                 'reference' => 'RES-'.$payment->reservation_id, 'link_kind' => 'reservation', 'link_id' => $payment->reservation_id,
                 'counterparty' => trim(($payment->reservation?->guest?->first_name ?? '').' '.($payment->reservation?->guest?->last_name ?? '')) ?: '—',
