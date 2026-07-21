@@ -648,8 +648,18 @@ production_db_fingerprint() {
     )
 }
 
+mysql_upstream_version() {
+    local version="$1"
+
+    [[ "${version}" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-0ubuntu0\.[0-9]+\.[0-9]+\.[0-9]+)?$ ]] \
+        || return 1
+    printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
 load_production_db_fingerprint() {
     local line_count
+    local production_upstream_version
+    local production_version
 
     PRODUCTION_DB_FINGERPRINT="$(production_db_fingerprint)"
     line_count="$(wc -l <<< "${PRODUCTION_DB_FINGERPRINT}" | tr -d ' ')"
@@ -674,7 +684,16 @@ load_production_db_fingerprint() {
         || fail 'production database connection collation fingerprint is invalid'
     [[ "$(sed -n 's/^server_uuid=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")" == "${PRODUCTION_DB_UUID}" ]] \
         || fail 'production database UUID checks disagree'
-    PRODUCTION_DB_PARITY_FINGERPRINT="$(sed -n '3,$p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
+    production_version="$(sed -n 's/^version=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
+    production_upstream_version="$(mysql_upstream_version "${production_version}")" \
+        || fail 'production database upstream version is invalid'
+    # Ubuntu packages append a distro revision to @@version while the pinned
+    # Oracle image reports only x.y.z. Require the same upstream engine version,
+    # then continue comparing every runtime/session setting exactly.
+    PRODUCTION_DB_PARITY_FINGERPRINT="$(
+        printf 'version=%s\n' "${production_upstream_version}"
+        sed -n '4,$p' <<< "${PRODUCTION_DB_FINGERPRINT}"
+    )"
     PRODUCTION_DB_SQL_MODE="$(sed -n 's/^sql_mode=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
     PRODUCTION_DB_CHARACTER_SET="$(sed -n 's/^character_set_server=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
     PRODUCTION_DB_COLLATION="$(sed -n 's/^collation_server=//p' <<< "${PRODUCTION_DB_FINGERPRINT}")"
@@ -1043,6 +1062,9 @@ assert_isolated_database() {
 assert_isolated_database_fingerprint() {
     local checkout="$1"
     local actual
+    local isolated_line_count
+    local isolated_upstream_version
+    local isolated_version
 
     actual="$(php_container "${checkout}" -r '
         require "vendor/autoload.php";
@@ -1064,6 +1086,16 @@ assert_isolated_database_fingerprint() {
         printf("character_set_connection=%s\n", (string) $row->character_set_connection);
         printf("collation_connection=%s\n", (string) $row->collation_connection);
     ')"
+    isolated_line_count="$(wc -l <<< "${actual}" | tr -d ' ')"
+    [[ "${isolated_line_count}" == 7 ]] \
+        || fail 'isolated database fingerprint is incomplete'
+    isolated_version="$(sed -n 's/^version=//p' <<< "${actual}")"
+    isolated_upstream_version="$(mysql_upstream_version "${isolated_version}")" \
+        || fail 'isolated database upstream version is invalid'
+    actual="$(
+        printf 'version=%s\n' "${isolated_upstream_version}"
+        sed -n '2,$p' <<< "${actual}"
+    )"
     [[ "${actual}" == "${PRODUCTION_DB_PARITY_FINGERPRINT}" ]] \
         || fail 'isolated Laravel DB session differs from the production connection fingerprint'
 }
