@@ -4,8 +4,9 @@ namespace App\Mcp\Tools;
 
 use App\Models\RoomType;
 use App\Services\AiPriceGuardrails;
-use App\Services\BaseCurrency;
+use App\Services\CommercialPriceRounding;
 use App\Services\MarketRates;
+use App\Services\PricingCurrency;
 use App\Services\PricingRulesVersion;
 use App\Services\SmartPricing;
 use App\Services\TenantBillingService;
@@ -49,9 +50,9 @@ class GetPricingCalendarTool extends LoraTool
         $aiRecommendations = $this->enabled('ai_price_recommendations_enabled');
         $days = collect(SmartPricing::calendar($type, $from, $to))->map(function ($day) use ($type, $market, $aiRecommendations) {
             $result = collect($day)->only([
-                'date', 'current_price', 'suggested_price', 'adjustment_pct', 'occupancy_pct',
+                'date', 'current_price', 'calculated_price', 'guarded_price', 'suggested_price', 'adjustment_pct', 'occupancy_pct',
                 'occupancy_type_pct', 'occupancy_property_pct', 'booked', 'total', 'days_until',
-                'actionable', 'has_override', 'factors', 'events', 'clamped', 'quiet_reason',
+                'actionable', 'has_override', 'factors', 'events', 'clamped', 'rounding', 'quiet_reason',
             ])->all();
             $result['lora_engine_price'] = (float) $day['suggested_price'];
             $result['market'] = $market[$day['date']] ?? null;
@@ -59,7 +60,7 @@ class GetPricingCalendarTool extends LoraTool
                 'allowed' => $aiRecommendations,
                 'guardrails' => AiPriceGuardrails::limits($type, $day),
                 'instruction' => $aiRecommendations
-                    ? 'You may recommend a different price using all returned evidence, but keep it inside guardrails and explain the strongest reasons and confidence.'
+                    ? 'You may recommend a different price using all returned evidence, but keep it inside guardrails and explain the strongest reasons and confidence. Lora will apply the hotel commercial-rounding policy to the final proposal.'
                     : 'Independent ChatGPT price recommendations are disabled for this hotel.',
             ];
 
@@ -68,7 +69,8 @@ class GetPricingCalendarTool extends LoraTool
 
         return Response::structured([
             'room_type' => ['id' => $type->id, 'name' => $type->name],
-            'currency' => BaseCurrency::code(),
+            'currency' => PricingCurrency::code(),
+            'commercial_rounding' => CommercialPriceRounding::policy(),
             'rules_version' => PricingRulesVersion::current(),
             'comparison' => [
                 'current' => 'Live selling price',

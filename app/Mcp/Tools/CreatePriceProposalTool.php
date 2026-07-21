@@ -5,8 +5,9 @@ namespace App\Mcp\Tools;
 use App\Models\AiActionProposal;
 use App\Models\RoomType;
 use App\Services\AiPriceGuardrails;
-use App\Services\BaseCurrency;
+use App\Services\CommercialPriceRounding;
 use App\Services\MarketRates;
+use App\Services\PricingCurrency;
 use App\Services\PricingEngine;
 use App\Services\PricingRulesVersion;
 use App\Services\TenantBillingService;
@@ -73,14 +74,24 @@ class CreatePriceProposalTool extends LoraTool
             $days = collect($data['recommendations'] ?? [])->map(function (array $recommendation) use ($byDate, $type, $market) {
                 $day = $byDate->get($recommendation['date']);
                 abort_unless($day, 422, "No live pricing context exists for {$recommendation['date']}.");
-                $price = round((float) $recommendation['price'], 2);
+                $requestedPrice = round((float) $recommendation['price'], 2);
                 $limits = AiPriceGuardrails::limits($type, $day);
-                abort_unless(AiPriceGuardrails::accepts($type, $day, $price), 422,
+                abort_unless(AiPriceGuardrails::accepts($type, $day, $requestedPrice), 422,
                     "ChatGPT price for {$recommendation['date']} must be between {$limits['min']} and {$limits['max']}.");
+                $rounding = CommercialPriceRounding::apply(
+                    $requestedPrice,
+                    (float) $limits['min'],
+                    (float) $limits['max'],
+                );
+                $price = $rounding['after'];
+                abort_unless(AiPriceGuardrails::accepts($type, $day, $price), 422,
+                    "Rounded ChatGPT price for {$recommendation['date']} must stay between {$limits['min']} and {$limits['max']}.");
 
                 return [
                     'date' => $day['date'],
                     'price' => $price,
+                    'calculated_price' => $requestedPrice,
+                    'rounding' => $rounding,
                     'source' => 'chatgpt',
                     'current_price' => round((float) $day['current_price'], 2),
                     'lora_engine_price' => round((float) $day['suggested_price'], 2),
@@ -110,7 +121,7 @@ class CreatePriceProposalTool extends LoraTool
                     'proposal_source' => $source,
                     'rules_version' => $rulesVersion,
                     'engine_fingerprint' => AiPriceGuardrails::fingerprint($engineDays->all(), $market, $rulesVersion),
-                    'currency' => BaseCurrency::code(),
+                    'currency' => PricingCurrency::code(),
                     'max_ai_deviation_pct' => AiPriceGuardrails::maxDeviationPct(),
                     'days' => $days,
                 ],

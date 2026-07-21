@@ -206,20 +206,28 @@ class PricingEngine
         }
 
         $factors = array_merge($demand, $eventFactors);
-        $suggested = round($reference * $product($factors), 2);
+        $calculated = round($reference * $product($factors), 2);
 
         // Owner guardrails via the normalized pair (inverted min>max = unset,
-        // matching the apply guard); breakdown marks the clamp.
+        // matching the apply guard). Commercial rounding runs only after this
+        // clamp and rechecks the same bounds before a rate can leave the engine.
         [$min, $max] = $type->priceBounds();
         $clamped = null;
-        if ($max !== null && $suggested > $max) {
-            $suggested = round($max, 2);
+        if ($max !== null && $calculated > $max) {
             $clamped = 'max';
         }
-        if ($min !== null && $suggested < $min) {
-            $suggested = round($min, 2);
+        if ($min !== null && $calculated < $min) {
             $clamped = 'min';
         }
+        $rounding = CommercialPriceRounding::apply($calculated, $min, $max);
+        // A neutral day must not manufacture a recommendation merely because
+        // an owner-entered base/season rate is not already a commercial number.
+        if ($factors === [] && $clamped === null) {
+            $rounding['after'] = $rounding['before'];
+            $rounding['applied'] = false;
+            $rounding['rule'] = 'no_price_signal';
+        }
+        $suggested = $rounding['after'];
 
         $pctTotal = $reference > 0 ? round(($suggested / $reference - 1) * 100, 1) : 0.0;
         // A suggestion must MOVE the price meaningfully vs what's live today —
@@ -249,11 +257,14 @@ class PricingEngine
             'total' => $typeTotal,
             'reference' => round($reference, 2),
             'current_price' => round($current, 2),
+            'calculated_price' => $calculated,
+            'guarded_price' => $rounding['before'],
             'suggested_price' => $actionable ? $suggested : round($current, 2),
             'adjustment_pct' => $actionable ? $pctTotal : 0.0,
             'factors' => $factors,
             'events' => $eventContext,
             'clamped' => $clamped,
+            'rounding' => $rounding,
             'kind' => $actionable ? ($pctTotal >= 20 ? 'peak' : ($pctTotal > 0 ? 'high' : 'low')) : null,
             'has_override' => (bool) $override,
             'days_until' => $daysUntil,

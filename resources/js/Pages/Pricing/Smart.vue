@@ -20,6 +20,7 @@ const props = defineProps({
     nextMonth: { type: String, default: '' },
     strategy: { type: String, default: 'balancuar' },
     currency: { type: String, default: '€' },
+    roundingPolicy: { type: Object, default: () => ({ mode: 'commercial', currency: 'EUR', label: '' }) },
     aiConfigured: { type: Boolean, default: false },
     lastSyncAt: { type: String, default: null },
     upcomingEvents: { type: Array, default: () => [] },
@@ -41,6 +42,11 @@ const strategySaving = ref(false);
 const priceMutationBusy = computed(() => applySaving.value || removeSaving.value || bulkSaving.value || revertSavingId.value !== null);
 
 const currentType = computed(() => props.roomTypes.find((t) => Number(t.id) === Number(typeId.value)) || null);
+const roundingPolicyLabel = computed(() => {
+    if (props.roundingPolicy.mode === 'exact') return translate('smartPricing.rounding.exact');
+    if (props.roundingPolicy.currency === 'ALL') return translate('smartPricing.rounding.all');
+    return translate('smartPricing.rounding.standard');
+});
 
 function showServerResult(page, fallback) {
     const flash = page?.props?.flash || {};
@@ -523,6 +529,10 @@ function syncLabel(ts) {
                             {{ s.label }}
                         </button>
                     </div>
+                    <span class="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-tiny text-neutral-500" :title="$t('smartPricing.rounding.tooltip')">
+                        <span aria-hidden="true">≈</span>
+                        {{ roundingPolicyLabel }}
+                    </span>
                     <span v-if="actionableCount" class="inline-flex items-center gap-2 text-tiny text-neutral-500">
                         {{ actionableCount }} {{ $t('admin.generated.k_0fb9c71df27a') }} <Button size="sm" variant="outline" :disabled="navigationLocked" @click="askBulkMonth">{{ $t('admin.generated.k_47b01d6519f6') }}</Button>
                     </span>
@@ -690,6 +700,10 @@ function syncLabel(ts) {
                                     <div v-for="(f, i) in selected.factors" :key="i" class="flex items-center justify-between text-body-sm text-neutral-600">
                                         <span class="min-w-0 break-words">{{ f.label }}</span>
                                         <span class="font-semibold tabular-nums" :class="f.pct > 0 ? 'text-success-700' : 'text-info-700'">{{ f.pct > 0 ? '+' : '' }}{{ f.pct }}%</span>
+                                    </div>
+                                    <div v-if="selected.rounding?.applied" class="flex items-center justify-between text-body-sm text-neutral-600 border-t border-neutral-200 pt-1.5">
+                                        <span>{{ $t('smartPricing.rounding.title') }}</span>
+                                        <span class="font-semibold tabular-nums text-primary-900">{{ currency }}{{ fmtPrice(selected.rounding.before) }} → {{ currency }}{{ fmtPrice(selected.rounding.after) }}</span>
                                     </div>
                                     <div v-if="selected.clamped" class="flex items-center justify-between text-body-sm font-semibold text-warning-700 border-t border-neutral-200 pt-1.5">
                                         <span>{{ $t('admin.generated.k_48c822e12681') }} {{ selected.clamped === 'max' ? $t('admin.generated.k_a79d1410fa68') : $t('admin.generated.k_3925eeee4836') }}</span>
