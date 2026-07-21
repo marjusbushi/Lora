@@ -21,6 +21,7 @@ PrivateMounts=true
 ProtectHome=true
 ProtectSystem=full
 NoNewPrivileges=true
+AmbientCapabilities=CAP_SETUID CAP_SETGID
 LockPersonality=true
 ReadWritePaths=/etc/cron.d /run/systemd/system /var/lib/lora-backup /var/cache/restic /var/www/villamucho/storage /var/www/villamucho/bootstrap/cache
 

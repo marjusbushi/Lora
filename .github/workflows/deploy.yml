@@ -94,7 +94,7 @@ jobs:
 
             app_dir=/var/www/villamucho
             tested_sha="${{ github.event.workflow_run.head_sha }}"
-            deploy_script_sha="75c613b3edf07886e9f02189d4f9b2b6436e78ccfef667e36007868f348b0a70"
+            deploy_script_sha="9f85f555a06fa94043db891af7ef48a1173ea7262527527fd5775b941b53c704"
             deploy_script_tmp=
 
             fail() {

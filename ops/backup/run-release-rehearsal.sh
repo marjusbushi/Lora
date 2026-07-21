@@ -31,8 +31,8 @@ readonly APP_RUNTIME_IMAGE="serversideup/php:8.4-cli@sha256:7b669c4fbb70ca392cdb
 readonly REHEARSAL_DATABASE="lora_rehearsal"
 readonly REHEARSAL_DB_USER="lora_rehearsal"
 readonly MINIMUM_DOCKER_VERSION="28.0.0"
-readonly BACKUP_SCRIPT_SHA="36a1615ed56848cd252661f34263f9c797194240c17fdc331f2f32873a4a7c78"
-readonly BACKUP_SERVICE_SHA="12c9a39973ca26d371b78992000128179463146f2f140089494e1ab04da5d5c6"
+readonly BACKUP_SCRIPT_SHA="a15ddb3014899d9982b2d6c1e7462b7f8f51b562dbc87e8213062ae876b5b5f0"
+readonly BACKUP_SERVICE_SHA="324ac6ee746ec39aa5d97e9e71381cad62be001bc77fce25130a0f6200435682"
 readonly INSTALLED_BACKUP_SCRIPT="/usr/local/sbin/lora-offsite-backup"
 readonly INSTALLED_BACKUP_SERVICE="/etc/systemd/system/lora-backup.service"
 

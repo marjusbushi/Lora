@@ -231,7 +231,7 @@ run_as_app_bounded() {
     shift
 
     timeout --signal=TERM --kill-after=30s "${duration}" \
-        runuser --user "${APP_USER}" -- \
+        setpriv --reuid="${APP_USER}" --regid="${app_group}" --init-groups -- \
             env -i \
                 HOME="${APP_PATH}/storage/framework" \
                 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
@@ -885,7 +885,7 @@ assert_storage_path_safe() {
     [[ -z "${unsafe_node}" ]] \
         || fail "storage snapshot refuses links or special nodes: ${unsafe_node}"
     if ! mount_targets="$(timeout --signal=TERM --kill-after=10s 30s \
-        findmnt --list --noheadings --raw --output TARGET)"; then
+        findmnt --noheadings --raw --output TARGET)"; then
         fail "mounted filesystems could not be inspected safely"
     fi
     while IFS= read -r mount_target; do
@@ -1230,7 +1230,7 @@ require_root_only_file "${RESTIC_PASSWORD_FILE}" "Restic password file"
 
 for binary in \
     awk bash chmod chown date df du env find findmnt flock git grep hostname id install mktemp mv mysql \
-    mount mountpoint mysqldump openssl pgrep php restic rm rmdir rsync runuser seq sha256sum sleep sort ss stat sync systemctl timeout tr umount wc xargs; do
+    mount mountpoint mysqldump openssl pgrep php restic rm rmdir rsync seq setpriv sha256sum sleep sort ss stat sync systemctl timeout tr umount wc xargs; do
     command -v "${binary}" >/dev/null 2>&1 || fail "required binary is missing: ${binary}"
 done
 app_group="$(id -gn "${APP_USER}")"
