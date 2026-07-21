@@ -342,7 +342,7 @@ jobs:
               --entrypoint /usr/bin/composer \
               --pull never \
               "$PHP_IMAGE" install --no-dev --no-interaction --prefer-dist --no-progress \
-              --no-audit --no-scripts --no-plugins --optimize-autoloader
+              --no-scripts --no-plugins --optimize-autoloader
             [[ -d "$source/vendor" && ! -L "$source/vendor" ]]
             while IFS= read -r -d '' path; do
               [[ "$path" != *$'\n'* && "$path" != *$'\r'* ]]
