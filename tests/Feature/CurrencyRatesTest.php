@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\PlatformSetting;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\CurrencyRates;
@@ -10,6 +11,11 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
+/**
+ * Tenant-facing currency contract: the hotel only chooses automatic/manual
+ * mode and its manual ALL rate — the rates themselves are platform-wide
+ * (see PlatformCurrencyRatesTest / PlatformCurrencyAdminTest).
+ */
 class CurrencyRatesTest extends TestCase
 {
     use RefreshDatabase;
@@ -20,114 +26,82 @@ class CurrencyRatesTest extends TestCase
         Http::preventStrayRequests();
     }
 
-    private function enable(): void
+    private function admin(): User
     {
-        Setting::set('currencies.enabled', '1', 'boolean');
-        Setting::set('currencies.api_key', 'test-fx-key', 'text');
+        $this->seed(RolePermissionSeeder::class);
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        return $user;
     }
 
-    private function fakeApi(): void
+    public function test_hotel_saves_manual_mode_and_rate(): void
     {
-        Http::fake(['v6.exchangerate-api.com/*' => Http::response([
-            'result' => 'success',
-            'conversion_rates' => ['USD' => 1.0842, 'GBP' => 0.8461, 'ALL' => 98.7132, 'CHF' => 0.9701,
-                'TRY' => 35.42, 'JPY' => 171.3, 'CAD' => 1.48, 'AUD' => 1.63, 'SEK' => 11.42, 'NOK' => 11.71,
-                'MXN' => 20.1 /* untracked — must be dropped */],
-        ])]);
+        $admin = $this->admin();
+        PlatformSetting::set('currencies.rates', ['ALL' => 93.72], 'json');
+
+        $this->actingAs($admin)->put(route('settings.currencies'), [
+            'mode' => 'manual',
+            'manual_all_rate' => 97.5,
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $this->assertSame('manual', CurrencyRates::mode());
+        // Manual mode pins the hotel's rate over the platform table.
+        $this->assertSame(97.5, CurrencyRates::rate('ALL'));
     }
 
-    public function test_command_is_a_no_op_when_disabled_or_without_key(): void
+    public function test_switching_back_to_automatic_restores_platform_rates(): void
     {
-        $this->artisan('currency:fetch-rates')->assertSuccessful(); // stray HTTP would throw
-        $this->assertSame([], CurrencyRates::rates());
-    }
-
-    public function test_fetch_stores_only_the_tracked_rates(): void
-    {
-        $this->enable();
-        $this->fakeApi();
-
-        $this->artisan('currency:fetch-rates')->assertSuccessful();
-
-        $rates = CurrencyRates::rates();
-        $this->assertSame(98.7132, $rates['ALL']);
-        $this->assertSame(1.0842, $rates['USD']);
-        $this->assertArrayNotHasKey('MXN', $rates);
-        $this->assertNotNull(CurrencyRates::updatedAt());
-        Http::assertSent(fn ($r) => str_contains($r->url(), '/v6/test-fx-key/latest/EUR'));
-    }
-
-    public function test_rate_prefers_api_and_falls_back_to_manual_for_all(): void
-    {
+        $admin = $this->admin();
+        PlatformSetting::set('currencies.rates', ['ALL' => 93.72], 'json');
+        Setting::set('currencies.mode', 'manual');
         Setting::set('financial.fx_all_per_eur', 97.5, 'number');
-        $this->assertSame(97.5, CurrencyRates::rate('ALL')); // API off -> manual
-
-        $this->enable();
-        $this->fakeApi();
-        $this->artisan('currency:fetch-rates')->assertSuccessful();
-        $this->assertSame(98.7132, CurrencyRates::rate('ALL')); // API wins
-        $this->assertSame(1.0, CurrencyRates::rate('EUR'));
-        $this->assertNull(CurrencyRates::rate('XYZ'));
-    }
-
-    public function test_settings_save_and_inline_refresh(): void
-    {
-        $this->seed(RolePermissionSeeder::class);
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
-        $this->fakeApi();
 
         $this->actingAs($admin)->put(route('settings.currencies'), [
-            'enabled' => true, 'api_key' => 'test-fx-key', 'clear_key' => false,
-        ])->assertSessionHasNoErrors()->assertRedirect();
-        $this->assertTrue(CurrencyRates::enabled());
-
-        $this->actingAs($admin)->post(route('settings.currencies.refresh'))->assertRedirect();
-        $this->assertSame(98.7132, CurrencyRates::rates()['ALL']);
-
-        // empty key on re-save keeps the stored one
-        $this->actingAs($admin)->put(route('settings.currencies'), [
-            'enabled' => true, 'api_key' => '', 'clear_key' => false,
-        ])->assertRedirect();
-        $this->assertSame('test-fx-key', CurrencyRates::apiKey());
-    }
-
-    public function test_hotel_can_save_a_tenant_scoped_manual_all_rate(): void
-    {
-        $this->seed(RolePermissionSeeder::class);
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
-
-        $this->actingAs($admin)->put(route('settings.currencies'), [
-            'enabled' => false,
-            'api_key' => '',
-            'clear_key' => false,
-            'manual_all_rate' => 93.7837,
+            'mode' => 'automatic',
         ])->assertSessionHasNoErrors()->assertRedirect();
 
-        $this->assertSame(93.7837, CurrencyRates::rate('ALL'));
+        $this->assertSame('automatic', CurrencyRates::mode());
+        $this->assertSame(93.72, CurrencyRates::rate('ALL'));
+    }
+
+    public function test_manual_rate_of_zero_is_rejected(): void
+    {
+        $admin = $this->admin();
+        Setting::set('financial.fx_all_per_eur', 93.7837, 'number');
 
         $this->actingAs($admin)->put(route('settings.currencies'), [
-            'enabled' => false,
-            'api_key' => '',
-            'clear_key' => false,
+            'mode' => 'manual',
             'manual_all_rate' => 0,
         ])->assertSessionHasErrors('manual_all_rate');
 
-        $this->assertSame(93.7837, CurrencyRates::rate('ALL'));
+        $this->assertSame(93.7837, (float) Setting::get('financial.fx_all_per_eur'));
     }
 
-    public function test_failed_api_reports_a_clean_error(): void
+    public function test_invalid_mode_is_rejected(): void
     {
-        $this->enable();
-        Http::fake(['v6.exchangerate-api.com/*' => Http::response(['result' => 'error', 'error-type' => 'invalid-key'], 200)]);
+        $admin = $this->admin();
 
-        $this->seed(RolePermissionSeeder::class);
-        $admin = User::factory()->create();
-        $admin->assignRole('admin');
+        $this->actingAs($admin)->put(route('settings.currencies'), [
+            'mode' => 'platform',
+        ])->assertSessionHasErrors('mode');
+    }
 
-        $this->actingAs($admin)->post(route('settings.currencies.refresh'))
-            ->assertRedirect()->assertSessionHas('error');
-        $this->assertSame([], CurrencyRates::rates());
+    public function test_settings_page_shares_the_platform_rates_read_only(): void
+    {
+        $admin = $this->admin();
+        PlatformSetting::set('currencies.enabled', '1', 'boolean');
+        PlatformSetting::set('currencies.api_key', 'platform-key');
+        PlatformSetting::set('currencies.rates', ['ALL' => 93.72, 'USD' => 1.14], 'json');
+
+        $response = $this->actingAs($admin)->get(route('settings.index'));
+
+        $response->assertOk();
+        $currencies = $response->viewData('page')['props']['settings']['currencies'];
+        $this->assertSame('automatic', $currencies['mode']);
+        $this->assertTrue($currencies['platform_enabled']);
+        $this->assertSame(93.72, $currencies['rates']['ALL']);
+        $this->assertArrayNotHasKey('api_key_hint', $currencies);
+        $this->assertArrayNotHasKey('configured', $currencies);
     }
 }

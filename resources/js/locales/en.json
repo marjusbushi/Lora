@@ -4149,8 +4149,16 @@
     "baseCurrencyLabel": "Base currency",
     "baseCurrencyLocked": "It cannot be changed because the hotel has recorded transactions.",
     "manualAllRate": "Manual ALL/EUR rate (1 € =)",
-    "manualAllRateHelp": "Used when the API is disabled and stored separately for this hotel. The rate is frozen on each document.",
-    "baseCurrencyInherited": "Inherited automatically from the hotel's base currency."
+    "manualAllRateHelp": "In Automatic mode it is used only when platform rates are missing; in Manual mode it is the active rate. Stored separately for this hotel and frozen on each document.",
+    "baseCurrencyInherited": "Inherited automatically from the hotel's base currency.",
+    "modeLabel": "Rate source",
+    "modeAutomatic": "Automatic — synced from the platform",
+    "modeManual": "Manual — I set the ALL/EUR rate myself",
+    "modeHelp": "Automatic: the platform's daily rates. Manual: your ALL/EUR rate below wins; other currencies still come from the platform.",
+    "platformRatesNote": "Rates are fetched once a day for the whole platform — nothing to configure here.",
+    "currentRates": "Current rates (1 € =)",
+    "refreshedAt": "refreshed:",
+    "manualBadge": "manual"
   },
   "integrationCenter": {
     "title": "Integration Center",
@@ -4346,6 +4354,7 @@
       "payments": "Payments",
       "paymentAttempts": "Payment Attempts",
       "providerEvents": "Provider Events",
+      "currencies": "Currencies",
       "open": "Open",
       "close": "Close",
       "openMenu": "Open menu",

@@ -394,7 +394,6 @@ class TenantIsolationTest extends TestCase
             ['channex:ping', []],
             ['channex:pull-bookings', []],
             ['channex:push-ari', []],
-            ['currency:fetch-rates', []],
             ['finance:backfill', []],
             ['hotel:setup', []],
             ['booking:import', ['file' => 'missing.csv']],
@@ -437,7 +436,7 @@ class TenantIsolationTest extends TestCase
         $this->app['env'] = 'production';
 
         try {
-            $this->artisan('currency:fetch-rates', ['--tenant' => $second->id])
+            $this->artisan('pricing:snapshot', ['--tenant' => $second->id])
                 ->expectsOutputToContain('nuk përputhet me kontekstin aktiv')
                 ->assertFailed();
         } finally {

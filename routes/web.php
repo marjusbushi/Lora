@@ -31,6 +31,7 @@ use App\Http\Controllers\SmartPricingController;
 use App\Http\Controllers\SuperAdmin\BillingInvoiceController as SuperAdminBillingInvoiceController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentAttemptController as SuperAdminBillingPaymentAttemptController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentController as SuperAdminBillingPaymentController;
+use App\Http\Controllers\SuperAdmin\CurrencyController as SuperAdminCurrencyController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Http\Controllers\SuperAdmin\FatureAlOnboardingController as SuperAdminFatureAlOnboardingController;
 use App\Http\Controllers\SuperAdmin\OnboardingController as SuperAdminOnboardingController;
@@ -186,6 +187,9 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
         Route::post('/billing/payments', [SuperAdminBillingPaymentController::class, 'store'])->name('billing.payments.store');
         Route::get('/billing/payment-attempts', [SuperAdminBillingPaymentAttemptController::class, 'index'])->name('billing.payment-attempts.index');
         Route::get('/billing/payment-attempts/{paymentAttempt}', [SuperAdminBillingPaymentAttemptController::class, 'show'])->name('billing.payment-attempts.show');
+        Route::get('/currencies', [SuperAdminCurrencyController::class, 'index'])->name('currencies.index');
+        Route::put('/currencies', [SuperAdminCurrencyController::class, 'update'])->name('currencies.update');
+        Route::post('/currencies/refresh', [SuperAdminCurrencyController::class, 'refresh'])->middleware('throttle:10,1')->name('currencies.refresh');
         Route::get('/billing/provider-events', [SuperAdminProviderEventController::class, 'index'])->name('billing.provider-events.index');
         Route::get('/billing/provider-events/{providerEvent}', [SuperAdminProviderEventController::class, 'show'])->name('billing.provider-events.show');
         Route::patch('/billing/provider-events/{providerEvent}/retry', [SuperAdminProviderEventController::class, 'retry'])->name('billing.provider-events.retry');
@@ -480,7 +484,6 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/settings/pos/salespeople', [SettingsController::class, 'storePosSalesperson'])->middleware('module:pos')->name('settings.pos.salespeople.store');
         Route::put('/settings/market-rates', [SettingsController::class, 'updateMarketRates'])->name('settings.market-rates');
         Route::put('/settings/currencies', [SettingsController::class, 'updateCurrencies'])->middleware('module:finance')->name('settings.currencies');
-        Route::post('/settings/currencies/refresh', [SettingsController::class, 'refreshCurrencies'])->middleware('module:finance')->name('settings.currencies.refresh');
         Route::put('/settings/pricing-programs', [SettingsController::class, 'updatePricingPrograms'])->name('settings.pricing-programs');
         Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->middleware('module:housekeeping')->name('settings.housekeeping');
         Route::put('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai');

@@ -3,6 +3,7 @@ import Dropdown from '@/Components/Dropdown.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     Bell,
+    Coins,
     CreditCard,
     FileText,
     LayoutDashboard,
@@ -46,6 +47,7 @@ const navigation = [
     { label: t('superAdmin.compact.payments'), href: '/super-admin/billing/payments', match: '/super-admin/billing/payments', icon: CreditCard, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.paymentAttempts'), href: '/super-admin/billing/payment-attempts', match: '/super-admin/billing/payment-attempts', icon: RefreshCw, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.providerEvents'), href: '/super-admin/billing/provider-events', match: '/super-admin/billing/provider-events', icon: Webhook, group: t('superAdmin.compact.loraFinance') },
+    { label: t('superAdmin.compact.currencies'), href: '/super-admin/currencies', match: '/super-admin/currencies', icon: Coins, group: t('superAdmin.compact.loraFinance') },
 ];
 
 const navigationGroups = computed(() => [...new Set(navigation.map((item) => item.group))]);

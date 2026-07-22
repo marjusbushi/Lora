@@ -110,9 +110,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // enabled it in Settings; the command itself honours the frequency.
         $schedule->call(fn () => app(TenantCommandRunner::class)->run('market:fetch-rates', ['--scheduled' => true]))
             ->name('tenants:market:fetch-rates')->dailyAt('05:30')->withoutOverlapping()->onOneServer();
-        // Daily exchange rates (Settings → Monedhat) — no-op unless enabled.
-        $schedule->call(fn () => app(TenantCommandRunner::class)->run('currency:fetch-rates'))
-            ->name('tenants:currency:fetch-rates')->dailyAt('06:00')->withoutOverlapping()->onOneServer();
+        // Daily exchange rates for the WHOLE platform (Admin → Monedhat) —
+        // one shared API call per day, not one per hotel; no-op unless enabled.
+        $schedule->command('currency:fetch-rates')
+            ->name('platform:currency:fetch-rates')->dailyAt('06:00')->withoutOverlapping()->onOneServer();
         // Midnight: archive inspected cleaning tasks so the board shows only the day's live work.
         $schedule->call(fn () => app(TenantCommandRunner::class)->run(
             'housekeeping:archive-inspected',

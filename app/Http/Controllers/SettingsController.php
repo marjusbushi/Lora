@@ -78,12 +78,12 @@ class SettingsController extends Controller
             'gemini_from_env' => empty($aiKey) && ! empty(config('services.gemini.key')),
         ];
 
-        // Currencies (daily fx rates): same rule — never ship the raw key.
-        $curKey = trim((string) ($settings['currencies']['api_key'] ?? ''));
+        // Currencies: rates come from the PLATFORM (one shared daily fetch,
+        // managed in the super-admin panel). The hotel only chooses its mode
+        // (automatic/manual) and its manual ALL rate.
         $settings['currencies'] = [
-            'enabled' => (bool) ($settings['currencies']['enabled'] ?? false),
-            'configured' => $curKey !== '',
-            'api_key_hint' => $curKey !== '' ? str_repeat('•', 6).substr($curKey, -4) : null,
+            'mode' => CurrencyRates::mode(),
+            'platform_enabled' => CurrencyRates::enabled(),
             'rates' => CurrencyRates::rates(),
             'updated_at' => CurrencyRates::updatedAt(),
             'tracked' => CurrencyRates::CURRENCIES,
@@ -671,44 +671,20 @@ class SettingsController extends Controller
         return back()->with('success', 'Çelësi AI u ruajt. Asistenti i çmimeve tani është aktiv.');
     }
 
-    // --- Currencies (daily fx rates for multi-currency finance) ---
+    // --- Currencies (per-hotel mode; the rates themselves are platform-wide) ---
     public function updateCurrencies(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'enabled' => ['required', 'boolean'],
-            'api_key' => ['nullable', 'string', 'max:100'],
-            'clear_key' => ['nullable', 'boolean'],
+            'mode' => ['required', 'in:'.CurrencyRates::MODE_AUTOMATIC.','.CurrencyRates::MODE_MANUAL],
             'manual_all_rate' => ['nullable', 'numeric', 'min:1', 'max:1000'],
         ]);
 
-        Setting::set('currencies.enabled', $data['enabled'] ? '1' : '0', 'boolean');
-        if ($request->boolean('clear_key')) {
-            Setting::set('currencies.api_key', '', 'text');
-        } elseif (trim((string) ($data['api_key'] ?? '')) !== '') {
-            Setting::set('currencies.api_key', trim($data['api_key']), 'text');
-        }
+        Setting::set('currencies.mode', $data['mode']);
         if ($request->exists('manual_all_rate')) {
             Setting::set('financial.fx_all_per_eur', $data['manual_all_rate'] ?? 0, 'number');
         }
 
         return back()->with('success', 'Monedhat u ruajtën.');
-    }
-
-    /** "Rifresko tani" — inline fetch so the owner sees fresh rates instantly. */
-    public function refreshCurrencies(): RedirectResponse
-    {
-        if (! CurrencyRates::enabled()) {
-            return back()->with('error', 'Aktivizo modulin dhe vendos çelësin API më parë.');
-        }
-        try {
-            $count = app(CurrencyRates::class)->fetch();
-        } catch (Throwable $e) {
-            report($e);
-
-            return back()->with('error', 'Rifreskimi dështoi — kontrollo çelësin API.');
-        }
-
-        return back()->with('success', "U morën {$count} kurse të freskëta.");
     }
 
     // --- Market rates (rate shopping — competitor prices, Phase 1) ---
