@@ -278,7 +278,9 @@ class GuestDirectoryTest extends TestCase
 
         $this->actingAs($admin)->get(route('guests.index'))->assertOk();
 
-        $this->assertLessThanOrEqual(35, count(DB::getQueryLog()));
+        // 36 = previous 35 + the single pricing.currency read the shared
+        // settings payload performs on a settings-cache miss.
+        $this->assertLessThanOrEqual(36, count(DB::getQueryLog()));
     }
 
     private function user(string $role): User
