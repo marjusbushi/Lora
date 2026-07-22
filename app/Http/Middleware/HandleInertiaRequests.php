@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Setting;
 use App\Services\BaseCurrency;
+use App\Services\PricingCurrency;
 use App\Services\TenantBillingService;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\Request;
@@ -48,6 +49,9 @@ class HandleInertiaRequests extends Middleware
                 'hotel_name' => Setting::get('hotel.name', 'Hotel'),
                 'currency' => $tenant->currency,
                 'currency_symbol' => BaseCurrency::symbol(),
+                // Commercial currency — what room rates/reservation totals actually mean.
+                'pricing_currency' => PricingCurrency::code(),
+                'pricing_currency_symbol' => PricingCurrency::symbol(),
                 'tax_rate' => Setting::get('financial.tax_rate', 20),
                 'check_in_time' => Setting::get('hotel.check_in_time', '14:00'),
                 'check_out_time' => Setting::get('hotel.check_out_time', '11:00'),
@@ -64,6 +68,8 @@ class HandleInertiaRequests extends Middleware
                 'hotel_name' => 'Lora PMS',
                 'currency' => 'EUR',
                 'currency_symbol' => '€',
+                'pricing_currency' => 'EUR',
+                'pricing_currency_symbol' => '€',
                 'tax_rate' => 20,
                 'check_in_time' => '14:00',
                 'check_out_time' => '11:00',

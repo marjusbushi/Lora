@@ -70,7 +70,7 @@ watch(groupMode, (value) => {
 });
 
 const page = usePage();
-const currencyCode = page.props.tenant?.currency || 'EUR';
+const currencyCode = page.props.settings?.pricing_currency || page.props.tenant?.currency || 'EUR';
 const userPerms = computed(() => page.props.auth.user?.permissions || []);
 const canCreate = computed(() => userPerms.value.includes('create_rooms'));
 const canUpdate = computed(() => userPerms.value.includes('update_rooms'));

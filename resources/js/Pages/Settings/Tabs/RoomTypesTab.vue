@@ -1,7 +1,7 @@
 <script setup>
 import { translate } from '@/i18n';
 import { ref, computed } from 'vue';
-import { useForm, router } from '@inertiajs/vue3';
+import { useForm, usePage, router } from '@inertiajs/vue3';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
@@ -12,6 +12,8 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import Checkbox from '@/Components/UI/Checkbox.vue';
 
 const props = defineProps({ roomTypes: Array, amenities: { type: Array, default: () => [] }, toasts: Object });
+
+const pricingSymbol = usePage().props.settings?.pricing_currency_symbol || '€';
 
 const showModal = ref(false);
 const showImagesModal = ref(false);
@@ -224,7 +226,7 @@ function setAsFeatured(type, imageId) {
                             <Badge v-else variant="warning" size="sm">{{ $t('admin.generated.k_acc761369569') }}</Badge>
                         </div>
                         <p class="text-small text-neutral-500 mt-0.5">
-                            €{{ type.base_price }}{{ $t('admin.generated.k_5e4b46d44471') }} {{ type.max_occupancy }} {{ $t('admin.generated.k_989ff178f505') }} </p>
+                            {{ pricingSymbol }}{{ type.base_price }}{{ $t('admin.generated.k_5e4b46d44471') }} {{ type.max_occupancy }} {{ $t('admin.generated.k_989ff178f505') }} </p>
                     </div>
 
                     <div class="flex gap-1.5 shrink-0">

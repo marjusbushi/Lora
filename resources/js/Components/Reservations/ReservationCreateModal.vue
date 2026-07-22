@@ -28,7 +28,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'created', 'guest-created']);
 
 const perms = usePage().props.auth.user?.permissions || [];
-const currencyCode = usePage().props.tenant?.currency || 'EUR';
+const currencyCode = usePage().props.settings?.pricing_currency || usePage().props.tenant?.currency || 'EUR';
 const canCreateGuest = perms.includes('create_guests');
 const money = (value) => new Intl.NumberFormat('sq-AL', { style: 'currency', currency: currencyCode }).format(Number(value || 0));
 

@@ -21,7 +21,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'updated']);
-const currencyCode = usePage().props.tenant?.currency || 'EUR';
+const currencyCode = usePage().props.settings?.pricing_currency || usePage().props.tenant?.currency || 'EUR';
 const money = (value) => new Intl.NumberFormat('sq-AL', { style: 'currency', currency: currencyCode }).format(Number(value || 0));
 
 const guestOptions = computed(() =>
