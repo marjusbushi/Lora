@@ -552,6 +552,12 @@ class TenantController extends Controller
             'Referrer-Policy' => 'no-referrer',
         ];
 
+        if ($request->wantsJson() && ! $request->header('X-Inertia')) {
+            // New-tab flow (onboarding "Hap"): hand the URL back and let the
+            // freshly opened tab consume the single-use handoff itself.
+            return response()->json(['url' => $handoffUrl], 200, $headers);
+        }
+
         if ($request->header('X-Inertia')) {
             return Inertia::location($handoffUrl)->withHeaders($headers);
         }

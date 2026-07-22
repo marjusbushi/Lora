@@ -36,25 +36,33 @@ function toggleTask(task) {
 }
 function openTask(task) {
     if (!task.action) return;
-    openingTask.value = task.key;
 
+    // Every "Hap" opens a NEW tab so the onboarding checklist stays put.
     if (task.action.type === 'fiscal_onboarding') {
-        router.get(`/super-admin/onboarding/${props.tenant.id}/fiscalization`, {}, {
-            onFinish: () => { openingTask.value = null; },
-        });
+        window.open(`/super-admin/onboarding/${props.tenant.id}/fiscalization`, '_blank', 'noopener');
         return;
     }
 
     if (task.action.type === 'control') {
-        router.get(`/super-admin/tenants/${props.tenant.id}`, { config: task.action.tab }, {
-            onFinish: () => { openingTask.value = null; },
-        });
+        window.open(`/super-admin/tenants/${props.tenant.id}?config=${encodeURIComponent(task.action.tab)}`, '_blank', 'noopener');
         return;
     }
 
-    router.post(`/super-admin/tenants/${props.tenant.id}/switch`, { redirect: task.action.path }, {
-        onFinish: () => { openingTask.value = null; },
-    });
+    // Tenant deep-link: the handoff token is single-use and host-bound, so
+    // open the tab synchronously (popup blockers allow it inside the click)
+    // and let THAT tab consume the URL the server hands back.
+    openingTask.value = task.key;
+    const tab = window.open('about:blank', '_blank');
+    window.axios.post(`/super-admin/tenants/${props.tenant.id}/switch`, { redirect: task.action.path })
+        .then(({ data }) => {
+            if (data?.url && tab) {
+                tab.location.href = data.url;
+            } else {
+                tab?.close();
+            }
+        })
+        .catch(() => tab?.close())
+        .finally(() => { openingTask.value = null; });
 }
 function saveMaster() { masterForm.patch(`/super-admin/onboarding/${props.tenant.id}`, { preserveScroll: true, onSuccess: () => { showSettings.value = false; } }); }
 function saveStep() { stepForm.patch(`/super-admin/onboarding/${props.tenant.id}/steps/${activeStepKey.value}`, { preserveScroll: true }); }
