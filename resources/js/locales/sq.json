@@ -4156,7 +4156,7 @@
     "modeHelp": "Automatike: kurset ditore të platformës, vetëm lexim. Manuale: vendos vetë kursin për çdo monedhë të aktivizuar.",
     "enabledColumn": "Aktive",
     "protectedTooltip": "Monedha bazë dhe ajo e çmimeve nuk mund të çaktivizohen.",
-    "manualRatesHelp": "Vendos kursin tënd për çdo monedhë të aktivizuar (1 € = X). Fushat nisin bosh — janë kurset e tua, jo të platformës.",
+    "manualRatesHelp": "Fushat fillojnë me kurset aktuale — modifiko cilëndo që dëshiron (1 € = X). Çdo monedhë e aktivizuar duhet të ketë vlerë.",
     "platformRatesNote": "Kurset merren një herë në ditë për gjithë platformën — s'ka asgjë për të konfiguruar këtu.",
     "currentRates": "Kurset aktuale (1 € =)",
     "refreshedAt": "rifreskuar:",
