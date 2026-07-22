@@ -1,6 +1,6 @@
 <script setup>
 import { translate } from '@/i18n';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
@@ -33,6 +33,25 @@ function isEnabled(code) {
     return !form.disabled.includes(code);
 }
 
+// Switching to manual keeps the values the hotel was already seeing: any
+// currency without a saved manual rate starts from the current platform
+// rate, ready to modify.
+function prefillManualRates() {
+    (props.settings.tracked || []).forEach((code) => {
+        if (!isEnabled(code)) return;
+        const current = form.manual_rates[code];
+        if (current === undefined || current === null || current === '') {
+            const platform = props.settings.rates?.[code];
+            if (platform) form.manual_rates[code] = platform;
+        }
+    });
+}
+
+watch(() => form.mode, (mode) => {
+    if (mode === 'manual') prefillManualRates();
+});
+if (isManual.value) prefillManualRates();
+
 function toggle(code) {
     if (isProtected(code)) return;
     if (isEnabled(code)) {
@@ -40,6 +59,7 @@ function toggle(code) {
         delete form.manual_rates[code];
     } else {
         form.disabled = form.disabled.filter((c) => c !== code);
+        if (isManual.value) prefillManualRates();
     }
 }
 
