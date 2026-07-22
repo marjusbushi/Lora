@@ -95,8 +95,8 @@ class TenantHandoffTest extends TestCase
     {
         $token = app(TenantHandoff::class)->issue($this->superAdmin, $this->tenant, 'hotel-a.lorapms.test');
 
-        $this->get('http://hotel-a.lorapms.test/tenant-handoff?token='.$token.'&redirect='.urlencode('/settings?tab=currencies'))
-            ->assertRedirect('http://hotel-a.lorapms.test/pms/settings?tab=currencies');
+        $this->get('http://hotel-a.lorapms.test/tenant-handoff?token='.$token.'&redirect='.urlencode('/reservations'))
+            ->assertRedirect('http://hotel-a.lorapms.test/pms/reservations');
 
         $this->post('http://hotel-a.lorapms.test/logout');
         $token = app(TenantHandoff::class)->issue($this->superAdmin, $this->tenant, 'hotel-a.lorapms.test');
