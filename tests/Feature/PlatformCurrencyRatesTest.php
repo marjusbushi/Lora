@@ -102,6 +102,109 @@ class PlatformCurrencyRatesTest extends TestCase
         $this->assertSame('platform-key', CurrencyRates::apiKey());
     }
 
+    public function test_manual_mode_uses_per_currency_manual_rates(): void
+    {
+        $this->withTenantContext();
+        PlatformSetting::set('currencies.rates', ['USD' => 1.14, 'ALL' => 93.72, 'GBP' => 0.85], 'json');
+        Setting::set('currencies.mode', CurrencyRates::MODE_MANUAL);
+        Setting::set('currencies.manual_rates', ['USD' => 1.20, 'ALL' => 97.0], 'json');
+
+        // Entered manual rates win; a rate not yet entered falls to the platform.
+        $this->assertSame(1.20, CurrencyRates::rate('USD'));
+        $this->assertSame(97.0, CurrencyRates::rate('ALL'));
+        $this->assertSame(0.85, CurrencyRates::rate('GBP'));
+    }
+
+    public function test_legacy_manual_all_rate_feeds_the_new_manual_rates(): void
+    {
+        $this->withTenantContext();
+        Setting::set('financial.fx_all_per_eur', 94.5, 'number');
+
+        $this->assertSame(94.5, CurrencyRates::manualRates()['ALL']);
+
+        // The new store wins over the legacy field once saved.
+        Setting::set('currencies.manual_rates', ['ALL' => 96.0], 'json');
+        $this->assertSame(96.0, CurrencyRates::manualRates()['ALL']);
+    }
+
+    public function test_disabled_currency_has_no_rate_and_protected_ones_cannot_be_disabled(): void
+    {
+        $this->withTenantContext();
+        $tenant = Tenant::query()->sole();
+        $tenant->update(['currency' => 'ALL']);
+        app(TenantContext::class)->set($tenant->fresh());
+        Setting::set('pricing.currency', 'EUR');
+        PlatformSetting::set('currencies.rates', ['USD' => 1.14, 'ALL' => 93.72, 'JPY' => 185.9], 'json');
+
+        // Protection is DYNAMIC from the hotel's settings: base ALL + pricing EUR.
+        $this->assertEqualsCanonicalizing(['ALL', 'EUR'], CurrencyRates::protectedCurrencies());
+
+        Setting::set('currencies.disabled', ['JPY', 'ALL'], 'json');
+
+        // ALL is protected — the stored value is ignored; JPY is genuinely off.
+        $this->assertSame(['JPY'], CurrencyRates::disabledCurrencies());
+        $this->assertNull(CurrencyRates::rate('JPY'));
+        $this->assertSame(93.72, CurrencyRates::rate('ALL'));
+        $this->assertNotContains('JPY', CurrencyRates::enabledCurrencies());
+    }
+
+    public function test_staleness_flags_failed_or_old_fetches_only_when_enabled(): void
+    {
+        // Integration off: never stale.
+        $this->assertFalse(CurrencyRates::isStale());
+
+        PlatformSetting::set('currencies.enabled', '1', 'boolean');
+        PlatformSetting::set('currencies.api_key', 'platform-key');
+
+        // Enabled but never fetched: stale.
+        $this->assertTrue(CurrencyRates::isStale());
+
+        PlatformSetting::set('currencies.rates', ['ALL' => 93.72], 'json');
+        PlatformSetting::set('currencies.updated_at', now()->subHours(2)->toDateTimeString());
+        $this->assertFalse(CurrencyRates::isStale());
+
+        PlatformSetting::set('currencies.updated_at', now()->subHours(26)->toDateTimeString());
+        $this->assertTrue(CurrencyRates::isStale());
+
+        // Fresh timestamp but a recorded failure still alerts.
+        PlatformSetting::set('currencies.updated_at', now()->toDateTimeString());
+        CurrencyRates::recordFetchFailure('invalid-key');
+        $this->assertTrue(CurrencyRates::isStale());
+        $this->assertStringContainsString('invalid-key', CurrencyRates::lastError());
+    }
+
+    public function test_successful_fetch_clears_the_recorded_failure(): void
+    {
+        PlatformSetting::set('currencies.enabled', '1', 'boolean');
+        PlatformSetting::set('currencies.api_key', 'platform-key');
+        CurrencyRates::recordFetchFailure('boom');
+        Http::fake([
+            'v6.exchangerate-api.com/*' => Http::response([
+                'result' => 'success',
+                'conversion_rates' => ['ALL' => 93.72],
+            ]),
+        ]);
+
+        app(CurrencyRates::class)->fetch();
+
+        $this->assertSame('', CurrencyRates::lastError());
+        $this->assertFalse(CurrencyRates::isStale());
+    }
+
+    public function test_failed_command_records_the_error_for_the_admin_banner(): void
+    {
+        PlatformSetting::set('currencies.enabled', '1', 'boolean');
+        PlatformSetting::set('currencies.api_key', 'platform-key');
+        Http::fake([
+            'v6.exchangerate-api.com/*' => Http::response(['result' => 'error', 'error-type' => 'invalid-key']),
+        ]);
+
+        $this->artisan('currency:fetch-rates')->assertFailed();
+
+        $this->assertNotSame('', CurrencyRates::lastError());
+        $this->assertTrue(CurrencyRates::isStale());
+    }
+
     public function test_command_is_a_noop_when_platform_integration_is_off(): void
     {
         Http::fake();

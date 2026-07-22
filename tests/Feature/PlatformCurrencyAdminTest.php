@@ -47,6 +47,45 @@ class PlatformCurrencyAdminTest extends TestCase
                 ->missing('currencies.api_key'));
     }
 
+    public function test_super_admin_sees_the_stale_rates_alert(): void
+    {
+        PlatformSetting::set('currencies.enabled', '1', 'boolean');
+        PlatformSetting::set('currencies.api_key', 'platform-key');
+        PlatformSetting::set('currencies.rates', ['ALL' => 93.72], 'json');
+        PlatformSetting::set('currencies.updated_at', now()->subHours(30)->toDateTimeString());
+
+        $this->actingAs($this->superAdmin())
+            ->get('https://admin.lorapms.test/super-admin')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('platformAlerts.currency_rates.stale', true));
+    }
+
+    public function test_fresh_rates_do_not_raise_the_alert(): void
+    {
+        PlatformSetting::set('currencies.enabled', '1', 'boolean');
+        PlatformSetting::set('currencies.api_key', 'platform-key');
+        PlatformSetting::set('currencies.rates', ['ALL' => 93.72], 'json');
+        PlatformSetting::set('currencies.updated_at', now()->subHours(2)->toDateTimeString());
+
+        $this->actingAs($this->superAdmin())
+            ->get('https://admin.lorapms.test/super-admin')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('platformAlerts.currency_rates.stale', false));
+    }
+
+    public function test_hotel_staff_get_no_platform_alerts(): void
+    {
+        PlatformSetting::set('currencies.enabled', '1', 'boolean');
+        PlatformSetting::set('currencies.api_key', 'platform-key');
+
+        $user = User::factory()->create(['is_super_admin' => false]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('platformAlerts', null));
+    }
+
     public function test_regular_user_cannot_open_platform_currencies(): void
     {
         $user = User::factory()->create(['is_super_admin' => false]);

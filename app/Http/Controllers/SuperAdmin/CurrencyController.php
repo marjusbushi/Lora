@@ -62,6 +62,8 @@ class CurrencyController extends Controller
         try {
             $count = $rates->fetch();
         } catch (\Throwable $e) {
+            CurrencyRates::recordFetchFailure($e->getMessage());
+
             return back()->with('error', 'Rifreskimi dështoi: '.$e->getMessage());
         }
 

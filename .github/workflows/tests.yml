@@ -222,7 +222,10 @@ jobs:
       - name: Checkout target branch schema
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.event.before || 'staging' }}
+          # On the FIRST push of a new branch github.event.before is the
+          # all-zeros SHA (a non-empty string, so `||` alone never falls
+          # back) — compare against staging in that case.
+          ref: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'staging' }}
           fetch-depth: 0
 
       - name: PHP

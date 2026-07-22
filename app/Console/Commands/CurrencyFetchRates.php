@@ -28,6 +28,7 @@ class CurrencyFetchRates extends Command
         try {
             $count = $rates->fetch();
         } catch (\Throwable $e) {
+            CurrencyRates::recordFetchFailure($e->getMessage());
             Log::error('Platform currency fetch failed', ['error' => $e->getMessage()]);
             $this->error('Currency fetch failed: '.$e->getMessage());
 
