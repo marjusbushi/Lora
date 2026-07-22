@@ -17,7 +17,7 @@ class RoomStoreRequest extends FormRequest
         return [
             'room_type_id' => ['required', TenantRule::exists('room_types')],
             'room_number' => ['required', 'string', 'max:10', TenantRule::unique('rooms', 'room_number')],
-            'floor' => ['required', 'integer', 'min:1', 'max:50'],
+            'floor' => ['required', 'integer', 'min:0', 'max:50'],
             'status' => ['sometimes', 'in:available,occupied,cleaning,maintenance'],
             'notes' => ['nullable', 'string', 'max:500'],
         ];
