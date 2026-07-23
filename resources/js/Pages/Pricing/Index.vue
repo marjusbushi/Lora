@@ -332,7 +332,19 @@ function saveRates() {
 
 // ── Redesign (approved mockup 2026-07-24): year timeline, gaps, dirty bar ──
 const DAY_MS = 86400000;
-const SEASON_COLORS = ['#4f7fbd', '#e0862f', '#4f9d6f', '#d64f4f', '#9a7bd0', '#3f9d9d', '#c46ba3', '#8a8f3f'];
+// Muted, system-matching tones (Marjus 2026-07-24: solid poster colours
+// clashed with the app): soft tinted fill + deep text of the same hue +
+// a mid-shade edge accent — the same language as the app's status badges.
+const SEASON_TONES = [
+    { bg: '#e7eef7', text: '#2f5578', edge: '#8fb0d1' }, // blu deti
+    { bg: '#f8eddc', text: '#7d5316', edge: '#d9ad62' }, // qelibar
+    { bg: '#e6f0ea', text: '#2c5d45', edge: '#8db8a2' }, // jeshile
+    { bg: '#f8e7e3', text: '#8c3d2e', edge: '#d69182' }, // terrakotë
+    { bg: '#ece8f6', text: '#4f3d80', edge: '#a795d6' }, // vjollcë
+    { bg: '#e2f0ef', text: '#275f5c', edge: '#85b7b3' }, // teal
+    { bg: '#f7e7ef', text: '#82365f', edge: '#cf8fb0' }, // trëndafili
+    { bg: '#f0f1de', text: '#5c5f22', edge: '#b3b766' }, // ulliri
+];
 const toUtc = (d) => { const [y, m, dd] = String(d).split('-').map(Number); return Date.UTC(y, m - 1, dd); };
 const isoOf = (utc) => new Date(utc).toISOString().slice(0, 10);
 const now = new Date();
@@ -351,7 +363,7 @@ const shortDate = (d) => {
 // Stable colour per season (keyed by id, so edits never reshuffle the palette).
 const seasonColor = computed(() => {
     const map = {};
-    [...props.seasons].sort((a, b) => a.id - b.id).forEach((s, i) => { map[s.id] = SEASON_COLORS[i % SEASON_COLORS.length]; });
+    [...props.seasons].sort((a, b) => a.id - b.id).forEach((s, i) => { map[s.id] = SEASON_TONES[i % SEASON_TONES.length]; });
     return map;
 });
 const yearSeasons = computed(() => props.seasons
@@ -372,7 +384,7 @@ const segments = computed(() => [...yearSeasons.value]
             season: s,
             left: (from / yearDays.value) * 100,
             width: ((to - from + 1) / yearDays.value) * 100,
-            color: seasonColor.value[s.id],
+            tone: seasonColor.value[s.id],
             raised,
         };
     }));
@@ -616,12 +628,20 @@ function fmtRange(s) {
                         v-for="seg in segments"
                         :key="seg.season.id"
                         type="button"
-                        class="absolute rounded-lg text-white font-extrabold text-tiny leading-tight px-1.5 overflow-hidden whitespace-nowrap transition hover:-translate-y-0.5 hover:shadow-lg"
+                        class="absolute rounded-lg font-extrabold text-tiny leading-tight px-1.5 overflow-hidden whitespace-nowrap transition hover:-translate-y-0.5 hover:shadow-md"
                         :class="[
                             seg.raised ? 'top-0 bottom-0 z-[2] shadow-md' : 'top-1.5 bottom-1.5',
                             editingSeason && editingSeason.id === seg.season.id && inlineOpen ? 'ring-2 ring-primary-900 ring-offset-1 z-[3]' : '',
                         ]"
-                        :style="{ left: seg.left + '%', width: seg.width + '%', background: seg.color, boxShadow: 'inset 0 -14px 16px rgba(0,0,0,.14)' }"
+                        :style="{
+                            left: seg.left + '%',
+                            width: seg.width + '%',
+                            background: seg.tone.bg,
+                            color: seg.tone.text,
+                            boxShadow: seg.raised
+                                ? `inset 0 0 0 2px ${seg.tone.edge}, inset 0 -3px 0 ${seg.tone.edge}`
+                                : `inset 0 -3px 0 ${seg.tone.edge}`,
+                        }"
                         :title="seg.season.name + ' · ' + fmtRange(seg.season) + ' · ' + $t('admin.generated.k_c0857a9c44ab') + ' ' + seg.season.priority"
                         @click="editSeasonInline(seg.season)"
                     >
@@ -649,9 +669,9 @@ function fmtRange(s) {
 
                 <!-- inline season editor -->
                 <div v-if="inlineOpen && editingSeason" class="mt-4 rounded-xl border border-neutral-200 overflow-hidden">
-                    <div class="flex items-center gap-2 px-4 py-2.5 text-white font-bold" :style="{ background: seasonColor[editingSeason.id] }">
+                    <div class="flex items-center gap-2 px-4 py-2.5 font-bold" :style="{ background: seasonColor[editingSeason.id].bg, color: seasonColor[editingSeason.id].text, boxShadow: `inset 0 -2px 0 ${seasonColor[editingSeason.id].edge}` }">
                         ✎ {{ editingSeason.name }}
-                        <button type="button" class="ml-auto h-6 w-6 rounded-md bg-white/20 font-extrabold hover:bg-white/30" @click="closeInline">✕</button>
+                        <button type="button" class="ml-auto h-6 w-6 rounded-md bg-black/5 font-extrabold hover:bg-black/10" @click="closeInline">✕</button>
                     </div>
                     <div class="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
                         <FormGroup :label="$t('admin.generated.k_51a0c7aadeb7')" :error="sform.errors.name" required>
@@ -706,7 +726,7 @@ function fmtRange(s) {
                                     </span>
                                 </th>
                                 <th v-for="s in yearSeasons" :key="s.id" class="px-3 pb-2 text-left align-bottom">
-                                    <span class="inline-block rounded-lg px-2.5 py-1.5 text-tiny font-extrabold leading-tight text-white shadow-sm" :style="{ background: seasonColor[s.id] }">
+                                    <span class="inline-block rounded-lg px-2.5 py-1.5 text-tiny font-extrabold leading-tight" :style="{ background: seasonColor[s.id].bg, color: seasonColor[s.id].text, boxShadow: `inset 0 0 0 1px ${seasonColor[s.id].edge}55, inset 0 -2px 0 ${seasonColor[s.id].edge}` }">
                                         {{ s.name }}
                                         <small class="block text-[9px] font-bold opacity-85">{{ shortDate(s.start_date) }} – {{ shortDate(s.end_date) }}</small>
                                     </span>
