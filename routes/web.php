@@ -390,8 +390,8 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/payments/export', [FinanceController::class, 'exportPayments'])->name('finance.payments.export');
         Route::post('/payments', [FinanceController::class, 'storePayment'])->middleware('permission:create_payment')->name('finance.payments.store');
         Route::post('/transfers', [FinanceController::class, 'storeTransfer'])->middleware('permission:manage_transfers')->name('finance.transfers.store');
-        Route::get('/movements', [FinanceController::class, 'movements'])->middleware('permission:manage_deposits')->name('finance.movements');
-        Route::post('/movements', [FinanceController::class, 'storeMovement'])->middleware('permission:manage_deposits')->name('finance.movements.store');
+        Route::get('/movements', [FinanceController::class, 'movements'])->middleware('permission:manage_deposits|manage_withdrawals')->name('finance.movements');
+        Route::post('/movements', [FinanceController::class, 'storeMovement'])->middleware('permission:manage_deposits|manage_withdrawals')->name('finance.movements.store');
         Route::get('/invoices', [FinanceController::class, 'invoices'])->name('finance.invoices');
 
         // Phase 2: Blerjet (Bills) + Furnitorët

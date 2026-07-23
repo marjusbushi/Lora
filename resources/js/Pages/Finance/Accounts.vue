@@ -238,8 +238,9 @@ watch(() => movement.account_id, (id) => {
     if (selected) movement.currency = selected.currency;
 });
 
-function openMovement(kind) {
-    movement.movement = kind;
+function openMovement() {
+    // Default to whichever kind this user is actually allowed to record.
+    movement.movement = props.can.deposits ? 'deposit' : 'withdrawal';
     movement.account_id = props.selectedId;
     const selected = activeAccounts.value.find((item) => item.id === props.selectedId);
     movement.currency = selected ? selected.currency : props.baseCurrency;
@@ -297,7 +298,7 @@ function toggleAccount(accountToToggle) {
                     <p class="mt-1 text-sm text-neutral-500">{{ t('financeAccounts.subtitle') }}</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <Button v-if="can.deposits" variant="outline" @click="openMovement('deposit')">
+                    <Button v-if="can.deposits || can.withdrawals" variant="outline" @click="openMovement">
                         <Banknote class="h-4 w-4" /> {{ t('financeAccounts.movementButton') }}
                     </Button>
                     <Button v-if="can.transfers && activeAccounts.length > 1" variant="outline" @click="showTransfer = true">
@@ -476,11 +477,11 @@ function toggleAccount(accountToToggle) {
         <Modal :show="showMovement" :title="t('financeAccounts.movementTitle')" max-width="lg" @close="showMovement = false">
             <form id="account-movement-form" class="space-y-4" @submit.prevent="submitMovement">
                 <div class="flex gap-4">
-                    <label class="flex items-center gap-2 text-body-sm text-primary-900">
+                    <label v-if="can.deposits" class="flex items-center gap-2 text-body-sm text-primary-900">
                         <input v-model="movement.movement" type="radio" value="deposit" class="h-4 w-4 border-neutral-300 text-primary-700 focus:ring-primary-600">
                         {{ t('financeAccounts.movementDeposit') }}
                     </label>
-                    <label class="flex items-center gap-2 text-body-sm text-primary-900">
+                    <label v-if="can.withdrawals" class="flex items-center gap-2 text-body-sm text-primary-900">
                         <input v-model="movement.movement" type="radio" value="withdrawal" class="h-4 w-4 border-neutral-300 text-primary-700 focus:ring-primary-600">
                         {{ t('financeAccounts.movementWithdrawal') }}
                     </label>

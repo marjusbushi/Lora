@@ -52,19 +52,19 @@ class FinanceMovementsTest extends TestCase
         $this->assertSame(500.0, (float) $arka->fresh()->balance());
     }
 
-    public function test_finance_role_records_a_withdrawal_that_lowers_the_balance(): void
+    public function test_admin_records_a_withdrawal_that_lowers_the_balance(): void
     {
-        $finance = $this->user('finance');
+        $admin = $this->user('admin');
         $arka = $this->arka();
 
-        $this->actingAs($finance)->post(route('finance.movements.store'), [
+        $this->actingAs($admin)->post(route('finance.movements.store'), [
             'movement' => 'deposit',
             'account_id' => $arka->id,
             'amount' => 300,
             'currency' => $arka->currency,
         ])->assertRedirect();
 
-        $this->actingAs($finance)->post(route('finance.movements.store'), [
+        $this->actingAs($admin)->post(route('finance.movements.store'), [
             'movement' => 'withdrawal',
             'account_id' => $arka->id,
             'amount' => 120,
@@ -76,6 +76,32 @@ class FinanceMovementsTest extends TestCase
         $this->assertSame('out', $withdrawal->direction);
         $this->assertSame('Tërheqje e pronarit', $withdrawal->description);
         $this->assertSame(180.0, (float) $arka->fresh()->balance());
+    }
+
+    public function test_finance_role_can_deposit_but_not_withdraw(): void
+    {
+        $finance = $this->user('finance');
+        $arka = $this->arka();
+
+        $this->actingAs($finance)->post(route('finance.movements.store'), [
+            'movement' => 'deposit',
+            'account_id' => $arka->id,
+            'amount' => 250,
+            'currency' => $arka->currency,
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $this->actingAs($finance)->post(route('finance.movements.store'), [
+            'movement' => 'withdrawal',
+            'account_id' => $arka->id,
+            'amount' => 50,
+            'currency' => $arka->currency,
+        ])->assertForbidden();
+
+        $this->assertSame(0, FinancePayment::query()->where('movement', 'withdrawal')->count());
+        $this->assertSame(250.0, (float) $arka->fresh()->balance());
+
+        // The report stays readable for the finance role.
+        $this->actingAs($finance)->get(route('finance.movements'))->assertOk();
     }
 
     public function test_manager_and_receptionist_cannot_move_capital(): void

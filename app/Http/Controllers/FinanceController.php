@@ -691,7 +691,8 @@ class FinanceController extends Controller
      * Capital movement on Arka & Banka — the owner putting money in (deposit)
      * or taking it out (withdrawal). Tagged on the same ledger so balances
      * flow naturally, but reportable separately from operational payments.
-     * Route-gated by manage_deposits (admin or the finance role).
+     * Deposits need manage_deposits (admin or the finance role); withdrawals
+     * need manage_withdrawals (admin only).
      */
     public function storeMovement(Request $request): RedirectResponse
     {
@@ -705,6 +706,11 @@ class FinanceController extends Controller
             'description' => ['nullable', 'string', 'max:300'],
             'paid_at' => ['nullable', 'date'],
         ]);
+
+        // The route allows either permission; each movement type checks its own.
+        abort_unless($request->user()->can(
+            $data['movement'] === 'deposit' ? 'manage_deposits' : 'manage_withdrawals'
+        ), 403);
 
         $account = $this->visibleAccounts($request)->firstWhere('id', (int) $data['account_id']);
         if (! $account) {
@@ -2052,6 +2058,7 @@ class FinanceController extends Controller
                 'manageSuppliers' => $request->user()->can('manage_suppliers'),
                 'manageAccounts' => $request->user()->can('manage_finance_settings'),
                 'deposits' => $request->user()->can('manage_deposits'),
+                'withdrawals' => $request->user()->can('manage_withdrawals'),
             ],
         ];
     }
