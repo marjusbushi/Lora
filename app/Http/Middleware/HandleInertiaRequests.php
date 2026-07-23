@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Setting;
 use App\Services\BaseCurrency;
+use App\Services\CurrencyRates;
 use App\Services\PricingCurrency;
 use App\Services\TenantBillingService;
 use App\Tenancy\TenantContext;
@@ -116,6 +117,15 @@ class HandleInertiaRequests extends Middleware
                 'current_period_ends_at' => $billingAccess['current_period_ends_at'],
             ] : null,
             'modules' => $billingAccess['modules'] ?? [],
+            // Platform health — super-admin only, so hotel staff requests pay
+            // zero extra queries (also keeps the guests-page query budget).
+            'platformAlerts' => $user?->is_super_admin ? [
+                'currency_rates' => [
+                    'stale' => CurrencyRates::isStale(),
+                    'updated_at' => CurrencyRates::updatedAt(),
+                    'last_error' => CurrencyRates::lastError(),
+                ],
+            ] : null,
             // Cached so the shared prop costs one cache lookup, not 6 SELECTs per request.
             // Invalidated in Setting::set().
             'settings' => $settings,

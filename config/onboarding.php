@@ -64,7 +64,7 @@ return [
                 'fature_al' => ['title' => 'fature.al', 'description' => 'Wizard fiskalizimi: kompani, certifikatë, degë dhe operator', 'action' => ['type' => 'fiscal_onboarding']],
                 'channex' => ['title' => 'Channex', 'description' => 'Kanalet dhe sinkronizimi', 'action' => ['type' => 'control', 'tab' => 'channex']],
                 'payments' => ['title' => 'Pagesat online', 'description' => 'POK dhe link pagesash', 'action' => ['type' => 'control', 'tab' => 'pok']],
-                'exchange_rates' => ['title' => 'ExchangeRate API', 'description' => 'API key dhe rifreskimi i kurseve', 'action' => ['type' => 'tenant', 'path' => '/settings?tab=currencies']],
+                // Exchange rates are platform-wide now (Admin → Monedhat) — no per-hotel setup.
             ],
         ],
         'testing' => [

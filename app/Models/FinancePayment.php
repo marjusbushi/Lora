@@ -17,7 +17,7 @@ class FinancePayment extends TenantModel
     private ?float $frozenAmountBase = null;
 
     protected $fillable = [
-        'direction', 'account_id', 'counter_account_id', 'amount', 'currency',
+        'direction', 'movement', 'account_id', 'counter_account_id', 'amount', 'currency',
         'fx_rate', 'amount_base', 'method', 'source', 'bill_id', 'invoice_id',
         'sourceable_type', 'sourceable_id', 'description', 'paid_at', 'created_by',
     ];

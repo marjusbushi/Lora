@@ -58,6 +58,14 @@ class TenantRoleService
                 'open_pos_shift', 'close_pos_shift',
                 'view_rooms',
             ],
+            // Dedicated finance staff: the full money surface (including bank
+            // visibility and capital deposits/withdrawals) but no operations.
+            'finance' => [
+                'view_finance', 'view_bank_accounts', 'create_payment', 'pay_bills',
+                'manage_transfers', 'manage_invoices', 'manage_bills',
+                'manage_suppliers', 'manage_deposits',
+                'view_reports',
+            ],
         ];
     }
 
@@ -83,6 +91,7 @@ class TenantRoleService
             'view_finance', 'view_bank_accounts', 'create_payment', 'pay_bills',
             'manage_transfers', 'manage_invoices', 'manage_bills',
             'manage_suppliers', 'manage_finance_settings', 'delete_finance_records',
+            'manage_deposits', 'manage_withdrawals',
             'view_inventory', 'manage_inventory',
         ];
 

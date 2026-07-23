@@ -78,16 +78,19 @@ class SettingsController extends Controller
             'gemini_from_env' => empty($aiKey) && ! empty(config('services.gemini.key')),
         ];
 
-        // Currencies (daily fx rates): same rule — never ship the raw key.
-        $curKey = trim((string) ($settings['currencies']['api_key'] ?? ''));
+        // Currencies: rates come from the PLATFORM (one shared daily fetch,
+        // managed in the super-admin panel). The hotel chooses its mode, its
+        // own rates in manual mode, and which currencies it uses at all.
         $settings['currencies'] = [
-            'enabled' => (bool) ($settings['currencies']['enabled'] ?? false),
-            'configured' => $curKey !== '',
-            'api_key_hint' => $curKey !== '' ? str_repeat('•', 6).substr($curKey, -4) : null,
+            'mode' => CurrencyRates::mode(),
+            'platform_enabled' => CurrencyRates::enabled(),
             'rates' => CurrencyRates::rates(),
             'updated_at' => CurrencyRates::updatedAt(),
             'tracked' => CurrencyRates::CURRENCIES,
-            'fallback_all' => (float) Setting::get('financial.fx_all_per_eur', 0) ?: null,
+            // The hotel's OWN saved rates — never prefilled from the platform.
+            'manual_rates' => (object) CurrencyRates::manualRates(),
+            'disabled' => CurrencyRates::disabledCurrencies(),
+            'protected' => CurrencyRates::protectedCurrencies(),
         ];
 
         // Rate shopping (market_rates): same rule — never ship the raw key.
@@ -245,6 +248,12 @@ class SettingsController extends Controller
         $currency = strtoupper((string) $request->input('currency'));
         $pricingCurrency = strtoupper((string) $request->input('pricing_currency', PricingCurrency::code()));
         BaseCurrency::assertCanChange($tenant, $currency);
+
+        if (in_array($pricingCurrency, CurrencyRates::disabledCurrencies(), true)) {
+            throw ValidationException::withMessages([
+                'pricing_currency' => "Monedha {$pricingCurrency} është e çaktivizuar për këtë hotel — aktivizoje së pari te Monedhat.",
+            ]);
+        }
 
         if ($pricingCurrency !== $currency && ! CurrencyRates::between($pricingCurrency, $currency)) {
             throw ValidationException::withMessages([
@@ -671,44 +680,53 @@ class SettingsController extends Controller
         return back()->with('success', 'Çelësi AI u ruajt. Asistenti i çmimeve tani është aktiv.');
     }
 
-    // --- Currencies (daily fx rates for multi-currency finance) ---
+    // --- Currencies (per-hotel mode; the rates themselves are platform-wide) ---
     public function updateCurrencies(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'enabled' => ['required', 'boolean'],
-            'api_key' => ['nullable', 'string', 'max:100'],
-            'clear_key' => ['nullable', 'boolean'],
-            'manual_all_rate' => ['nullable', 'numeric', 'min:1', 'max:1000'],
+            'mode' => ['required', 'in:'.CurrencyRates::MODE_AUTOMATIC.','.CurrencyRates::MODE_MANUAL],
+            'disabled' => ['nullable', 'array'],
+            'disabled.*' => ['string', Rule::in(CurrencyRates::CURRENCIES)],
+            'manual_rates' => ['nullable', 'array'],
+            'manual_rates.*' => ['nullable', 'numeric', 'min:0.0001', 'max:100000'],
         ]);
 
-        Setting::set('currencies.enabled', $data['enabled'] ? '1' : '0', 'boolean');
-        if ($request->boolean('clear_key')) {
-            Setting::set('currencies.api_key', '', 'text');
-        } elseif (trim((string) ($data['api_key'] ?? '')) !== '') {
-            Setting::set('currencies.api_key', trim($data['api_key']), 'text');
+        $disabled = array_values(array_unique($data['disabled'] ?? []));
+
+        // Dynamic guard — never hardcoded: the hotel's own base and pricing
+        // currencies stay enabled no matter what the form sends.
+        $clash = array_intersect($disabled, CurrencyRates::protectedCurrencies());
+        if ($clash !== []) {
+            throw ValidationException::withMessages([
+                'disabled' => 'Monedha bazë dhe ajo e çmimeve nuk mund të çaktivizohen: '.implode(', ', $clash).'.',
+            ]);
         }
-        if ($request->exists('manual_all_rate')) {
-            Setting::set('financial.fx_all_per_eur', $data['manual_all_rate'] ?? 0, 'number');
+
+        $manualRates = collect($data['manual_rates'] ?? [])
+            ->only(CurrencyRates::CURRENCIES)
+            ->filter(fn ($rate) => $rate !== null && $rate !== '')
+            ->map(fn ($rate) => round((float) $rate, 4));
+
+        // Manual mode: every currency the hotel still uses needs its rate.
+        if ($data['mode'] === CurrencyRates::MODE_MANUAL) {
+            $enabled = array_values(array_diff(CurrencyRates::CURRENCIES, $disabled));
+            $missing = array_values(array_diff($enabled, array_keys($manualRates->all())));
+            if ($missing !== []) {
+                throw ValidationException::withMessages([
+                    'manual_rates' => 'Vendos kursin për çdo monedhë të aktivizuar: '.implode(', ', $missing).'.',
+                ]);
+            }
+        }
+
+        Setting::set('currencies.mode', $data['mode']);
+        Setting::set('currencies.disabled', $disabled, 'json');
+        if ($request->exists('manual_rates')) {
+            Setting::set('currencies.manual_rates', $manualRates->all(), 'json');
+            // Keep the legacy single-ALL field coherent for old readers.
+            Setting::set('financial.fx_all_per_eur', $manualRates->get('ALL', 0), 'number');
         }
 
         return back()->with('success', 'Monedhat u ruajtën.');
-    }
-
-    /** "Rifresko tani" — inline fetch so the owner sees fresh rates instantly. */
-    public function refreshCurrencies(): RedirectResponse
-    {
-        if (! CurrencyRates::enabled()) {
-            return back()->with('error', 'Aktivizo modulin dhe vendos çelësin API më parë.');
-        }
-        try {
-            $count = app(CurrencyRates::class)->fetch();
-        } catch (Throwable $e) {
-            report($e);
-
-            return back()->with('error', 'Rifreskimi dështoi — kontrollo çelësin API.');
-        }
-
-        return back()->with('success', "U morën {$count} kurse të freskëta.");
     }
 
     // --- Market rates (rate shopping — competitor prices, Phase 1) ---

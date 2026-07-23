@@ -91,12 +91,31 @@ class TenantHandoffTest extends TestCase
         $this->assertAuthenticatedAs($this->superAdmin);
     }
 
+    public function test_switch_returns_the_handoff_url_as_json_for_the_new_tab_flow(): void
+    {
+        $response = $this->actingAs($this->superAdmin)
+            ->postJson('https://admin.lorapms.test/super-admin/tenants/'.$this->tenant->id.'/switch', [
+                'redirect' => '/reservations',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonStructure(['url'])
+            ->assertHeader('Cache-Control', 'max-age=0, no-store, private');
+
+        $url = $response->json('url');
+        $this->assertStringContainsString('hotel-a.lorapms.test/tenant-handoff?token=', $url);
+
+        // The handed-back URL behaves exactly like the redirect flow — the new
+        // tab consumes the single-use token and lands on the deep link.
+        $this->get($url)->assertRedirectContains('/pms/reservations');
+    }
+
     public function test_handoff_redirects_only_to_an_onboarding_destination(): void
     {
         $token = app(TenantHandoff::class)->issue($this->superAdmin, $this->tenant, 'hotel-a.lorapms.test');
 
-        $this->get('http://hotel-a.lorapms.test/tenant-handoff?token='.$token.'&redirect='.urlencode('/settings?tab=currencies'))
-            ->assertRedirect('http://hotel-a.lorapms.test/pms/settings?tab=currencies');
+        $this->get('http://hotel-a.lorapms.test/tenant-handoff?token='.$token.'&redirect='.urlencode('/reservations'))
+            ->assertRedirect('http://hotel-a.lorapms.test/pms/reservations');
 
         $this->post('http://hotel-a.lorapms.test/logout');
         $token = app(TenantHandoff::class)->issue($this->superAdmin, $this->tenant, 'hotel-a.lorapms.test');

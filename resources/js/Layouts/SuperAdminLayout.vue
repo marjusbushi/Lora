@@ -3,6 +3,7 @@ import Dropdown from '@/Components/Dropdown.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     Bell,
+    Coins,
     CreditCard,
     FileText,
     LayoutDashboard,
@@ -14,6 +15,7 @@ import {
     Repeat2,
     RefreshCw,
     ShieldCheck,
+    TriangleAlert,
     UserRound,
     Webhook,
     X,
@@ -46,9 +48,14 @@ const navigation = [
     { label: t('superAdmin.compact.payments'), href: '/super-admin/billing/payments', match: '/super-admin/billing/payments', icon: CreditCard, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.paymentAttempts'), href: '/super-admin/billing/payment-attempts', match: '/super-admin/billing/payment-attempts', icon: RefreshCw, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.providerEvents'), href: '/super-admin/billing/provider-events', match: '/super-admin/billing/provider-events', icon: Webhook, group: t('superAdmin.compact.loraFinance') },
+    { label: t('superAdmin.compact.currencies'), href: '/super-admin/currencies', match: '/super-admin/currencies', icon: Coins, group: t('superAdmin.compact.loraFinance') },
 ];
 
 const navigationGroups = computed(() => [...new Set(navigation.map((item) => item.group))]);
+
+// Platform health: shown on every control-panel page so a failed/stale
+// currency fetch is impossible to miss.
+const currencyAlert = computed(() => page.props.platformAlerts?.currency_rates);
 
 function isActive(item) {
     if (item.exact) return page.url === item.href || page.url === `${item.href}/`;
@@ -178,6 +185,15 @@ function isActive(item) {
                     </Dropdown>
                 </div>
             </header>
+
+            <div v-if="currencyAlert?.stale" class="border-b border-amber-200 bg-amber-50 px-4 py-2.5 sm:px-7">
+                <div class="flex flex-wrap items-center gap-2 text-xs font-semibold text-amber-900">
+                    <TriangleAlert class="h-4 w-4 shrink-0 text-amber-600" />
+                    <span>Kurset e monedhave janë të vjetruara{{ currencyAlert.updated_at ? ` — rifreskimi i fundit: ${currencyAlert.updated_at}` : ' — asnjë rifreskim i suksesshëm ende' }}. Hotelet po lexojnë vlerat e fundit të sinkronizuara.</span>
+                    <span v-if="currencyAlert.last_error" class="font-normal text-amber-800">({{ currencyAlert.last_error }})</span>
+                    <Link href="/super-admin/currencies" class="font-bold text-amber-900 underline">Hap Monedhat</Link>
+                </div>
+            </div>
 
             <main class="px-4 py-5 sm:px-6 lg:px-7">
                 <slot />

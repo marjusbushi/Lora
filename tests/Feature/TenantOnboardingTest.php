@@ -8,6 +8,7 @@ use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
 use App\Models\User;
 use App\Services\ChannexConfiguration;
+use App\Services\TenantBillingService;
 use App\Services\TenantOnboardingService;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -80,7 +81,7 @@ class TenantOnboardingTest extends TestCase
                     ->contains('value', 'Europe/Tirane')));
     }
 
-    public function test_every_onboarding_task_has_a_destination_and_exchange_api_is_included(): void
+    public function test_every_onboarding_task_has_a_destination(): void
     {
         $tenant = Tenant::query()->sole();
 
@@ -89,8 +90,8 @@ class TenantOnboardingTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('SuperAdmin/Onboarding/Show')
-                ->where('onboarding.steps.6.tasks.3.key', 'exchange_rates')
-                ->where('onboarding.steps.6.tasks.3.action.path', '/settings?tab=currencies'));
+                ->where('onboarding.steps.6.tasks.2.key', 'payments')
+                ->where('onboarding.steps.6.tasks.2.action.tab', 'pok'));
 
         $tasks = collect(config('onboarding.steps'))->flatMap(fn (array $step) => $step['tasks']);
         $this->assertTrue($tasks->every(fn (array $task) => isset($task['action']['type'])));
@@ -102,13 +103,13 @@ class TenantOnboardingTest extends TestCase
         $service = app(TenantOnboardingService::class);
         $onboarding = $service->findOrCreate($tenant);
         $steps = $onboarding->steps;
-        unset($steps['integrations']['tasks']['exchange_rates']);
+        unset($steps['integrations']['tasks']['payments']);
         $onboarding->forceFill(['steps' => $steps])->save();
 
         $synced = $service->findOrCreate($tenant);
 
-        $this->assertArrayHasKey('exchange_rates', $synced->steps['integrations']['tasks']);
-        $this->assertFalse($synced->steps['integrations']['tasks']['exchange_rates']['completed']);
+        $this->assertArrayHasKey('payments', $synced->steps['integrations']['tasks']);
+        $this->assertFalse($synced->steps['integrations']['tasks']['payments']['completed']);
     }
 
     public function test_tenant_creation_rejects_a_currency_outside_the_supported_list(): void
@@ -128,7 +129,7 @@ class TenantOnboardingTest extends TestCase
     public function test_integration_credentials_are_saved_per_tenant_and_never_echoed(): void
     {
         $tenant = Tenant::factory()->create(['name' => 'Hotel B']);
-        app(\App\Services\TenantBillingService::class)->provision($tenant, enableAll: true);
+        app(TenantBillingService::class)->provision($tenant, enableAll: true);
 
         $this->actingAs($this->superAdmin)
             ->put(route('super-admin.tenants.integrations.update', [$tenant->id, 'channex']), [
@@ -231,6 +232,7 @@ class TenantOnboardingTest extends TestCase
                 ->count(),
         );
     }
+
     public function test_enabling_channex_without_a_property_id_is_rejected(): void
     {
         $tenant = Tenant::factory()->create();
@@ -243,10 +245,11 @@ class TenantOnboardingTest extends TestCase
             ])
             ->assertSessionHasErrors('property_id');
     }
+
     public function test_suspending_a_hotel_locks_it_out_and_activating_restores_it(): void
     {
         $tenant = Tenant::factory()->create(['name' => 'Hotel D', 'status' => 'active']);
-        app(\App\Services\TenantBillingService::class)->provision($tenant, enableAll: true);
+        app(TenantBillingService::class)->provision($tenant, enableAll: true);
         TenantDomain::query()->create([
             'tenant_id' => $tenant->id, 'domain' => 'hoteld.test', 'is_primary' => true,
         ]);

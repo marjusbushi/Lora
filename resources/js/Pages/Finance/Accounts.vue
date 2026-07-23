@@ -228,6 +228,35 @@ function submitTransfer() {
     });
 }
 
+// Capital deposit/withdrawal (admin or the finance role) — same ledger,
+// tagged with `movement` so the dedicated report can isolate it.
+const showMovement = ref(false);
+const movement = useForm({ movement: 'deposit', account_id: props.selectedId, amount: null, currency: props.baseCurrency, fx_rate: null, description: '' });
+
+watch(() => movement.account_id, (id) => {
+    const selected = activeAccounts.value.find((item) => item.id === id);
+    if (selected) movement.currency = selected.currency;
+});
+
+function openMovement() {
+    // Default to whichever kind this user is actually allowed to record.
+    movement.movement = props.can.deposits ? 'deposit' : 'withdrawal';
+    movement.account_id = props.selectedId;
+    const selected = activeAccounts.value.find((item) => item.id === props.selectedId);
+    movement.currency = selected ? selected.currency : props.baseCurrency;
+    showMovement.value = true;
+}
+
+function submitMovement() {
+    movement.post(route('finance.movements.store'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            showMovement.value = false;
+            movement.reset();
+        },
+    });
+}
+
 const showNewAccount = ref(false);
 const account = useForm({ name: '', type: 'cash', currency: props.baseCurrency, iban: '' });
 const accountPreviewName = computed(() => account.name.trim() || (account.type === 'cash' ? t('financeAccounts.newCashAccount') : t('financeAccounts.newBankAccount')));
@@ -269,6 +298,9 @@ function toggleAccount(accountToToggle) {
                     <p class="mt-1 text-sm text-neutral-500">{{ t('financeAccounts.subtitle') }}</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
+                    <Button v-if="can.deposits || can.withdrawals" variant="outline" @click="openMovement">
+                        <Banknote class="h-4 w-4" /> {{ t('financeAccounts.movementButton') }}
+                    </Button>
                     <Button v-if="can.transfers && activeAccounts.length > 1" variant="outline" @click="showTransfer = true">
                         <ArrowLeftRight class="h-4 w-4" /> {{ t('financeAccounts.transfer') }}
                     </Button>
@@ -439,6 +471,53 @@ function toggleAccount(accountToToggle) {
             <template #footer>
                 <Button variant="ghost" type="button" @click="showTransfer = false">{{ $t('admin.generated.k_83fe7c41f4fc') }}</Button>
                 <Button form="account-transfer-form" type="submit" :loading="transfer.processing" :disabled="!transfer.to_account_id || !transfer.amount">{{ $t('admin.generated.k_baaf04345068') }}</Button>
+            </template>
+        </Modal>
+
+        <Modal :show="showMovement" :title="t('financeAccounts.movementTitle')" max-width="lg" @close="showMovement = false">
+            <form id="account-movement-form" class="space-y-4" @submit.prevent="submitMovement">
+                <div class="flex gap-4">
+                    <label v-if="can.deposits" class="flex items-center gap-2 text-body-sm text-primary-900">
+                        <input v-model="movement.movement" type="radio" value="deposit" class="h-4 w-4 border-neutral-300 text-primary-700 focus:ring-primary-600">
+                        {{ t('financeAccounts.movementDeposit') }}
+                    </label>
+                    <label v-if="can.withdrawals" class="flex items-center gap-2 text-body-sm text-primary-900">
+                        <input v-model="movement.movement" type="radio" value="withdrawal" class="h-4 w-4 border-neutral-300 text-primary-700 focus:ring-primary-600">
+                        {{ t('financeAccounts.movementWithdrawal') }}
+                    </label>
+                </div>
+                <div>
+                    <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ t('financeAccounts.movementAccount') }}</label>
+                    <select v-model="movement.account_id" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm">
+                        <option v-for="accountItem in activeAccounts" :key="accountItem.id" :value="accountItem.id">{{ accountItem.name }} ({{ formatMoney(accountItem.balance, accountItem.currency) }})</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                        <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_8f4c4f48eb66') }}</label>
+                        <TextInput v-model="movement.amount" type="number" min="0.01" step="0.01" class="w-full" placeholder="0.00" />
+                        <p v-if="movement.errors.amount" class="mt-1 text-tiny text-error-600">{{ movement.errors.amount }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ t('financeAccounts.movementCurrency') }}</label>
+                        <select v-model="movement.currency" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm">
+                            <option v-for="code in currencies" :key="code" :value="code">{{ code }}</option>
+                        </select>
+                    </div>
+                </div>
+                <div v-if="movement.currency !== baseCurrency">
+                    <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ t('financeAccounts.movementFx', { currency: baseCurrency }) }}</label>
+                    <TextInput v-model="movement.fx_rate" type="number" min="0.000001" step="0.000001" class="w-full" />
+                    <p v-if="movement.errors.fx_rate" class="mt-1 text-tiny text-error-600">{{ movement.errors.fx_rate }}</p>
+                </div>
+                <div>
+                    <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_8a16159d3a40') }}</label>
+                    <TextInput v-model="movement.description" class="w-full" :placeholder="movement.movement === 'deposit' ? t('financeAccounts.movementDeposit') : t('financeAccounts.movementWithdrawal')" />
+                </div>
+            </form>
+            <template #footer>
+                <Button variant="ghost" type="button" @click="showMovement = false">{{ $t('admin.generated.k_83fe7c41f4fc') }}</Button>
+                <Button form="account-movement-form" type="submit" :loading="movement.processing" :disabled="!movement.account_id || !movement.amount">{{ t('financeAccounts.movementSubmit') }}</Button>
             </template>
         </Modal>
 

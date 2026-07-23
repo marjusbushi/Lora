@@ -57,7 +57,7 @@ class UserManagementIndexTest extends TestCase
                 ->where('stats.total', 3)
                 ->where('stats.active', 2)
                 ->where('stats.inactive', 1)
-                ->where('stats.roles', 6)
+                ->where('stats.roles', 7)
                 ->where('filters.search', 'erion')
                 ->where('filters.role', 'receptionist')
                 ->where('filters.status', 'inactive')

@@ -14,7 +14,7 @@ class VerifyTenantIntegrity extends Command
                             {--snapshot= : Write a PII-free counts/totals baseline to this JSON file}
                             {--compare= : Compare current counts/totals with this JSON baseline}
                             {--verify-storage : Verify every supported database file reference exists on its local/public disk}
-                            {--allow-additive-schema : Allow new tables and permission growth while preserving every existing count/total}
+                            {--allow-additive-schema : Allow new tables and permission/role growth while preserving every existing count/total}
                             {--allow-additive-settings : Allow setting rows to grow for existing tenants while preserving every other count/total}';
 
     protected $description = 'Fail if tenant ownership or same-tenant relations are invalid';
@@ -170,7 +170,9 @@ class VerifyTenantIntegrity extends Command
 
             $actual = $current[$key];
 
-            if ($allowAdditiveSchema && $path === 'central_counts.permissions') {
+            // Role-system evolution (new permissions, new provisioned roles)
+            // may only ever GROW under an approved additive migration.
+            if ($allowAdditiveSchema && in_array($path, ['central_counts.permissions', 'central_counts.roles'], true)) {
                 if (! is_int($expected) || ! is_int($actual) || $actual < $expected) {
                     $changes[] = $path;
                 }

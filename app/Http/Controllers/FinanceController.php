@@ -644,6 +644,106 @@ class FinanceController extends Controller
         return back()->with('success', 'Transferta u krye.');
     }
 
+    /** Report: capital deposits/withdrawals only — the movement-tagged ledger rows. */
+    public function movements(Request $request): Response
+    {
+        FinanceAccount::ensureDefaults();
+        $accounts = $this->visibleAccounts($request);
+        $accountId = (int) $request->input('account_id') ?: null;
+        if ($accountId && ! $accounts->firstWhere('id', $accountId)) {
+            abort(403);
+        }
+        $from = $request->date('from');
+        $to = $request->date('to');
+        $kind = (string) $request->input('movement');
+
+        $rows = FinancePayment::with($this->paymentRelations())
+            ->whereNotNull('movement')
+            ->when($accountId, fn ($q) => $q->where('account_id', $accountId))
+            ->when(! $accountId, fn ($q) => $q->whereIn('account_id', $accounts->pluck('id')))
+            ->when(in_array($kind, ['deposit', 'withdrawal'], true), fn ($q) => $q->where('movement', $kind))
+            ->when($from, fn ($q) => $q->whereDate('paid_at', '>=', $from))
+            ->when($to, fn ($q) => $q->whereDate('paid_at', '<=', $to))
+            ->orderByDesc('paid_at')->orderByDesc('id')
+            ->get();
+
+        $deposits = (float) $rows->where('movement', 'deposit')->sum('amount_base');
+        $withdrawals = (float) $rows->where('movement', 'withdrawal')->sum('amount_base');
+
+        return Inertia::render('Finance/Movements', array_merge($this->shared($request), [
+            'accounts' => $accounts,
+            'rows' => $this->paymentRows($rows),
+            'filters' => [
+                'account_id' => $accountId,
+                'from' => $from?->toDateString(),
+                'to' => $to?->toDateString(),
+                'movement' => in_array($kind, ['deposit', 'withdrawal'], true) ? $kind : null,
+            ],
+            'totals' => [
+                'deposits' => round($deposits, 2),
+                'withdrawals' => round($withdrawals, 2),
+                'net' => round($deposits - $withdrawals, 2),
+            ],
+        ]));
+    }
+
+    /**
+     * Capital movement on Arka & Banka — the owner putting money in (deposit)
+     * or taking it out (withdrawal). Tagged on the same ledger so balances
+     * flow naturally, but reportable separately from operational payments.
+     * Deposits need manage_deposits (admin or the finance role); withdrawals
+     * need manage_withdrawals (admin only).
+     */
+    public function storeMovement(Request $request): RedirectResponse
+    {
+        $baseCurrency = BaseCurrency::code();
+        $data = $request->validate([
+            'movement' => ['required', 'in:deposit,withdrawal'],
+            'account_id' => ['required', 'integer'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:999999'],
+            'currency' => ['required', Rule::in(config('lora.tenant_currencies', ['EUR', 'ALL']))],
+            'fx_rate' => ['nullable', 'numeric', 'min:0.000001'],
+            'description' => ['nullable', 'string', 'max:300'],
+            'paid_at' => ['nullable', 'date'],
+        ]);
+
+        // The route allows either permission; each movement type checks its own.
+        abort_unless($request->user()->can(
+            $data['movement'] === 'deposit' ? 'manage_deposits' : 'manage_withdrawals'
+        ), 403);
+
+        $account = $this->visibleAccounts($request)->firstWhere('id', (int) $data['account_id']);
+        if (! $account) {
+            abort(403); // never move money on an account this user cannot see
+        }
+        if ($data['currency'] !== $baseCurrency && empty($data['fx_rate'])) {
+            throw ValidationException::withMessages([
+                'fx_rate' => "Vendos kursin për {$data['currency']} ndaj {$baseCurrency}.",
+            ]);
+        }
+        if ($account['currency'] !== $baseCurrency && $data['currency'] !== $account['currency']) {
+            return back()->with('error', "Kjo llogari mban vetëm {$account['currency']}.");
+        }
+
+        $isDeposit = $data['movement'] === 'deposit';
+
+        FinancePayment::create([
+            'direction' => $isDeposit ? 'in' : 'out',
+            'movement' => $data['movement'],
+            'account_id' => $account['id'],
+            'amount' => $data['amount'],
+            'currency' => $data['currency'],
+            'fx_rate' => $data['currency'] === $baseCurrency ? null : $data['fx_rate'],
+            'method' => $account['type'] === 'cash' ? 'cash' : 'bank',
+            'source' => 'manual',
+            'description' => ($data['description'] ?? null) ?: ($isDeposit ? 'Depozitim' : 'Tërheqje'),
+            'paid_at' => $data['paid_at'] ?? now(),
+            'created_by' => $request->user()->id,
+        ]);
+
+        return back()->with('success', $isDeposit ? 'Depozitimi u regjistrua.' : 'Tërheqja u regjistrua.');
+    }
+
     // -- bills (Blerjet) ------------------------------------------------------
 
     public function bills(Request $request): Response
@@ -1957,6 +2057,8 @@ class FinanceController extends Controller
                 'manageInventory' => $request->user()->can('manage_inventory'),
                 'manageSuppliers' => $request->user()->can('manage_suppliers'),
                 'manageAccounts' => $request->user()->can('manage_finance_settings'),
+                'deposits' => $request->user()->can('manage_deposits'),
+                'withdrawals' => $request->user()->can('manage_withdrawals'),
             ],
         ];
     }
@@ -1982,6 +2084,7 @@ class FinanceController extends Controller
         return [
             'id' => $p->id,
             'direction' => $p->direction,
+            'movement' => $p->movement,
             'account_id' => $p->account_id,
             'account' => $p->account?->name,
             'counter_account_id' => $p->counter_account_id,

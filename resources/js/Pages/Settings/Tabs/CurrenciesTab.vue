@@ -1,9 +1,9 @@
 <script setup>
 import { translate } from '@/i18n';
-import { router, useForm } from '@inertiajs/vue3';
+import { computed, watch } from 'vue';
+import { useForm } from '@inertiajs/vue3';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
-import Checkbox from '@/Components/UI/Checkbox.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 
@@ -16,25 +16,58 @@ const names = {
 };
 
 const form = useForm({
-    enabled: Boolean(props.settings.enabled),
-    api_key: '',
-    clear_key: false,
-    manual_all_rate: props.settings.fallback_all ?? '',
+    mode: props.settings.mode || 'automatic',
+    // The hotel's OWN saved rates only — never prefilled from platform values.
+    manual_rates: { ...(props.settings.manual_rates || {}) },
+    disabled: [...(props.settings.disabled || [])],
 });
+
+const isManual = computed(() => form.mode === 'manual');
+const protectedCodes = computed(() => props.settings.protected || []);
+
+function isProtected(code) {
+    return protectedCodes.value.includes(code);
+}
+
+function isEnabled(code) {
+    return !form.disabled.includes(code);
+}
+
+// Switching to manual keeps the values the hotel was already seeing: any
+// currency without a saved manual rate starts from the current platform
+// rate, ready to modify.
+function prefillManualRates() {
+    (props.settings.tracked || []).forEach((code) => {
+        if (!isEnabled(code)) return;
+        const current = form.manual_rates[code];
+        if (current === undefined || current === null || current === '') {
+            const platform = props.settings.rates?.[code];
+            if (platform) form.manual_rates[code] = platform;
+        }
+    });
+}
+
+watch(() => form.mode, (mode) => {
+    if (mode === 'manual') prefillManualRates();
+});
+if (isManual.value) prefillManualRates();
+
+function toggle(code) {
+    if (isProtected(code)) return;
+    if (isEnabled(code)) {
+        form.disabled = [...form.disabled, code];
+        delete form.manual_rates[code];
+    } else {
+        form.disabled = form.disabled.filter((c) => c !== code);
+        if (isManual.value) prefillManualRates();
+    }
+}
 
 function submit() {
     form.put(route('settings.currencies'), {
         preserveScroll: true,
-        onSuccess: () => {
-            form.api_key = '';
-            form.clear_key = false;
-            props.toasts?.success(translate('admin.generated.k_076b6a4a30d9'));
-        },
+        onSuccess: () => props.toasts?.success(translate('admin.generated.k_076b6a4a30d9')),
     });
-}
-
-function refresh() {
-    router.post(route('settings.currencies.refresh'), {}, { preserveScroll: true });
 }
 </script>
 
@@ -43,66 +76,74 @@ function refresh() {
         <template #header>
             <div>
                 <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_93d6d7a865bb') }}</h3>
-                <p class="text-tiny text-neutral-500 mt-1">
-{{ $t('admin.generated.k_16e1e9820e66') }} <b>{{ $t('admin.generated.k_7450cd181e97') }}</b>{{ $t('admin.generated.k_152d02c12735') }} <b>{{ $t('admin.generated.k_239be86c2620') }}</b> {{ $t('admin.generated.k_4e44b170c56c') }} </p>
+                <p class="text-tiny text-neutral-500 mt-1">{{ $t('currencySettings.platformRatesNote') }}</p>
             </div>
         </template>
 
         <div class="space-y-6">
-            <div class="flex items-center gap-3">
-                <Checkbox v-model="form.enabled" :label="$t('admin.generated.k_631f0fd03443')" />
-                <span v-if="!form.enabled" class="text-tiny text-neutral-500">{{ $t('admin.generated.k_547524710a92') }}</span>
-            </div>
-
-            <div class="grid sm:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-body-sm font-semibold text-primary-900 mb-1">{{ $t('admin.generated.k_22b71c81d956') }}</label>
-                    <TextInput
-                        v-model="form.api_key"
-                        type="password"
-                        class="w-full"
-                        :placeholder="settings.configured ? 'I ruajtur: ' + settings.api_key_hint + $t('admin.generated.k_e5edb4f115c3') : $t('admin.generated.k_99e3a1432b0a')"
-                        autocomplete="off"
-                    />
-                    <div v-if="settings.configured" class="mt-2">
-                        <Checkbox v-model="form.clear_key" :label="$t('admin.generated.k_85b4ba588c33')" />
-                    </div>
+            <FormGroup :label="$t('currencySettings.modeLabel')" :error="form.errors.mode">
+                <div class="space-y-2">
+                    <label class="flex items-center gap-2.5 text-body-sm text-primary-900">
+                        <input v-model="form.mode" type="radio" value="automatic" class="h-4 w-4 border-neutral-300 text-primary-700 focus:ring-primary-600">
+                        {{ $t('currencySettings.modeAutomatic') }}
+                    </label>
+                    <label class="flex items-center gap-2.5 text-body-sm text-primary-900">
+                        <input v-model="form.mode" type="radio" value="manual" class="h-4 w-4 border-neutral-300 text-primary-700 focus:ring-primary-600">
+                        {{ $t('currencySettings.modeManual') }}
+                    </label>
                 </div>
-                <div class="flex items-end gap-2">
-                    <Button variant="secondary" :disabled="!settings.configured" @click="refresh">{{ $t('admin.generated.k_7630593e65f6') }}</Button>
-                    <span v-if="settings.updated_at" class="text-tiny text-neutral-400 pb-2">{{ $t('admin.generated.k_12b49da83767') }} {{ settings.updated_at }}</span>
-                </div>
-            </div>
-
-            <FormGroup :label="$t('currencySettings.manualAllRate')" :error="form.errors.manual_all_rate">
-                <TextInput
-                    v-model="form.manual_all_rate"
-                    type="number"
-                    min="1"
-                    max="1000"
-                    step="0.0001"
-                    placeholder="93.7837"
-                    :error="form.errors.manual_all_rate"
-                />
-                <p class="mt-1 text-tiny text-neutral-500">{{ $t('currencySettings.manualAllRateHelp') }}</p>
+                <p class="mt-1 text-tiny text-neutral-500">{{ $t('currencySettings.modeHelp') }}</p>
             </FormGroup>
 
-            <!-- rates table -->
             <div>
-                <h4 class="text-tiny font-bold uppercase tracking-wide text-neutral-400 mb-2">{{ $t('admin.generated.k_03637753a041') }}</h4>
+                <div class="mb-2 flex items-center gap-2">
+                    <h4 class="text-tiny font-bold uppercase tracking-wide text-neutral-400">{{ $t('currencySettings.currentRates') }}</h4>
+                    <span v-if="settings.updated_at && !isManual" class="text-tiny text-neutral-400">{{ $t('currencySettings.refreshedAt') }} {{ settings.updated_at }}</span>
+                </div>
+                <p v-if="isManual" class="mb-2 text-tiny text-neutral-500">{{ $t('currencySettings.manualRatesHelp') }}</p>
+                <p v-if="form.errors.manual_rates" class="mb-2 text-tiny text-red-600">{{ form.errors.manual_rates }}</p>
+                <p v-if="form.errors.disabled" class="mb-2 text-tiny text-red-600">{{ form.errors.disabled }}</p>
                 <div class="overflow-x-auto">
                     <table class="w-full text-body-sm tabular-nums">
                         <thead><tr class="text-tiny uppercase tracking-wide text-neutral-400 text-left border-b border-neutral-100">
-                            <th class="py-2 pr-3">{{ $t('admin.generated.k_3dcaac0a0952') }}</th><th class="py-2 pr-3">{{ $t('admin.generated.k_3a6933c3b8db') }}</th><th class="py-2 text-right">{{ $t('admin.generated.k_3989929d8b13') }}</th>
+                            <th class="py-2 pr-3">{{ $t('currencySettings.enabledColumn') }}</th>
+                            <th class="py-2 pr-3">{{ $t('admin.generated.k_3dcaac0a0952') }}</th>
+                            <th class="py-2 pr-3">{{ $t('admin.generated.k_3a6933c3b8db') }}</th>
+                            <th class="py-2 text-right">{{ $t('admin.generated.k_3989929d8b13') }}</th>
                         </tr></thead>
                         <tbody>
-                            <tr v-for="code in settings.tracked" :key="code" class="border-b border-neutral-50 last:border-0">
-                                <td class="py-2 pr-3 font-bold text-primary-900">{{ code }}</td>
+                            <tr v-for="code in settings.tracked" :key="code" class="border-b border-neutral-50 last:border-0" :class="{ 'opacity-50': !isEnabled(code) }">
+                                <td class="py-2 pr-3">
+                                    <input
+                                        type="checkbox"
+                                        class="h-4 w-4 rounded border-neutral-300 text-primary-700 focus:ring-primary-600 disabled:opacity-40"
+                                        :checked="isEnabled(code)"
+                                        :disabled="isProtected(code)"
+                                        :title="isProtected(code) ? $t('currencySettings.protectedTooltip') : ''"
+                                        @change="toggle(code)"
+                                    >
+                                </td>
+                                <td class="py-2 pr-3 font-bold text-primary-900">
+                                    {{ code }}
+                                    <span v-if="isProtected(code)" class="ml-1 text-tiny font-normal text-neutral-400" :title="$t('currencySettings.protectedTooltip')">🔒</span>
+                                </td>
                                 <td class="py-2 pr-3 text-neutral-600">{{ names[code] || code }}</td>
                                 <td class="py-2 text-right font-semibold">
-                                    <template v-if="settings.rates[code]">{{ settings.rates[code] }}</template>
-                                    <span v-else-if="code === 'ALL' && settings.fallback_all" class="text-neutral-500" :title="$t('admin.generated.k_aa31eae61bb8')">{{ settings.fallback_all }} <span class="text-tiny">{{ $t('admin.generated.k_b296959996b5') }}</span></span>
-                                    <span v-else class="text-neutral-300">—</span>
+                                    <template v-if="!isEnabled(code)"><span class="text-neutral-300">—</span></template>
+                                    <template v-else-if="isManual">
+                                        <TextInput
+                                            v-model="form.manual_rates[code]"
+                                            type="number"
+                                            min="0.0001"
+                                            step="0.0001"
+                                            class="w-32 text-right"
+                                            :error="form.errors[`manual_rates.${code}`]"
+                                        />
+                                    </template>
+                                    <template v-else>
+                                        <span v-if="settings.rates[code]">{{ settings.rates[code] }}</span>
+                                        <span v-else class="text-neutral-300">—</span>
+                                    </template>
                                 </td>
                             </tr>
                         </tbody>
