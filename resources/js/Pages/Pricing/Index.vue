@@ -318,15 +318,152 @@ function buildMatrix() {
     });
 }
 buildMatrix();
-watch(() => [props.roomTypes, props.seasons], buildMatrix);
+watch(() => [props.roomTypes, props.seasons], () => { buildMatrix(); snapMatrix(); });
 
 const savingRates = ref(false);
 function saveRates() {
     savingRates.value = true;
     router.post(route('pricing.rates.save'), { base, rates }, {
         preserveScroll: true,
-        onSuccess: () => toasts.value?.success(translate('admin.generated.k_50b93c41a367')),
+        onSuccess: () => { toasts.value?.success(translate('admin.generated.k_50b93c41a367')); snapMatrix(); },
         onFinish: () => { savingRates.value = false; },
+    });
+}
+
+// ── Redesign (approved mockup 2026-07-24): year timeline, gaps, dirty bar ──
+const DAY_MS = 86400000;
+const SEASON_COLORS = ['#4f7fbd', '#e0862f', '#4f9d6f', '#d64f4f', '#9a7bd0', '#3f9d9d', '#c46ba3', '#8a8f3f'];
+const toUtc = (d) => { const [y, m, dd] = String(d).split('-').map(Number); return Date.UTC(y, m - 1, dd); };
+const isoOf = (utc) => new Date(utc).toISOString().slice(0, 10);
+const now = new Date();
+const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+const year = ref(now.getFullYear());
+const yearStartUtc = computed(() => Date.UTC(year.value, 0, 1));
+const yearDays = computed(() => Math.round((Date.UTC(year.value + 1, 0, 1) - yearStartUtc.value) / DAY_MS));
+const dayIdx = (d) => Math.round((toUtc(d) - yearStartUtc.value) / DAY_MS);
+const clampIdx = (i) => Math.min(Math.max(i, 0), yearDays.value - 1);
+const monthNames = ['Jan', 'Shk', 'Mar', 'Pri', 'Maj', 'Qer', 'Kor', 'Gu', 'Sht', 'Tet', 'Nën', 'Dhj'];
+const shortDate = (d) => {
+    const [, m, dd] = String(d).split('-').map(Number);
+    return `${dd} ${['jan', 'shk', 'mar', 'pri', 'maj', 'qer', 'kor', 'gush', 'sht', 'tet', 'nën', 'dhj'][m - 1] || ''}`;
+};
+
+// Stable colour per season (keyed by id, so edits never reshuffle the palette).
+const seasonColor = computed(() => {
+    const map = {};
+    [...props.seasons].sort((a, b) => a.id - b.id).forEach((s, i) => { map[s.id] = SEASON_COLORS[i % SEASON_COLORS.length]; });
+    return map;
+});
+const yearSeasons = computed(() => props.seasons
+    .filter((s) => dayIdx(s.start_date) <= yearDays.value - 1 && dayIdx(s.end_date) >= 0)
+    .sort((a, b) => String(a.start_date).localeCompare(String(b.start_date))));
+
+// Low-priority first so the winner paints on top (its ★ marks the raise).
+const segments = computed(() => [...yearSeasons.value]
+    .sort((a, b) => a.priority - b.priority)
+    .map((s) => {
+        const from = clampIdx(dayIdx(s.start_date));
+        const to = clampIdx(dayIdx(s.end_date));
+        const raised = yearSeasons.value.some((o) => o.id !== s.id
+            && String(o.start_date) <= String(s.end_date)
+            && String(o.end_date) >= String(s.start_date)
+            && o.priority < s.priority);
+        return {
+            season: s,
+            left: (from / yearDays.value) * 100,
+            width: ((to - from + 1) / yearDays.value) * 100,
+            color: seasonColor.value[s.id],
+            raised,
+        };
+    }));
+
+const gaps = computed(() => {
+    const len = yearDays.value;
+    const intervals = yearSeasons.value
+        .map((s) => [clampIdx(dayIdx(s.start_date)), clampIdx(dayIdx(s.end_date))])
+        .sort((a, b) => a[0] - b[0]);
+    const out = [];
+    let cursor = 0;
+    intervals.forEach(([a, b]) => {
+        if (a > cursor) out.push([cursor, a - 1]);
+        cursor = Math.max(cursor, b + 1);
+    });
+    if (cursor < len) out.push([cursor, len - 1]);
+    return out.map(([a, b]) => ({
+        from: isoOf(yearStartUtc.value + a * DAY_MS),
+        to: isoOf(yearStartUtc.value + b * DAY_MS),
+        days: b - a + 1,
+        left: (a / len) * 100,
+        width: ((b - a + 1) / len) * 100,
+    }));
+});
+const gapDays = computed(() => gaps.value.reduce((sum, g) => sum + g.days, 0));
+const coveredDays = computed(() => yearDays.value - gapDays.value);
+const todayPct = computed(() => {
+    const i = dayIdx(todayIso);
+    return i >= 0 && i < yearDays.value ? ((i + 0.5) / yearDays.value) * 100 : null;
+});
+const nextYearEmpty = computed(() => !props.seasons.some((s) => Number(String(s.end_date).slice(0, 4)) >= year.value + 1));
+const avgBase = computed(() => {
+    const vals = props.roomTypes.map((t) => Number(base[t.id])).filter((v) => Number.isFinite(v) && v > 0);
+    return vals.length ? Math.round(vals.reduce((sum, v) => sum + v, 0) / vals.length) : null;
+});
+
+// Inline season editor under the band (creation keeps the modal).
+const inlineOpen = ref(false);
+function editSeasonInline(s) {
+    editingSeason.value = s;
+    sform.name = s.name;
+    sform.start_date = s.start_date;
+    sform.end_date = s.end_date;
+    sform.priority = s.priority;
+    sform.clearErrors();
+    inlineOpen.value = true;
+}
+function closeInline() { inlineOpen.value = false; editingSeason.value = null; }
+function saveInline() {
+    sform.put(route('pricing.seasons.update', editingSeason.value.id), {
+        preserveScroll: true,
+        onSuccess: () => { closeInline(); toasts.value?.success(translate('admin.generated.k_d79213323d87')); },
+    });
+}
+const inlineOverlaps = computed(() => {
+    if (!editingSeason.value) return [];
+    return props.seasons.filter((o) => o.id !== editingSeason.value.id
+        && String(o.start_date) <= String(sform.end_date)
+        && String(o.end_date) >= String(sform.start_date));
+});
+function coverGap(g) {
+    editingSeason.value = null;
+    sform.reset();
+    sform.clearErrors();
+    sform.start_date = g.from;
+    sform.end_date = g.to;
+    showSeason.value = true;
+}
+
+// Dirty tracking: the save bar appears only when the matrix differs from the
+// last loaded/saved snapshot, and Anulo restores it.
+const matrixSnap = ref('');
+function snapMatrix() { matrixSnap.value = JSON.stringify({ base, rates }); }
+snapMatrix();
+const dirtyCount = computed(() => {
+    let n = 0;
+    let snap;
+    try { snap = JSON.parse(matrixSnap.value || '{}'); } catch { return 0; }
+    props.roomTypes.forEach((t) => { if (String(snap.base?.[t.id] ?? '') !== String(base[t.id] ?? '')) n += 1; });
+    props.seasons.forEach((s) => props.roomTypes.forEach((t) => {
+        if (String(snap.rates?.[s.id]?.[t.id] ?? '') !== String(rates[s.id]?.[t.id] ?? '')) n += 1;
+    }));
+    return n;
+});
+function resetMatrix() {
+    let snap;
+    try { snap = JSON.parse(matrixSnap.value || '{}'); } catch { return; }
+    props.roomTypes.forEach((t) => { base[t.id] = snap.base?.[t.id] ?? ''; });
+    props.seasons.forEach((s) => {
+        rates[s.id] = rates[s.id] || {};
+        props.roomTypes.forEach((t) => { rates[s.id][t.id] = snap.rates?.[s.id]?.[t.id] ?? ''; });
     });
 }
 
@@ -380,7 +517,7 @@ function deleteSeason(s) {
     if (!confirm(`Fshi sezonin "${s.name}"? (cmimet e tij do hiqen)`)) return;
     router.delete(route('pricing.seasons.destroy', s.id), {
         preserveScroll: true,
-        onSuccess: () => toasts.value?.success(translate('admin.generated.k_6031e3e37904')),
+        onSuccess: () => { closeInline(); toasts.value?.success(translate('admin.generated.k_6031e3e37904')); },
     });
 }
 
@@ -394,61 +531,64 @@ function fmtRange(s) {
         <PageHeader
             :title="$t('admin.generated.k_41ef039c5194')"
             :breadcrumbs="[{ label: $t('admin.generated.k_f226794ce976'), href: '/dashboard' }, { label: $t('admin.generated.k_9cccd7468e78') }]"
-        />
-
-        <div class="mt-6 space-y-6">
-            <!-- Channel manager (Channex) -->
-            <Card v-if="channelManagerEnabled">
-                <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div class="min-w-0">
-                        <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_5786b449b811') }}</h3>
-                        <p class="text-small text-neutral-500 mt-0.5">{{ $t('admin.generated.k_18d8a171be34') }}</p>
-                    </div>
-                    <div class="flex shrink-0 flex-col gap-2 sm:flex-row">
-                        <Button variant="outline" @click="openOtaWindow">
-{{ $t('admin.generated.k_3c46c19034c7') }} </Button>
-                        <Button variant="secondary" :disabled="syncing" @click="syncChannex">
-                            {{ syncing ? $t('admin.generated.k_270ec5ff9530') : $t('admin.generated.k_bb12cb3fbb4c') }}
-                        </Button>
-                    </div>
+        >
+            <template #actions>
+                <div class="inline-flex items-center rounded-xl border border-neutral-200 bg-white shadow-sm overflow-hidden">
+                    <button class="px-3 py-2 text-neutral-500 hover:text-primary-900 hover:bg-neutral-50 font-bold" @click="year -= 1">‹</button>
+                    <b class="px-1.5 text-body font-bold text-primary-900 tabular-nums">{{ year }}</b>
+                    <button class="relative px-3 py-2 text-neutral-500 hover:text-primary-900 hover:bg-neutral-50 font-bold" @click="year += 1">
+                        ›
+                        <span v-if="nextYearEmpty" class="absolute -top-0.5 right-0.5 text-[8px] font-extrabold bg-warning-500 text-white rounded px-1 leading-tight">bosh</span>
+                    </button>
                 </div>
+            </template>
+        </PageHeader>
 
-                <div class="mt-4 grid gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-3">
-                    <div>
-                        <p class="text-tiny font-medium uppercase tracking-wide text-neutral-500">{{ $t('admin.generated.k_bcbc2e972c63') }}</p>
-                        <p class="mt-1 text-body-sm font-semibold text-primary-900">{{ formatDate(otaEffectiveUntil) }}</p>
-                    </div>
-                    <div>
-                        <p class="text-tiny font-medium uppercase tracking-wide text-neutral-500">{{ $t('admin.generated.k_e74c4fbdf8d7') }}</p>
-                        <p class="mt-1 text-body-sm font-semibold text-primary-900">{{ formatDate(nextDate(otaEffectiveUntil)) }}</p>
-                    </div>
-                    <div>
-                        <p class="text-tiny font-medium uppercase tracking-wide text-neutral-500">{{ $t('admin.generated.k_51ddb459ca05') }}</p>
-                        <p class="mt-1 text-body-sm font-semibold text-primary-900">
-                            {{ otaWindow.configured_until ? $t('admin.generated.k_85bf551587e9') : $t('admin.generated.k_ac3136e75c30') }}
-                        </p>
-                    </div>
-                </div>
+        <!-- month KPIs: the year's pricing health at a glance -->
+        <div class="mt-5 flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600 shadow-sm">
+                📅 Mbulimi i vitit <b class="text-primary-900 tabular-nums">{{ coveredDays }}/{{ yearDays }}</b> ditë
+            </span>
+            <span v-if="avgBase" class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600 shadow-sm">
+                Çmimi bazë mesatar <b class="text-primary-900 tabular-nums">{{ formatPrice(avgBase) }}</b>
+            </span>
+            <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600 shadow-sm">
+                <b class="text-primary-900 tabular-nums">{{ yearSeasons.length }}</b> sezone · <b class="text-primary-900 tabular-nums">{{ roomTypes.length }}</b> tipe dhomash
+            </span>
+            <span v-if="gapDays" class="inline-flex items-center gap-1.5 rounded-full border border-warning-300 bg-warning-50 px-3 py-1.5 text-tiny font-bold text-warning-800 shadow-sm">
+                ⚠ {{ gapDays }} ditë pa sezon — shiten me çmim bazë
+            </span>
+            <a :href="route('pricing.smart.index')" class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-bold text-primary-900 no-underline shadow-sm hover:border-ionian">
+                ✨ Çmimi Inteligjent →
+            </a>
+        </div>
 
-                <div
-                    v-if="otaSyncPending"
-                    class="mt-3 rounded-md border border-warning-200 bg-warning-50 px-3 py-2 text-small text-warning-800"
-                    role="status"
-                >
-                    <strong>{{ $t('admin.generated.k_ae248b23fa5d') }}</strong>
-                    <span v-if="otaWindow.applied_until"> {{ $t('admin.generated.k_4f0dd3b2e4ca') }} {{ formatDate(otaWindow.applied_until) }}.</span>
-{{ $t('admin.generated.k_c82352eecc28') }} </div>
-                <div class="mt-3 rounded-md border border-warning-200 bg-warning-50 px-3 py-2 text-small text-warning-800">
-                    <strong>{{ $t('admin.generated.k_edc684fd7b7a') }}</strong> {{ $t('admin.generated.k_86cf0aa1def8') }} </div>
-            </Card>
+        <div class="mt-4 space-y-5">
+            <!-- Channel manager (Channex): one calm strip, banners only when real -->
+            <div v-if="channelManagerEnabled" class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-body-sm shadow-sm">
+                <span class="relative flex h-2.5 w-2.5">
+                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" :class="otaSyncPending ? 'bg-warning-400' : 'bg-success-400'" />
+                    <span class="relative inline-flex h-2.5 w-2.5 rounded-full" :class="otaSyncPending ? 'bg-warning-500' : 'bg-success-500'" />
+                </span>
+                <span class="font-bold text-primary-900">{{ $t('admin.generated.k_5786b449b811') }}</span>
+                <span class="text-neutral-500">{{ $t('admin.generated.k_bcbc2e972c63') }} <b class="text-primary-900">{{ formatDate(otaEffectiveUntil) }}</b></span>
+                <span v-if="otaSyncPending" class="rounded-full bg-warning-50 border border-warning-200 px-2.5 py-0.5 text-tiny font-bold text-warning-800">
+                    {{ $t('admin.generated.k_ae248b23fa5d') }}<template v-if="otaWindow.applied_until"> · {{ formatDate(otaWindow.applied_until) }}</template>
+                </span>
+                <span class="flex-1" />
+                <Button size="sm" variant="outline" @click="openOtaWindow">{{ $t('admin.generated.k_3c46c19034c7') }}</Button>
+                <Button size="sm" variant="secondary" :disabled="syncing" @click="syncChannex">
+                    {{ syncing ? $t('admin.generated.k_270ec5ff9530') : $t('admin.generated.k_bb12cb3fbb4c') }}
+                </Button>
+            </div>
 
-            <!-- Seasons -->
+            <!-- Seasons: the year timeline -->
             <Card>
                 <template #header>
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div class="min-w-0">
                             <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_b393cba9fdfc') }}</h3>
-                            <p class="text-small text-neutral-500 mt-0.5">{{ $t('admin.generated.k_d2d5790eb313') }}</p>
+                            <p class="text-small text-neutral-500 mt-0.5">Kliko një sezon për ta edituar · zonat e verdha me vija = ditë pa sezon · ★ fiton mbi të tjerët ku mbivendosen</p>
                         </div>
                         <div class="flex shrink-0 flex-col gap-2 sm:flex-row">
                             <Button
@@ -463,64 +603,147 @@ function fmtRange(s) {
                     </div>
                 </template>
 
-                <div class="divide-y divide-neutral-100">
-                    <div v-for="s in seasons" :key="s.id" class="py-3 flex items-center gap-4">
-                        <div class="flex-1 min-w-0">
-                            <p class="text-body-sm font-medium text-primary-900">{{ s.name }}</p>
-                            <p class="text-small text-neutral-500">{{ fmtRange(s) }} {{ $t('admin.generated.k_c0857a9c44ab') }} {{ s.priority }}</p>
-                        </div>
-                        <Button size="sm" variant="ghost" @click="openEditSeason(s)">{{ $t('admin.generated.k_0814d8529e68') }}</Button>
-                        <Button size="sm" variant="ghost" class="text-error-600" @click="deleteSeason(s)">{{ $t('admin.generated.k_315a0d2b6347') }}</Button>
-                    </div>
-                    <div v-if="!seasons.length" class="py-6 text-center text-body-sm text-neutral-500">
-{{ $t('admin.generated.k_1974bcb2ef98') }} </div>
+                <div class="grid grid-cols-12 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                    <span v-for="m in monthNames" :key="m" class="text-center">{{ m }}</span>
                 </div>
+                <div class="relative h-14 rounded-xl border border-neutral-200 overflow-visible"
+                    style="background:repeating-linear-gradient(-45deg,#faf5dd,#faf5dd 7px,#f3ecc9 7px,#f3ecc9 14px)">
+                    <div class="absolute inset-0 grid grid-cols-12 pointer-events-none rounded-xl overflow-hidden">
+                        <i v-for="m in 12" :key="m" class="border-r border-black/5 last:border-0" />
+                    </div>
+
+                    <button
+                        v-for="seg in segments"
+                        :key="seg.season.id"
+                        type="button"
+                        class="absolute rounded-lg text-white font-extrabold text-tiny leading-tight px-1.5 overflow-hidden whitespace-nowrap transition hover:-translate-y-0.5 hover:shadow-lg"
+                        :class="[
+                            seg.raised ? 'top-0 bottom-0 z-[2] shadow-md' : 'top-1.5 bottom-1.5',
+                            editingSeason && editingSeason.id === seg.season.id && inlineOpen ? 'ring-2 ring-primary-900 ring-offset-1 z-[3]' : '',
+                        ]"
+                        :style="{ left: seg.left + '%', width: seg.width + '%', background: seg.color, boxShadow: 'inset 0 -14px 16px rgba(0,0,0,.14)' }"
+                        :title="seg.season.name + ' · ' + fmtRange(seg.season) + ' · ' + $t('admin.generated.k_c0857a9c44ab') + ' ' + seg.season.priority"
+                        @click="editSeasonInline(seg.season)"
+                    >
+                        <span v-if="seg.raised" class="absolute top-0.5 right-1 text-[9px]">★</span>
+                        {{ seg.season.name }}
+                    </button>
+
+                    <button
+                        v-for="g in gaps"
+                        :key="g.from"
+                        type="button"
+                        class="absolute top-1.5 bottom-1.5 rounded-lg border-2 border-dashed border-warning-400 text-warning-800 text-[10px] font-extrabold leading-tight px-1 hover:bg-warning-50/80"
+                        :style="{ left: g.left + '%', width: g.width + '%' }"
+                        :title="shortDate(g.from) + ' – ' + shortDate(g.to) + ': ' + g.days + ' ditë pa sezon — kliko për t\'i mbuluar'"
+                        @click="coverGap(g)"
+                    >
+                        <template v-if="g.width > 6">⚠ {{ g.days }} ditë<br>+ Mbulo</template>
+                        <template v-else>⚠</template>
+                    </button>
+
+                    <div v-if="todayPct !== null" class="absolute -top-2 -bottom-2 w-0.5 bg-primary-950 z-[4] pointer-events-none" :style="{ left: todayPct + '%' }">
+                        <span class="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-primary-950 px-1.5 py-0.5 text-[8px] font-extrabold tracking-widest text-white">SOT</span>
+                    </div>
+                </div>
+
+                <!-- inline season editor -->
+                <div v-if="inlineOpen && editingSeason" class="mt-4 rounded-xl border border-neutral-200 overflow-hidden">
+                    <div class="flex items-center gap-2 px-4 py-2.5 text-white font-bold" :style="{ background: seasonColor[editingSeason.id] }">
+                        ✎ {{ editingSeason.name }}
+                        <button type="button" class="ml-auto h-6 w-6 rounded-md bg-white/20 font-extrabold hover:bg-white/30" @click="closeInline">✕</button>
+                    </div>
+                    <div class="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <FormGroup :label="$t('admin.generated.k_51a0c7aadeb7')" :error="sform.errors.name" required>
+                            <TextInput v-model="sform.name" :error="sform.errors.name" />
+                        </FormGroup>
+                        <FormGroup :label="$t('admin.generated.k_8b9d783e781c')" :error="sform.errors.start_date" required>
+                            <DatePicker v-model="sform.start_date" :error="sform.errors.start_date" />
+                        </FormGroup>
+                        <FormGroup :label="$t('admin.generated.k_15cdee011901')" :error="sform.errors.end_date" required>
+                            <DatePicker v-model="sform.end_date" :error="sform.errors.end_date" />
+                        </FormGroup>
+                        <FormGroup :label="$t('admin.generated.k_2bd87c03f9dd')" :error="sform.errors.priority" required>
+                            <TextInput type="number" v-model="sform.priority" min="0" max="1000" />
+                        </FormGroup>
+                    </div>
+                    <div v-if="inlineOverlaps.length" class="mx-4 mb-3 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-body-sm text-primary-800">
+                        💡 Mbivendoset me
+                        <template v-for="(o, i) in inlineOverlaps" :key="o.id"><template v-if="i > 0">, </template><b>{{ o.name }}</b> ({{ $t('admin.generated.k_c0857a9c44ab') }} {{ o.priority }})</template>.
+                        Netët e përbashkëta shiten me sezonin që ka prioritetin më të lartë.
+                    </div>
+                    <div class="flex items-center justify-between gap-3 px-4 pb-4">
+                        <button type="button" class="text-body-sm font-bold text-error-600 hover:underline" @click="deleteSeason(editingSeason)">{{ $t('admin.generated.k_315a0d2b6347') }}</button>
+                        <div class="flex gap-2">
+                            <Button size="sm" variant="outline" :disabled="sform.processing" @click="closeInline">{{ $t('admin.generated.k_b59ae1e356c9') }}</Button>
+                            <Button size="sm" variant="primary" :loading="sform.processing" @click="saveInline">{{ $t('admin.generated.k_4e4180955a51') }}</Button>
+                        </div>
+                    </div>
+                </div>
+                <p v-else-if="!yearSeasons.length" class="mt-3 text-body-sm text-neutral-500">
+                    {{ $t('admin.generated.k_1974bcb2ef98') }}<template v-if="sourceYearOptions.length"> · përdor <b>{{ $t('admin.generated.k_05a62a33ee40') }}</b> për t'i sjellë nga një vit tjetër.</template>
+                </p>
             </Card>
 
             <!-- Price matrix -->
             <Card>
                 <template #header>
                     <div>
-                        <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_26e2b820adef') }}</h3>
-                        <p class="text-small text-neutral-500 mt-0.5">{{ $t('admin.generated.k_36dda3961dee') }}</p>
+                        <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_26e2b820adef') }} <span class="text-small font-normal text-neutral-400">({{ currencyCode }} / natë)</span></h3>
+                        <p class="text-small text-neutral-500 mt-0.5">Qeliza bosh trashëgon çmimin bazë (duket si hije) · kolonat kanë ngjyrën e sezonit të tyre</p>
                     </div>
                 </template>
 
                 <div class="overflow-x-auto">
                     <table class="w-full text-body-sm">
                         <thead>
-                            <tr class="border-b border-neutral-200">
-                                <th class="px-3 py-2 text-left text-label text-neutral-600">{{ $t('admin.generated.k_a6aa7eff1daa') }}</th>
-                                <th class="px-3 py-2 text-left text-label text-neutral-600 whitespace-nowrap">{{ $t('admin.generated.k_17da06e5a5dd') }}</th>
-                                <th v-for="s in seasons" :key="s.id" class="px-3 py-2 text-left text-label text-neutral-600 whitespace-nowrap">
-                                    {{ s.name }} ({{ currencyCode }})
+                            <tr>
+                                <th class="px-3 pb-2 text-left text-label text-neutral-600 align-bottom">{{ $t('admin.generated.k_a6aa7eff1daa') }}</th>
+                                <th class="px-3 pb-2 text-left align-bottom">
+                                    <span class="inline-block rounded-lg bg-primary-950 px-2.5 py-1.5 text-tiny font-extrabold leading-tight text-white shadow-sm">
+                                        {{ $t('admin.generated.k_17da06e5a5dd') }}
+                                        <small class="block text-[9px] font-bold opacity-80">gjithë viti · themeli</small>
+                                    </span>
+                                </th>
+                                <th v-for="s in yearSeasons" :key="s.id" class="px-3 pb-2 text-left align-bottom">
+                                    <span class="inline-block rounded-lg px-2.5 py-1.5 text-tiny font-extrabold leading-tight text-white shadow-sm" :style="{ background: seasonColor[s.id] }">
+                                        {{ s.name }}
+                                        <small class="block text-[9px] font-bold opacity-85">{{ shortDate(s.start_date) }} – {{ shortDate(s.end_date) }}</small>
+                                    </span>
                                 </th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-neutral-100">
-                            <tr v-for="t in roomTypes" :key="t.id">
-                                <td class="px-3 py-2 font-medium text-primary-900 whitespace-nowrap">{{ t.name }}</td>
+                            <tr v-for="t in roomTypes" :key="t.id" class="hover:bg-neutral-50/60">
+                                <td class="px-3 py-2 font-semibold text-primary-900 whitespace-nowrap">{{ t.name }}</td>
                                 <td class="px-3 py-2">
                                     <input v-model="base[t.id]" type="number" min="0" step="1"
-                                        class="w-24 rounded-md border border-neutral-300 px-2 py-1.5 text-body-sm focus:border-accent-500 focus:ring-2 focus:ring-accent-500/40" />
+                                        class="w-24 rounded-lg border border-primary-200 bg-primary-50 px-2 py-1.5 text-right text-body-sm font-bold tabular-nums text-primary-900 focus:border-accent-500 focus:ring-2 focus:ring-accent-500/40" />
                                 </td>
-                                <td v-for="s in seasons" :key="s.id" class="px-3 py-2">
+                                <td v-for="s in yearSeasons" :key="s.id" class="px-3 py-2">
                                     <input v-if="rates[s.id]" v-model="rates[s.id][t.id]" type="number" min="0" step="1"
                                         :placeholder="String(base[t.id] ?? '')"
-                                        class="w-24 rounded-md border border-neutral-300 px-2 py-1.5 text-body-sm focus:border-accent-500 focus:ring-2 focus:ring-accent-500/40" />
+                                        class="w-24 rounded-lg border border-neutral-300 px-2 py-1.5 text-right text-body-sm font-semibold tabular-nums placeholder:font-normal placeholder:text-neutral-300 focus:border-accent-500 focus:ring-2 focus:ring-accent-500/40" />
                                 </td>
                             </tr>
                             <tr v-if="!roomTypes.length">
-                                <td :colspan="2 + seasons.length" class="px-3 py-6 text-center text-neutral-500">
+                                <td :colspan="2 + yearSeasons.length" class="px-3 py-6 text-center text-neutral-500">
 {{ $t('admin.generated.k_62e357276d24') }} </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                <div class="flex justify-end mt-4">
-                    <Button variant="primary" :loading="savingRates" @click="saveRates">{{ $t('admin.generated.k_f5e21afe68a5') }}</Button>
-                </div>
+                <p class="mt-3 text-tiny text-neutral-400">💡 Këto çmime janë themeli — <a :href="route('pricing.smart.index')" class="font-bold text-primary-900 no-underline hover:underline">Çmimi Inteligjent ✨</a> niset prej tyre dhe i lëviz sipas kërkesës, brenda kufijve të tu min–max.</p>
             </Card>
+        </div>
+
+        <!-- sticky save bar: appears only when the matrix has unsaved edits -->
+        <div v-if="dirtyCount" class="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-5 pointer-events-none">
+            <div class="pointer-events-auto flex items-center gap-3 rounded-xl bg-primary-950 py-2.5 pl-5 pr-3 text-body-sm text-white shadow-2xl">
+                <span><b class="tabular-nums text-warning-300">{{ dirtyCount }}</b> {{ dirtyCount === 1 ? 'ndryshim i paruajtur' : 'ndryshime të paruajtura' }}</span>
+                <Button size="sm" variant="outline" class="!border-neutral-600 !text-neutral-200" :disabled="savingRates" @click="resetMatrix">{{ $t('admin.generated.k_b59ae1e356c9') }}</Button>
+                <Button size="sm" variant="primary" :loading="savingRates" @click="saveRates">{{ $t('admin.generated.k_f5e21afe68a5') }}</Button>
+            </div>
         </div>
 
         <!-- Season modal -->
