@@ -612,7 +612,7 @@ function syncLabel(ts) {
                             :class="[
                                 'group min-h-[76px] sm:min-h-[96px] rounded-xl border p-1.5 sm:p-2 pb-3.5 relative transition',
                                 cellTone(d),
-                                d.is_past ? 'opacity-45 pointer-events-none hidden sm:block' : 'cursor-pointer sm:hover:-translate-y-0.5 hover:shadow-md',
+                                d.is_past ? 'opacity-45 pointer-events-none' : 'cursor-pointer sm:hover:-translate-y-0.5 hover:shadow-md',
                                 selected && selected.date === d.date ? 'ring-2 ring-ionian ring-offset-1' : '',
                                 d.date === todayStr ? 'ring-2 ring-primary-700 ring-offset-1' : '',
                             ]"
