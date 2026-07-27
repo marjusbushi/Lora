@@ -349,6 +349,40 @@ class ChannexClient
         return $resp->successful() ? $resp->json('data') : null;
     }
 
+    /**
+     * Full booking collection for a periodic audit. The revision feed remains
+     * the real-time source; this slower full scan is only a safety net.
+     *
+     * @throws RuntimeException rather than silently returning a partial audit.
+     */
+    public function listBookings(int $maxPages = 50, int $limit = self::PAGE_LIMIT): array
+    {
+        $bookings = [];
+
+        for ($page = 1; $page <= $maxPages; $page++) {
+            $resp = $this->http(idempotent: true, timeout: 45)->get("{$this->baseUrl}/bookings", [
+                'filter' => ['property_id' => $this->propertyId],
+                'pagination' => ['page' => $page, 'limit' => $limit],
+            ]);
+
+            if (! $resp->successful()) {
+                throw new RuntimeException("Channex GET /bookings failed: HTTP {$resp->status()}");
+            }
+
+            $batch = $resp->json('data') ?? [];
+            $bookings = array_merge($bookings, $batch);
+
+            $total = (int) ($resp->json('meta.total') ?? 0);
+            if (count($batch) < $limit || ($total > 0 && count($bookings) >= $total)) {
+                return $bookings;
+            }
+        }
+
+        throw new RuntimeException(
+            "Channex /bookings audit exceeded {$maxPages} pages; no partial reconciliation was accepted."
+        );
+    }
+
     /** Close a guest-message thread on Channex (mirrors our 'closed' status). */
     public function closeMessageThread(string $id): void
     {

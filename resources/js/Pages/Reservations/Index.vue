@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { ArrowRightLeft, Ban, CalendarDays, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Search, SlidersHorizontal } from 'lucide-vue-next';
+import { AlertTriangle, ArrowRightLeft, Ban, CalendarDays, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Search, ShieldCheck, SlidersHorizontal } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -26,6 +26,7 @@ const props = defineProps({
     latestReservationId: [Number, String],
     focusReservation: { type: Object, default: null },
     channelFees: { type: Object, default: () => ({}) },
+    reconciliation: { type: Object, default: () => ({ open: 0, critical: 0, manual_candidates: 0 }) },
 });
 
 const perms = usePage().props.auth.user?.permissions || [];
@@ -175,6 +176,31 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
             </template>
         </PageHeader>
         <p class="mt-1 text-body-sm text-neutral-500">Menaxho qëndrimet, pagesat dhe veprimet operative nga një vend.</p>
+
+        <div
+            v-if="reconciliation.open"
+            class="mt-5 flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+            :class="reconciliation.critical ? 'border-error-200 bg-error-50' : 'border-warning-200 bg-warning-50'"
+        >
+            <div class="flex items-start gap-3">
+                <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0" :class="reconciliation.critical ? 'text-error-600' : 'text-warning-600'" />
+                <div>
+                    <p class="text-body-sm font-semibold" :class="reconciliation.critical ? 'text-error-900' : 'text-warning-900'">
+                        {{ reconciliation.open }} diferenca OTA–PMS kërkojnë kontroll
+                    </p>
+                    <p class="mt-0.5 text-small" :class="reconciliation.critical ? 'text-error-700' : 'text-warning-700'">
+                        <span v-if="reconciliation.manual_candidates">{{ reconciliation.manual_candidates }} kanë rezervime manuale të mundshme. </span>
+                        Asnjë rezervim nuk është ndryshuar automatikisht.
+                    </p>
+                </div>
+            </div>
+            <Link :href="route('reservations.reconciliation')" class="shrink-0 no-underline">
+                <Button size="sm" variant="outline">Kontrollo diferencat</Button>
+            </Link>
+        </div>
+        <div v-else-if="reconciliation.last_checked_at" class="mt-5 flex items-center gap-2 text-small text-success-700">
+            <ShieldCheck class="h-4 w-4" /> Kontrolli OTA–PMS është në rregull.
+        </div>
 
         <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Card v-for="card in statCards" :key="card.label">

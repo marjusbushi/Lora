@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ReservationStoreRequest;
 use App\Http\Requests\ReservationUpdateRequest;
 use App\Models\AuditLog;
+use App\Models\ChannelSyncLog;
 use App\Models\CleaningTask;
 use App\Models\FiscalDocument;
 use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
+use App\Models\OtaReconciliationIssue;
 use App\Models\Payment;
 use App\Models\PosOrder;
 use App\Models\Reservation;
@@ -159,6 +161,17 @@ class ReservationController extends Controller
                 ->get(),
             'filters' => $filters,
             'channelFees' => Setting::get('financial.channel_fees', []),
+            'reconciliation' => [
+                'open' => OtaReconciliationIssue::where('status', 'open')->count(),
+                'critical' => OtaReconciliationIssue::where('status', 'open')->where('severity', 'error')->count(),
+                'manual_candidates' => OtaReconciliationIssue::where('status', 'open')
+                    ->whereIn('issue_type', ['missing_in_pms', 'possible_manual_duplicate'])
+                    ->get()
+                    ->filter(fn (OtaReconciliationIssue $issue) => ! empty($issue->details['candidate_reservation_ids']))
+                    ->count(),
+                'last_checked_at' => ChannelSyncLog::where('action', 'booking.reconciliation')->max('created_at')
+                    ?? OtaReconciliationIssue::max('last_detected_at'),
+            ],
             'stats' => [
                 'total' => Reservation::count(),
                 'pending' => Reservation::where('status', 'pending')->count(),
