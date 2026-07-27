@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { ArrowRightLeft, Ban, CalendarDays, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Search, SlidersHorizontal } from 'lucide-vue-next';
+import { ArrowRightLeft, Ban, CalendarDays, CalendarMinus, CalendarPlus, CalendarRange, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Search, SlidersHorizontal } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -13,6 +13,8 @@ import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ReservationCreateModal from '@/Components/Reservations/ReservationCreateModal.vue';
 import ReservationEditModal from '@/Components/Reservations/ReservationEditModal.vue';
 import MoveRoomModal from '@/Components/Reservations/MoveRoomModal.vue';
+import EarlyDepartureModal from '@/Components/Reservations/EarlyDepartureModal.vue';
+import StayExtensionModal from '@/Components/Reservations/StayExtensionModal.vue';
 import ReservationDetailsDrawer from './Components/ReservationDetailsDrawer.vue';
 import { channelOptions } from '@/channels';
 import { getIntlLocale } from '@/i18n';
@@ -26,6 +28,7 @@ const props = defineProps({
     latestReservationId: [Number, String],
     focusReservation: { type: Object, default: null },
     channelFees: { type: Object, default: () => ({}) },
+    hotelToday: { type: String, default: '' },
 });
 
 const perms = usePage().props.auth.user?.permissions || [];
@@ -55,11 +58,17 @@ const pageUrl = new URL(usePage().url, 'http://localhost');
 const showCreateModal = ref(canCreate && pageUrl.searchParams.get('new') === '1');
 const showEditModal = ref(false);
 const showMoveModal = ref(false);
+const showEarlyDepartureModal = ref(false);
+const showStayExtensionModal = ref(false);
 const selectedRes = ref(null);
 const moveRes = ref(null);
+const earlyDepartureRes = ref(null);
+const stayExtensionRes = ref(null);
 const details = ref(props.focusReservation);
 const filterStatus = ref(props.filters?.status || '');
 const searchQuery = ref(props.filters?.search || '');
+const dateFrom = ref(props.filters?.date_from || '');
+const dateTo = ref(props.filters?.date_to || '');
 const perPage = ref(Number(props.filters?.per_page || props.reservations?.per_page || 25));
 const sortBy = ref(props.filters?.sort || 'latest');
 
@@ -75,6 +84,8 @@ function listParams() {
     return Object.fromEntries(Object.entries({
         status: filterStatus.value || undefined,
         search: searchQuery.value.trim() || undefined,
+        date_from: dateFrom.value || undefined,
+        date_to: dateTo.value || undefined,
         per_page: Number(perPage.value),
         sort: sortBy.value,
     }).filter(([, value]) => value !== undefined && value !== ''));
@@ -85,6 +96,8 @@ function applyFilters() {
 function clearFilters() {
     filterStatus.value = '';
     searchQuery.value = '';
+    dateFrom.value = '';
+    dateTo.value = '';
     applyFilters();
 }
 function goToPage(url) {
@@ -126,6 +139,29 @@ function openMove(reservation) {
     moveRes.value = reservation;
     showMoveModal.value = true;
 }
+function openEarlyDeparture(reservation) {
+    earlyDepartureRes.value = reservation;
+    showEarlyDepartureModal.value = true;
+}
+function openStayExtension(reservation) {
+    stayExtensionRes.value = reservation;
+    showStayExtensionModal.value = true;
+}
+function isEarlyDeparturePlanned(reservation) {
+    return Boolean(
+        reservation?.early_departure_scheduled_at
+        && !reservation?.early_departure_at
+        && reservation?.original_check_out_date
+    );
+}
+function canDepartEarly(reservation) {
+    if (reservation?.status !== 'checked_in') return false;
+    const contractualCheckOut = reservation.original_check_out_date || reservation.check_out_date;
+    const earliestDeparture = new Date(`${reservation.check_in_date}T00:00:00Z`);
+    earliestDeparture.setUTCDate(earliestDeparture.getUTCDate() + 1);
+
+    return earliestDeparture.toISOString().slice(0, 10) < contractualCheckOut;
+}
 function doCheckIn(reservation) {
     router.post(route('reservations.check-in', reservation.id), {}, {
         preserveScroll: true,
@@ -134,6 +170,11 @@ function doCheckIn(reservation) {
     });
 }
 function doCheckOut(reservation) {
+    if (isEarlyDeparturePlanned(reservation)) {
+        openEarlyDeparture(reservation);
+        return;
+    }
+
     router.post(route('reservations.check-out', reservation.id), {}, {
         preserveScroll: true,
         onSuccess: () => { closeDetails(false); toasts.value?.success(`Check-out: ${reservation.guest?.name || ''}`); },
@@ -158,6 +199,8 @@ function isLatest(reservation) {
 watch(() => props.filters, (filters) => {
     filterStatus.value = filters?.status || '';
     searchQuery.value = filters?.search || '';
+    dateFrom.value = filters?.date_from || '';
+    dateTo.value = filters?.date_to || '';
     perPage.value = Number(filters?.per_page || props.reservations?.per_page || 25);
     sortBy.value = filters?.sort || 'latest';
 });
@@ -184,16 +227,42 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
         </div>
 
         <Card class="mt-6" :padding="false">
-            <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 lg:flex-row lg:items-center">
-                <div class="relative min-w-0 flex-1 lg:max-w-md">
-                    <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                    <input v-model="searchQuery" type="search" class="w-full rounded-lg border-neutral-200 py-2 pl-9 pr-3 text-body-sm placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500" placeholder="Kërko emër, telefon, email, dhomë ose #rezervimi" @keyup.enter="applyFilters" />
+            <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+                    <div class="relative min-w-0 flex-1 lg:max-w-xl">
+                        <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                        <input v-model="searchQuery" type="search" class="w-full rounded-lg border-neutral-200 py-2 pl-9 pr-3 text-body-sm placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500" placeholder="Kërko emër, telefon, email, dhomë ose #rezervimi" @keyup.enter="applyFilters" />
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 lg:ml-auto">
+                        <div class="w-40"><Select v-model="filterStatus" :options="statusOptions" placeholder="Të gjitha statuset" @change="applyFilters" /></div>
+                        <div class="w-44"><Select v-model="sortBy" :options="sortOptions" placeholder="" @change="applyFilters" /></div>
+                    </div>
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <div class="w-40"><Select v-model="filterStatus" :options="statusOptions" placeholder="Të gjitha statuset" @change="applyFilters" /></div>
-                    <div class="w-44"><Select v-model="sortBy" :options="sortOptions" placeholder="" @change="applyFilters" /></div>
-                    <Button variant="outline" @click="applyFilters"><SlidersHorizontal class="mr-2 h-4 w-4" />Filtro</Button>
-                    <button v-if="filterStatus || searchQuery" type="button" class="text-small font-semibold text-accent-700 hover:text-accent-800" @click="clearFilters">Pastro</button>
+
+                <div class="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-neutral-50/70 p-3 lg:flex-row lg:items-end">
+                    <div class="flex min-w-0 items-center gap-2 lg:mr-1">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-accent-700 shadow-sm ring-1 ring-neutral-200">
+                            <CalendarRange class="h-4 w-4" />
+                        </span>
+                        <div>
+                            <p class="text-body-sm font-semibold text-primary-900">Periudha e qëndrimit</p>
+                            <p class="text-small text-neutral-500">Shfaq rezervimet që prekin intervalin.</p>
+                        </div>
+                    </div>
+                    <div class="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-md">
+                        <label class="block">
+                            <span class="mb-1 block text-small font-medium text-neutral-600">Nga data</span>
+                            <input v-model="dateFrom" type="date" :max="dateTo || undefined" class="w-full rounded-lg border-neutral-200 bg-white py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="applyFilters" />
+                        </label>
+                        <label class="block">
+                            <span class="mb-1 block text-small font-medium text-neutral-600">Deri më</span>
+                            <input v-model="dateTo" type="date" :min="dateFrom || undefined" class="w-full rounded-lg border-neutral-200 bg-white py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="applyFilters" />
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-3 lg:ml-auto">
+                        <Button variant="outline" @click="applyFilters"><SlidersHorizontal class="mr-2 h-4 w-4" />Filtro</Button>
+                        <button v-if="filterStatus || searchQuery || dateFrom || dateTo" type="button" class="text-small font-semibold text-accent-700 hover:text-accent-800" @click="clearFilters">Pastro</button>
+                    </div>
                 </div>
             </div>
 
@@ -217,7 +286,11 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                                 <p class="mt-0.5 text-small text-neutral-400">#{{ res.id }}<span v-if="res.guest?.phone"> · {{ res.guest.phone }}</span></p>
                             </td>
                             <td class="px-5 py-3.5"><p class="font-medium text-primary-900">{{ res.room?.room_number || '—' }}</p><p class="text-small text-neutral-400">{{ res.room?.room_type?.name || '—' }}</p></td>
-                            <td class="px-5 py-3.5"><p class="text-body-sm text-neutral-700">{{ formatDate(res.check_in_date) }} → {{ formatDate(res.check_out_date) }}</p><p class="text-small text-neutral-400">{{ res.nights }} net · {{ res.adults }} të rritur<span v-if="res.children"> · {{ res.children }} fëmijë</span></p></td>
+                            <td class="px-5 py-3.5">
+                                <p class="text-body-sm text-neutral-700">{{ formatDate(res.check_in_date) }} → {{ formatDate(res.check_out_date) }}</p>
+                                <p class="text-small text-neutral-400">{{ res.nights }} net · {{ res.adults }} të rritur<span v-if="res.children"> · {{ res.children }} fëmijë</span></p>
+                                <p v-if="isEarlyDeparturePlanned(res)" class="mt-1 text-small font-semibold text-info-700">Largim i planifikuar · fillimisht {{ formatDate(res.original_check_out_date) }}</p>
+                            </td>
                             <td class="px-5 py-3.5"><p class="text-body-sm font-medium capitalize text-neutral-700">{{ channelLabels[res.channel] || res.channel || 'Direct' }}</p><p v-if="res.channel_ref" class="text-small text-neutral-400">{{ res.channel_ref }}</p></td>
                             <td class="px-5 py-3.5"><Badge :variant="statusMeta[res.status]?.variant" dot>{{ statusMeta[res.status]?.label }}</Badge></td>
                             <td class="px-5 py-3.5 text-right"><p class="font-semibold text-primary-900">{{ money(res.gross_amount, res.currency) }}</p><p class="text-small" :class="res.outstanding_amount > 0 ? 'text-warning-700' : 'text-success-700'">{{ res.outstanding_amount > 0 ? `${money(res.outstanding_amount, res.currency)} mbetur` : 'Paguar' }}</p></td>
@@ -229,6 +302,8 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                                         <Link :href="res.links.show" :class="menuItemClass"><Eye class="h-4 w-4 text-neutral-400" />Hap faqen</Link>
                                         <button v-if="canUpdate && !['checked_in','checked_out','cancelled'].includes(res.status)" type="button" :class="menuItemClass" @click="openEdit(res)"><Pencil class="h-4 w-4 text-neutral-400" />Ndrysho</button>
                                         <button v-if="canUpdate && res.status === 'checked_in'" type="button" :class="menuItemClass" @click="openMove(res)"><ArrowRightLeft class="h-4 w-4 text-neutral-400" />Ndrysho dhomën</button>
+                                        <button v-if="canUpdate && res.status === 'checked_in' && !isEarlyDeparturePlanned(res)" type="button" :class="menuItemClass" @click="openStayExtension(res)"><CalendarPlus class="h-4 w-4 text-neutral-400" />Zgjat qëndrimin</button>
+                                        <button v-if="canUpdate && canDepartEarly(res)" type="button" :class="menuItemClass" @click="openEarlyDeparture(res)"><CalendarMinus class="h-4 w-4 text-neutral-400" />{{ isEarlyDeparturePlanned(res) ? 'Menaxho largimin' : 'Largim i parakohshëm' }}</button>
                                         <button v-if="canUpdate && ['pending','confirmed'].includes(res.status)" type="button" :class="[menuItemClass, 'text-error-600']" @click="doCancel(res)"><Ban class="h-4 w-4 text-error-500" />Anulo</button>
                                     </ActionMenu>
                                 </div>
@@ -244,10 +319,24 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
             </div>
         </Card>
 
-        <ReservationDetailsDrawer :reservation="details" :can-update="canUpdate" @close="closeDetails" @edit="openEdit" @check-in="doCheckIn" @check-out="doCheckOut" />
+        <ReservationDetailsDrawer :reservation="details" :can-update="canUpdate" :hotel-today="hotelToday" @close="closeDetails" @edit="openEdit" @check-in="doCheckIn" @check-out="doCheckOut" @early-departure="openEarlyDeparture" @stay-extension="openStayExtension" />
         <ReservationCreateModal :show="showCreateModal" :rooms="rooms" :guests="guests" :channel-fees="channelFees" @close="closeCreateModal" @created="toasts?.success('Rezervimi u krijua me sukses.')" />
         <ReservationEditModal :show="showEditModal" :reservation="selectedRes" :rooms="rooms" :guests="guests" :channel-fees="channelFees" @close="showEditModal = false" @updated="toasts?.success('Rezervimi u përditësua.')" />
         <MoveRoomModal :show="showMoveModal" :reservation="moveRes" :rooms="rooms" @close="showMoveModal = false" @moved="toasts?.success('Dhoma u ndryshua.')" />
+        <EarlyDepartureModal
+            :show="showEarlyDepartureModal"
+            :reservation="earlyDepartureRes"
+            :hotel-today="hotelToday"
+            @close="showEarlyDepartureModal = false"
+            @completed="() => { closeDetails(false); toasts?.success('Plani i largimit u përditësua.') }"
+        />
+        <StayExtensionModal
+            :show="showStayExtensionModal"
+            :reservation="stayExtensionRes"
+            :hotel-today="hotelToday"
+            @close="showStayExtensionModal = false"
+            @extended="() => { closeDetails(false); toasts?.success('Qëndrimi u zgjat; përditësimi i inventarit u dërgua te Channex.') }"
+        />
         <ToastContainer ref="toasts" />
     </AppLayout>
 </template>
