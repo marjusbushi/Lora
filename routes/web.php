@@ -14,6 +14,7 @@ use App\Http\Controllers\LoraAiController;
 use App\Http\Controllers\MaintenanceController;
 use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OtaReconciliationController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosSalespersonController;
 use App\Http\Controllers\PosShiftController;
@@ -277,6 +278,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/messages/{thread}/reopen', [MessagesController::class, 'reopen'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.reopen');
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         Route::get('/reservations/calendar-design', fn () => Inertia::render('Reservations/CalendarDesign'))->name('reservations.calendar-design');
+        Route::get('/reservations/reconciliation', [OtaReconciliationController::class, 'index'])
+            ->middleware('module:channel_manager')
+            ->name('reservations.reconciliation');
         // Seasonal price quote for the create/edit form (server-computed; MUST stay before the {reservation} wildcard).
         Route::get('/reservations/quote', [ReservationController::class, 'quote'])->name('reservations.quote');
         Route::get('/reservations/{reservation}', [ReservationController::class, 'show'])->name('reservations.show');

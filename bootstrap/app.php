@@ -112,6 +112,14 @@ return Application::configure(basePath: dirname(__DIR__))
             requiresChannex: true,
             requiredModule: TenantBillingService::CHANNEL_MANAGER,
         ))->name('tenants:channex:push-ari')->dailyAt('04:00')->withoutOverlapping()->onOneServer();
+        // Daily full-booking audit. The 15-minute revision feed above remains
+        // the importer; this read-only pass detects missing/mismatched records
+        // and possible staff-entered copies without changing reservations.
+        $schedule->call(fn () => app(TenantCommandRunner::class)->run(
+            'channex:reconcile-bookings',
+            requiresChannex: true,
+            requiredModule: TenantBillingService::CHANNEL_MANAGER,
+        ))->name('tenants:channex:reconcile-bookings')->dailyAt('04:20')->withoutOverlapping()->onOneServer();
         // Free abandoned holds: cancel pending direct bookings whose POK payment never completed.
         $schedule->call(fn () => app(TenantCommandRunner::class)->run(
             'pok:release-unpaid',
