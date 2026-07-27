@@ -22,17 +22,46 @@ use Illuminate\Database\Eloquent\Model;
  */
 class FinanceLedger
 {
-    public static function accountFor(string $method): FinanceAccount
+    public static function accountFor(string $method, ?string $currency = null): FinanceAccount
     {
         FinanceAccount::ensureDefaults();
 
         $type = $method === 'cash' ? 'cash' : 'bank';
+        $currency = strtoupper($currency ?: BaseCurrency::code());
 
-        return FinanceAccount::where('type', $type)
-            ->where('currency', BaseCurrency::code())
-            ->where('is_active', true)
+        $account = FinanceAccount::where('type', $type)
+            ->where('currency', $currency)
             ->orderBy('id')
-            ->firstOrFail();
+            ->orderByDesc('is_active')
+            ->first();
+
+        if ($account) {
+            // A deliberately disabled drawer must still catch a live sale —
+            // reactivate rather than fail at the till.
+            if (! $account->is_active) {
+                $account->update(['is_active' => true]);
+            }
+
+            return $account;
+        }
+
+        if ($currency === BaseCurrency::code()) {
+            // ensureDefaults guarantees the base accounts exist.
+            return FinanceAccount::where('type', $type)
+                ->where('currency', $currency)
+                ->orderBy('id')
+                ->firstOrFail();
+        }
+
+        // First foreign-currency tender for this drawer type: create the
+        // account on the spot (mirrors ensureDefaults) so the sale never
+        // blocks on a missing configuration.
+        return FinanceAccount::create([
+            'name' => ($type === 'cash' ? 'Arka ' : 'Banka ').$currency,
+            'type' => $type,
+            'currency' => $currency,
+            'is_active' => true,
+        ]);
     }
 
     /** Mirror one folio payment into the ledger (or remove it when voided). */
@@ -96,22 +125,37 @@ class FinanceLedger
 
         $payment->loadMissing('order');
 
-        return FinancePayment::updateOrCreate(
-            ['sourceable_type' => PosOrderPayment::class, 'sourceable_id' => $payment->id],
-            [
-                'direction' => $payment->direction,
-                'account_id' => self::accountFor($payment->method)->id,
-                'amount' => $payment->amount,
-                'currency' => BaseCurrency::code(),
-                'fx_rate' => null,
-                'method' => $payment->method,
-                'source' => 'auto',
-                'description' => ($payment->direction === 'out' ? 'Rimbursim' : 'Pagesë')
-                    .' POS — porosia #'.$payment->pos_order_id,
-                'paid_at' => $payment->paid_at,
-                'created_by' => $payment->created_by,
-            ],
-        );
+        $baseCurrency = BaseCurrency::code();
+        $currency = strtoupper((string) ($payment->currency ?: $baseCurrency));
+        // Foreign tender: the customer's money enters THAT currency's account
+        // with its own amount; the frozen POS base equivalent stays authoritative.
+        $foreign = $currency !== $baseCurrency
+            && $payment->tendered_amount !== null
+            && (float) $payment->exchange_rate > 0;
+
+        $ledger = FinancePayment::firstOrNew([
+            'sourceable_type' => PosOrderPayment::class,
+            'sourceable_id' => $payment->id,
+        ]);
+        $ledger->fill([
+            'direction' => $payment->direction,
+            'account_id' => self::accountFor($payment->method, $foreign ? $currency : null)->id,
+            'amount' => $foreign ? $payment->tendered_amount : $payment->amount,
+            'currency' => $foreign ? $currency : $baseCurrency,
+            // FinancePayment uses source units per 1 base unit; the POS tender
+            // stores base units per 1 source unit — reuse the frozen rate.
+            'fx_rate' => $foreign ? round(1 / (float) $payment->exchange_rate, 6) : null,
+            'method' => $payment->method,
+            'source' => 'auto',
+            'description' => ($payment->direction === 'out' ? 'Rimbursim' : 'Pagesë')
+                .' POS — porosia #'.$payment->pos_order_id
+                .($foreign ? " ({$currency})" : ''),
+            'paid_at' => $payment->paid_at,
+            'created_by' => $payment->created_by,
+        ]);
+        $ledger->withFrozenAmountBase((float) $payment->amount)->save();
+
+        return $ledger;
     }
 
     /**

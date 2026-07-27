@@ -26,6 +26,7 @@ const props = defineProps({
     currentSalesperson: { type: Object, default: null },
     salespeople: { type: Array, default: () => [] },
     posSettings: { type: Object, default: () => ({}) },
+    payCurrencies: { type: Array, default: () => [] },
 });
 
 const toasts = ref(null);
@@ -49,6 +50,33 @@ const freeTables = computed(() => props.tables.filter((table) => table.status ==
 const freeCount = computed(() => Math.max(0, Number(props.stats.total || 0) - Number(props.stats.occupied || 0) - Number(props.stats.bill_requested || 0)));
 const splitCash = computed(() => Math.min(Number(selectedOrder.value?.total_amount || 0), Math.max(0, Number(splitCashAmount.value || 0))));
 const splitCard = computed(() => Math.max(0, Math.round((Number(selectedOrder.value?.total_amount || 0) - splitCash.value) * 100) / 100));
+
+const payCurrency = ref('');
+const splitCashCurrency = ref('');
+const posBaseCurrency = computed(() => props.payCurrencies[0]?.code || 'EUR');
+const multiCurrency = computed(() => (props.payCurrencies || []).length > 1);
+const orderTotal = computed(() => Number(selectedOrder.value?.total_amount || 0));
+
+function fxRateFor(code) {
+    return Number((props.payCurrencies || []).find((entry) => entry.code === code)?.rate || 1);
+}
+
+function toTendered(baseAmount, code) {
+    const rate = fxRateFor(code);
+    return rate > 0 ? Math.round((baseAmount / rate) * 100) / 100 : 0;
+}
+
+const payTendered = computed(() => (
+    payCurrency.value && payCurrency.value !== posBaseCurrency.value && (paymentMethod.value === 'cash' || paymentMethod.value === 'card')
+        ? toTendered(orderTotal.value, payCurrency.value)
+        : null
+));
+
+const splitCashTendered = computed(() => (
+    splitCashCurrency.value && splitCashCurrency.value !== posBaseCurrency.value && splitCash.value > 0
+        ? toTendered(splitCash.value, splitCashCurrency.value)
+        : null
+));
 
 function money(value) {
     return new Intl.NumberFormat('sq-AL', { style: 'currency', currency: props.currency }).format(Number(value || 0));
@@ -171,6 +199,8 @@ function openPayment() {
         return;
     }
     paymentMethod.value = 'cash';
+    payCurrency.value = posBaseCurrency.value;
+    splitCashCurrency.value = posBaseCurrency.value;
     paymentReservationId.value = '';
     splitCashAmount.value = '';
     showPaymentModal.value = true;
@@ -182,22 +212,30 @@ function payTable() {
         toasts.value?.error('Zgjidh dhomën ose mysafirin.');
         return;
     }
-    const payments = paymentMethod.value === 'split'
-        ? [{ method: 'cash', amount: splitCash.value }, { method: 'card', amount: splitCard.value }]
-        : [];
+    const payments = [];
+    if (paymentMethod.value === 'split') {
+        const cashTender = { method: 'cash', amount: splitCash.value };
+        if (splitCashTendered.value !== null) {
+            cashTender.currency = splitCashCurrency.value;
+            cashTender.tendered_amount = splitCashTendered.value;
+        }
+        payments.push(cashTender, { method: 'card', amount: splitCard.value });
+    } else if (payTendered.value !== null) {
+        payments.push({ method: paymentMethod.value, amount: orderTotal.value, currency: payCurrency.value, tendered_amount: payTendered.value });
+    }
     if (paymentMethod.value === 'split' && (!splitCash.value || !splitCard.value)) {
         toasts.value?.error('Vendos një ndarje të vlefshme mes cash dhe kartës.');
         return;
     }
     saving.value = true;
     router.post(route('pos.complete', selectedOrder.value.id), {
-        payment_method: paymentMethod.value === 'split' ? null : paymentMethod.value,
+        payment_method: paymentMethod.value === 'split' || payments.length ? null : paymentMethod.value,
         payments,
         reservation_id: paymentMethod.value === 'room_charge' ? paymentReservationId.value : null,
     }, {
         preserveScroll: true,
         onSuccess: () => { showPaymentModal.value = false; },
-        onError: (errors) => toasts.value?.error(errors.order || errors.payments || errors.reservation_id || 'Pagesa nuk u regjistrua.'),
+        onError: (errors) => toasts.value?.error(errors.order || errors.payments || errors.reservation_id || Object.values(errors)[0] || 'Pagesa nuk u regjistrua.'),
         onFinish: () => { saving.value = false; },
     });
 }
@@ -342,7 +380,36 @@ onMounted(() => {
         <Modal :show="showPaymentModal" :title="`Paguaj · ${selectedTable?.name || ''}`" max-width="md" @close="showPaymentModal = false">
             <div class="rounded-xl bg-primary-950 p-5 text-center text-white"><p class="text-small text-neutral-300">Totali për pagesë</p><p class="mt-1 text-3xl font-bold">{{ money(selectedOrder?.total_amount) }}</p></div>
             <div class="mt-4 grid grid-cols-2 gap-2"><button v-for="method in [{ id: 'cash', label: 'Cash', icon: '💵' }, { id: 'card', label: 'Kartë', icon: '💳' }, { id: 'split', label: 'Cash + Kartë', icon: '💵＋💳' }, { id: 'room_charge', label: 'Dhomë', icon: '🏨' }]" :key="method.id" type="button" class="rounded-xl border-2 p-3 text-center" :class="paymentMethod === method.id ? 'border-accent-500 bg-accent-50 text-accent-800' : 'border-neutral-200 text-neutral-600'" @click="paymentMethod = method.id"><span class="block text-2xl">{{ method.icon }}</span><span class="mt-1 block text-small font-bold">{{ method.label }}</span></button></div>
-            <div v-if="paymentMethod === 'split'" class="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4"><label class="text-small font-semibold text-neutral-600">Shuma cash</label><input v-model="splitCashAmount" type="number" min="0" :max="selectedOrder?.total_amount" step="0.01" class="mt-1.5 w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500" placeholder="0.00" /><div class="mt-3 flex justify-between text-body-sm"><span class="text-neutral-500">Pjesa me kartë</span><strong>{{ money(splitCard) }}</strong></div></div>
+            <div v-if="multiCurrency && (paymentMethod === 'cash' || paymentMethod === 'card')" class="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                <div class="flex items-center justify-between gap-3">
+                    <span class="text-small font-semibold text-neutral-600">Monedha e pagesës</span>
+                    <select v-model="payCurrency" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                        <option v-for="entry in payCurrencies" :key="entry.code" :value="entry.code">{{ entry.code }}</option>
+                    </select>
+                </div>
+                <template v-if="payTendered !== null">
+                    <div class="mt-3 flex items-center justify-between text-body-sm">
+                        <span class="text-neutral-500">Merr nga klienti</span>
+                        <strong class="text-lg">{{ payTendered.toFixed(2) }} {{ payCurrency }}</strong>
+                    </div>
+                    <p class="mt-1 text-tiny text-neutral-400">1 {{ payCurrency }} = {{ fxRateFor(payCurrency).toFixed(2) }} {{ posBaseCurrency }} · shkon në llogarinë {{ payCurrency }}</p>
+                </template>
+            </div>
+            <div v-if="paymentMethod === 'split'" class="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                <label class="text-small font-semibold text-neutral-600">Shuma cash</label>
+                <input v-model="splitCashAmount" type="number" min="0" :max="selectedOrder?.total_amount" step="0.01" class="mt-1.5 w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500" placeholder="0.00" />
+                <div v-if="multiCurrency" class="mt-3 flex items-center justify-between gap-3">
+                    <span class="text-small font-semibold text-neutral-600">Monedha e cash-it</span>
+                    <select v-model="splitCashCurrency" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                        <option v-for="entry in payCurrencies" :key="entry.code" :value="entry.code">{{ entry.code }}</option>
+                    </select>
+                </div>
+                <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between text-body-sm">
+                    <span class="text-neutral-500">Merr cash nga klienti</span>
+                    <strong>{{ splitCashTendered.toFixed(2) }} {{ splitCashCurrency }}</strong>
+                </div>
+                <div class="mt-3 flex justify-between text-body-sm"><span class="text-neutral-500">Pjesa me kartë</span><strong>{{ money(splitCard) }}</strong></div>
+            </div>
             <select v-if="paymentMethod === 'room_charge'" v-model="paymentReservationId" class="mt-4 w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500"><option value="">Zgjidh dhomën / mysafirin...</option><option v-for="reservation in activeReservations" :key="reservation.id" :value="reservation.id">{{ reservation.label }}</option></select>
             <template #footer><Button variant="ghost" @click="showPaymentModal = false">Anulo</Button><Button variant="primary" :loading="saving" @click="payTable"><Check class="h-4 w-4" /> Konfirmo pagesën</Button></template>
         </Modal>
