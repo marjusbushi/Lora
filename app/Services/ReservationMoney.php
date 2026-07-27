@@ -62,7 +62,8 @@ class ReservationMoney
             ->sum(fn (FolioItem $item) => self::folioAmount($reservation, $item));
         $paid = $reservation->payments
             ->reject(fn (Payment $payment) => $payment->is_voided)
-            ->sum(fn (Payment $payment) => self::paymentAmount($reservation, $payment));
+            ->sum(fn (Payment $payment) => self::paymentAmount($reservation, $payment)
+                * ($payment->type === 'refund' ? -1 : 1));
         $room = (float) $reservation->total_amount;
         $gross = round($room + $charges - $discounts, 2);
 
