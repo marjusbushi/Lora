@@ -11,6 +11,7 @@ use App\Models\PosShift;
 use App\Models\PosTable;
 use App\Models\Reservation;
 use App\Services\BaseCurrency;
+use App\Services\CurrencyRates;
 use App\Services\InventoryLedger;
 use App\Services\PosSalespersonService;
 use App\Tenancy\TenantRule;
@@ -89,6 +90,7 @@ class PosTableServiceController extends Controller
                 'user_name' => $request->user()->name,
             ] : null,
             'currency' => BaseCurrency::code(),
+            'payCurrencies' => CurrencyRates::payable(),
             'printRoundId' => $request->session()->pull('pos_print_round_id'),
             'selectedTableId' => $request->integer('table') ?: null,
             'autoAction' => $request->string('action')->toString(),

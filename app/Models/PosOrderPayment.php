@@ -8,6 +8,7 @@ class PosOrderPayment extends TenantModel
 {
     protected $fillable = [
         'pos_order_id', 'pos_shift_id', 'direction', 'method', 'amount',
+        'currency', 'tendered_amount', 'exchange_rate',
         'refunded_from_id', 'reference', 'paid_at', 'created_by',
     ];
 
@@ -15,6 +16,8 @@ class PosOrderPayment extends TenantModel
     {
         return [
             'amount' => 'decimal:2',
+            'tendered_amount' => 'decimal:2',
+            'exchange_rate' => 'decimal:6',
             'paid_at' => 'datetime',
         ];
     }
