@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, watch } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
-import { ArrowRight, CalendarDays, CreditCard, DoorOpen, ExternalLink, Mail, Phone, UserRound, X } from 'lucide-vue-next';
+import { ArrowRight, CalendarDays, CalendarMinus, CalendarPlus, CreditCard, DoorOpen, ExternalLink, Mail, Phone, UserRound, X } from 'lucide-vue-next';
 import Badge from '@/Components/UI/Badge.vue';
 import Button from '@/Components/UI/Button.vue';
 import { getIntlLocale } from '@/i18n';
@@ -9,8 +9,9 @@ import { getIntlLocale } from '@/i18n';
 const props = defineProps({
     reservation: { type: Object, default: null },
     canUpdate: { type: Boolean, default: false },
+    hotelToday: { type: String, default: '' },
 });
-const emit = defineEmits(['close', 'edit', 'check-in', 'check-out']);
+const emit = defineEmits(['close', 'edit', 'check-in', 'check-out', 'early-departure', 'stay-extension']);
 const currencyCode = usePage().props.tenant?.currency || 'EUR';
 
 const statusMeta = {
@@ -24,6 +25,19 @@ const statusMeta = {
 const guestName = computed(() => props.reservation?.guest?.name
     || [props.reservation?.guest?.first_name, props.reservation?.guest?.last_name].filter(Boolean).join(' ')
     || '—');
+const earlyDeparturePlanned = computed(() => Boolean(
+    props.reservation?.early_departure_scheduled_at
+    && !props.reservation?.early_departure_at
+    && props.reservation?.original_check_out_date
+));
+const canDepartEarly = computed(() => {
+    if (props.reservation?.status !== 'checked_in') return false;
+    const contractualCheckOut = props.reservation.original_check_out_date || props.reservation.check_out_date;
+    const earliestDeparture = new Date(`${props.reservation.check_in_date}T00:00:00Z`);
+    earliestDeparture.setUTCDate(earliestDeparture.getUTCDate() + 1);
+
+    return earliestDeparture.toISOString().slice(0, 10) < contractualCheckOut;
+});
 
 function money(value) {
     return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currencyCode }).format(Number(value || 0));
@@ -86,6 +100,7 @@ onBeforeUnmount(() => {
                             <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">Qëndrimi</p>
                             <p class="mt-1 text-body-sm font-semibold text-primary-900">{{ date(reservation.check_in_date) }}</p>
                             <p class="text-small text-neutral-500">deri {{ date(reservation.check_out_date) }} · {{ reservation.nights }} net</p>
+                            <p v-if="earlyDeparturePlanned" class="mt-1 text-small font-semibold text-info-700">Planifikuar më herët · fillimisht {{ date(reservation.original_check_out_date) }}</p>
                         </div>
                         <div class="rounded-xl border border-neutral-200 p-4">
                             <DoorOpen class="mb-3 h-5 w-5 text-accent-700" />
@@ -119,7 +134,9 @@ onBeforeUnmount(() => {
                         <Button variant="outline" @click="emit('close')">Mbyll</Button>
                         <Button v-if="canUpdate" variant="secondary" @click="emit('edit', reservation)">Ndrysho</Button>
                         <Button v-if="canUpdate && reservation.status === 'confirmed'" variant="primary" @click="emit('check-in', reservation)">Check-in</Button>
-                        <Button v-if="canUpdate && reservation.status === 'checked_in'" variant="primary" @click="emit('check-out', reservation)">Check-out</Button>
+                        <Button v-if="canUpdate && reservation.status === 'checked_in' && !earlyDeparturePlanned" variant="outline" @click="emit('stay-extension', reservation)"><CalendarPlus class="h-4 w-4" />Zgjat qëndrimin</Button>
+                        <Button v-if="canUpdate && canDepartEarly" variant="outline" @click="emit('early-departure', reservation)"><CalendarMinus class="h-4 w-4" />{{ earlyDeparturePlanned ? 'Menaxho largimin' : 'Largim më herët' }}</Button>
+                        <Button v-if="canUpdate && reservation.status === 'checked_in' && !earlyDeparturePlanned" variant="primary" @click="emit('check-out', reservation)">Check-out</Button>
                         <Link :href="reservation.links.show" class="no-underline"><Button variant="primary">Hap faqen <ArrowRight class="ml-1.5 h-4 w-4" /></Button></Link>
                     </div>
                 </footer>

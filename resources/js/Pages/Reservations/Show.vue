@@ -15,12 +15,17 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import AuditTimeline from '@/Components/AuditTimeline.vue';
 import HotelInvoice from '@/Components/Invoices/HotelInvoice.vue';
+import EarlyDepartureModal from '@/Components/Reservations/EarlyDepartureModal.vue';
+import StayExtensionModal from '@/Components/Reservations/StayExtensionModal.vue';
 import { channelMeta } from '@/channels';
 import {
     ArrowLeft,
     ArrowRight,
     Banknote,
+    CalendarClock,
     CalendarDays,
+    CalendarMinus,
+    CalendarPlus,
     Check,
     ChevronDown,
     CircleAlert,
@@ -46,6 +51,7 @@ const props = defineProps({
     currency: { type: String, default: '€' },
     invoicePrint: { type: Object, default: () => ({}) },
     fiscalization: { type: Object, default: () => ({ configured: false, verified: false, environment: 'sandbox', document: null }) },
+    hotelToday: { type: String, default: '' },
 });
 
 const toasts = ref(null);
@@ -57,6 +63,8 @@ const showInvoice = ref(false);
 const checkoutMode = ref(false);
 const paymentSubmitting = ref(false);
 const fiscalizing = ref(false);
+const showEarlyDeparture = ref(false);
+const showStayExtension = ref(false);
 
 const perms = usePage().props.auth.user?.permissions || [];
 const canUpdate = perms.includes('update_reservations');
@@ -104,11 +112,28 @@ const hasOpenOrders = computed(() => (props.openPosOrders?.length || 0) > 0);
 const unsettled = computed(() => Number(props.folio.outstanding) > 0.005);
 const canAddCharge = computed(() => canUpdate && ['pending', 'confirmed', 'checked_in'].includes(props.reservation.status));
 const isCheckedIn = computed(() => props.reservation.status === 'checked_in');
+const earlyDeparturePlanned = computed(() => Boolean(
+    props.reservation.early_departure_scheduled_at
+    && !props.reservation.early_departure_at
+    && props.reservation.original_check_out_date
+));
+const canDepartEarly = computed(() => {
+    if (!isCheckedIn.value) return false;
+    const contractualCheckOut = props.reservation.original_check_out_date || props.reservation.check_out_date;
+    const earliestDeparture = new Date(`${props.reservation.check_in_date}T00:00:00Z`);
+    earliestDeparture.setUTCDate(earliestDeparture.getUTCDate() + 1);
+
+    return earliestDeparture.toISOString().slice(0, 10) < contractualCheckOut;
+});
+const plannedDepartureDue = computed(() => (
+    earlyDeparturePlanned.value && props.reservation.check_out_date <= props.hotelToday
+));
 const hasMoreMenuActions = computed(() => (
     (canUpdate && isCheckedIn.value && props.inventoryEnabled && props.inventoryItems.length > 0)
     || canAddCharge.value
     || (canUpdate && props.reservation.status !== 'cancelled' && unsettled.value)
     || (canUpdate && isCheckedIn.value)
+    || (canUpdate && canDepartEarly.value)
 ));
 const guestInitials = computed(() => (props.reservation.guest?.name || '?')
     .split(/\s+/)
@@ -270,6 +295,13 @@ function toggleMoreMenu() {
 function runMoreMenuAction(action) {
     closeMoreMenu(false);
     action();
+}
+
+function openEarlyDepartureModal() {
+    showEarlyDeparture.value = true;
+}
+function openStayExtensionModal() {
+    showStayExtension.value = true;
 }
 
 onBeforeUnmount(() => closeMoreMenu(false));
@@ -445,6 +477,10 @@ function openInvoice() {
     showInvoice.value = true;
 }
 function openCheckout() {
+    if (earlyDeparturePlanned.value) {
+        openEarlyDepartureModal();
+        return;
+    }
     if (hasOpenOrders.value) { toasts.value?.error(translate('admin.generated.k_b42ad0dd36d6')); return; }
     checkoutMode.value = true;
     showInvoice.value = true;
@@ -522,11 +558,13 @@ function settleAndCheckout(method) {
                             <button v-if="canAddCharge" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openLineModal)"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</button>
                             <button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openPaymentModal)"><CreditCard class="h-4 w-4" />{{ $t('reservationShow.recordPayment') }}</button>
                             <button v-if="canUpdate && isCheckedIn" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="requestingCleaning" @click="runMoreMenuAction(requestCleaning)"><RefreshCcw class="h-4 w-4" />{{ $t('reservationShow.requestCleaning') }}</button>
+                            <button v-if="canUpdate && isCheckedIn && !earlyDeparturePlanned" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openStayExtensionModal)"><CalendarPlus class="h-4 w-4" />Zgjat qëndrimin</button>
+                            <button v-if="canUpdate && canDepartEarly" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openEarlyDepartureModal)"><CalendarMinus class="h-4 w-4" />{{ earlyDeparturePlanned ? 'Menaxho largimin' : 'Largim i parakohshëm' }}</button>
                         </div>
                     </template>
                 </Teleport>
                 <Button v-if="canUpdate && isCheckedIn" variant="primary" :disabled="hasOpenOrders" @click="openCheckout">
-                    {{ $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" />
+                    {{ earlyDeparturePlanned ? (plannedDepartureDue ? 'Përfundo largimin' : 'Menaxho largimin') : $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" />
                 </Button>
             </div>
         </div>
@@ -547,6 +585,17 @@ function settleAndCheckout(method) {
             <div class="border-t border-neutral-100 pt-3 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0"><p class="text-xs text-neutral-400">{{ $t('reservationShow.total') }}</p><p class="mt-1 text-sm font-semibold text-neutral-900">{{ money(folio.gross) }}</p></div>
         </section>
 
+        <section v-if="earlyDeparturePlanned" class="mt-4 flex flex-col gap-3 rounded-xl border border-info-200 bg-info-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex items-start gap-3">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-info-700 ring-1 ring-info-200"><CalendarClock class="h-5 w-5" /></span>
+                <div>
+                    <p class="font-semibold text-info-900">Largim i planifikuar më {{ formatDate(reservation.check_out_date) }}</p>
+                    <p class="mt-0.5 text-sm text-info-700">Check-out fillestar: {{ formatDate(reservation.original_check_out_date) }}. Netët e mbetura janë liruar në inventar; mysafiri vazhdon të jetë në hotel.</p>
+                </div>
+            </div>
+            <Button variant="outline" @click="openEarlyDepartureModal">{{ plannedDepartureDue ? 'Përfundo largimin' : 'Menaxho planin' }}</Button>
+        </section>
+
         <section
             v-if="isCheckedIn"
             class="mt-4 flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -559,7 +608,7 @@ function settleAndCheckout(method) {
                 </span>
                 <div><p class="font-semibold" :class="checkoutState.tone === 'success' ? 'text-success-800' : 'text-warning-800'">{{ checkoutState.title }}</p><p class="mt-0.5 text-sm" :class="checkoutState.tone === 'success' ? 'text-success-700' : 'text-warning-700'">{{ checkoutState.description }}</p></div>
             </div>
-            <Button variant="primary" :disabled="hasOpenOrders" @click="openCheckout">{{ $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" /></Button>
+            <Button variant="primary" :disabled="hasOpenOrders" @click="openCheckout">{{ earlyDeparturePlanned ? (plannedDepartureDue ? 'Përfundo largimin' : 'Menaxho largimin') : $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" /></Button>
         </section>
 
         <div class="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
@@ -984,6 +1033,20 @@ function settleAndCheckout(method) {
             </template>
         </Modal>
 
+        <EarlyDepartureModal
+            :show="showEarlyDeparture"
+            :reservation="reservation"
+            :hotel-today="hotelToday"
+            @close="showEarlyDeparture = false"
+            @completed="toasts?.success('Plani i largimit u përditësua.')"
+        />
+        <StayExtensionModal
+            :show="showStayExtension"
+            :reservation="reservation"
+            :hotel-today="hotelToday"
+            @close="showStayExtension = false"
+            @extended="toasts?.success('Qëndrimi u zgjat; përditësimi i inventarit u dërgua te Channex.')"
+        />
         <ToastContainer ref="toasts" />
     </AppLayout>
 </template>

@@ -229,6 +229,65 @@ class ReservationVisibilityTest extends TestCase
         }
     }
 
+    public function test_list_filters_reservations_that_overlap_the_selected_stay_period(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $type = RoomType::create(['name' => 'Std', 'base_price' => 100, 'max_occupancy' => 3, 'amenities' => []]);
+        $room = Room::create(['room_type_id' => $type->id, 'room_number' => '801', 'floor' => 8, 'status' => 'available']);
+        $guest = Guest::create(['first_name' => 'Date', 'last_name' => 'Filter']);
+
+        $makeReservation = fn (string $checkIn, string $checkOut) => Reservation::create([
+            'room_id' => $room->id,
+            'guest_id' => $guest->id,
+            'created_by' => $admin->id,
+            'check_in_date' => $checkIn,
+            'check_out_date' => $checkOut,
+            'status' => 'confirmed',
+            'total_amount' => 200,
+            'adults' => 2,
+        ]);
+
+        $checksOutAtRangeStart = $makeReservation('2026-08-08', '2026-08-10');
+        $overlapsRangeStart = $makeReservation('2026-08-09', '2026-08-11');
+        $startsAtRangeEnd = $makeReservation('2026-08-12', '2026-08-14');
+        $startsAfterRange = $makeReservation('2026-08-13', '2026-08-15');
+
+        $this->actingAs($admin)->get(route('reservations.index', [
+            'date_from' => '2026-08-10',
+            'date_to' => '2026-08-12',
+        ]))->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('filters.date_from', '2026-08-10')
+            ->where('filters.date_to', '2026-08-12')
+            ->has('reservations.data', 2)
+            ->where('reservations.data.0.id', $startsAtRangeEnd->id)
+            ->where('reservations.data.1.id', $overlapsRangeStart->id)
+            ->where('reservations.data', fn ($rows) => collect($rows)->pluck('id')->doesntContain($checksOutAtRangeStart->id)
+                && collect($rows)->pluck('id')->doesntContain($startsAfterRange->id)));
+    }
+
+    public function test_list_normalizes_an_inverted_date_range_and_ignores_invalid_dates(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)->get(route('reservations.index', [
+            'date_from' => '2026-08-12',
+            'date_to' => '2026-08-10',
+        ]))->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('filters.date_from', '2026-08-10')
+            ->where('filters.date_to', '2026-08-12'));
+
+        $this->actingAs($admin)->get(route('reservations.index', [
+            'date_from' => '2026-02-31',
+            'date_to' => ['2026-08-12'],
+        ]))->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('filters.date_from', null)
+            ->where('filters.date_to', null));
+    }
+
     public function test_list_exposes_financial_summary_links_and_deep_link_focus(): void
     {
         $this->withoutVite();
