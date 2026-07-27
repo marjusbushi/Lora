@@ -715,6 +715,11 @@ class PosController extends Controller
                     'direction' => 'out',
                     'method' => $salePayment->method,
                     'amount' => $salePayment->amount,
+                    // A foreign tender is returned from ITS currency account,
+                    // at the rate frozen when the sale was taken.
+                    'currency' => $salePayment->currency,
+                    'tendered_amount' => $salePayment->tendered_amount,
+                    'exchange_rate' => $salePayment->exchange_rate,
                     'refunded_from_id' => $salePayment->exists ? $salePayment->id : null,
                     'paid_at' => now(),
                     'created_by' => $request->user()->id,

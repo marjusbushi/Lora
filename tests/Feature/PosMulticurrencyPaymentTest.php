@@ -160,6 +160,43 @@ class PosMulticurrencyPaymentTest extends TestCase
         $this->assertSame(0, PosOrderPayment::query()->count());
     }
 
+    public function test_refunding_a_foreign_tender_returns_the_money_from_its_own_account(): void
+    {
+        $admin = $this->admin();
+        $this->lekBaseWithRates();
+        $this->openShift($admin);
+        $order = $this->openOrder($admin, 937.20);
+
+        $this->actingAs($admin)->post(route('pos.complete', $order), [
+            'payments' => [
+                ['method' => 'cash', 'amount' => 937.20, 'currency' => 'EUR', 'tendered_amount' => 10],
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $this->actingAs($admin)->post(route('pos.refund', $order), [
+            'reason' => 'Klienti ktheu porosinë',
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $refund = PosOrderPayment::query()->where('direction', 'out')->sole();
+        $this->assertSame('EUR', $refund->currency);
+        $this->assertSame(10.0, (float) $refund->tendered_amount);
+        $this->assertSame(93.72, (float) $refund->exchange_rate);
+        $this->assertSame(937.20, (float) $refund->amount);
+
+        $euroArka = FinanceAccount::query()->where('type', 'cash')->where('currency', 'EUR')->sole();
+        $ledgerOut = FinancePayment::query()
+            ->where('sourceable_type', PosOrderPayment::class)
+            ->where('direction', 'out')->sole();
+        $this->assertSame($euroArka->id, $ledgerOut->account_id);
+        $this->assertSame('EUR', $ledgerOut->currency);
+        $this->assertSame(10.0, (float) $ledgerOut->amount);
+        $this->assertSame(937.20, (float) $ledgerOut->amount_base);
+
+        // Money in, money out — the EUR drawer is flat again.
+        app(TenantContext::class)->set(Tenant::query()->sole());
+        $this->assertSame(0.0, $euroArka->balance());
+    }
+
     public function test_base_currency_sale_is_untouched_by_the_feature(): void
     {
         $admin = $this->admin();
