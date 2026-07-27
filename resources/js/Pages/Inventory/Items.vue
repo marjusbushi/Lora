@@ -149,8 +149,8 @@ function submit() {
                             <div><label class="mb-1 block text-body-sm font-semibold">Barcode</label><TextInput v-model="form.barcode" class="w-full" /></div>
                             <div><label class="mb-1 block text-body-sm font-semibold">Kategoria</label><TextInput v-model="form.category" class="w-full" placeholder="Pije" /></div>
                             <div><label class="mb-1 block text-body-sm font-semibold">Lloji</label><select v-model="form.type" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="(label, key) in typeLabels" :key="key" :value="key">{{ label }}</option></select></div>
-                            <div><label class="mb-1 block text-body-sm font-semibold">Njësia</label><select v-model="form.unit" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="(label, key) in unitLabels" :key="key" :value="key">{{ label }}</option></select></div>
-                            <div><label class="mb-1 block text-body-sm font-semibold">Stoku minimal</label><TextInput v-model="form.minimum_stock" type="number" min="0" step="0.0001" class="w-full" /></div>
+                            <div v-if="form.type !== 'service'"><label class="mb-1 block text-body-sm font-semibold">Njësia</label><select v-model="form.unit" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="(label, key) in unitLabels" :key="key" :value="key">{{ label }}</option></select></div>
+                            <div v-if="form.type !== 'service'"><label class="mb-1 block text-body-sm font-semibold">Stoku minimal</label><TextInput v-model="form.minimum_stock" type="number" min="0" step="0.0001" class="w-full" /></div>
                             <label v-if="editing !== 'new'" class="flex items-center gap-2 self-end pb-2 text-body-sm font-semibold"><input v-model="form.is_active" type="checkbox" class="rounded border-neutral-300 text-accent-600 focus:ring-accent-500" /> Produkt aktiv</label>
                         </div>
                     </div>
