@@ -1157,11 +1157,21 @@ onMounted(() => {
             </template>
         </Modal>
 
+        <!-- Print-only receipt copy: teleported to body so the print CSS can pin
+             it to the page corner — the modal copy sits inside a positioned,
+             scroll-clipped dialog and prints mid-page and truncated. -->
+        <Teleport to="body">
+            <div v-if="receiptOrder" id="pos-receipt-print" aria-hidden="true">
+                <PosReceipt :order="receiptOrder" :settings="receiptSettings" />
+            </div>
+        </Teleport>
+
         <ToastContainer ref="toasts" />
     </AppLayout>
 </template>
 
 <style>
+#pos-receipt-print { display: none; }
 @media print {
     @page { size: 80mm auto; margin: 0; }
     body.printing-z-report * { visibility: hidden !important; }
@@ -1169,7 +1179,7 @@ onMounted(() => {
     body.printing-z-report #zreport { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
 
     body.printing-pos-receipt * { visibility: hidden !important; }
-    body.printing-pos-receipt #pos-receipt, body.printing-pos-receipt #pos-receipt * { visibility: visible !important; }
-    body.printing-pos-receipt #pos-receipt { position: absolute; left: 0; top: 0; margin: 0; box-shadow: none !important; }
+    body.printing-pos-receipt #pos-receipt-print { display: block; position: fixed; inset: 0 auto auto 0; width: 80mm; background: #fff; }
+    body.printing-pos-receipt #pos-receipt-print, body.printing-pos-receipt #pos-receipt-print * { visibility: visible !important; }
 }
 </style>
