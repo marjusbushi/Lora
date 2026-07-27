@@ -286,6 +286,10 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::delete('/reservations/{reservation}', [ReservationController::class, 'destroy'])->middleware('permission:delete_reservations')->name('reservations.destroy');
         Route::post('/reservations/{reservation}/check-in', [ReservationController::class, 'checkIn'])->middleware('permission:update_reservations')->name('reservations.check-in');
         Route::post('/reservations/{reservation}/check-out', [ReservationController::class, 'checkOut'])->middleware('permission:update_reservations')->name('reservations.check-out');
+        Route::post('/reservations/{reservation}/early-departure', [ReservationController::class, 'earlyDeparture'])->middleware('permission:update_reservations')->name('reservations.early-departure');
+        Route::delete('/reservations/{reservation}/early-departure-plan', [ReservationController::class, 'cancelEarlyDeparturePlan'])->middleware('permission:update_reservations')->name('reservations.early-departure-plan.cancel');
+        Route::get('/reservations/{reservation}/stay-extension/quote', [ReservationController::class, 'stayExtensionQuote'])->middleware('permission:update_reservations')->name('reservations.stay-extension.quote');
+        Route::post('/reservations/{reservation}/stay-extension', [ReservationController::class, 'extendStay'])->middleware('permission:update_reservations')->name('reservations.stay-extension');
         // Front desk asks housekeeping for a stayover (daily) clean while the guest is in-house.
         Route::post('/reservations/{reservation}/request-cleaning', [ReservationController::class, 'requestCleaning'])->middleware(['module:housekeeping', 'permission:update_reservations'])->name('reservations.request-cleaning');
         Route::post('/reservations/{reservation}/cancel', [ReservationController::class, 'cancel'])->middleware('permission:update_reservations')->name('reservations.cancel');
