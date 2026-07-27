@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\ChannexBookingImporter;
 use App\Services\ChannexClient;
 use App\Services\ChannexMessageImporter;
+use App\Services\OtaReservationReconciler;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -77,6 +78,16 @@ class ChannexWebhookController extends Controller
             report($e);
 
             return response('error', 500); // import failed -> do NOT ack, Channex re-delivers
+        }
+
+        // Reconciliation is advisory. A temporary audit failure must not block
+        // acknowledgement after the booking itself was safely imported.
+        if (isset($revision) && $revision) {
+            try {
+                app(OtaReservationReconciler::class)->reconcileBooking($revision, $channex->propertyId());
+            } catch (\Throwable $e) {
+                report($e);
+            }
         }
 
         // Ack OUTSIDE the import try: the import already committed, so a transient

@@ -2,9 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ResolvesTenantContext;
 use App\Services\ChannexBookingImporter;
 use App\Services\ChannexClient;
-use App\Console\Concerns\ResolvesTenantContext;
+use App\Services\OtaReservationReconciler;
 use Illuminate\Console\Command;
 
 /**
@@ -20,8 +21,11 @@ class ChannexPullBookings extends Command
 
     protected $description = 'Pull + import unacknowledged Channex booking revisions (OTA -> PMS)';
 
-    public function handle(ChannexClient $channex, ChannexBookingImporter $importer): int
-    {
+    public function handle(
+        ChannexClient $channex,
+        ChannexBookingImporter $importer,
+        OtaReservationReconciler $reconciler,
+    ): int {
         if (! $this->ensureTenantContext()) {
             return self::FAILURE;
         }
@@ -66,6 +70,13 @@ class ChannexPullBookings extends Command
                 }
 
                 $channex->ackBookingRevision($item['id']);
+                try {
+                    $reconciler->reconcileBooking($item, $channex->propertyId());
+                } catch (\Throwable $e) {
+                    // The booking is already imported and acknowledged. Keep
+                    // reconciliation advisory; the nightly full audit retries it.
+                    report($e);
+                }
                 $created += $s['created'];
                 $updated += $s['updated'];
                 $cancelled += $s['cancelled'];
