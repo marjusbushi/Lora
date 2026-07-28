@@ -25,6 +25,7 @@ use App\Services\BaseCurrency;
 use App\Services\CurrencyRates;
 use App\Services\FatureAlClient;
 use App\Services\FatureAlConfiguration;
+use App\Services\FinanceLedger;
 use App\Services\IntegrationCatalog;
 use App\Services\MarketRates;
 use App\Services\PosSalespersonService;
@@ -135,6 +136,7 @@ class SettingsController extends Controller
             'auditHistory' => $auditLogController->pageData($request, $timeline, 'audit_'),
             'integrations' => $integrationCatalog->forSettings($settings),
             'posStaff' => $posSalespeople->staff(),
+            'posAccountMode' => FinanceLedger::posAccountMode(),
         ]);
     }
 
