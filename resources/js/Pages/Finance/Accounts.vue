@@ -34,16 +34,8 @@ const props = defineProps({
     baseCurrency: String,
     fxRate: Number,
     currencies: { type: Array, default: () => ['EUR', 'ALL'] },
-    posAccountMode: { type: String, default: 'shared' },
     can: Object,
 });
-
-const posMode = ref(props.posAccountMode);
-watch(() => props.posAccountMode, (mode) => { posMode.value = mode; });
-
-function updatePosMode() {
-    router.put(route('finance.accounts.pos-mode'), { mode: posMode.value }, { preserveScroll: true });
-}
 
 const activeAccounts = computed(() => props.accounts.filter((account) => account.is_active));
 const selectedAccount = computed(() => props.accounts.find((account) => account.id === props.selectedId));
@@ -339,18 +331,6 @@ function toggleAccount(accountToToggle) {
                     <p class="mt-2 text-2xl font-extrabold tabular-nums" :class="todayNet >= 0 ? 'text-emerald-950' : 'text-rose-800'">{{ todayNet >= 0 ? '+' : '−' }}{{ formatMoney(Math.abs(todayNet)) }}</p>
                     <p class="mt-1 flex items-center gap-1 text-xs font-medium" :class="todayNet >= 0 ? 'text-emerald-700' : 'text-rose-600'"><Check class="h-3.5 w-3.5" /> {{ t('financeAccounts.updatedNow') }}</p>
                 </article>
-            </section>
-
-            <section v-if="can.manageAccounts" class="mt-4 flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-4 shadow-card lg:flex-row lg:items-center lg:justify-between">
-                <div class="min-w-0">
-                    <p class="text-sm font-bold text-neutral-900">{{ t('financeAccounts.posModeTitle') }}</p>
-                    <p class="mt-0.5 text-xs text-neutral-500">{{ t('financeAccounts.posModeHint') }}</p>
-                </div>
-                <select v-model="posMode" class="h-10 shrink-0 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 outline-none focus:border-emerald-600" @change="updatePosMode">
-                    <option value="shared">{{ t('financeAccounts.posModeShared') }}</option>
-                    <option value="split_cash">{{ t('financeAccounts.posModeSplitCash') }}</option>
-                    <option value="split_all">{{ t('financeAccounts.posModeSplitAll') }}</option>
-                </select>
             </section>
 
             <section class="mt-4 grid min-h-[650px] overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-card lg:grid-cols-[320px_minmax(0,1fr)]">
