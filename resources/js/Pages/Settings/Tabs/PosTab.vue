@@ -116,7 +116,7 @@ function digitsOnly(event) {
                 <div class="mt-3 grid gap-3 md:grid-cols-3">
                     <label
                         v-for="option in [
-                            { value: 'shared', title: 'Në llogaritë e hotelit', text: 'Cash te Arka, kartat te Banka — si deri tani' },
+                            { value: 'shared', title: 'Në llogaritë e hotelit', text: 'Cash te Arka, kartat te Banka' },
                             { value: 'split_cash', title: 'Arkë e veçantë për POS', text: 'Cash-i i barit në sirtarin e vet; kartat te Banka' },
                             { value: 'split_all', title: 'Arkë & bankë të veçanta', text: 'Gjithçka nga POS në llogaritë Bar/Restorant' },
                         ]"
