@@ -22,6 +22,7 @@ use App\Models\Warehouse;
 use App\Services\BaseCurrency;
 use App\Services\BillDocumentAiExtractor;
 use App\Services\CurrencyRates;
+use App\Services\FinanceLedger;
 use App\Services\GeminiClient;
 use App\Services\InventoryLedger;
 use App\Services\ReservationMoney;
@@ -428,7 +429,24 @@ class FinanceController extends Controller
             'ledger' => $ledger,
             'todayNet' => round($todayNet, 2),
             'currencies' => config('lora.tenant_currencies', ['EUR', 'ALL']),
+            'posAccountMode' => FinanceLedger::posAccountMode(),
         ]));
+    }
+
+    /** Where POS money lands: shared hotel accounts, split cash drawer, or split cash+bank. */
+    public function updatePosAccountMode(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'mode' => ['required', Rule::in([
+                FinanceLedger::POS_MODE_SHARED,
+                FinanceLedger::POS_MODE_SPLIT_CASH,
+                FinanceLedger::POS_MODE_SPLIT_ALL,
+            ])],
+        ]);
+
+        Setting::set('finance.pos_account_mode', $data['mode']);
+
+        return back()->with('success', 'Modaliteti i llogarive POS u ruajt — pagesat e reja ndjekin routimin e ri, historiku nuk preket.');
     }
 
     /** New cash box or bank account (owner-only via manage_finance_settings). */
@@ -465,9 +483,10 @@ class FinanceController extends Controller
      */
     public function toggleAccount(Request $request, FinanceAccount $account): RedirectResponse
     {
-        if ($account->is_active && $account->currency === BaseCurrency::code()) {
+        if ($account->is_active && $account->scope === 'general' && $account->currency === BaseCurrency::code()) {
             $lastOfType = ! FinanceAccount::where('type', $account->type)
                 ->where('currency', BaseCurrency::code())
+                ->where('scope', 'general')
                 ->where('is_active', true)->where('id', '!=', $account->id)->exists();
             if ($lastOfType) {
                 $lloji = $account->type === 'cash' ? 'arkë' : 'bankë';
@@ -1693,6 +1712,7 @@ class FinanceController extends Controller
                 'name' => $a->name,
                 'type' => $a->type,
                 'currency' => $a->currency,
+                'scope' => $a->scope,
                 'iban' => $a->iban,
                 'is_active' => $a->is_active,
                 'balance' => $balance,
