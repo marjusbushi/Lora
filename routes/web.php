@@ -431,6 +431,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/warehouses', [InventoryController::class, 'storeWarehouse'])->middleware('permission:manage_inventory')->name('inventory.warehouses.store');
         Route::put('/warehouses/{warehouse}', [InventoryController::class, 'updateWarehouse'])->middleware('permission:manage_inventory')->name('inventory.warehouses.update');
         Route::post('/transfers', [InventoryController::class, 'transfer'])->middleware('permission:manage_inventory')->name('inventory.transfers.store');
+        Route::post('/write-offs', [InventoryController::class, 'writeOff'])->middleware('permission:manage_stock_writeoffs')->name('inventory.write-offs.store');
     });
 
     // Admin-only: User Management + Settings

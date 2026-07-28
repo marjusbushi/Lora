@@ -4080,7 +4080,19 @@
       "transfer_out": "Transferim dalës",
       "sale": "Shitje",
       "adjustment": "Rregullim",
-      "room_charge": "Konsum dhome"
+      "room_charge": "Konsum dhome",
+      "write_off": "Nxjerrje nga stoku"
+    },
+    "writeOff": {
+      "action": "Nxirr nga stoku",
+      "hint": "Regjistrohet si lëvizje me arsye dhe autor — historiku i stokut mbetet gjithmonë i rakorduar.",
+      "warehouse": "Magazina",
+      "quantity": "Sasia",
+      "available": "Disponueshëm: {value}",
+      "reason": "Arsyeja",
+      "notes": "Shënim (opsional)",
+      "notesPlaceholder": "p.sh. 2 batanije të grisura",
+      "submit": "Nxirr nga stoku"
     },
     "warehouseTypes": {
       "central": "Qendrore",

@@ -4080,7 +4080,19 @@
       "transfer_out": "Transfer out",
       "sale": "Sale",
       "adjustment": "Adjustment",
-      "room_charge": "Room consumption"
+      "room_charge": "Room consumption",
+      "write_off": "Write-off"
+    },
+    "writeOff": {
+      "action": "Write off stock",
+      "hint": "Recorded as a movement with a reason and author — the stock history always reconciles.",
+      "warehouse": "Warehouse",
+      "quantity": "Quantity",
+      "available": "Available: {value}",
+      "reason": "Reason",
+      "notes": "Note (optional)",
+      "notesPlaceholder": "e.g. 2 torn blankets",
+      "submit": "Write off"
     },
     "warehouseTypes": {
       "central": "Central",
