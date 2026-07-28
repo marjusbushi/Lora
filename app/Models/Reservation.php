@@ -42,6 +42,7 @@ class Reservation extends TenantModel
         'confirmation_token',
         'check_in_date',
         'check_out_date',
+        'original_check_out_date',
         'status',
         'total_amount',
         'currency',
@@ -70,6 +71,14 @@ class Reservation extends TenantModel
         'etd',
         'early_check_in',
         'late_check_out',
+        'early_departure_original_room_total',
+        'early_departure_scheduled_at',
+        'early_departure_scheduled_by',
+        'early_departure_at',
+        'early_departure_by',
+        'early_departure_policy',
+        'early_departure_penalty_amount',
+        'early_departure_reason',
     ];
 
     /**
@@ -130,6 +139,7 @@ class Reservation extends TenantModel
             // read '2026-09-06' — the edit form shifted every date one day back.
             'check_in_date' => 'date:Y-m-d',
             'check_out_date' => 'date:Y-m-d',
+            'original_check_out_date' => 'date:Y-m-d',
             'booked_at' => 'datetime',
             'total_amount' => 'decimal:2',
             'exchange_rate' => 'decimal:6',
@@ -145,6 +155,10 @@ class Reservation extends TenantModel
             'no_show_at' => 'datetime',
             'early_check_in' => 'boolean',
             'late_check_out' => 'boolean',
+            'early_departure_original_room_total' => 'decimal:2',
+            'early_departure_scheduled_at' => 'datetime',
+            'early_departure_at' => 'datetime',
+            'early_departure_penalty_amount' => 'decimal:2',
         ];
     }
 
@@ -161,6 +175,16 @@ class Reservation extends TenantModel
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function earlyDepartureBy()
+    {
+        return $this->belongsTo(User::class, 'early_departure_by');
+    }
+
+    public function earlyDepartureScheduledBy()
+    {
+        return $this->belongsTo(User::class, 'early_departure_scheduled_by');
     }
 
     public function folioItems()

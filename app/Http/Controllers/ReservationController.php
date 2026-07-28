@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\EarlyDepartureRequest;
 use App\Http\Requests\ReservationStoreRequest;
 use App\Http\Requests\ReservationUpdateRequest;
+use App\Http\Requests\StayExtensionRequest;
 use App\Models\AuditLog;
 use App\Models\ChannelSyncLog;
 use App\Models\CleaningTask;
@@ -21,11 +23,13 @@ use App\Models\Setting;
 use App\Models\Warehouse;
 use App\Services\AuditTimeline;
 use App\Services\BaseCurrency;
+use App\Services\EarlyDepartureService;
 use App\Services\FatureAlConfiguration;
 use App\Services\InventoryLedger;
 use App\Services\ReservationConflictService;
 use App\Services\ReservationMoney;
 use App\Services\RoomPricing;
+use App\Services\StayExtensionService;
 use App\Services\TenantBillingService;
 use App\Services\VatConfiguration;
 use App\Tenancy\TenantContext;
@@ -56,10 +60,28 @@ class ReservationController extends Controller
             $sort = 'latest';
         }
 
+        $dateFrom = $this->normalizedListDate($request->input('date_from'));
+        $dateTo = $this->normalizedListDate($request->input('date_to'));
+
+        if ($dateFrom !== null && $dateTo !== null && $dateFrom > $dateTo) {
+            [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
+        }
+
         $query = $this->reservationListQuery();
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
+        }
+
+        // Reservation stays use a half-open interval [check-in, check-out).
+        // The selected "to" date is inclusive for the user, so a stay checking
+        // in on that date is included while one checking out on "from" is not.
+        if ($dateFrom !== null) {
+            $query->where('check_out_date', '>', $dateFrom);
+        }
+
+        if ($dateTo !== null) {
+            $query->where('check_in_date', '<=', $dateTo);
         }
 
         if ($request->filled('search')) {
@@ -84,7 +106,7 @@ class ReservationController extends Controller
             });
         }
 
-        $today = today()->toDateString();
+        $today = $this->hotelToday();
 
         if ($sort === 'checkin') {
             $query
@@ -135,6 +157,8 @@ class ReservationController extends Controller
         $query->orderByDesc('created_at')->orderByDesc('id');
 
         $filters = array_merge($request->only('status', 'search'), [
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
             'per_page' => $perPage,
             'sort' => $sort,
         ]);
@@ -160,6 +184,7 @@ class ReservationController extends Controller
                 ->orderBy('last_name')
                 ->get(),
             'filters' => $filters,
+            'hotelToday' => $today,
             'channelFees' => Setting::get('financial.channel_fees', []),
             'reconciliation' => [
                 'open' => OtaReconciliationIssue::where('status', 'open')->count(),
@@ -181,6 +206,22 @@ class ReservationController extends Controller
                     ->whereIn('status', ['pending', 'confirmed'])->count(),
             ],
         ]);
+    }
+
+    private function normalizedListDate(mixed $value): ?string
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        $errors = \DateTimeImmutable::getLastErrors();
+
+        if ($date === false || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return null;
+        }
+
+        return $date->format('Y-m-d') === $value ? $value : null;
     }
 
     public function calendar(Request $request, ReservationConflictService $conflictService): Response
@@ -205,7 +246,12 @@ class ReservationController extends Controller
             'payment_collect', 'notes', 'eta', 'booking_group_id', 'created_at'
         )
             ->with('guest:id,first_name,last_name,phone,email,nationality')
-            ->withSum(['payments as paid_amount_base' => fn ($query) => $query->notVoided()], 'amount_base')
+            ->withSum(['payments as paid_amount_base' => fn ($query) => $query
+                ->notVoided()
+                ->where(fn ($payments) => $payments->whereNull('type')->orWhere('type', '!=', 'refund'))], 'amount_base')
+            ->withSum(['payments as refunded_amount_base' => fn ($query) => $query
+                ->notVoided()
+                ->where('type', 'refund')], 'amount_base')
             ->whereNotIn('status', ['cancelled'])
             ->where('check_in_date', '<=', $endDate)
             ->where('check_out_date', '>=', $startDate)
@@ -229,7 +275,11 @@ class ReservationController extends Controller
                 'payment_collect' => $r->payment_collect,
                 'notes' => $r->notes,
                 'eta' => $r->eta,
-                'paid_amount' => round((float) $r->paid_amount_base / max((float) $r->exchange_rate, 0.000001), 2),
+                'paid_amount' => round(
+                    ((float) $r->paid_amount_base - (float) $r->refunded_amount_base)
+                    / max((float) $r->exchange_rate, 0.000001),
+                    2
+                ),
                 'booking_group_id' => $r->booking_group_id,
                 'created_at' => $r->created_at?->toIso8601String(),
                 'guest' => $r->guest ? [
@@ -314,7 +364,7 @@ class ReservationController extends Controller
             ->where('environment', $fiscalEnvironment)
             ->first();
         $paymentMethods = $reservation->payments
-            ->reject(fn ($payment) => $payment->is_voided)
+            ->reject(fn ($payment) => $payment->is_voided || $payment->type === 'refund')
             ->pluck('method')
             ->unique()
             ->values();
@@ -386,7 +436,23 @@ class ReservationController extends Controller
                 'status' => $reservation->status,
                 'check_in_date' => $reservation->check_in_date?->toDateString(),
                 'check_out_date' => $reservation->check_out_date?->toDateString(),
+                'original_check_out_date' => $reservation->original_check_out_date?->toDateString(),
+                'early_departure_original_room_total' => $reservation->early_departure_original_room_total !== null
+                    ? (float) $reservation->early_departure_original_room_total
+                    : null,
+                'early_departure_scheduled_at' => $reservation->early_departure_scheduled_at?->toIso8601String(),
+                'early_departure_at' => $reservation->early_departure_at?->toIso8601String(),
+                'early_departure_policy' => $reservation->early_departure_policy,
+                'early_departure_penalty_amount' => $reservation->early_departure_penalty_amount !== null
+                    ? (float) $reservation->early_departure_penalty_amount
+                    : null,
+                'early_departure_reason' => $reservation->early_departure_reason,
                 'nights' => $reservation->nights,
+                'total_amount' => $roomCharge,
+                'currency' => ReservationMoney::currency($reservation),
+                'gross_amount' => $gross,
+                'paid_amount' => round($paid, 2),
+                'outstanding_amount' => $outstanding,
                 'adults' => $reservation->adults,
                 'children' => $reservation->children,
                 'notes' => $reservation->notes,
@@ -431,12 +497,14 @@ class ReservationController extends Controller
                 'paid' => round($paid, 2),
                 'outstanding' => $outstanding,
             ],
+            'hotelToday' => $hotelToday,
             'payments' => $reservation->payments->map(fn ($p) => [
                 'id' => $p->id,
                 'amount' => ReservationMoney::paymentAmount($reservation, $p),
                 'original_amount' => (float) $p->amount,
                 'original_currency' => $p->currency,
                 'method' => $p->method,
+                'type' => $p->type,
                 'date' => $p->created_at?->toDateString(),
             ]),
             'openPosOrders' => $openPosOrders,
@@ -1086,6 +1154,12 @@ class ReservationController extends Controller
             return back()->with('error', 'Vetem mysafiret brenda mund te bejne check-out.');
         }
 
+        if ($reservation->early_departure_scheduled_at && ! $reservation->early_departure_at) {
+            throw ValidationException::withMessages([
+                'departure_date' => 'Ky qëndrim ka largim të parakohshëm të planifikuar. Përdor veprimin “Përfundo largimin”.',
+            ]);
+        }
+
         // Don't let a guest leave with an unsettled bar/restaurant tab still open.
         $openOrders = PosOrder::where('reservation_id', $reservation->id)
             ->where('status', 'open')
@@ -1168,6 +1242,58 @@ class ReservationController extends Controller
         return back()->with('success', $message);
     }
 
+    public function earlyDeparture(
+        EarlyDepartureRequest $request,
+        Reservation $reservation,
+        EarlyDepartureService $service,
+    ): RedirectResponse {
+        $result = $service->handle($reservation, $request->validated(), $request->user()?->id);
+        $message = $result['mode'] === 'scheduled'
+            ? 'Largimi i parakohshëm u planifikua dhe netët e mbetura u liruan në inventar.'
+            : ($result['room_number']
+                ? "Largimi i parakohshëm për dhomën {$result['room_number']} u përfundua."
+                : 'Largimi i parakohshëm u përfundua.');
+
+        return back()->with('success', $message);
+    }
+
+    public function cancelEarlyDeparturePlan(
+        Request $request,
+        Reservation $reservation,
+        EarlyDepartureService $service,
+    ): RedirectResponse {
+        abort_unless($request->user()?->can('update_reservations'), 403);
+        $service->cancelPlan($reservation, $request->user()?->id);
+
+        return back()->with('success', 'Plani i largimit të parakohshëm u anulua dhe inventari u rikthye.');
+    }
+
+    public function stayExtensionQuote(
+        Request $request,
+        Reservation $reservation,
+        StayExtensionService $service,
+    ): JsonResponse {
+        abort_unless($request->user()?->can('update_reservations'), 403);
+        $data = $request->validate([
+            'new_check_out_date' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        return response()->json($service->quote($reservation, $data['new_check_out_date']));
+    }
+
+    public function extendStay(
+        StayExtensionRequest $request,
+        Reservation $reservation,
+        StayExtensionService $service,
+    ): RedirectResponse {
+        $result = $service->extend($reservation, $request->validated(), $request->user()?->id);
+
+        return back()->with(
+            'success',
+            "Qëndrimi në dhomën {$result['room_number']} u zgjat me {$result['additional_nights']} net."
+        );
+    }
+
     /**
      * Front desk requests a stayover (daily) cleaning while the guest is still in-house.
      * Creates a stayover_clean task WITHOUT ending the stay or touching room status —
@@ -1208,14 +1334,23 @@ class ReservationController extends Controller
                 'id', 'room_id', 'guest_id', 'check_in_date', 'check_out_date',
                 'status', 'total_amount', 'adults', 'children', 'channel', 'channel_ref',
                 'currency', 'exchange_rate', 'total_amount_base',
-                'payment_collect', 'notes', 'created_via', 'created_at'
+                'payment_collect', 'notes', 'created_via', 'created_at',
+                'original_check_out_date', 'early_departure_original_room_total',
+                'early_departure_scheduled_at', 'early_departure_at',
+                'early_departure_policy', 'early_departure_penalty_amount',
+                'early_departure_reason'
             )
             ->with([
                 'room:id,room_number,room_type_id',
                 'room.roomType:id,name',
                 'guest:id,first_name,last_name,email,phone',
             ])
-            ->withSum(['payments as paid_amount_base' => fn ($query) => $query->notVoided()], 'amount_base')
+            ->withSum(['payments as paid_amount_base' => fn ($query) => $query
+                ->notVoided()
+                ->where(fn ($payments) => $payments->whereNull('type')->orWhere('type', '!=', 'refund'))], 'amount_base')
+            ->withSum(['payments as refunded_amount_base' => fn ($query) => $query
+                ->notVoided()
+                ->where('type', 'refund')], 'amount_base')
             ->withSum(['folioItems as extra_charges_base' => fn ($query) => $query->whereNotIn('type', ['discount', 'room'])], 'amount_base')
             ->withSum(['folioItems as discount_amount_base_sum' => fn ($query) => $query->where('type', 'discount')], 'amount_base');
     }
@@ -1229,7 +1364,10 @@ class ReservationController extends Controller
             - (float) $reservation->discount_amount_base_sum,
             2
         );
-        $paidBase = round((float) $reservation->paid_amount_base, 2);
+        $paidBase = round(
+            (float) $reservation->paid_amount_base - (float) $reservation->refunded_amount_base,
+            2
+        );
         $gross = round($grossBase / $rate, 2);
         $paid = round($paidBase / $rate, 2);
 
@@ -1239,6 +1377,17 @@ class ReservationController extends Controller
             'guest_id' => $reservation->guest_id,
             'check_in_date' => $reservation->check_in_date?->toDateString(),
             'check_out_date' => $reservation->check_out_date?->toDateString(),
+            'original_check_out_date' => $reservation->original_check_out_date?->toDateString(),
+            'early_departure_original_room_total' => $reservation->early_departure_original_room_total !== null
+                ? (float) $reservation->early_departure_original_room_total
+                : null,
+            'early_departure_scheduled_at' => $reservation->early_departure_scheduled_at?->toIso8601String(),
+            'early_departure_at' => $reservation->early_departure_at?->toIso8601String(),
+            'early_departure_policy' => $reservation->early_departure_policy,
+            'early_departure_penalty_amount' => $reservation->early_departure_penalty_amount !== null
+                ? (float) $reservation->early_departure_penalty_amount
+                : null,
+            'early_departure_reason' => $reservation->early_departure_reason,
             'nights' => $reservation->nights,
             'status' => $reservation->status,
             'total_amount' => (float) $reservation->total_amount,
@@ -1272,6 +1421,13 @@ class ReservationController extends Controller
             ] : null,
             'links' => $this->reservationLinks($reservation, $request),
         ];
+    }
+
+    private function hotelToday(): string
+    {
+        $timezone = app(TenantContext::class)->tenant()?->timezone ?: config('app.timezone');
+
+        return CarbonImmutable::today($timezone)->toDateString();
     }
 
     private function reservationLinks(Reservation $reservation, Request $request): array
