@@ -429,7 +429,6 @@ class FinanceController extends Controller
             'ledger' => $ledger,
             'todayNet' => round($todayNet, 2),
             'currencies' => config('lora.tenant_currencies', ['EUR', 'ALL']),
-            'posAccountMode' => FinanceLedger::posAccountMode(),
         ]));
     }
 
