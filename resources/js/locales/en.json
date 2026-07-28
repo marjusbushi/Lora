@@ -5083,6 +5083,7 @@
       "opening": "Opening",
       "received": "Received",
       "consumed": "Consumed",
+      "writtenOff": "Written off",
       "ending": "Ending",
       "unitCost": "Unit cost",
       "value": "Value",

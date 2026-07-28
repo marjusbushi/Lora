@@ -82,6 +82,7 @@ const consumptionBars = computed(() => topConsumption.value.map((row) => ({
                             <th class="px-4 py-3 text-right">{{ $t('reports360.stockValuation.opening') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.stockValuation.received') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.stockValuation.consumed') }}</th>
+                            <th class="px-4 py-3 text-right">{{ $t('reports360.stockValuation.writtenOff') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.stockValuation.ending') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.stockValuation.unitCost') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.stockValuation.value') }}</th>
@@ -97,6 +98,7 @@ const consumptionBars = computed(() => topConsumption.value.map((row) => ({
                             <td class="px-4 py-3 text-right text-body-sm tabular-nums text-neutral-600">{{ number(row.opening_quantity, 4) }}</td>
                             <td class="px-4 py-3 text-right text-body-sm tabular-nums text-success-700">{{ number(row.received_quantity, 4) }}</td>
                             <td class="px-4 py-3 text-right text-body-sm tabular-nums text-info-700">{{ number(row.consumed_quantity, 4) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm tabular-nums" :class="row.written_off_quantity > 0 ? 'text-warning-700' : 'text-neutral-400'">{{ number(row.written_off_quantity, 4) }}</td>
                             <td class="px-4 py-3 text-right text-body-sm font-semibold tabular-nums text-primary-900">{{ number(row.ending_quantity, 4) }} {{ row.unit }}</td>
                             <td class="px-4 py-3 text-right text-body-sm tabular-nums text-neutral-600">{{ money(row.unit_cost) }}</td>
                             <td class="px-4 py-3 text-right text-body-sm font-semibold tabular-nums text-primary-900">{{ money(row.ending_value) }}</td>
