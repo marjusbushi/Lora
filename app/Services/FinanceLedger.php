@@ -7,6 +7,7 @@ use App\Models\FinancePayment;
 use App\Models\Payment;
 use App\Models\PosOrderPayment;
 use App\Models\PosShift;
+use App\Models\Setting;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -22,15 +23,40 @@ use Illuminate\Database\Eloquent\Model;
  */
 class FinanceLedger
 {
-    public static function accountFor(string $method, ?string $currency = null): FinanceAccount
+    /** Where POS money lands, per hotel: the shared hotel accounts (default), a separate POS cash drawer, or separate POS cash AND bank accounts. */
+    public const POS_MODE_SHARED = 'shared';
+
+    public const POS_MODE_SPLIT_CASH = 'split_cash';
+
+    public const POS_MODE_SPLIT_ALL = 'split_all';
+
+    public static function posAccountMode(): string
+    {
+        $mode = Setting::get('finance.pos_account_mode');
+
+        return in_array($mode, [self::POS_MODE_SPLIT_CASH, self::POS_MODE_SPLIT_ALL], true)
+            ? $mode
+            : self::POS_MODE_SHARED;
+    }
+
+    public static function accountFor(string $method, ?string $currency = null, bool $pos = false): FinanceAccount
     {
         FinanceAccount::ensureDefaults();
 
         $type = $method === 'cash' ? 'cash' : 'bank';
         $currency = strtoupper($currency ?: BaseCurrency::code());
 
+        // POS money gets its own Bar/Restorant accounts only when the hotel
+        // opted in: cash in both split modes, cards only in split_all. Scope
+        // — not the (renamable) name — is the routing key.
+        $mode = self::posAccountMode();
+        $scope = $pos && ($type === 'cash' ? $mode !== self::POS_MODE_SHARED : $mode === self::POS_MODE_SPLIT_ALL)
+            ? 'pos'
+            : 'general';
+
         $account = FinanceAccount::where('type', $type)
             ->where('currency', $currency)
+            ->where('scope', $scope)
             ->orderBy('id')
             ->orderByDesc('is_active')
             ->first();
@@ -45,21 +71,25 @@ class FinanceLedger
             return $account;
         }
 
-        if ($currency === BaseCurrency::code()) {
+        if ($scope === 'general' && $currency === BaseCurrency::code()) {
             // ensureDefaults guarantees the base accounts exist.
             return FinanceAccount::where('type', $type)
                 ->where('currency', $currency)
+                ->where('scope', 'general')
                 ->orderBy('id')
                 ->firstOrFail();
         }
 
-        // First foreign-currency tender for this drawer type: create the
-        // account on the spot (mirrors ensureDefaults) so the sale never
-        // blocks on a missing configuration.
+        // First tender for this drawer/currency/scope: create the account on
+        // the spot (mirrors ensureDefaults) so the sale never blocks on a
+        // missing configuration.
         return FinanceAccount::create([
-            'name' => ($type === 'cash' ? 'Arka ' : 'Banka ').$currency,
+            'name' => ($type === 'cash' ? 'Arka' : 'Banka')
+                .($scope === 'pos' ? ' Bar/Restorant' : '')
+                .($currency === BaseCurrency::code() ? '' : ' '.$currency),
             'type' => $type,
             'currency' => $currency,
+            'scope' => $scope,
             'is_active' => true,
         ]);
     }
@@ -139,7 +169,7 @@ class FinanceLedger
         ]);
         $ledger->fill([
             'direction' => $payment->direction,
-            'account_id' => self::accountFor($payment->method, $foreign ? $currency : null)->id,
+            'account_id' => self::accountFor($payment->method, $foreign ? $currency : null, pos: true)->id,
             'amount' => $foreign ? $payment->tendered_amount : $payment->amount,
             'currency' => $foreign ? $currency : $baseCurrency,
             // FinancePayment uses source units per 1 base unit; the POS tender
@@ -193,7 +223,7 @@ class FinanceLedger
             ['sourceable_type' => PosShift::class, 'sourceable_id' => $shift->id],
             [
                 'direction' => $yield > 0 ? 'in' : 'out',
-                'account_id' => self::accountFor('cash')->id,
+                'account_id' => self::accountFor('cash', pos: true)->id,
                 'amount' => abs($yield),
                 'currency' => BaseCurrency::code(),
                 'fx_rate' => null,

@@ -13,7 +13,7 @@ use App\Services\BaseCurrency;
  */
 class FinanceAccount extends TenantModel
 {
-    protected $fillable = ['name', 'type', 'currency', 'iban', 'is_active'];
+    protected $fillable = ['name', 'type', 'currency', 'scope', 'iban', 'is_active'];
 
     protected $casts = ['is_active' => 'boolean'];
 
