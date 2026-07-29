@@ -178,6 +178,12 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
             ->scopeBindings()->name('tenants.domains.destroy');
         Route::patch('/tenants/{tenant}/domains/{domain}/primary', [SuperAdminTenantController::class, 'makePrimaryDomain'])
             ->scopeBindings()->name('tenants.domains.primary');
+        Route::post('/tenants/{tenant}/domains/{domain}/verify-dns', [SuperAdminTenantController::class, 'verifyDomainDns'])
+            ->scopeBindings()->middleware('throttle:20,1')->name('tenants.domains.verify');
+        Route::post('/tenants/{tenant}/domains/{domain}/provision', [SuperAdminTenantController::class, 'provisionDomain'])
+            ->scopeBindings()->middleware('throttle:10,1')->name('tenants.domains.provision');
+        Route::post('/tenants/{tenant}/domains/{domain}/refresh-status', [SuperAdminTenantController::class, 'refreshDomainStatus'])
+            ->scopeBindings()->middleware('throttle:20,1')->name('tenants.domains.refresh');
         Route::get('/billing/invoices', [SuperAdminBillingInvoiceController::class, 'index'])->name('billing.invoices.index');
         Route::get('/billing/invoices/{invoice}', [SuperAdminBillingInvoiceController::class, 'show'])->name('billing.invoices.show');
         Route::post('/billing/invoices', [SuperAdminBillingInvoiceController::class, 'store'])->name('billing.invoices.store');

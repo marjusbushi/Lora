@@ -8,7 +8,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TenantDomain extends Model
 {
-    protected $fillable = ['tenant_id', 'domain', 'is_primary'];
+    /** Lifecycle: the client points DNS, we provision the server, then it serves. */
+    public const STATUS_PENDING_DNS = 'pending_dns';
+
+    public const STATUS_PROVISIONING = 'provisioning';
+
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_FAILED = 'failed';
+
+    protected $fillable = ['tenant_id', 'domain', 'is_primary', 'status', 'status_message', 'verified_at'];
 
     protected static function booted(): void
     {
@@ -18,7 +27,7 @@ class TenantDomain extends Model
 
     protected function casts(): array
     {
-        return ['is_primary' => 'boolean'];
+        return ['is_primary' => 'boolean', 'verified_at' => 'datetime'];
     }
 
     public function tenant(): BelongsTo

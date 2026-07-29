@@ -265,6 +265,28 @@ function makePrimary(domain) {
     router.patch(route('super-admin.tenants.domains.primary', [props.tenant.id, domain.id]), {}, { preserveScroll: true });
 }
 
+// Domain lifecycle: verify DNS → provision on Forge → active.
+const domainBusy = ref(null);
+
+function domainAction(domain, routeName) {
+    domainBusy.value = domain.id;
+    router.post(route(routeName, [props.tenant.id, domain.id]), {}, {
+        preserveScroll: true,
+        onFinish: () => { domainBusy.value = null; },
+    });
+}
+
+const domainStatusMeta = {
+    pending_dns: { label: 'Pret DNS', class: 'bg-amber-50 text-amber-700' },
+    provisioning: { label: 'Duke u provizionuar', class: 'bg-sky-50 text-sky-700' },
+    active: { label: 'Aktiv', class: 'bg-emerald-50 text-emerald-700' },
+    failed: { label: 'Dështoi', class: 'bg-red-50 text-red-700' },
+};
+
+function isPlatformSubdomain(domain) {
+    return domain.domain.endsWith('.lorapms.com');
+}
+
 function saveConfig() {
     const options = { preserveScroll: true, onSuccess: closeDrawer };
     if (configTab.value === 'channex') {
@@ -482,7 +504,45 @@ function toggleStatus() {
                         </form>
 
                         <div v-else-if="activeDrawer === 'config'">
-                            <section v-if="configTab === 'domains'" class="space-y-4"><div class="flex items-start gap-2.5"><Globe2 class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">Domain-et e hotelit</strong><p class="mt-0.5 text-[10px] text-neutral-500">Domain primar dhe adresat alternative.</p></div></div><div class="overflow-hidden rounded-xl border border-neutral-200"><div v-for="domain in tenant.domains" :key="domain.id" class="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 border-b border-neutral-100 px-3 py-3 last:border-b-0"><span class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><Globe2 class="h-4 w-4" /></span><div><strong class="block text-xs text-neutral-900">{{ domain.domain }}</strong><span class="mt-0.5 block text-[9px] text-neutral-500">{{ domain.is_primary ? 'Domain primar' : 'Domain alternativ' }}</span></div><div class="flex gap-2"><span v-if="domain.is_primary" class="rounded-lg bg-emerald-50 px-2 py-1 text-[9px] font-bold text-emerald-700">Primar</span><Button v-else size="sm" variant="outline" @click="makePrimary(domain)">Bëj primar</Button><Button v-if="!domain.is_primary" size="sm" variant="outline" class="!text-red-600" @click="removeDomain(domain)">Hiq</Button></div></div></div><form class="rounded-xl border border-neutral-200 p-4" @submit.prevent="addDomain"><label class="text-[11px] font-semibold text-neutral-600">Shto domain të ri<div class="mt-1.5 flex gap-2"><input v-model="domainForm.domain" placeholder="booking.hoteli.al" class="min-w-0 flex-1 rounded-xl border-neutral-300 text-sm" /><Button type="submit" variant="primary" :disabled="domainForm.processing">Shto</Button></div></label><p v-if="domainForm.errors.domain" class="mt-2 text-xs text-red-600">{{ domainForm.errors.domain }}</p><p class="mt-2 text-[9px] text-neutral-500">Pas shtimit duhet të konfigurohen DNS records.</p></form></section>
+                            <section v-if="configTab === 'domains'" class="space-y-4">
+                                <div class="flex items-start gap-2.5"><Globe2 class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">Domain-et e hotelit</strong><p class="mt-0.5 text-[10px] text-neutral-500">Cikli: klienti drejton DNS-in → verifikohet → provizionohet siti + SSL → aktiv.</p></div></div>
+                                <div class="overflow-hidden rounded-xl border border-neutral-200">
+                                    <div v-for="domain in tenant.domains" :key="domain.id" class="border-b border-neutral-100 px-3 py-3 last:border-b-0">
+                                        <div class="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3">
+                                            <span class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><Globe2 class="h-4 w-4" /></span>
+                                            <div class="min-w-0">
+                                                <div class="flex flex-wrap items-center gap-1.5">
+                                                    <strong class="text-xs text-neutral-900">{{ domain.domain }}</strong>
+                                                    <span class="rounded-lg px-2 py-0.5 text-[9px] font-bold" :class="domainStatusMeta[domain.status]?.class || 'bg-neutral-100 text-neutral-600'">{{ domainStatusMeta[domain.status]?.label || domain.status }}</span>
+                                                    <span v-if="domain.is_primary" class="rounded-lg bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">Primar</span>
+                                                </div>
+                                                <span v-if="domain.status_message" class="mt-0.5 block text-[9px]" :class="domain.status === 'failed' ? 'text-red-600' : 'text-neutral-500'">{{ domain.status_message }}</span>
+                                                <span v-else-if="isPlatformSubdomain(domain)" class="mt-0.5 block text-[9px] text-neutral-500">Nën-domain i platformës — DNS-i ynë, klienti s'vendos asgjë.</span>
+                                            </div>
+                                            <div class="flex flex-wrap justify-end gap-1.5">
+                                                <Button v-if="domain.status !== 'active'" size="sm" variant="outline" :disabled="domainBusy === domain.id" @click="domainAction(domain, 'super-admin.tenants.domains.verify')">Verifiko DNS</Button>
+                                                <Button v-if="domain.verified_at && ['pending_dns', 'failed'].includes(domain.status)" size="sm" variant="primary" :disabled="domainBusy === domain.id" @click="domainAction(domain, 'super-admin.tenants.domains.provision')">Provizio</Button>
+                                                <Button v-if="domain.status === 'provisioning'" size="sm" variant="outline" :disabled="domainBusy === domain.id" @click="domainAction(domain, 'super-admin.tenants.domains.refresh')">Rifresko</Button>
+                                                <Button v-if="!domain.is_primary" size="sm" variant="outline" @click="makePrimary(domain)">Bëj primar</Button>
+                                                <Button v-if="!domain.is_primary" size="sm" variant="outline" class="!text-red-600" @click="removeDomain(domain)">Hiq</Button>
+                                            </div>
+                                        </div>
+                                        <div v-if="domain.status === 'pending_dns' && !isPlatformSubdomain(domain)" class="mt-2 rounded-lg bg-neutral-50 p-3">
+                                            <p class="text-[9px] font-bold uppercase tracking-wide text-neutral-500">Udhëzimet për klientin — te paneli DNS i domain-it të vet</p>
+                                            <div class="mt-1.5 overflow-x-auto">
+                                                <table class="text-[10px] text-neutral-700">
+                                                    <tbody>
+                                                        <tr><td class="pr-3 font-mono">@</td><td class="pr-3 font-bold">A</td><td class="font-mono">{{ tenant.domainServerIp || '—' }}</td></tr>
+                                                        <tr><td class="pr-3 font-mono">www</td><td class="pr-3 font-bold">A</td><td class="font-mono">{{ tenant.domainServerIp || '—' }}</td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <p class="mt-1.5 text-[9px] text-neutral-500">Asnjë ndryshim nameserver-ash — vetëm këto dy records. Pas vendosjes (deri 1 orë propagim), kliko "Verifiko DNS".</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <form class="rounded-xl border border-neutral-200 p-4" @submit.prevent="addDomain"><label class="text-[11px] font-semibold text-neutral-600">Shto domain të ri<div class="mt-1.5 flex gap-2"><input v-model="domainForm.domain" placeholder="booking.hoteli.al" class="min-w-0 flex-1 rounded-xl border-neutral-300 text-sm" /><Button type="submit" variant="primary" :disabled="domainForm.processing">Shto</Button></div></label><p v-if="domainForm.errors.domain" class="mt-2 text-xs text-red-600">{{ domainForm.errors.domain }}</p><p class="mt-2 text-[9px] text-neutral-500">Domain-i i ri nis te "Pret DNS" me udhëzimet për klientin.</p></form>
+                            </section>
 
                             <section v-else-if="configTab === 'channex'" class="space-y-4"><div class="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4"><div><strong class="text-xs text-neutral-900">Channex Channel Manager</strong><p class="mt-1 text-[10px] text-neutral-500">Sinkronizon OTA-t, rezervimet dhe disponibilitetin.</p></div><button type="button" class="relative h-6 w-11 rounded-full transition" :class="channexForm.enabled ? 'bg-emerald-700' : 'bg-neutral-300'" @click="channexForm.enabled = !channexForm.enabled"><span class="absolute top-1 h-4 w-4 rounded-full bg-white shadow transition" :class="channexForm.enabled ? 'left-6' : 'left-1'" /></button></div><div class="grid gap-4 rounded-xl border border-neutral-200 p-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">API key<input v-model="channexForm.api_key" type="password" :placeholder="tenant.integrations.channex.has_api_key ? '•••••••• (lëre bosh për ta mbajtur)' : 'Ngjit API key'" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Webhook secret<input v-model="channexForm.webhook_secret" type="password" :placeholder="tenant.integrations.channex.has_webhook_secret ? '•••••••• (lëre bosh për ta mbajtur)' : 'Ngjit webhook secret'" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Property ID<input v-model="channexForm.property_id" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Base URL<input v-model="channexForm.base_url" placeholder="https://app.channex.io/api/v1" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><p v-if="Object.keys(channexForm.errors).length" class="text-xs text-red-600 sm:col-span-2">{{ Object.values(channexForm.errors)[0] }}</p></div></section>
 
