@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
 use App\Models\MenuCategory;
@@ -125,20 +126,27 @@ class PosInventoryTest extends TestCase
         $warehouse = Warehouse::ensureDefault();
         $inventoryItem = InventoryItem::create(['name' => 'Birrë', 'sku' => 'BIRRE', 'type' => 'product', 'unit' => 'piece']);
 
-        $this->actingAs($admin)->post(route('settings.menu-categories.store'), [
-            'name' => 'Bar', 'outlet' => 'bar', 'warehouse_id' => $warehouse->id,
-        ])->assertRedirect()->assertSessionHasNoErrors();
-        $category = MenuCategory::where('name', 'Bar')->firstOrFail();
+        // Unified categories: a standalone menu item picks a TREE node; its
+        // POS group auto-creates, then keeps outlet/warehouse as settings.
+        $barNode = InventoryCategory::create(['name' => 'Bar']);
 
         $this->actingAs($admin)->post(route('settings.menu-items.store'), [
-            'menu_category_id' => $category->id, 'name' => 'Birrë 0.33', 'price' => 3,
+            'inventory_category_id' => $barNode->id, 'name' => 'Birrë 0.33', 'price' => 3,
             'inventory_components' => [[
                 'inventory_item_id' => $inventoryItem->id, 'quantity' => 1,
             ]],
         ])->assertRedirect()->assertSessionHasNoErrors();
 
         $menuItem = MenuItem::where('name', 'Birrë 0.33')->firstOrFail();
+        $category = $menuItem->category;
+        $this->assertSame($barNode->id, $category->inventory_category_id);
+
+        $this->actingAs($admin)->put(route('settings.menu-categories.update', $category), [
+            'outlet' => 'bar', 'warehouse_id' => $warehouse->id,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
         $this->assertSame($warehouse->id, $category->fresh()->warehouse_id);
+        $this->assertSame('Bar', $category->fresh()->name);
         $this->assertDatabaseHas('menu_item_inventory', [
             'menu_item_id' => $menuItem->id, 'inventory_item_id' => $inventoryItem->id, 'quantity' => 1,
         ]);

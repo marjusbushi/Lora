@@ -11,7 +11,7 @@ import TextInput from '@/Components/UI/TextInput.vue';
 import { money } from '@/Pages/Finance/financeShared.js';
 import { translate } from '@/i18n';
 
-const props = defineProps({ items: Array, warehouses: Array, posCategories: Array, categories: { type: Array, default: () => [] }, filters: Object, can: Object });
+const props = defineProps({ items: Array, warehouses: Array, categories: { type: Array, default: () => [] }, filters: Object, can: Object });
 const search = ref(props.filters.search || '');
 const status = ref(props.filters.status || 'active');
 const categoryFilter = ref(props.filters.category_id || '');
@@ -35,7 +35,7 @@ const defaultWarehouse = computed(() => props.warehouses[0]?.id || null);
 const form = useForm({
     name: '', sku: '', barcode: '', category_id: null, type: 'product', unit: 'piece', average_cost: 0,
     image: null, remove_image: false, selling_price: null, minimum_stock: 0,
-    sell_in_pos: false, pos_menu_category_id: null, pos_warehouse_id: null,
+    sell_in_pos: false, pos_warehouse_id: null,
     sell_in_rooms: false, room_selling_price: null, room_warehouse_id: null,
     initial_quantity: 0, initial_warehouse_id: null, is_active: true,
 });
@@ -52,7 +52,7 @@ function openNew() {
         category_id: null,
         type: 'product', unit: 'piece', average_cost: 0, image: null, remove_image: false,
         selling_price: null, minimum_stock: 0, sell_in_pos: false,
-        pos_menu_category_id: props.posCategories[0]?.id || null, pos_warehouse_id: defaultWarehouse.value,
+        pos_warehouse_id: defaultWarehouse.value,
         sell_in_rooms: false, room_selling_price: null, room_warehouse_id: defaultWarehouse.value,
         initial_quantity: 0, initial_warehouse_id: defaultWarehouse.value, is_active: true,
     });
@@ -66,7 +66,6 @@ function openEdit(item) {
         name: item.name, sku: item.sku, barcode: item.barcode || '', category_id: item.category_id || null, type: item.type,
         unit: item.unit, average_cost: item.average_cost, selling_price: item.selling_price, minimum_stock: item.minimum_stock,
         image: null, remove_image: false, sell_in_pos: item.sell_in_pos,
-        pos_menu_category_id: item.pos_menu_category_id || props.posCategories[0]?.id || null,
         pos_warehouse_id: item.pos_warehouse_id || defaultWarehouse.value,
         sell_in_rooms: item.sell_in_rooms, room_selling_price: item.room_selling_price,
         room_warehouse_id: item.room_warehouse_id || defaultWarehouse.value,
@@ -228,9 +227,9 @@ function deleteCategory(category) {
                     <div class="rounded-xl border p-4" :class="form.sell_in_pos ? 'border-blue-200 bg-blue-50/40' : 'border-neutral-200'">
                         <label class="flex cursor-pointer items-start justify-between gap-4"><span class="flex gap-3"><span class="grid h-10 w-10 place-items-center rounded-lg bg-blue-100 text-blue-700"><ShoppingBasket class="h-5 w-5" /></span><span><strong class="block text-primary-900">Shitet në POS</strong><small class="text-neutral-500">Shfaqe si produkt në bar/restorant.</small></span></span><input v-model="form.sell_in_pos" type="checkbox" class="mt-2 rounded border-neutral-300 text-accent-600 focus:ring-accent-500" /></label>
                         <div v-if="form.sell_in_pos" class="mt-4 grid gap-3 sm:grid-cols-2">
-                            <div><label class="mb-1 block text-tiny font-bold">Kategoria POS</label><select v-model="form.pos_menu_category_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option :value="null" disabled>Zgjidh kategorinë</option><option v-for="category in posCategories" :key="category.id" :value="category.id">{{ category.name }}</option></select><p v-if="form.errors.pos_menu_category_id" class="mt-1 text-tiny text-error-600">{{ form.errors.pos_menu_category_id }}</p></div>
                             <div><label class="mb-1 block text-tiny font-bold">Magazina POS</label><select v-model="form.pos_warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option></select><p v-if="form.errors.pos_warehouse_id" class="mt-1 text-tiny text-error-600">{{ form.errors.pos_warehouse_id }}</p></div>
-                            <div class="sm:col-span-2"><label class="mb-1 block text-tiny font-bold">Çmimi në POS (€)</label><TextInput v-model="form.selling_price" type="number" min="0.01" step="0.01" class="w-full" /><p v-if="form.errors.selling_price" class="mt-1 text-tiny text-error-600">{{ form.errors.selling_price }}</p></div>
+                            <div><label class="mb-1 block text-tiny font-bold">Çmimi në POS (€)</label><TextInput v-model="form.selling_price" type="number" min="0.01" step="0.01" class="w-full" /><p v-if="form.errors.selling_price" class="mt-1 text-tiny text-error-600">{{ form.errors.selling_price }}</p></div>
+                            <p class="sm:col-span-2 rounded-lg bg-blue-50 px-3 py-2 text-tiny text-blue-800">Në POS artikulli shfaqet nën kategorinë e vet të inventarit ("Kategoria" sipër).</p>
                         </div>
                     </div>
                     <div class="rounded-xl border p-4" :class="form.sell_in_rooms ? 'border-violet-200 bg-violet-50/40' : 'border-neutral-200'">
