@@ -13,6 +13,15 @@ return new class extends Migration
      * (Pije → Alkoolike → Verë), unlimited siblings, always optional.
      * Every distinct free-text value becomes a root category per tenant and
      * its items are linked before the old column is dropped — no data lost.
+     *
+     * SQLite caveat: inventory_items carries same-tenant integrity triggers
+     * (2026_07_16_140000) and other tables' triggers reference it. Any table
+     * REBUILD (which Laravel performs when adding an FK-constrained column)
+     * collides with those triggers and would silently drop the table's own
+     * ones. Every inventory_items change below therefore uses only native
+     * ADD/DROP COLUMN, and the FK constraint is added on the MySQL family
+     * alone — on SQLite (tests only) integrity is covered by application
+     * validation and the mysql-migrations CI job.
      */
     public function up(): void
     {
@@ -30,10 +39,20 @@ return new class extends Migration
             $table->index(['tenant_id', 'parent_id']);
         });
 
+        // Plain nullable column: native ADD COLUMN on every driver, no rebuild.
         Schema::table('inventory_items', function (Blueprint $table) {
-            // restrictOnDelete mirrors the app rule: only empty categories die.
-            $table->foreignId('category_id')->nullable()->after('category')->constrained('inventory_categories')->restrictOnDelete();
+            $table->unsignedBigInteger('category_id')->nullable()->after('category');
+            $table->index('category_id');
         });
+
+        if ($this->isMySqlFamily()) {
+            // restrictOnDelete mirrors the app rule: only empty categories die.
+            Schema::table('inventory_items', function (Blueprint $table) {
+                $table->foreign('category_id')
+                    ->references('id')->on('inventory_categories')
+                    ->restrictOnDelete();
+            });
+        }
 
         // Backfill runs on raw tables — tenant scopes must not narrow it.
         $now = now();
@@ -58,6 +77,7 @@ return new class extends Migration
                 ->update(['category_id' => $category->id]);
         }
 
+        // Native DROP COLUMN — 'category' is referenced by no index, trigger or view.
         Schema::table('inventory_items', function (Blueprint $table) {
             $table->dropColumn('category');
         });
@@ -71,13 +91,27 @@ return new class extends Migration
 
         // Best-effort reverse: each item gets its linked category's own name
         // (a sub-subcategory flattens to its own label, ancestry is lost).
+        // Correlated subquery instead of UPDATE..JOIN — SQLite has no join update.
         DB::table('inventory_items')
-            ->join('inventory_categories', 'inventory_items.category_id', '=', 'inventory_categories.id')
-            ->update(['inventory_items.category' => DB::raw('inventory_categories.name')]);
+            ->whereNotNull('category_id')
+            ->update(['category' => DB::raw(
+                '(SELECT name FROM inventory_categories WHERE inventory_categories.id = inventory_items.category_id)'
+            )]);
 
+        if ($this->isMySqlFamily()) {
+            Schema::table('inventory_items', function (Blueprint $table) {
+                $table->dropForeign(['category_id']);
+            });
+        }
         Schema::table('inventory_items', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('category_id');
+            $table->dropIndex(['category_id']);
+            $table->dropColumn('category_id');
         });
         Schema::dropIfExists('inventory_categories');
+    }
+
+    private function isMySqlFamily(): bool
+    {
+        return in_array(DB::getDriverName(), ['mysql', 'mariadb'], true);
     }
 };
