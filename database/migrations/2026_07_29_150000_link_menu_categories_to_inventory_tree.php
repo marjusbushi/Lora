@@ -91,5 +91,13 @@ return new class extends Migration
         if ($removable->isNotEmpty()) {
             DB::table('inventory_categories')->whereIn('id', $removable->all())->delete();
         }
+
+        // A never-used table dumps WITHOUT an AUTO_INCREMENT clause; when the
+        // rollback empties the table again, reset the counter so the upgrade
+        // rehearsal's schema diff stays byte-exact.
+        if (in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)
+            && DB::table('inventory_categories')->count() === 0) {
+            DB::statement('ALTER TABLE inventory_categories AUTO_INCREMENT = 1');
+        }
     }
 };
