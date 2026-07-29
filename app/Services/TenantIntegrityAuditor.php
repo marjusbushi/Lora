@@ -4,6 +4,8 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 final class TenantIntegrityAuditor
 {
@@ -57,6 +59,12 @@ final class TenantIntegrityAuditor
         ['payments', 'reservation_id', 'reservations'],
         ['pos_order_items', 'menu_item_id', 'menu_items'],
         ['pos_order_items', 'pos_order_id', 'pos_orders'],
+        ['pos_order_items', 'pos_order_round_id', 'pos_order_rounds'],
+        ['pos_order_payments', 'pos_order_id', 'pos_orders'],
+        ['pos_order_payments', 'pos_shift_id', 'pos_shifts'],
+        ['pos_order_payments', 'refunded_from_id', 'pos_order_payments'],
+        ['pos_order_rounds', 'pos_order_id', 'pos_orders'],
+        ['pos_orders', 'pos_table_id', 'pos_tables'],
         ['pos_orders', 'pos_shift_id', 'pos_shifts'],
         ['pos_orders', 'reservation_id', 'reservations'],
         ['pricing_autopilot_logs', 'room_type_id', 'room_types'],
@@ -169,6 +177,28 @@ final class TenantIntegrityAuditor
             }
         }
 
+        if (Schema::hasTable('pos_order_payments')
+            && Schema::hasColumn('pos_order_payments', 'refunded_from_id')
+            && Schema::hasColumn('pos_order_payments', 'refunded_from_tenant_id')) {
+            $invalidRefundShadows = DB::table('pos_order_payments')
+                ->where(function ($query) {
+                    $query->whereNull('refunded_from_id')
+                        ->whereNotNull('refunded_from_tenant_id');
+                })
+                ->orWhere(function ($query) {
+                    $query->whereNotNull('refunded_from_id')
+                        ->where(function ($nested) {
+                            $nested->whereNull('refunded_from_tenant_id')
+                                ->orWhereColumn('refunded_from_tenant_id', '!=', 'tenant_id');
+                        });
+                })
+                ->count();
+
+            if ($invalidRefundShadows > 0) {
+                $violations[] = "pos_order_payments.refunded_from_tenant_id: {$invalidRefundShadows} rows have an inconsistent tenant shadow key";
+            }
+        }
+
         if ($this->invitationRoleRelationExists()) {
             $invalidInvitationRoles = DB::table('tenant_user_invitations as invitation')
                 ->leftJoin('roles as role', 'role.id', '=', 'invitation.role_id')
@@ -189,6 +219,110 @@ final class TenantIntegrityAuditor
                 if ($missingTeam > 0) {
                     $violations[] = "{$table}: {$missingTeam} rows have a null team_id";
                 }
+            }
+        }
+
+        return $violations;
+    }
+
+    /** @return list<string> */
+    public function storageViolations(): array
+    {
+        $violations = [];
+        $references = [
+            ['guest_documents', 'path', 'local', null, null, 'tenant'],
+            ['maintenance_attachments', 'path', null, 'disk', null, 'tenant'],
+            ['tenant_onboarding_documents', 'path', null, 'disk', null, 'onboarding'],
+            ['room_type_images', 'path', 'public', null, null, 'tenant'],
+            ['menu_items', 'image_path', 'public', null, null, 'tenant'],
+            ['inventory_items', 'image_path', 'public', null, null, 'tenant'],
+            ['settings', 'value', 'public', null, ['type', 'image'], 'tenant'],
+        ];
+
+        foreach ($references as [$table, $pathColumn, $fixedDisk, $diskColumn, $filter, $namespace]) {
+            if (! Schema::hasTable($table)
+                || ! Schema::hasColumn($table, 'id')
+                || ! Schema::hasColumn($table, $pathColumn)
+                || ($diskColumn && ! Schema::hasColumn($table, $diskColumn))) {
+                continue;
+            }
+
+            $unsafe = 0;
+            $missing = 0;
+            $crossTenant = 0;
+            $columns = ["storage_ref.id as id", "storage_ref.{$pathColumn} as storage_path"];
+            if ($diskColumn) {
+                $columns[] = "storage_ref.{$diskColumn} as storage_disk";
+            }
+
+            $query = DB::table("{$table} as storage_ref")
+                ->select($columns)
+                ->whereNotNull("storage_ref.{$pathColumn}");
+            $tenantIdAvailable = false;
+            if (Schema::hasColumn($table, 'tenant_id')) {
+                $query->addSelect('storage_ref.tenant_id as storage_tenant_id');
+                $tenantIdAvailable = true;
+            } elseif ($table === 'tenant_onboarding_documents'
+                && Schema::hasTable('tenant_onboardings')
+                && Schema::hasColumn('tenant_onboardings', 'tenant_id')
+                && Schema::hasColumn($table, 'tenant_onboarding_id')) {
+                $query->leftJoin(
+                    'tenant_onboardings as storage_owner',
+                    'storage_owner.id',
+                    '=',
+                    'storage_ref.tenant_onboarding_id',
+                )->addSelect('storage_owner.tenant_id as storage_tenant_id');
+                $tenantIdAvailable = true;
+            }
+            if ($filter) {
+                $query->where("storage_ref.{$filter[0]}", $filter[1]);
+            }
+
+            $query->chunkById(500, function ($rows) use (
+                &$unsafe,
+                &$missing,
+                &$crossTenant,
+                $fixedDisk,
+                $diskColumn,
+                $tenantIdAvailable,
+                $namespace,
+            ) {
+                foreach ($rows as $row) {
+                    $path = (string) $row->storage_path;
+                    $disk = $fixedDisk ?? (string) $row->storage_disk;
+
+                    if (! in_array($disk, ['local', 'public'], true)
+                        || ! $this->isSafeStoragePath($path)) {
+                        $unsafe++;
+
+                        continue;
+                    }
+
+                    $tenantId = $tenantIdAvailable ? $row->storage_tenant_id : null;
+                    if (! $this->storagePathBelongsToTenant($path, $tenantId, $namespace)) {
+                        $crossTenant++;
+
+                        continue;
+                    }
+
+                    try {
+                        if (! Storage::disk($disk)->exists($path)) {
+                            $missing++;
+                        }
+                    } catch (Throwable) {
+                        $missing++;
+                    }
+                }
+            }, 'storage_ref.id', 'id');
+
+            if ($unsafe > 0) {
+                $violations[] = "{$table}.{$pathColumn}: {$unsafe} rows have an unsafe storage disk or path";
+            }
+            if ($missing > 0) {
+                $violations[] = "{$table}.{$pathColumn}: {$missing} rows reference a missing stored file";
+            }
+            if ($crossTenant > 0) {
+                $violations[] = "{$table}.{$pathColumn}: {$crossTenant} rows reference another tenant's storage namespace";
             }
         }
 
@@ -303,6 +437,35 @@ final class TenantIntegrityAuditor
             && Schema::hasColumn('tenant_user_invitations', 'tenant_id')
             && Schema::hasColumn('tenant_user_invitations', 'role_id')
             && Schema::hasColumn('roles', 'team_id');
+    }
+
+    private function isSafeStoragePath(string $path): bool
+    {
+        return $path !== ''
+            && ! str_starts_with($path, '/')
+            && ! str_contains($path, "\0")
+            && ! str_contains($path, '\\')
+            && preg_match('#(?:^|/)[.][.](?:/|$)#', $path) !== 1;
+    }
+
+    private function storagePathBelongsToTenant(string $path, mixed $tenantId, string $namespace): bool
+    {
+        $tenant = (string) $tenantId;
+        if ($tenant === '' || preg_match('/^[1-9][0-9]*$/', $tenant) !== 1) {
+            return $namespace === 'tenant' && ! str_starts_with($path, 'tenants/');
+        }
+
+        if ($namespace === 'onboarding') {
+            return preg_match('#^onboarding/tenant-([1-9][0-9]*)/.+$#', $path, $matches) === 1
+                && hash_equals($tenant, $matches[1]);
+        }
+
+        if (! str_starts_with($path, 'tenants/')) {
+            return true;
+        }
+
+        return preg_match('#^tenants/([1-9][0-9]*)/.+$#', $path, $matches) === 1
+            && hash_equals($tenant, $matches[1]);
     }
 
     private function sortRecursively(array &$value): void

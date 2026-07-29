@@ -43,6 +43,17 @@ class CommercialPriceRoundingTest extends TestCase
         $this->assertSame(113.0, CommercialPriceRounding::apply(130, 113, 113, 'EUR', 'commercial')['after']);
     }
 
+    public function test_rounding_never_reverses_the_calculated_direction(): void
+    {
+        $increase = CommercialPriceRounding::apply(102.10, null, null, 'EUR', 'commercial', 102);
+        $decrease = CommercialPriceRounding::apply(102.90, null, null, 'EUR', 'commercial', 103);
+        $neutral = CommercialPriceRounding::apply(102, null, null, 'EUR', 'commercial', 102);
+
+        $this->assertSame(105.0, $increase['after']);
+        $this->assertSame(100.0, $decrease['after']);
+        $this->assertSame(102.0, $neutral['after']);
+    }
+
     public function test_exact_mode_preserves_cents_after_guardrails(): void
     {
         $result = CommercialPriceRounding::apply(88.83, 80, 90, 'EUR', CommercialPriceRounding::MODE_EXACT);

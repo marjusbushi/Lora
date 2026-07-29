@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PosOrderPayment extends TenantModel
 {
+    protected $hidden = ['refunded_from_tenant_id'];
+
     protected $fillable = [
         'pos_order_id', 'pos_shift_id', 'direction', 'method', 'amount',
         'currency', 'tendered_amount', 'exchange_rate',

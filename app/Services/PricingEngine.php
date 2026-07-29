@@ -219,7 +219,7 @@ class PricingEngine
         if ($min !== null && $calculated < $min) {
             $clamped = 'min';
         }
-        $rounding = CommercialPriceRounding::apply($calculated, $min, $max);
+        $rounding = CommercialPriceRounding::apply($calculated, $min, $max, reference: $reference);
         // A neutral day must not manufacture a recommendation merely because
         // an owner-entered base/season rate is not already a commercial number.
         if ($factors === [] && $clamped === null) {
