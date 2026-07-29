@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\CleaningTask;
 use App\Models\FinanceAccount;
 use App\Models\Floor;
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
@@ -126,6 +127,7 @@ class SettingsController extends Controller
             ])
                 ->orderBy('sort_order')
                 ->get(),
+            'inventoryCategoryTree' => InventoryCategory::flatTree(),
             'inventoryItems' => InventoryItem::where('is_active', true)->where('type', '!=', 'service')
                 ->orderBy('name')->get(['id', 'name', 'sku', 'unit']),
             'inventoryWarehouses' => Warehouse::where('is_active', true)
@@ -881,35 +883,33 @@ class SettingsController extends Controller
     }
 
     // --- Menu Categories CRUD ---
-    public function storeMenuCategory(Request $request): RedirectResponse
-    {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', TenantRule::unique('menu_categories', 'name')],
-            'outlet' => ['nullable', 'in:bar,restaurant'],
-            'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
-        ]);
-
-        $maxOrder = MenuCategory::max('sort_order') ?? 0;
-        MenuCategory::create($data + ['sort_order' => $maxOrder + 1]);
-
-        return back()->with('success', 'Kategoria u shtua.');
-    }
-
+    /**
+     * Groups linked to the inventory tree keep their POS-only settings here
+     * (outlet, source warehouse) — the NAME belongs to the tree. Legacy
+     * unlinked groups may still rename until they are re-homed.
+     */
     public function updateMenuCategory(Request $request, MenuCategory $menuCategory): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', TenantRule::unique('menu_categories', 'name')->ignore($menuCategory->id)],
+            'name' => [$menuCategory->inventory_category_id ? 'nullable' : 'required', 'string', 'max:255', TenantRule::unique('menu_categories', 'name')->ignore($menuCategory->id)],
             'outlet' => ['nullable', 'in:bar,restaurant'],
             'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
         ]);
 
+        if ($menuCategory->inventory_category_id) {
+            unset($data['name']);
+        }
         $menuCategory->update($data);
 
         return back()->with('success', 'Kategoria u perditesua.');
     }
 
+    /** Linked groups die with their tree node (Inventari → Artikujt); only legacy leftovers delete here. */
     public function destroyMenuCategory(MenuCategory $menuCategory): RedirectResponse
     {
+        if ($menuCategory->inventory_category_id) {
+            return back()->with('error', 'Ky grup vjen nga kategoritë e inventarit — menaxhohet te Inventari → Artikujt.');
+        }
         if ($menuCategory->items()->exists()) {
             return back()->with('error', "Nuk mund te fshihet — ka {$menuCategory->items()->count()} artikuj brenda.");
         }
@@ -923,7 +923,9 @@ class SettingsController extends Controller
     public function storeMenuItem(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'menu_category_id' => ['required', TenantRule::exists('menu_categories')],
+            // The item picks a node of the inventory category tree — its POS
+            // group is derived (created on first use), never chosen directly.
+            'inventory_category_id' => ['required', TenantRule::exists('inventory_categories')],
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0.01'],
             'image' => ['nullable', 'image', 'max:2048'],
@@ -935,7 +937,9 @@ class SettingsController extends Controller
         ]);
 
         $itemData = [
-            'menu_category_id' => $data['menu_category_id'],
+            'menu_category_id' => MenuCategory::forInventoryCategory(
+                InventoryCategory::findOrFail($data['inventory_category_id']),
+            )->id,
             'name' => $data['name'],
             'price' => $data['price'],
             'is_available' => true,
@@ -962,6 +966,7 @@ class SettingsController extends Controller
         }
 
         $data = $request->validate([
+            'inventory_category_id' => ['nullable', TenantRule::exists('inventory_categories')],
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0.01'],
             'image' => ['nullable', 'image', 'max:2048'],
@@ -973,6 +978,11 @@ class SettingsController extends Controller
         ]);
 
         $itemData = collect($data)->only('name', 'price')->all();
+        if (! empty($data['inventory_category_id'])) {
+            $itemData['menu_category_id'] = MenuCategory::forInventoryCategory(
+                InventoryCategory::findOrFail($data['inventory_category_id']),
+            )->id;
+        }
 
         if ($request->hasFile('image')) {
             // Delete old image

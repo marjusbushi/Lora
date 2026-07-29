@@ -180,6 +180,17 @@ class VerifyTenantIntegrity extends Command
                 continue;
             }
 
+            // The category-unification migration converts existing POS menu
+            // categories into inventory tree nodes, so per-tenant category
+            // counts may only ever GROW under an approved additive migration.
+            if ($allowAdditiveSchema && str_starts_with($path, 'tenant_counts.inventory_categories.')) {
+                if (! is_int($expected) || ! is_int($actual) || $actual < $expected) {
+                    $changes[] = $path;
+                }
+
+                continue;
+            }
+
             if ($allowAdditiveSettings
                 && str_starts_with($path, 'tenant_counts.settings.')
                 && is_int($expected)
@@ -208,7 +219,14 @@ class VerifyTenantIntegrity extends Command
                 // inside an existing table/metric remain data changes.
                 if (! $allowAdditiveSchema || ! in_array($path, ['tenant_counts', 'financial_totals'], true)) {
                     foreach (array_keys(array_diff_key($actual, $expected)) as $addedKey) {
-                        $changes[] = "{$path}.{$addedKey}";
+                        $addedPath = "{$path}.{$addedKey}";
+                        // A tenant gaining its FIRST inventory categories during
+                        // the category-unification migration is approved growth
+                        // too — the tenant id is absent from the baseline map.
+                        if ($allowAdditiveSchema && str_starts_with($addedPath, 'tenant_counts.inventory_categories.')) {
+                            continue;
+                        }
+                        $changes[] = $addedPath;
                     }
                 }
 

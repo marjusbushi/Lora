@@ -20,6 +20,7 @@ const props = defineProps({
     view: { type: String, default: 'sale' },
     orders: Object,
     menu: Array,
+    menuTree: { type: Array, default: () => [] },
     activeReservations: Array,
     filters: Object,
     shiftHistory: { type: Array, default: () => [] },
@@ -43,7 +44,6 @@ const editingOrderId = ref(null);
 const showReceipt = ref(false);
 const receiptOrder = ref(null);
 const fiscalizingOrder = ref(null);
-const activeCategory = ref(props.menu?.[0]?.id || null);
 const searchQuery = ref('');
 const serviceMode = ref('table');
 const checkoutStep = ref('cart');
@@ -189,19 +189,100 @@ const paymentTotal = computed(() => Math.max(0, Math.round((paymentSubtotal.valu
 const splitCash = computed(() => Math.min(paymentTotal.value, Math.max(0, Number(splitCashAmount.value || 0))));
 const splitCard = computed(() => Math.round((paymentTotal.value - splitCash.value) * 100) / 100);
 
+// Drill-down through the inventory category tree: Niveli 1 → 2 → 3 → Artikujt.
+// currentNodeId: null = top level, a tree node id, or 'legacy-<groupId>' for
+// pre-unification menu groups that carry no tree link.
+const currentNodeId = ref(null);
+const showFrequent = ref(false);
+
+const legacyGroups = computed(() => (props.menu || [])
+    .filter((group) => !group.inventory_category_id && (group.items || []).length));
+
+const currentTiles = computed(() => {
+    const children = (props.menuTree || []).filter((node) => node.parent_id === (typeof currentNodeId.value === 'number' ? currentNodeId.value : null));
+    const tiles = children.map((node) => ({
+        key: node.id,
+        name: node.name,
+        count: subtreeItemCount(node.id),
+    }));
+    if (currentNodeId.value === null) {
+        for (const group of legacyGroups.value) {
+            tiles.push({ key: `legacy-${group.id}`, name: group.name, count: (group.items || []).length });
+        }
+    }
+    return tiles;
+});
+
+const breadcrumb = computed(() => {
+    if (typeof currentNodeId.value !== 'number') return [];
+    const byId = Object.fromEntries((props.menuTree || []).map((node) => [node.id, node]));
+    const trail = [];
+    let node = byId[currentNodeId.value];
+    while (node) {
+        trail.unshift(node);
+        node = node.parent_id != null ? byId[node.parent_id] : null;
+    }
+    return trail;
+});
+
+function subtreeNodeIds(nodeId) {
+    const ids = [nodeId];
+    let added = true;
+    while (added) {
+        added = false;
+        for (const node of props.menuTree || []) {
+            if (ids.includes(node.parent_id) && !ids.includes(node.id)) {
+                ids.push(node.id);
+                added = true;
+            }
+        }
+    }
+    return ids;
+}
+
+function subtreeItemCount(nodeId) {
+    const ids = subtreeNodeIds(nodeId);
+    return (props.menu || [])
+        .filter((group) => ids.includes(group.inventory_category_id))
+        .reduce((sum, group) => sum + (group.items || []).length, 0);
+}
+
+function enterTile(key) {
+    showFrequent.value = false;
+    currentNodeId.value = key;
+}
+
+function goUp() {
+    showFrequent.value = false;
+    if (typeof currentNodeId.value !== 'number') {
+        currentNodeId.value = null;
+        return;
+    }
+    const byId = Object.fromEntries((props.menuTree || []).map((node) => [node.id, node]));
+    currentNodeId.value = byId[currentNodeId.value]?.parent_id ?? null;
+}
+
 const activeMenuItems = computed(() => {
     const allItems = (props.menu || []).flatMap((category) =>
         (category.items || []).map((item) => ({ ...item, category_name: category.name }))
     );
     const query = searchQuery.value.trim().toLocaleLowerCase('sq');
-    const categoryItems = activeCategory.value === 'frequent'
-        ? [...allItems]
+    // Search jumps across every level of the tree.
+    if (query) return allItems.filter((item) => item.name?.toLocaleLowerCase('sq').includes(query));
+    if (showFrequent.value) {
+        return [...allItems]
             .filter((item) => Number(item.sales_count || 0) > 0)
             .sort((a, b) => Number(b.sales_count || 0) - Number(a.sales_count || 0))
-            .slice(0, 10)
-        : (props.menu?.find((category) => category.id === activeCategory.value)?.items || []);
-    if (!query) return categoryItems;
-    return allItems.filter((item) => item.name?.toLocaleLowerCase('sq').includes(query));
+            .slice(0, 10);
+    }
+    if (currentNodeId.value === null) return [];
+    if (typeof currentNodeId.value === 'string') {
+        const groupId = Number(currentNodeId.value.replace('legacy-', ''));
+        return (props.menu || []).find((group) => group.id === groupId)?.items || [];
+    }
+    return (props.menu || [])
+        .filter((group) => group.inventory_category_id === currentNodeId.value)
+        .flatMap((group) => group.items || []);
 });
 
 const hasFrequentItems = computed(() => (props.menu || [])
@@ -694,29 +775,42 @@ onMounted(() => {
                         <button
                             type="button"
                             class="inline-flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-small font-semibold transition"
-                            :class="activeCategory === 'frequent' ? 'border-accent-700 bg-accent-700 text-white' : 'border-accent-200 bg-accent-50 text-accent-700 hover:bg-accent-100'"
-                            @click="activeCategory = 'frequent'"
+                            :class="showFrequent ? 'border-accent-700 bg-accent-700 text-white' : 'border-accent-200 bg-accent-50 text-accent-700 hover:bg-accent-100'"
+                            @click="showFrequent = !showFrequent"
                         >
                             <Star class="h-4 w-4" /> Të shpeshtat
                         </button>
                     </div>
-                    <!-- Category tabs -->
-                    <div class="flex gap-2 overflow-x-auto border-b border-neutral-200 px-4 py-3">
-                        <button
-                            v-for="cat in menu"
-                            :key="cat.id"
-                            :class="[
-                                'rounded-full border px-4 py-2 text-body-sm font-semibold whitespace-nowrap transition-all duration-150',
-                                activeCategory === cat.id
-                                    ? 'border-primary-900 bg-primary-900 text-white'
-                                    : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50',
-                            ]"
-                            @click="activeCategory = cat.id"
-                        >
-                            <span class="mr-1.5">{{ categoryIcons[cat.name] || '📋' }}</span>
-                            {{ cat.name }}
-                            <span class="ml-1 text-tiny opacity-70">({{ cat.items?.length }})</span>
-                        </button>
+                    <!-- Drill-down navigation: Niveli 1 → 2 → 3 → Artikujt -->
+                    <div v-if="!showFrequent && !searchQuery.trim()" class="border-b border-neutral-200 px-4 py-3">
+                        <div v-if="currentNodeId !== null" class="mb-2 flex items-center gap-2">
+                            <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-small font-semibold text-neutral-700 hover:bg-neutral-50 touch-manipulation" @click="goUp">
+                                <ArrowLeft class="h-4 w-4" /> Prapa
+                            </button>
+                            <nav class="flex min-w-0 items-center gap-1 overflow-x-auto text-body-sm text-neutral-500">
+                                <button type="button" class="shrink-0 font-semibold hover:text-primary-900" @click="enterTile(null)">Kategoritë</button>
+                                <template v-for="node in breadcrumb" :key="node.id">
+                                    <span class="shrink-0">/</span>
+                                    <button type="button" class="shrink-0 font-semibold" :class="node.id === currentNodeId ? 'text-primary-900' : 'hover:text-primary-900'" @click="enterTile(node.id)">{{ node.name }}</button>
+                                </template>
+                                <template v-if="typeof currentNodeId === 'string'">
+                                    <span class="shrink-0">/</span>
+                                    <span class="shrink-0 font-semibold text-primary-900">{{ menu.find((group) => `legacy-${group.id}` === currentNodeId)?.name }}</span>
+                                </template>
+                            </nav>
+                        </div>
+                        <div v-if="currentTiles.length" class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4" :class="touchMode ? 'xl:grid-cols-6' : '2xl:grid-cols-6'">
+                            <button
+                                v-for="tile in currentTiles"
+                                :key="tile.key"
+                                type="button"
+                                class="flex min-h-16 items-center justify-between gap-2 rounded-xl border-2 border-neutral-200 bg-neutral-50 px-4 py-3 text-left font-bold text-primary-900 transition hover:-translate-y-0.5 hover:border-accent-300 hover:shadow-card touch-manipulation"
+                                @click="enterTile(tile.key)"
+                            >
+                                <span class="min-w-0 truncate"><span class="mr-1.5">{{ categoryIcons[tile.name] || '📂' }}</span>{{ tile.name }}</span>
+                                <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-tiny font-semibold text-neutral-500 ring-1 ring-neutral-200">{{ tile.count }}</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Locked when no shift is open -->
@@ -724,7 +818,7 @@ onMounted(() => {
                         <span class="text-body-sm font-medium text-warning-900">{{ $t('admin.generated.k_b9030406c1c4') }}</span>
                     </div>
 
-                    <div v-if="activeCategory === 'frequent' && !hasFrequentItems" class="mx-4 mt-4 rounded-lg border border-info-200 bg-info-50 px-4 py-3 text-center text-body-sm text-info-800">
+                    <div v-if="showFrequent && !hasFrequentItems" class="mx-4 mt-4 rounded-lg border border-info-200 bg-info-50 px-4 py-3 text-center text-body-sm text-info-800">
                         Të shpeshtat plotësohen automatikisht pasi të regjistrohen shitjet e para.
                     </div>
 
