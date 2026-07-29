@@ -4083,6 +4083,20 @@
       "room_charge": "Konsum dhome",
       "write_off": "Nxjerrje nga stoku"
     },
+    "categories": {
+      "all": "Të gjitha kategoritë",
+      "none": "Pa kategori",
+      "manage": "Menaxho kategoritë",
+      "add": "Shto",
+      "namePlaceholder": "p.sh. Pije",
+      "rootLevel": "Kategori kryesore (pa prind)",
+      "depthHint": "Një kategori mban deri në dy nivele nën-kategorish: Pije → Alkoolike → Verë. Fshihen vetëm kategoritë bosh.",
+      "rename": "Riemërto",
+      "delete": "Fshi",
+      "deleteBlocked": "Ka artikuj ose nën-kategori — zbrazeni fillimisht",
+      "itemCount": "{count} artikuj",
+      "empty": "Ende pa kategori. Shto të parën sipër."
+    },
     "writeOff": {
       "action": "Nxirr nga stoku",
       "hint": "Regjistrohet si lëvizje me arsye dhe autor — historiku i stokut mbetet gjithmonë i rakorduar.",

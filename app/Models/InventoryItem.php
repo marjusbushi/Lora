@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class InventoryItem extends TenantModel
 {
     protected $fillable = [
-        'name', 'sku', 'barcode', 'category', 'type', 'unit', 'image_path',
+        'name', 'sku', 'barcode', 'category_id', 'type', 'unit', 'image_path',
         'average_cost', 'selling_price', 'sell_in_pos', 'sell_in_rooms',
         'room_selling_price', 'room_warehouse_id', 'minimum_stock', 'is_active',
     ];
@@ -25,6 +25,11 @@ class InventoryItem extends TenantModel
             'minimum_stock' => 'decimal:4',
             'is_active' => 'boolean',
         ];
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(InventoryCategory::class, 'category_id');
     }
 
     public function movements(): HasMany
