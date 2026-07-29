@@ -27,6 +27,11 @@ class InventoryCategory extends TenantModel
         return $this->hasMany(InventoryItem::class, 'category_id');
     }
 
+    public function menuCategories()
+    {
+        return $this->hasMany(MenuCategory::class);
+    }
+
     /** 0 = root, 1 = subcategory, 2 = sub-subcategory (the maximum). */
     public function depth(): int
     {

@@ -333,6 +333,8 @@ class InventoryController extends Controller
         $this->assertCategoryNameFree(trim($data['name']), $category->parent_id, $category->id);
 
         $category->update(['name' => trim($data['name'])]);
+        // The tree owns the names — linked POS menu groups follow.
+        $category->menuCategories()->update(['name' => $category->name]);
 
         return back()->with('success', 'Kategoria u riemërtua.');
     }
@@ -342,7 +344,12 @@ class InventoryController extends Controller
         if ($category->children()->exists() || $category->items()->exists()) {
             return back()->with('error', 'Fshihen vetëm kategoritë bosh — pa nën-kategori dhe pa artikuj.');
         }
+        if ($category->menuCategories()->whereHas('items')->exists()) {
+            return back()->with('error', 'Kategoria mban një grup POS me artikuj menuje — zbraze menunë fillimisht.');
+        }
 
+        // An empty linked POS group dies with its node.
+        $category->menuCategories()->delete();
         $category->delete();
 
         return back()->with('success', 'Kategoria u fshi.');
