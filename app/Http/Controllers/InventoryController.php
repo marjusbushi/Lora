@@ -105,7 +105,10 @@ class InventoryController extends Controller
             'warehouses' => Warehouse::where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get(['id', 'name']),
             'posCategories' => MenuCategory::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'outlet']),
             'filters' => ['search' => $search, 'status' => $status],
-            'can' => ['manageInventory' => $request->user()->can('manage_inventory')],
+            'can' => [
+                'manageInventory' => $request->user()->can('manage_inventory'),
+                'writeOffs' => $request->user()->can('manage_stock_writeoffs'),
+            ],
         ]);
     }
 
@@ -288,6 +291,28 @@ class InventoryController extends Controller
         );
 
         return back()->with('success', 'Transferimi i stokut u regjistrua.');
+    }
+
+    public function writeOff(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'inventory_item_id' => ['required', TenantRule::exists('inventory_items')->where('is_active', true)->whereNot('type', 'service')],
+            'warehouse_id' => ['required', TenantRule::exists('warehouses')->where('is_active', true)],
+            'quantity' => ['required', 'numeric', 'min:0.0001', 'max:9999999'],
+            'reason' => ['required', Rule::in(array_keys(InventoryLedger::WRITE_OFF_REASONS))],
+            'notes' => ['nullable', 'string', 'max:300'],
+        ]);
+
+        $this->ledger->writeOff(
+            InventoryItem::findOrFail($data['inventory_item_id']),
+            Warehouse::findOrFail($data['warehouse_id']),
+            (float) $data['quantity'],
+            $data['reason'],
+            $data['notes'] ?? null,
+            $request->user()->id,
+        );
+
+        return back()->with('success', 'Artikulli u nxor nga stoku.');
     }
 
     private function itemData(Request $request, ?int $ignoreId = null, bool $includeInitial = true): array

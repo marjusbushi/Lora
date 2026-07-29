@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, BedDouble, ImagePlus, Package, Pencil, Plus, Search, ShoppingBasket, Trash2 } from 'lucide-vue-next';
+import { AlertTriangle, BedDouble, ImagePlus, Package, PackageMinus, Pencil, Plus, Search, ShoppingBasket, Trash2 } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -89,6 +89,30 @@ function submit() {
     if (editing.value === 'new') form.transform(data => data).post(route('inventory.items.store'), options);
     else form.transform(data => ({ ...data, _method: 'put' })).post(route('inventory.items.update', editing.value.id), options);
 }
+
+// Write-off: audited stock exit for damaged/lost/expired goods.
+const writingOff = ref(null);
+const writeOffReasons = { damaged: 'Dëmtuar', lost: 'Humbur', expired: 'Skaduar', other: 'Tjetër' };
+const writeOffForm = useForm({ inventory_item_id: null, warehouse_id: null, quantity: null, reason: 'damaged', notes: '' });
+const writeOffStock = computed(() => Number((writingOff.value?.warehouses || []).find(stock => stock.id === writeOffForm.warehouse_id)?.quantity || 0));
+
+function openWriteOff(item) {
+    writeOffForm.reset();
+    writeOffForm.clearErrors();
+    writeOffForm.inventory_item_id = item.id;
+    writeOffForm.warehouse_id = item.warehouses[0]?.id || null;
+    writeOffForm.reason = 'damaged';
+    writingOff.value = item;
+}
+
+function closeWriteOff() {
+    writingOff.value = null;
+    writeOffForm.clearErrors();
+}
+
+function submitWriteOff() {
+    writeOffForm.post(route('inventory.write-offs.store'), { preserveScroll: true, onSuccess: closeWriteOff });
+}
 </script>
 
 <template>
@@ -120,7 +144,7 @@ function submit() {
                                 <td class="px-5 py-3.5 text-right"><strong class="text-body-sm tabular-nums" :class="item.is_low ? 'text-warning-700' : 'text-primary-900'">{{ item.stock }} {{ unitLabels[item.unit] }}</strong><span v-if="item.is_low" class="mt-1 flex items-center justify-end gap-1 text-tiny text-warning-700"><AlertTriangle class="h-3 w-3" /> {{ $t('inventory.items.minimum', { value: item.minimum_stock }) }}</span></td>
                                 <td class="px-5 py-3.5 text-right"><strong class="text-body-sm text-primary-900">{{ money(item.average_cost) }}</strong><span class="block text-tiny text-neutral-400">{{ money(item.stock_value) }}</span></td>
                                 <td class="px-5 py-3.5"><span class="rounded-full px-2 py-1 text-tiny font-bold" :class="item.is_active ? 'bg-accent-50 text-accent-700' : 'bg-neutral-100 text-neutral-500'">{{ item.is_active ? $t('inventory.status.active') : $t('inventory.status.inactive') }}</span></td>
-                                <td class="px-5 py-3.5 text-right"><button v-if="can.manageInventory" class="rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" @click="openEdit(item)"><Pencil class="h-4 w-4" /></button></td>
+                                <td class="px-5 py-3.5 text-right"><div class="flex items-center justify-end gap-1"><button v-if="can.writeOffs && item.type !== 'service' && item.warehouses.length" class="rounded-md p-2 text-neutral-400 hover:bg-warning-50 hover:text-warning-700" :title="$t('inventory.writeOff.action')" @click="openWriteOff(item)"><PackageMinus class="h-4 w-4" /></button><button v-if="can.manageInventory" class="rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" @click="openEdit(item)"><Pencil class="h-4 w-4" /></button></div></td>
                             </tr>
                             <tr v-if="!items.length"><td colspan="7" class="px-5 py-14 text-center text-body-sm text-neutral-400">{{ $t('inventory.items.empty') }}</td></tr>
                         </tbody>
@@ -177,6 +201,43 @@ function submit() {
                 <section v-if="editing === 'new' && form.type !== 'service'" class="rounded-xl border border-accent-200 bg-accent-50/50 p-4"><h4 class="text-body-sm font-bold text-primary-900">Gjendja fillestare</h4><p class="mt-1 text-tiny text-neutral-500">Opsionale. Blerjet e ardhshme regjistrohen nga faturat e blerjes.</p><div class="mt-3 grid gap-3 sm:grid-cols-3"><div><label class="mb-1 block text-tiny font-semibold">Sasia</label><TextInput v-model="form.initial_quantity" type="number" min="0" step="0.0001" class="w-full" /></div><div><label class="mb-1 block text-tiny font-semibold">Kosto / njësi (€)</label><TextInput v-model="form.average_cost" type="number" min="0" step="0.01" class="w-full" /></div><div><label class="mb-1 block text-tiny font-semibold">Magazina</label><select v-model="form.initial_warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option></select></div></div></section>
             </div>
             <template #footer><Button variant="ghost" @click="closeModal">{{ $t('inventory.actions.cancel') }}</Button><Button :loading="form.processing" :disabled="!form.name || !form.sku" @click="submit">{{ $t('inventory.actions.save') }}</Button></template>
+        </Modal>
+
+        <Modal :show="!!writingOff" :title="`${$t('inventory.writeOff.action')} · ${writingOff?.name || ''}`" max-width="md" @close="closeWriteOff">
+            <div class="space-y-4">
+                <p class="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2.5 text-small text-warning-800">{{ $t('inventory.writeOff.hint') }}</p>
+                <div>
+                    <label class="mb-1 block text-body-sm font-semibold">{{ $t('inventory.writeOff.warehouse') }}</label>
+                    <select v-model="writeOffForm.warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
+                        <option v-for="stock in writingOff?.warehouses || []" :key="stock.id" :value="stock.id">{{ stock.name }} ({{ stock.quantity }} {{ unitLabels[writingOff?.unit] }})</option>
+                    </select>
+                    <p v-if="writeOffForm.errors.warehouse_id" class="mt-1 text-tiny text-error-600">{{ writeOffForm.errors.warehouse_id }}</p>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                        <label class="mb-1 block text-body-sm font-semibold">{{ $t('inventory.writeOff.quantity') }}</label>
+                        <TextInput v-model="writeOffForm.quantity" type="number" min="0.0001" :max="writeOffStock" step="0.0001" class="w-full" placeholder="0" />
+                        <p class="mt-1 text-tiny text-neutral-400">{{ $t('inventory.writeOff.available', { value: writeOffStock }) }}</p>
+                        <p v-if="writeOffForm.errors.quantity" class="mt-1 text-tiny text-error-600">{{ writeOffForm.errors.quantity }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-body-sm font-semibold">{{ $t('inventory.writeOff.reason') }}</label>
+                        <select v-model="writeOffForm.reason" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
+                            <option v-for="(label, key) in writeOffReasons" :key="key" :value="key">{{ label }}</option>
+                        </select>
+                        <p v-if="writeOffForm.errors.reason" class="mt-1 text-tiny text-error-600">{{ writeOffForm.errors.reason }}</p>
+                    </div>
+                </div>
+                <div>
+                    <label class="mb-1 block text-body-sm font-semibold">{{ $t('inventory.writeOff.notes') }}</label>
+                    <TextInput v-model="writeOffForm.notes" class="w-full" :placeholder="$t('inventory.writeOff.notesPlaceholder')" maxlength="300" />
+                    <p v-if="writeOffForm.errors.notes" class="mt-1 text-tiny text-error-600">{{ writeOffForm.errors.notes }}</p>
+                </div>
+            </div>
+            <template #footer>
+                <Button variant="ghost" @click="closeWriteOff">{{ $t('inventory.actions.cancel') }}</Button>
+                <Button variant="danger" :loading="writeOffForm.processing" :disabled="!writeOffForm.quantity || !writeOffForm.warehouse_id" @click="submitWriteOff"><PackageMinus class="h-4 w-4" /> {{ $t('inventory.writeOff.submit') }}</Button>
+            </template>
         </Modal>
     </AppLayout>
 </template>
