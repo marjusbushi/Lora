@@ -180,6 +180,17 @@ class VerifyTenantIntegrity extends Command
                 continue;
             }
 
+            // The category-unification migration converts existing POS menu
+            // categories into inventory tree nodes, so per-tenant category
+            // counts may only ever GROW under an approved additive migration.
+            if ($allowAdditiveSchema && str_starts_with($path, 'tenant_counts.inventory_categories.')) {
+                if (! is_int($expected) || ! is_int($actual) || $actual < $expected) {
+                    $changes[] = $path;
+                }
+
+                continue;
+            }
+
             if ($allowAdditiveSettings
                 && str_starts_with($path, 'tenant_counts.settings.')
                 && is_int($expected)

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\InventoryCategory;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\Tenant;
@@ -252,6 +253,46 @@ class TenantIntegrityCommandTest extends TestCase
                 '--allow-additive-schema' => true,
             ])
                 ->expectsOutputToContain('Baseline value changed: tenant_counts.room_types')
+                ->assertFailed();
+        } finally {
+            if (is_string($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
+    public function test_additive_schema_compare_allows_inventory_category_growth_only(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'lora-tenant-baseline-');
+        $this->assertNotFalse($path);
+
+        try {
+            InventoryCategory::create(['name' => 'Pije']);
+
+            $this->artisan('tenants:verify-integrity', ['--snapshot' => $path])
+                ->assertSuccessful();
+
+            // The category-unification migration converts menu categories into
+            // tree nodes — approved growth under the additive flag.
+            InventoryCategory::create(['name' => 'Ushqim']);
+
+            $this->artisan('tenants:verify-integrity', [
+                '--compare' => $path,
+                '--allow-additive-schema' => true,
+            ])->assertSuccessful();
+
+            // Without the flag it stays an ordinary data change.
+            $this->artisan('tenants:verify-integrity', ['--compare' => $path])
+                ->expectsOutputToContain('Tenant counts or financial totals changed from the baseline.')
+                ->assertFailed();
+
+            // Shrinking below the baseline is never approved.
+            InventoryCategory::query()->delete();
+            $this->artisan('tenants:verify-integrity', [
+                '--compare' => $path,
+                '--allow-additive-schema' => true,
+            ])
+                ->expectsOutputToContain('Baseline value changed: tenant_counts.inventory_categories')
                 ->assertFailed();
         } finally {
             if (is_string($path)) {
