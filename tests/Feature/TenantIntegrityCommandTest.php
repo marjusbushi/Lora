@@ -261,6 +261,31 @@ class TenantIntegrityCommandTest extends TestCase
         }
     }
 
+    public function test_additive_schema_compare_allows_a_tenants_first_inventory_categories(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'lora-tenant-baseline-');
+        $this->assertNotFalse($path);
+
+        try {
+            // Zero categories at baseline — the CI upgrade scenario: the
+            // tenant id is ABSENT from the baseline map and appears only
+            // after the unification migration backfills the tree.
+            $this->artisan('tenants:verify-integrity', ['--snapshot' => $path])
+                ->assertSuccessful();
+
+            InventoryCategory::create(['name' => 'Pije']);
+
+            $this->artisan('tenants:verify-integrity', [
+                '--compare' => $path,
+                '--allow-additive-schema' => true,
+            ])->assertSuccessful();
+        } finally {
+            if (is_string($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
     public function test_additive_schema_compare_allows_inventory_category_growth_only(): void
     {
         $path = tempnam(sys_get_temp_dir(), 'lora-tenant-baseline-');

@@ -219,7 +219,14 @@ class VerifyTenantIntegrity extends Command
                 // inside an existing table/metric remain data changes.
                 if (! $allowAdditiveSchema || ! in_array($path, ['tenant_counts', 'financial_totals'], true)) {
                     foreach (array_keys(array_diff_key($actual, $expected)) as $addedKey) {
-                        $changes[] = "{$path}.{$addedKey}";
+                        $addedPath = "{$path}.{$addedKey}";
+                        // A tenant gaining its FIRST inventory categories during
+                        // the category-unification migration is approved growth
+                        // too — the tenant id is absent from the baseline map.
+                        if ($allowAdditiveSchema && str_starts_with($addedPath, 'tenant_counts.inventory_categories.')) {
+                            continue;
+                        }
+                        $changes[] = $addedPath;
                     }
                 }
 
