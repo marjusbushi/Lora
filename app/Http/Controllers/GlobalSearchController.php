@@ -284,16 +284,17 @@ class GlobalSearchController extends Controller
 
     private function inventory(string $term, string $like): Collection
     {
-        return InventoryItem::query()->where(function ($query) use ($term, $like) {
+        return InventoryItem::query()->with('category:id,name')->where(function ($query) use ($term, $like) {
             if (ctype_digit($term)) {
                 $query->orWhereKey((int) $term);
             }
             $query->orWhere('name', 'like', $like)->orWhere('sku', 'like', $like)
-                ->orWhere('barcode', 'like', $like)->orWhere('category', 'like', $like);
+                ->orWhere('barcode', 'like', $like)
+                ->orWhereHas('category', fn ($category) => $category->where('name', 'like', $like));
         })->orderBy('name')->limit(5)->get()->map(fn (InventoryItem $item) => $this->result(
             'inventory',
             $item->name,
-            implode(' · ', array_filter([$item->sku ? 'SKU '.$item->sku : null, $item->category, __('global_search.stock', ['quantity' => number_format($item->stock(), 2), 'unit' => $item->unit])])),
+            implode(' · ', array_filter([$item->sku ? 'SKU '.$item->sku : null, $item->category?->name, __('global_search.stock', ['quantity' => number_format($item->stock(), 2), 'unit' => $item->unit])])),
             route('inventory.items', ['item_id' => $item->id, 'status' => $item->is_active ? 'active' : 'inactive'], false),
         ));
     }

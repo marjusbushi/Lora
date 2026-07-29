@@ -8,6 +8,7 @@ use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
 use App\Models\FiscalDocument;
 use App\Models\FolioItem;
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -1306,7 +1307,7 @@ class FinanceController extends Controller
             'name' => $name,
             'sku' => $this->availableImportedSku($sku !== '' ? $sku : $name),
             'barcode' => $barcode !== '' ? $barcode : null,
-            'category' => trim((string) ($new['category'] ?? '')) ?: null,
+            'category_id' => $this->importedCategoryId($new['category'] ?? null),
             'type' => $new['type'] ?? 'product',
             'unit' => $new['unit'] ?? 'piece',
             'average_cost' => (float) ($lineData['unit_cost'] ?? 0),
@@ -1316,6 +1317,17 @@ class FinanceController extends Controller
             'minimum_stock' => 0,
             'is_active' => true,
         ]);
+    }
+
+    /** Bill imports may suggest a category by name — map it onto a root category, creating it on first use. */
+    private function importedCategoryId(?string $name): ?int
+    {
+        $name = trim((string) $name);
+        if ($name === '') {
+            return null;
+        }
+
+        return InventoryCategory::firstOrCreate(['name' => $name, 'parent_id' => null])->id;
     }
 
     private function availableImportedSku(string $source): string

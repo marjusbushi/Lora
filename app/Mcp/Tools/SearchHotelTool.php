@@ -289,14 +289,14 @@ class SearchHotelTool extends LoraTool
 
     private function inventory(string $term, string $like, int $limit): Collection
     {
-        return InventoryItem::query()->where(function ($query) use ($term, $like) {
+        return InventoryItem::query()->with('category:id,name')->where(function ($query) use ($term, $like) {
             if (ctype_digit($term)) {
                 $query->orWhereKey((int) $term);
             }
             $query->orWhere('name', 'like', $like)
                 ->orWhere('sku', 'like', $like)
                 ->orWhere('barcode', 'like', $like)
-                ->orWhere('category', 'like', $like);
+                ->orWhereHas('category', fn ($category) => $category->where('name', 'like', $like));
         })->orderBy('name')->limit($limit)->get()->map(fn (InventoryItem $item) => [
             'module' => 'inventory',
             'type' => 'inventory_item',
@@ -304,7 +304,7 @@ class SearchHotelTool extends LoraTool
             'title' => $item->name,
             'subtitle' => implode(' · ', array_filter([
                 $item->sku ? 'SKU '.$item->sku : null,
-                $item->category,
+                $item->category?->name,
                 'Stok '.number_format($item->stock(), 2).' '.$item->unit,
             ])),
             'href' => url('/pms/inventory/items?item_id='.$item->id),
