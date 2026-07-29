@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Guest;
 use App\Models\Tenant;
 use App\Services\TenantBillingService;
+use App\Services\TenantIntegrityAuditor;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -370,6 +371,217 @@ class TenantDatabaseIntegrityTest extends TestCase
             ]),
             'provider_events accepted a billing reference without tenant_id.',
         );
+    }
+
+    public function test_database_rejects_cross_tenant_pos_service_relations(): void
+    {
+        $first = Tenant::query()->sole();
+        $second = Tenant::factory()->create();
+        $userId = $this->createPosUser();
+        $firstOrderId = $this->createPosOrder($first->id, $userId);
+        $secondOrderId = $this->createPosOrder($second->id, $userId);
+        $firstShiftId = $this->createPosShift($first->id, $userId);
+        $secondShiftId = $this->createPosShift($second->id, $userId);
+        $firstTableId = $this->createPosTable($first->id, 'A-1');
+        $secondTableId = $this->createPosTable($second->id, 'B-1');
+        $firstRoundId = $this->createPosRound($first->id, $firstOrderId, 1);
+        $secondRoundId = $this->createPosRound($second->id, $secondOrderId, 1);
+        $secondPaymentId = $this->createPosPayment($second->id, $secondOrderId);
+        $menuItemId = $this->createMenuItem($first->id);
+
+        $this->assertQueryRejected(
+            fn () => $this->createPosPayment($first->id, $secondOrderId),
+            'pos_order_payments accepted an order from another tenant.',
+        );
+        $this->assertQueryRejected(
+            fn () => $this->createPosPayment($first->id, $firstOrderId, shiftId: $secondShiftId),
+            'pos_order_payments accepted a shift from another tenant.',
+        );
+        $this->assertQueryRejected(
+            fn () => $this->createPosPayment($first->id, $firstOrderId, refundedFromId: $secondPaymentId),
+            'pos_order_payments accepted a refund source from another tenant.',
+        );
+        $this->assertQueryRejected(
+            fn () => $this->createPosRound($first->id, $secondOrderId, 2),
+            'pos_order_rounds accepted an order from another tenant.',
+        );
+        $this->assertQueryRejected(
+            fn () => DB::table('pos_order_items')->insert([
+                'tenant_id' => $first->id,
+                'pos_order_id' => $firstOrderId,
+                'pos_order_round_id' => $secondRoundId,
+                'menu_item_id' => $menuItemId,
+                'quantity' => 1,
+                'unit_price' => 10,
+                'total_price' => 10,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]),
+            'pos_order_items accepted a round from another tenant.',
+        );
+        $this->assertQueryRejected(
+            fn () => $this->createPosOrder($first->id, $userId, $secondTableId),
+            'pos_orders accepted a table from another tenant.',
+        );
+
+        DB::table('pos_orders')->where('id', $firstOrderId)->update(['pos_table_id' => $firstTableId]);
+        $firstPaymentId = $this->createPosPayment($first->id, $firstOrderId, shiftId: $firstShiftId);
+        DB::table('pos_order_items')->insert([
+            'tenant_id' => $first->id,
+            'pos_order_id' => $firstOrderId,
+            'pos_order_round_id' => $firstRoundId,
+            'menu_item_id' => $menuItemId,
+            'quantity' => 1,
+            'unit_price' => 10,
+            'total_price' => 10,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->assertQueryRejected(
+            fn () => DB::table('pos_orders')->where('id', $firstOrderId)->update([
+                'pos_table_id' => $secondTableId,
+            ]),
+            'pos_orders accepted a table update from another tenant.',
+        );
+        $this->assertQueryRejected(
+            fn () => DB::table('pos_order_payments')->where('id', $firstPaymentId)->update([
+                'pos_shift_id' => $secondShiftId,
+            ]),
+            'pos_order_payments accepted a shift update from another tenant.',
+        );
+        $this->assertQueryRejected(
+            fn () => DB::table('pos_order_payments')->where('id', $firstPaymentId)->update([
+                'refunded_from_id' => $secondPaymentId,
+            ]),
+            'pos_order_payments accepted a refund-source update from another tenant.',
+        );
+        $this->assertQueryRejected(
+            fn () => DB::table('pos_order_rounds')->where('id', $firstRoundId)->update([
+                'pos_order_id' => $secondOrderId,
+            ]),
+            'pos_order_rounds accepted an order update from another tenant.',
+        );
+
+        $this->assertTenantMoveRejected('pos_tables', $firstTableId, $first->id, $second->id);
+        $this->assertTenantMoveRejected('pos_shifts', $firstShiftId, $first->id, $second->id);
+        $this->assertTenantMoveRejected('pos_order_rounds', $firstRoundId, $first->id, $second->id);
+        $this->assertTenantMoveRejected('pos_orders', $firstOrderId, $first->id, $second->id);
+    }
+
+    public function test_pos_order_delete_cascades_rounds_and_payments(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $userId = $this->createPosUser();
+        $orderId = $this->createPosOrder($tenant->id, $userId);
+        $roundId = $this->createPosRound($tenant->id, $orderId, 1);
+        $paymentId = $this->createPosPayment($tenant->id, $orderId);
+
+        DB::table('pos_orders')->where('id', $orderId)->delete();
+
+        $this->assertDatabaseMissing('pos_order_rounds', ['id' => $roundId]);
+        $this->assertDatabaseMissing('pos_order_payments', ['id' => $paymentId]);
+    }
+
+    public function test_deleting_refund_source_nulls_both_link_columns_without_deleting_refund(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $userId = $this->createPosUser();
+        $orderId = $this->createPosOrder($tenant->id, $userId);
+        $saleId = $this->createPosPayment($tenant->id, $orderId);
+        $refundId = $this->createPosPayment($tenant->id, $orderId, refundedFromId: $saleId);
+
+        $this->assertDatabaseHas('pos_order_payments', [
+            'id' => $refundId,
+            'tenant_id' => $tenant->id,
+            'refunded_from_id' => $saleId,
+            'refunded_from_tenant_id' => $tenant->id,
+        ]);
+        $this->assertTenantMoveRejected('pos_order_payments', $saleId, $tenant->id, Tenant::factory()->create()->id);
+
+        DB::table('pos_order_payments')->where('id', $saleId)->delete();
+
+        $this->assertDatabaseHas('pos_order_payments', [
+            'id' => $refundId,
+            'tenant_id' => $tenant->id,
+            'refunded_from_id' => null,
+            'refunded_from_tenant_id' => null,
+        ]);
+    }
+
+    public function test_pos_same_tenant_migration_rolls_back_and_reapplies_cleanly(): void
+    {
+        $first = Tenant::query()->sole();
+        $second = Tenant::factory()->create();
+        $userId = $this->createPosUser();
+        $secondOrderId = $this->createPosOrder($second->id, $userId);
+        $migration = require database_path(
+            'migrations/2026_07_20_000000_enforce_pos_same_tenant_foreign_keys.php',
+        );
+        $crossRoundId = null;
+
+        $migration->down();
+
+        try {
+            $this->assertFalse(Schema::hasColumn('pos_order_payments', 'refunded_from_tenant_id'));
+            $this->assertFalse(Schema::hasForeignKey('pos_order_rounds', ['tenant_id', 'pos_order_id']));
+
+            $crossRoundId = $this->createPosRound($first->id, $secondOrderId, 99);
+            $this->assertDatabaseHas('pos_order_rounds', [
+                'id' => $crossRoundId,
+                'tenant_id' => $first->id,
+                'pos_order_id' => $secondOrderId,
+            ]);
+            $this->assertContains(
+                'pos_order_rounds.pos_order_id: 1 rows cross tenant boundaries',
+                app(TenantIntegrityAuditor::class)->violations(),
+            );
+        } finally {
+            if ($crossRoundId !== null) {
+                DB::table('pos_order_rounds')->where('id', $crossRoundId)->delete();
+            }
+
+            $migration->up();
+        }
+
+        $this->assertTrue(Schema::hasColumn('pos_order_payments', 'refunded_from_tenant_id'));
+        $this->assertTrue(Schema::hasForeignKey('pos_order_rounds', ['tenant_id', 'pos_order_id']));
+        $this->assertQueryRejected(
+            fn () => $this->createPosRound($first->id, $secondOrderId, 100),
+            'POS same-tenant enforcement was not restored after rollback.',
+        );
+    }
+
+    public function test_integrity_auditor_detects_an_inconsistent_pos_refund_shadow_key(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $userId = $this->createPosUser();
+        $orderId = $this->createPosOrder($tenant->id, $userId);
+        $saleId = $this->createPosPayment($tenant->id, $orderId);
+        $refundId = $this->createPosPayment($tenant->id, $orderId, refundedFromId: $saleId);
+        $migration = require database_path(
+            'migrations/2026_07_20_000000_enforce_pos_same_tenant_foreign_keys.php',
+        );
+        $dropSyncTriggers = new ReflectionMethod($migration, 'dropRefundTenantSyncTriggers');
+        $addSyncTriggers = new ReflectionMethod($migration, 'addRefundTenantSyncTriggers');
+
+        $dropSyncTriggers->invoke($migration);
+
+        try {
+            DB::table('pos_order_payments')->where('id', $refundId)->update([
+                'refunded_from_tenant_id' => null,
+            ]);
+
+            $this->assertContains(
+                'pos_order_payments.refunded_from_tenant_id: 1 rows have an inconsistent tenant shadow key',
+                app(TenantIntegrityAuditor::class)->violations(),
+            );
+        } finally {
+            DB::table('pos_order_payments')->where('id', $refundId)->update([
+                'refunded_from_tenant_id' => $tenant->id,
+            ]);
+            $addSyncTriggers->invoke($migration);
+        }
     }
 
     public function test_database_rejects_parent_tenant_moves_for_every_hardened_family(): void
@@ -790,6 +1002,105 @@ class TenantDatabaseIntegrityTest extends TestCase
             'provider' => 'stripe',
             'currency' => 'EUR',
             'amount_cents' => 1000,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createPosUser(): int
+    {
+        return DB::table('users')->insertGetId([
+            'name' => 'POS integrity user',
+            'email' => 'pos-integrity-'.str()->uuid().'@example.test',
+            'password' => 'not-used',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createPosOrder(int $tenantId, int $userId, ?int $tableId = null): int
+    {
+        return DB::table('pos_orders')->insertGetId([
+            'tenant_id' => $tenantId,
+            'pos_table_id' => $tableId,
+            'status' => 'open',
+            'service_status' => 'open',
+            'total_amount' => 0,
+            'created_by' => $userId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createPosShift(int $tenantId, int $userId): int
+    {
+        return DB::table('pos_shifts')->insertGetId([
+            'tenant_id' => $tenantId,
+            'user_id' => $userId,
+            'status' => 'open',
+            'opening_float' => 0,
+            'opened_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createPosTable(int $tenantId, string $number): int
+    {
+        return DB::table('pos_tables')->insertGetId([
+            'tenant_id' => $tenantId,
+            'number' => $number,
+            'name' => 'Protected table '.$number,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createPosRound(int $tenantId, int $orderId, int $sequence): int
+    {
+        return DB::table('pos_order_rounds')->insertGetId([
+            'tenant_id' => $tenantId,
+            'pos_order_id' => $orderId,
+            'sequence' => $sequence,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createPosPayment(
+        int $tenantId,
+        int $orderId,
+        ?int $shiftId = null,
+        ?int $refundedFromId = null,
+    ): int {
+        return DB::table('pos_order_payments')->insertGetId([
+            'tenant_id' => $tenantId,
+            'pos_order_id' => $orderId,
+            'pos_shift_id' => $shiftId,
+            'direction' => $refundedFromId ? 'out' : 'in',
+            'method' => 'cash',
+            'amount' => 10,
+            'refunded_from_id' => $refundedFromId,
+            'paid_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createMenuItem(int $tenantId): int
+    {
+        $categoryId = DB::table('menu_categories')->insertGetId([
+            'tenant_id' => $tenantId,
+            'name' => 'POS integrity category',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return DB::table('menu_items')->insertGetId([
+            'tenant_id' => $tenantId,
+            'menu_category_id' => $categoryId,
+            'name' => 'POS integrity item',
+            'price' => 10,
             'created_at' => now(),
             'updated_at' => now(),
         ]);

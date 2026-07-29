@@ -18,6 +18,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Support\Facades\Route;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
@@ -28,6 +29,29 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         channels: __DIR__.'/../routes/channels.php',
         health: '/up',
+        then: static function (): void {
+            Route::get('/up/release', static function () {
+                $headers = [
+                    'Cache-Control' => 'no-store',
+                    'Content-Type' => 'text/plain; charset=UTF-8',
+                ];
+                $releasePath = app()->environment('production')
+                    ? '/var/lib/lora-release/current'
+                    : storage_path('framework/release');
+
+                if (! is_file($releasePath) || ! is_readable($releasePath)) {
+                    return response('release unavailable', 503, $headers);
+                }
+
+                $release = trim((string) file_get_contents($releasePath));
+
+                if (preg_match('/\A[0-9a-f]{40}\z/D', $release) !== 1) {
+                    return response('release unavailable', 503, $headers);
+                }
+
+                return response($release, 200, $headers);
+            })->name('health.release');
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Exact platform + registered tenant hosts only. Do not trust arbitrary

@@ -13,6 +13,7 @@ class VerifyTenantIntegrity extends Command
     protected $signature = 'tenants:verify-integrity
                             {--snapshot= : Write a PII-free counts/totals baseline to this JSON file}
                             {--compare= : Compare current counts/totals with this JSON baseline}
+                            {--verify-storage : Verify every supported database file reference exists on its local/public disk}
                             {--allow-additive-schema : Allow new tables and permission/role growth while preserving every existing count/total}
                             {--allow-additive-settings : Allow setting rows to grow for existing tenants while preserving every other count/total}';
 
@@ -36,6 +37,9 @@ class VerifyTenantIntegrity extends Command
         }
 
         $violations = $auditor->violations();
+        if ($this->option('verify-storage')) {
+            array_push($violations, ...$auditor->storageViolations());
+        }
         if ($violations !== []) {
             foreach ($violations as $violation) {
                 $this->error($violation);
@@ -103,7 +107,11 @@ class VerifyTenantIntegrity extends Command
     private function writeSnapshot(string $path, array $snapshot): void
     {
         $directory = dirname($path);
-        if (! is_dir($directory) || ! is_writable($directory)) {
+        $pathExists = file_exists($path) || is_link($path);
+        if ($pathExists && (is_link($path) || ! is_file($path) || ! is_writable($path))) {
+            throw new RuntimeException("Snapshot target is not a writable regular file: {$path}");
+        }
+        if (! $pathExists && (! is_dir($directory) || ! is_writable($directory))) {
             throw new RuntimeException("Snapshot directory is not writable: {$directory}");
         }
 
