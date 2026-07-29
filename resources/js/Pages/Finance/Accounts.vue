@@ -363,7 +363,7 @@ function toggleAccount(accountToToggle) {
                                 <component :is="accountIcon(accountItem.type)" class="h-5 w-5" />
                             </span>
                             <span class="min-w-0 flex-1">
-                                <span class="flex items-center gap-2"><span class="truncate text-sm font-bold text-neutral-900">{{ accountItem.name }}</span><span v-if="!accountItem.is_active" class="rounded bg-neutral-200 px-1.5 py-0.5 text-[9px] font-bold uppercase text-neutral-500">{{ t('financeAccounts.inactive') }}</span></span>
+                                <span class="flex items-center gap-2"><span class="truncate text-sm font-bold text-neutral-900">{{ accountItem.name }}</span><span v-if="accountItem.scope === 'pos'" class="rounded bg-violet-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-violet-700">{{ t('financeAccounts.posBadge') }}</span><span v-if="!accountItem.is_active" class="rounded bg-neutral-200 px-1.5 py-0.5 text-[9px] font-bold uppercase text-neutral-500">{{ t('financeAccounts.inactive') }}</span></span>
                                 <span class="mt-0.5 block text-xs text-neutral-500">{{ accountItem.currency }} · {{ t(`financeAccounts.types.${accountItem.type}`) }}</span>
                             </span>
                             <span class="text-right">

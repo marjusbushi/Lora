@@ -33,6 +33,7 @@ const props = defineProps({
     currentSalesperson: { type: Object, default: null },
     salespeople: { type: Array, default: () => [] },
     posSettings: { type: Object, default: () => ({}) },
+    payCurrencies: { type: Array, default: () => [] },
 });
 
 const toasts = ref(null);
@@ -66,6 +67,29 @@ const paymentOptions = [
     { value: 'room_charge', label: translate('admin.generated.k_31417756fe7f') },
 ];
 const paymentMethod = ref('');
+// Multi-currency tender: the totals stay in the base currency; the currency
+// choice only tells the cashier what to collect and which account it enters.
+const payCurrency = ref('');
+const splitCashCurrency = ref('');
+const posBaseCurrency = computed(() => props.payCurrencies[0]?.code || 'EUR');
+const multiCurrency = computed(() => (props.payCurrencies || []).length > 1);
+function fxRateFor(code) {
+    return Number((props.payCurrencies || []).find((entry) => entry.code === code)?.rate || 1);
+}
+function toTendered(baseAmount, code) {
+    const rate = fxRateFor(code);
+    return rate > 0 ? Math.round((baseAmount / rate) * 100) / 100 : 0;
+}
+const payTendered = computed(() => (
+    payCurrency.value && payCurrency.value !== posBaseCurrency.value && paymentMethod.value !== 'room_charge'
+        ? toTendered(paymentTotal.value, payCurrency.value)
+        : null
+));
+const splitCashTendered = computed(() => (
+    splitCashCurrency.value && splitCashCurrency.value !== posBaseCurrency.value && splitCash.value > 0
+        ? toTendered(splitCash.value, splitCashCurrency.value)
+        : null
+));
 const selectedPayReservation = ref('');
 const discountType = ref('none');
 const discountValue = ref('');
@@ -356,6 +380,8 @@ function openPay(order) {
     if (!hasOpenShift.value) { toasts.value?.error(translate('admin.generated.k_d4d2e4579cbb')); return; }
     selectedOrder.value = order;
     paymentMethod.value = '';
+    payCurrency.value = posBaseCurrency.value;
+    splitCashCurrency.value = posBaseCurrency.value;
     discountType.value = 'none';
     discountValue.value = '';
     discountReason.value = '';
@@ -375,10 +401,22 @@ function submitPay() {
     const payments = [];
     if (paymentTotal.value > 0) {
         if (paymentMethod.value === 'split') {
-            if (splitCash.value > 0) payments.push({ method: 'cash', amount: splitCash.value });
+            if (splitCash.value > 0) {
+                const cashTender = { method: 'cash', amount: splitCash.value };
+                if (splitCashTendered.value !== null) {
+                    cashTender.currency = splitCashCurrency.value;
+                    cashTender.tendered_amount = splitCashTendered.value;
+                }
+                payments.push(cashTender);
+            }
             if (splitCard.value > 0) payments.push({ method: 'card', amount: splitCard.value });
         } else if (paymentMethod.value) {
-            payments.push({ method: paymentMethod.value, amount: paymentTotal.value });
+            const tender = { method: paymentMethod.value, amount: paymentTotal.value };
+            if (payTendered.value !== null) {
+                tender.currency = payCurrency.value;
+                tender.tendered_amount = payTendered.value;
+            }
+            payments.push(tender);
         }
     }
     router.post(route('pos.complete', selectedOrder.value.id), {
@@ -399,7 +437,7 @@ function submitPay() {
             else toasts.value?.success(translate('admin.generated.k_4d1af80f8706'));
         },
         onError: (errors) => {
-            toasts.value?.error(errors.inventory || errors.payments || errors.discount_reason || errors.reservation_id || 'Pagesa nuk u regjistrua.');
+            toasts.value?.error(errors.inventory || errors.payments || errors.discount_reason || errors.reservation_id || Object.values(errors)[0] || 'Pagesa nuk u regjistrua.');
         },
     });
 }
@@ -780,8 +818,34 @@ onMounted(() => {
                                 </div>
                             </div>
 
+                            <div v-if="multiCurrency && (paymentMethod === 'cash' || paymentMethod === 'card')" class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                                <div class="flex items-center justify-between gap-3">
+                                    <span class="text-label text-neutral-600">Monedha e pagesës</span>
+                                    <select v-model="payCurrency" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
+                                        <option v-for="entry in payCurrencies" :key="entry.code" :value="entry.code">{{ entry.code }}</option>
+                                    </select>
+                                </div>
+                                <template v-if="payTendered !== null">
+                                    <div class="mt-3 flex items-center justify-between text-body-sm">
+                                        <span class="text-neutral-500">Merr nga klienti</span>
+                                        <strong class="text-lg">{{ payTendered.toFixed(2) }} {{ payCurrency }}</strong>
+                                    </div>
+                                    <p class="mt-1 text-small text-neutral-400">1 {{ payCurrency }} = {{ fxRateFor(payCurrency).toFixed(2) }} {{ posBaseCurrency }} · shkon në llogarinë {{ payCurrency }}</p>
+                                </template>
+                            </div>
+
                             <div v-if="paymentMethod === 'split'" class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                                 <FormGroup label="Shuma cash"><TextInput v-model="splitCashAmount" type="number" min="0" :max="paymentTotal" step="0.01" placeholder="0.00" /></FormGroup>
+                                <div v-if="multiCurrency" class="mt-3 flex items-center justify-between gap-3">
+                                    <span class="text-label text-neutral-600">Monedha e cash-it</span>
+                                    <select v-model="splitCashCurrency" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
+                                        <option v-for="entry in payCurrencies" :key="entry.code" :value="entry.code">{{ entry.code }}</option>
+                                    </select>
+                                </div>
+                                <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between text-body-sm">
+                                    <span class="text-neutral-500">Merr cash nga klienti</span>
+                                    <strong>{{ splitCashTendered.toFixed(2) }} {{ splitCashCurrency }}</strong>
+                                </div>
                                 <div class="mt-3 flex items-center justify-between text-body-sm"><span class="text-neutral-500">Pjesa me kartë</span><strong>{{ money(splitCard) }}</strong></div>
                             </div>
 
@@ -1093,11 +1157,21 @@ onMounted(() => {
             </template>
         </Modal>
 
+        <!-- Print-only receipt copy: teleported to body so the print CSS can pin
+             it to the page corner — the modal copy sits inside a positioned,
+             scroll-clipped dialog and prints mid-page and truncated. -->
+        <Teleport to="body">
+            <div v-if="receiptOrder" id="pos-receipt-print" aria-hidden="true">
+                <PosReceipt :order="receiptOrder" :settings="receiptSettings" />
+            </div>
+        </Teleport>
+
         <ToastContainer ref="toasts" />
     </AppLayout>
 </template>
 
 <style>
+#pos-receipt-print { display: none; }
 @media print {
     @page { size: 80mm auto; margin: 0; }
     body.printing-z-report * { visibility: hidden !important; }
@@ -1105,7 +1179,7 @@ onMounted(() => {
     body.printing-z-report #zreport { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
 
     body.printing-pos-receipt * { visibility: hidden !important; }
-    body.printing-pos-receipt #pos-receipt, body.printing-pos-receipt #pos-receipt * { visibility: visible !important; }
-    body.printing-pos-receipt #pos-receipt { position: absolute; left: 0; top: 0; margin: 0; box-shadow: none !important; }
+    body.printing-pos-receipt #pos-receipt-print { display: block; position: fixed; inset: 0 auto auto 0; width: 80mm; background: #fff; }
+    body.printing-pos-receipt #pos-receipt-print, body.printing-pos-receipt #pos-receipt-print * { visibility: visible !important; }
 }
 </style>

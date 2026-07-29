@@ -14,6 +14,7 @@ use App\Http\Controllers\LoraAiController;
 use App\Http\Controllers\MaintenanceController;
 use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OtaReconciliationController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosSalespersonController;
 use App\Http\Controllers\PosShiftController;
@@ -277,6 +278,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/messages/{thread}/reopen', [MessagesController::class, 'reopen'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.reopen');
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         Route::get('/reservations/calendar-design', fn () => Inertia::render('Reservations/CalendarDesign'))->name('reservations.calendar-design');
+        Route::get('/reservations/reconciliation', [OtaReconciliationController::class, 'index'])
+            ->middleware('module:channel_manager')
+            ->name('reservations.reconciliation');
         // Seasonal price quote for the create/edit form (server-computed; MUST stay before the {reservation} wildcard).
         Route::get('/reservations/quote', [ReservationController::class, 'quote'])->name('reservations.quote');
         Route::get('/reservations/{reservation}', [ReservationController::class, 'show'])->name('reservations.show');
@@ -390,6 +394,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/accounts', [FinanceController::class, 'accounts'])->name('finance.accounts');
         Route::post('/accounts', [FinanceController::class, 'storeAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.store');
         Route::put('/accounts/{account}/toggle', [FinanceController::class, 'toggleAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.toggle');
+        Route::put('/accounts/pos-mode', [FinanceController::class, 'updatePosAccountMode'])->middleware('permission:manage_finance_settings')->name('finance.accounts.pos-mode');
         Route::get('/payments', [FinanceController::class, 'payments'])->name('finance.payments');
         Route::get('/payments/export', [FinanceController::class, 'exportPayments'])->name('finance.payments.export');
         Route::post('/payments', [FinanceController::class, 'storePayment'])->middleware('permission:create_payment')->name('finance.payments.store');
@@ -426,6 +431,10 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/warehouses', [InventoryController::class, 'storeWarehouse'])->middleware('permission:manage_inventory')->name('inventory.warehouses.store');
         Route::put('/warehouses/{warehouse}', [InventoryController::class, 'updateWarehouse'])->middleware('permission:manage_inventory')->name('inventory.warehouses.update');
         Route::post('/transfers', [InventoryController::class, 'transfer'])->middleware('permission:manage_inventory')->name('inventory.transfers.store');
+        Route::post('/write-offs', [InventoryController::class, 'writeOff'])->middleware('permission:manage_stock_writeoffs')->name('inventory.write-offs.store');
+        Route::post('/categories', [InventoryController::class, 'storeCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.store');
+        Route::put('/categories/{category}', [InventoryController::class, 'updateCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.update');
+        Route::delete('/categories/{category}', [InventoryController::class, 'destroyCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.destroy');
     });
 
     // Admin-only: User Management + Settings

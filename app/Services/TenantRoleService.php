@@ -65,6 +65,9 @@ class TenantRoleService
                 'manage_transfers', 'manage_invoices', 'manage_bills',
                 'manage_suppliers', 'manage_deposits',
                 'view_reports',
+                // Sees stock and writes off damaged/lost goods, but cannot
+                // create or edit the articles themselves.
+                'view_inventory', 'manage_stock_writeoffs',
             ],
         ];
     }
@@ -92,7 +95,7 @@ class TenantRoleService
             'manage_transfers', 'manage_invoices', 'manage_bills',
             'manage_suppliers', 'manage_finance_settings', 'delete_finance_records',
             'manage_deposits', 'manage_withdrawals',
-            'view_inventory', 'manage_inventory',
+            'view_inventory', 'manage_inventory', 'manage_stock_writeoffs',
         ];
 
         return collect($resources)

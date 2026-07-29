@@ -1,5 +1,5 @@
 <script setup>
-import { useForm } from '@inertiajs/vue3';
+import { router, useForm } from '@inertiajs/vue3';
 import { Plus, UserRoundCheck } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
@@ -12,8 +12,26 @@ import Checkbox from '@/Components/UI/Checkbox.vue';
 const props = defineProps({
     settings: { type: Object, default: () => ({}) },
     staff: { type: Array, default: () => [] },
+    accountMode: { type: String, default: 'shared' },
     toasts: Object,
 });
+
+// Where POS money lands — saved immediately, independent of the main form.
+const accountMode = ref(props.accountMode);
+watch(() => props.accountMode, (mode) => { accountMode.value = mode; });
+
+function saveAccountMode(mode) {
+    if (accountMode.value === mode) return;
+    accountMode.value = mode;
+    router.put(route('finance.accounts.pos-mode'), { mode }, {
+        preserveScroll: true,
+        onSuccess: () => props.toasts?.success('Modaliteti i llogarive POS u ruajt.'),
+        onError: () => {
+            accountMode.value = props.accountMode;
+            props.toasts?.error('Modaliteti nuk u ruajt.');
+        },
+    });
+}
 
 const staffRows = (staff) => staff.map((person) => ({ ...person, pin: '', clear_pin: false }));
 const form = useForm({
@@ -86,6 +104,27 @@ function digitsOnly(event) {
                         :class="form.service_mode === option.value ? 'border-accent-500 bg-accent-50 ring-2 ring-accent-500/10' : 'border-neutral-200'"
                     >
                         <input v-model="form.service_mode" type="radio" :value="option.value" class="sr-only">
+                        <strong class="text-body-sm text-primary-900">{{ option.title }}</strong>
+                        <span class="mt-1 block text-tiny text-neutral-500">{{ option.text }}</span>
+                    </label>
+                </div>
+            </section>
+
+            <section class="border-t border-neutral-100 pt-5">
+                <h4 class="text-label text-primary-900">Paratë e POS Bar/Restorant</h4>
+                <p class="mt-1 text-small text-neutral-500">Ku derdhen pagesat e POS në Financë. Llogaritë krijohen vetë në shitjen e parë; ndërrimi nuk prek historikun — vetëm pagesat e reja ndjekin routimin e ri. Ruhet menjëherë.</p>
+                <div class="mt-3 grid gap-3 md:grid-cols-3">
+                    <label
+                        v-for="option in [
+                            { value: 'shared', title: 'Në llogaritë e hotelit', text: 'Cash te Arka, kartat te Banka' },
+                            { value: 'split_cash', title: 'Arkë e veçantë për POS', text: 'Cash-i i barit në sirtarin e vet; kartat te Banka' },
+                            { value: 'split_all', title: 'Arkë & bankë të veçanta', text: 'Gjithçka nga POS në llogaritë Bar/Restorant' },
+                        ]"
+                        :key="option.value"
+                        class="cursor-pointer rounded-xl border p-4"
+                        :class="accountMode === option.value ? 'border-accent-500 bg-accent-50 ring-2 ring-accent-500/10' : 'border-neutral-200'"
+                    >
+                        <input :checked="accountMode === option.value" type="radio" name="pos-account-mode" :value="option.value" class="sr-only" @change="saveAccountMode(option.value)">
                         <strong class="text-body-sm text-primary-900">{{ option.title }}</strong>
                         <span class="mt-1 block text-tiny text-neutral-500">{{ option.text }}</span>
                     </label>

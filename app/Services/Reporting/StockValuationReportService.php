@@ -47,9 +47,10 @@ final class StockValuationReportService
 
         $movementsByItem = $movements->groupBy('inventory_item_id');
         $items = InventoryItem::query()
+            ->with('category:id,name')
             ->where('type', '!=', 'service')
             ->orderBy('name')
-            ->get(['id', 'name', 'sku', 'category', 'type', 'unit', 'average_cost', 'minimum_stock', 'is_active']);
+            ->get(['id', 'name', 'sku', 'category_id', 'type', 'unit', 'average_cost', 'minimum_stock', 'is_active']);
 
         $rows = $items->map(fn (InventoryItem $item) => $this->itemRow(
             $item,
@@ -88,6 +89,7 @@ final class StockValuationReportService
                 'stock_change' => round($stockValue - $openingValue, 2),
                 'received_value' => round((float) $rows->sum('received_value'), 2),
                 'consumed_value' => round((float) $rows->sum('consumed_value'), 2),
+                'written_off_value' => round((float) $rows->sum('written_off_value'), 2),
                 'transfer_value' => round((float) $rows->sum('transfer_value'), 2),
                 'total_items' => $rows->count(),
                 'at_risk_count' => $atRisk->count(),
@@ -115,6 +117,9 @@ final class StockValuationReportService
         $received = $movements->where('type', 'purchase')
             ->filter(fn ($row) => (float) $row->period_quantity > 0);
         $consumption = $movements->whereIn('type', ['sale', 'room_charge', 'sale_release', 'sale_return']);
+        // Write-offs get their own bucket so the row keeps telling the whole
+        // story: opening + received − consumed − written off = ending.
+        $writeOffs = $movements->where('type', 'write_off');
         $consumedQuantity = max(0, -(float) $consumption->sum('period_quantity'));
         $consumedValue = max(0, -(float) $consumption->sum('period_value'));
         $dailyConsumption = $days > 0 ? $consumedQuantity / $days : 0.0;
@@ -131,7 +136,7 @@ final class StockValuationReportService
             'id' => $item->id,
             'name' => $item->name,
             'sku' => $item->sku,
-            'category' => $item->category ?: $item->type,
+            'category' => $item->category?->name ?: $item->type,
             'unit' => $item->unit,
             'is_active' => $item->is_active,
             'opening_quantity' => $openingQuantity,
@@ -144,6 +149,8 @@ final class StockValuationReportService
             'ending_value' => round(max(0, $endingQuantity) * $endingUnitCost, 2),
             'received_value' => round(max(0, (float) $received->sum('period_value')), 2),
             'consumed_value' => round($consumedValue, 2),
+            'written_off_quantity' => round(max(0, -(float) $writeOffs->sum('period_quantity')), 4),
+            'written_off_value' => round(max(0, -(float) $writeOffs->sum('period_value')), 2),
             'transfer_value' => round(abs((float) $movements->where('type', 'transfer_out')->sum('period_value')), 2),
             'days_cover' => $daysCover,
             'status' => $status,

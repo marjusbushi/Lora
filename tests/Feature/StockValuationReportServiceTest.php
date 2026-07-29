@@ -57,6 +57,26 @@ class StockValuationReportServiceTest extends TestCase
             'occurred_at' => '2026-07-10 08:00:00', 'created_by' => $user->id,
         ]);
 
+        // A write-off in the period must appear in its own bucket, not vanish
+        // into an unexplained ending-stock gap.
+        InventoryMovement::create([
+            'inventory_item_id' => $coffee->id, 'warehouse_id' => $central->id,
+            'type' => 'write_off', 'quantity' => -2, 'unit_cost' => 2.5,
+            'occurred_at' => '2026-07-13 09:00:00', 'created_by' => $user->id,
+        ]);
+
+        $current = app(StockValuationReportService::class)
+            ->summary(new ReportingPeriod('2026-07-10', '2026-07-15'));
+
+        $coffeeWriteOffRow = collect($current['items'])->firstWhere('id', $coffee->id);
+        $this->assertSame(2.0, $coffeeWriteOffRow['written_off_quantity']);
+        $this->assertSame(5.0, $coffeeWriteOffRow['written_off_value']);
+        $this->assertSame(5.0, $current['summary']['written_off_value']);
+        $this->assertSame(5.0, $coffeeWriteOffRow['ending_quantity']);
+        $this->assertSame(18.67, $coffeeWriteOffRow['consumed_value']);
+
+        // Remove it again so the original expectations stay byte-identical.
+        InventoryMovement::query()->where('type', 'write_off')->delete();
         $current = app(StockValuationReportService::class)
             ->summary(new ReportingPeriod('2026-07-10', '2026-07-15'));
 

@@ -29,6 +29,7 @@ use App\Tenancy\TenantRule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -259,6 +260,7 @@ class PosController extends Controller
             'view' => $view,
             'orders' => $orders,
             'menu' => $menu,
+            'payCurrencies' => CurrencyRates::payable(),
             'activeReservations' => $activeReservations,
             'filters' => $request->only('status', 'order_id'),
             'shiftHistory' => $shiftHistory,
@@ -413,11 +415,20 @@ class PosController extends Controller
 
     public function complete(Request $request, PosOrder $posOrder): RedirectResponse
     {
+        // The customer may pay cash/card in any currency the hotel keeps
+        // active (plus EUR, the rate base, and the base currency itself).
+        $payableCurrencies = array_values(array_unique(array_merge(
+            [BaseCurrency::code(), 'EUR'],
+            CurrencyRates::enabledCurrencies(),
+        )));
+
         $data = $request->validate([
             'payment_method' => ['nullable', 'in:cash,card,room_charge'],
             'payments' => ['nullable', 'array', 'max:2'],
             'payments.*.method' => ['required_with:payments', 'in:cash,card,room_charge'],
             'payments.*.amount' => ['required_with:payments', 'numeric', 'min:0.01', 'max:99999999.99'],
+            'payments.*.currency' => ['nullable', 'string', Rule::in($payableCurrencies)],
+            'payments.*.tendered_amount' => ['nullable', 'numeric', 'min:0.01', 'max:99999999.99'],
             'reservation_id' => ['nullable', TenantRule::exists('reservations')->where('status', 'checked_in')],
             'discount_amount' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'discount_reason' => ['nullable', 'string', 'max:255'],
@@ -469,8 +480,57 @@ class PosController extends Controller
                 $tenders = collect([['method' => $data['payment_method'], 'amount' => $total]]);
             }
 
-            if ($total > 0 && abs((float) $tenders->sum('amount') - $total) > 0.009) {
+            // Foreign-currency tenders: the server's live rate is authoritative;
+            // the base equivalent is recomputed from what the customer hands over.
+            $baseCurrency = BaseCurrency::code();
+            $fxTolerance = 0.0;
+            $tenders = $tenders->map(function (array $tender) use ($baseCurrency, &$fxTolerance) {
+                $currency = strtoupper((string) ($tender['currency'] ?? $baseCurrency));
+                if ($currency === $baseCurrency) {
+                    $tender['currency'] = null;
+                    $tender['tendered_amount'] = null;
+                    $tender['exchange_rate'] = null;
+
+                    return $tender;
+                }
+                if ($tender['method'] === 'room_charge') {
+                    throw ValidationException::withMessages(['payments' => 'Pagesa në dhomë regjistrohet vetëm në monedhën bazë.']);
+                }
+                $rate = CurrencyRates::between($currency, $baseCurrency);
+                if (! $rate) {
+                    throw ValidationException::withMessages(['payments' => "Kursi {$currency}/{$baseCurrency} mungon — kontrollo Cilësimet → Monedhat."]);
+                }
+                $tendered = round((float) ($tender['tendered_amount'] ?? $tender['amount']), 2);
+                $tender['currency'] = $currency;
+                $tender['tendered_amount'] = $tendered;
+                $tender['exchange_rate'] = round($rate, 6);
+                $tender['amount'] = round($tendered * $rate, 2);
+                // Half a minor unit of the tender currency, expressed in base.
+                $fxTolerance = max($fxTolerance, 0.005 * $rate);
+
+                return $tender;
+            });
+
+            $tenderSum = round((float) $tenders->sum('amount'), 2);
+            $residual = round($total - $tenderSum, 2);
+            if ($total > 0 && abs($residual) > 0.009 + $fxTolerance) {
                 throw ValidationException::withMessages(['payments' => 'Shuma e pagesave duhet të jetë e barabartë me totalin.']);
+            }
+            // Absorb sub-cent FX rounding into the last foreign tender so the
+            // recorded base amounts reconcile exactly with the order total.
+            if ($residual !== 0.0 && abs($residual) <= 0.009 + $fxTolerance) {
+                $lastForeign = $tenders->search(fn (array $tender) => $tender['currency'] !== null);
+                if ($lastForeign !== false) {
+                    $tenders = $tenders->map(function (array $tender, int $index) use ($lastForeign, $residual) {
+                        if ($index === $lastForeign) {
+                            $tender['amount'] = round((float) $tender['amount'] + $residual, 2);
+                        }
+
+                        return $tender;
+                    });
+                } elseif (abs($residual) > 0.009) {
+                    throw ValidationException::withMessages(['payments' => 'Shuma e pagesave duhet të jetë e barabartë me totalin.']);
+                }
             }
             if ($total === 0.0 && $tenders->isNotEmpty()) {
                 throw ValidationException::withMessages(['payments' => 'Një porosi komplimentare nuk kërkon pagesë.']);
@@ -513,6 +573,9 @@ class PosController extends Controller
                     'direction' => 'in',
                     'method' => $tender['method'],
                     'amount' => round((float) $tender['amount'], 2),
+                    'currency' => $tender['currency'] ?? null,
+                    'tendered_amount' => $tender['tendered_amount'] ?? null,
+                    'exchange_rate' => $tender['exchange_rate'] ?? null,
                     'paid_at' => now(),
                     'created_by' => $request->user()->id,
                 ]);
@@ -652,6 +715,11 @@ class PosController extends Controller
                     'direction' => 'out',
                     'method' => $salePayment->method,
                     'amount' => $salePayment->amount,
+                    // A foreign tender is returned from ITS currency account,
+                    // at the rate frozen when the sale was taken.
+                    'currency' => $salePayment->currency,
+                    'tendered_amount' => $salePayment->tendered_amount,
+                    'exchange_rate' => $salePayment->exchange_rate,
                     'refunded_from_id' => $salePayment->exists ? $salePayment->id : null,
                     'paid_at' => now(),
                     'created_by' => $request->user()->id,

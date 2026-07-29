@@ -8,6 +8,7 @@ use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
 use App\Models\FiscalDocument;
 use App\Models\FolioItem;
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -22,6 +23,7 @@ use App\Models\Warehouse;
 use App\Services\BaseCurrency;
 use App\Services\BillDocumentAiExtractor;
 use App\Services\CurrencyRates;
+use App\Services\FinanceLedger;
 use App\Services\GeminiClient;
 use App\Services\InventoryLedger;
 use App\Services\ReservationMoney;
@@ -431,6 +433,22 @@ class FinanceController extends Controller
         ]));
     }
 
+    /** Where POS money lands: shared hotel accounts, split cash drawer, or split cash+bank. */
+    public function updatePosAccountMode(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'mode' => ['required', Rule::in([
+                FinanceLedger::POS_MODE_SHARED,
+                FinanceLedger::POS_MODE_SPLIT_CASH,
+                FinanceLedger::POS_MODE_SPLIT_ALL,
+            ])],
+        ]);
+
+        Setting::set('finance.pos_account_mode', $data['mode']);
+
+        return back()->with('success', 'Modaliteti i llogarive POS u ruajt — pagesat e reja ndjekin routimin e ri, historiku nuk preket.');
+    }
+
     /** New cash box or bank account (owner-only via manage_finance_settings). */
     public function storeAccount(Request $request): RedirectResponse
     {
@@ -465,9 +483,10 @@ class FinanceController extends Controller
      */
     public function toggleAccount(Request $request, FinanceAccount $account): RedirectResponse
     {
-        if ($account->is_active && $account->currency === BaseCurrency::code()) {
+        if ($account->is_active && $account->scope === 'general' && $account->currency === BaseCurrency::code()) {
             $lastOfType = ! FinanceAccount::where('type', $account->type)
                 ->where('currency', BaseCurrency::code())
+                ->where('scope', 'general')
                 ->where('is_active', true)->where('id', '!=', $account->id)->exists();
             if ($lastOfType) {
                 $lloji = $account->type === 'cash' ? 'arkë' : 'bankë';
@@ -1288,7 +1307,7 @@ class FinanceController extends Controller
             'name' => $name,
             'sku' => $this->availableImportedSku($sku !== '' ? $sku : $name),
             'barcode' => $barcode !== '' ? $barcode : null,
-            'category' => trim((string) ($new['category'] ?? '')) ?: null,
+            'category_id' => $this->importedCategoryId($new['category'] ?? null),
             'type' => $new['type'] ?? 'product',
             'unit' => $new['unit'] ?? 'piece',
             'average_cost' => (float) ($lineData['unit_cost'] ?? 0),
@@ -1298,6 +1317,17 @@ class FinanceController extends Controller
             'minimum_stock' => 0,
             'is_active' => true,
         ]);
+    }
+
+    /** Bill imports may suggest a category by name — map it onto a root category, creating it on first use. */
+    private function importedCategoryId(?string $name): ?int
+    {
+        $name = trim((string) $name);
+        if ($name === '') {
+            return null;
+        }
+
+        return InventoryCategory::firstOrCreate(['name' => $name, 'parent_id' => null])->id;
     }
 
     private function availableImportedSku(string $source): string
@@ -1693,6 +1723,7 @@ class FinanceController extends Controller
                 'name' => $a->name,
                 'type' => $a->type,
                 'currency' => $a->currency,
+                'scope' => $a->scope,
                 'iban' => $a->iban,
                 'is_active' => $a->is_active,
                 'balance' => $balance,

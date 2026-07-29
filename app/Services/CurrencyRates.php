@@ -170,6 +170,30 @@ class CurrencyRates
     }
 
     /**
+     * Currencies a customer can pay in right now (base first), each with the
+     * preview rate: base units per 1 unit of that currency. Codes whose rate
+     * cannot be resolved are omitted — the POS never offers an unpriceable
+     * currency.
+     *
+     * @return list<array{code: string, rate: float}>
+     */
+    public static function payable(): array
+    {
+        $base = BaseCurrency::code();
+        $codes = array_values(array_unique(array_merge([$base, 'EUR'], self::enabledCurrencies())));
+
+        return collect($codes)
+            ->map(function (string $code) use ($base) {
+                $rate = $code === $base ? 1.0 : self::between($code, $base);
+
+                return $rate ? ['code' => $code, 'rate' => round($rate, 6)] : null;
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
      * Units of $code per 1 EUR, or null when unknown or disabled by the hotel.
      * Manual mode: the hotel's own rate wins for every enabled currency (the
      * platform serves any rate not yet entered). Automatic mode: the platform

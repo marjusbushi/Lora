@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
-import { AlertTriangle, BedDouble, ImagePlus, Package, Pencil, Plus, Search, ShoppingBasket, Trash2 } from 'lucide-vue-next';
+import { AlertTriangle, BedDouble, FolderTree, ImagePlus, Package, PackageMinus, Pencil, Plus, Search, ShoppingBasket, Trash2 } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -11,23 +11,29 @@ import TextInput from '@/Components/UI/TextInput.vue';
 import { money } from '@/Pages/Finance/financeShared.js';
 import { translate } from '@/i18n';
 
-const props = defineProps({ items: Array, warehouses: Array, posCategories: Array, filters: Object, can: Object });
+const props = defineProps({ items: Array, warehouses: Array, posCategories: Array, categories: { type: Array, default: () => [] }, filters: Object, can: Object });
 const search = ref(props.filters.search || '');
 const status = ref(props.filters.status || 'active');
+const categoryFilter = ref(props.filters.category_id || '');
 const editing = ref(null);
 const imagePreview = ref(null);
 const fileInput = ref(null);
 const unitLabels = { piece: translate('inventory.units.piece'), kg: translate('inventory.units.kg'), liter: translate('inventory.units.liter'), pack: translate('inventory.units.pack') };
 const typeLabels = { product: translate('inventory.types.product'), ingredient: translate('inventory.types.ingredient'), consumable: translate('inventory.types.consumable'), service: translate('inventory.types.service') };
 
-watch(() => props.filters, value => { search.value = value.search || ''; status.value = value.status || 'active'; }, { deep: true });
+watch(() => props.filters, value => { search.value = value.search || ''; status.value = value.status || 'active'; categoryFilter.value = value.category_id || ''; }, { deep: true });
 function filter() {
-    router.get(route('inventory.items'), { search: search.value || undefined, status: status.value }, { preserveState: true, preserveScroll: true, replace: true });
+    router.get(route('inventory.items'), { search: search.value || undefined, status: status.value, category_id: categoryFilter.value || undefined }, { preserveState: true, preserveScroll: true, replace: true });
+}
+
+// Indented label for the hierarchical selects: Pije / — Alkoolike / —— Verë.
+function categoryLabel(category) {
+    return `${'—'.repeat(category.depth)}${category.depth ? ' ' : ''}${category.name}`;
 }
 
 const defaultWarehouse = computed(() => props.warehouses[0]?.id || null);
 const form = useForm({
-    name: '', sku: '', barcode: '', category: '', type: 'product', unit: 'piece', average_cost: 0,
+    name: '', sku: '', barcode: '', category_id: null, type: 'product', unit: 'piece', average_cost: 0,
     image: null, remove_image: false, selling_price: null, minimum_stock: 0,
     sell_in_pos: false, pos_menu_category_id: null, pos_warehouse_id: null,
     sell_in_rooms: false, room_selling_price: null, room_warehouse_id: null,
@@ -43,6 +49,7 @@ watch(() => form.type, (type) => {
 function openNew() {
     form.reset();
     Object.assign(form, {
+        category_id: null,
         type: 'product', unit: 'piece', average_cost: 0, image: null, remove_image: false,
         selling_price: null, minimum_stock: 0, sell_in_pos: false,
         pos_menu_category_id: props.posCategories[0]?.id || null, pos_warehouse_id: defaultWarehouse.value,
@@ -56,7 +63,7 @@ function openNew() {
 
 function openEdit(item) {
     Object.assign(form, {
-        name: item.name, sku: item.sku, barcode: item.barcode || '', category: item.category || '', type: item.type,
+        name: item.name, sku: item.sku, barcode: item.barcode || '', category_id: item.category_id || null, type: item.type,
         unit: item.unit, average_cost: item.average_cost, selling_price: item.selling_price, minimum_stock: item.minimum_stock,
         image: null, remove_image: false, sell_in_pos: item.sell_in_pos,
         pos_menu_category_id: item.pos_menu_category_id || props.posCategories[0]?.id || null,
@@ -89,6 +96,62 @@ function submit() {
     if (editing.value === 'new') form.transform(data => data).post(route('inventory.items.store'), options);
     else form.transform(data => ({ ...data, _method: 'put' })).post(route('inventory.items.update', editing.value.id), options);
 }
+
+// Write-off: audited stock exit for damaged/lost/expired goods.
+const writingOff = ref(null);
+const writeOffReasons = { damaged: 'Dëmtuar', lost: 'Humbur', expired: 'Skaduar', other: 'Tjetër' };
+const writeOffForm = useForm({ inventory_item_id: null, warehouse_id: null, quantity: null, reason: 'damaged', notes: '' });
+const writeOffStock = computed(() => Number((writingOff.value?.warehouses || []).find(stock => stock.id === writeOffForm.warehouse_id)?.quantity || 0));
+
+function openWriteOff(item) {
+    writeOffForm.reset();
+    writeOffForm.clearErrors();
+    writeOffForm.inventory_item_id = item.id;
+    writeOffForm.warehouse_id = item.warehouses[0]?.id || null;
+    writeOffForm.reason = 'damaged';
+    writingOff.value = item;
+}
+
+function closeWriteOff() {
+    writingOff.value = null;
+    writeOffForm.clearErrors();
+}
+
+function submitWriteOff() {
+    writeOffForm.post(route('inventory.write-offs.store'), { preserveScroll: true, onSuccess: closeWriteOff });
+}
+
+// Category management: add (parent capped at two levels), rename, delete-when-empty.
+const showCategories = ref(false);
+const categoryForm = useForm({ name: '', parent_id: null });
+const parentOptions = computed(() => props.categories.filter(category => category.depth < 2));
+const renaming = ref(null);
+const renameForm = useForm({ name: '' });
+
+function submitCategory() {
+    categoryForm.post(route('inventory.categories.store'), {
+        preserveScroll: true,
+        onSuccess: () => { categoryForm.reset(); categoryForm.clearErrors(); },
+    });
+}
+
+function startRename(category) {
+    renaming.value = category.id;
+    renameForm.name = category.name;
+    renameForm.clearErrors();
+}
+
+function submitRename(category) {
+    renameForm.put(route('inventory.categories.update', category.id), {
+        preserveScroll: true,
+        onSuccess: () => { renaming.value = null; },
+    });
+}
+
+function deleteCategory(category) {
+    if (!confirm(`Fshi kategorinë "${category.name}"?`)) return;
+    router.delete(route('inventory.categories.destroy', category.id), { preserveScroll: true });
+}
 </script>
 
 <template>
@@ -104,10 +167,15 @@ function submit() {
             <Card :padding="false">
                 <div class="flex flex-col gap-3 border-b border-neutral-200 p-4 sm:flex-row sm:items-center">
                     <div class="relative min-w-0 flex-1"><Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><TextInput v-model="search" class="w-full pl-9" :placeholder="$t('inventory.items.search')" @keyup.enter="filter" /></div>
+                    <select v-model="categoryFilter" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="filter">
+                        <option value="">{{ $t('inventory.categories.all') }}</option>
+                        <option v-for="category in categories" :key="category.id" :value="category.id">{{ categoryLabel(category) }}</option>
+                    </select>
                     <select v-model="status" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="filter">
                         <option value="active">{{ $t('inventory.status.active') }}</option><option value="low">{{ $t('inventory.status.low') }}</option><option value="inactive">{{ $t('inventory.status.inactive') }}</option>
                     </select>
                     <Button variant="outline" @click="filter">{{ $t('inventory.actions.filter') }}</Button>
+                    <Button v-if="can.manageInventory" variant="outline" @click="showCategories = true"><FolderTree class="h-4 w-4" /> {{ $t('inventory.categories.manage') }}</Button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[850px] text-left">
@@ -120,7 +188,7 @@ function submit() {
                                 <td class="px-5 py-3.5 text-right"><strong class="text-body-sm tabular-nums" :class="item.is_low ? 'text-warning-700' : 'text-primary-900'">{{ item.stock }} {{ unitLabels[item.unit] }}</strong><span v-if="item.is_low" class="mt-1 flex items-center justify-end gap-1 text-tiny text-warning-700"><AlertTriangle class="h-3 w-3" /> {{ $t('inventory.items.minimum', { value: item.minimum_stock }) }}</span></td>
                                 <td class="px-5 py-3.5 text-right"><strong class="text-body-sm text-primary-900">{{ money(item.average_cost) }}</strong><span class="block text-tiny text-neutral-400">{{ money(item.stock_value) }}</span></td>
                                 <td class="px-5 py-3.5"><span class="rounded-full px-2 py-1 text-tiny font-bold" :class="item.is_active ? 'bg-accent-50 text-accent-700' : 'bg-neutral-100 text-neutral-500'">{{ item.is_active ? $t('inventory.status.active') : $t('inventory.status.inactive') }}</span></td>
-                                <td class="px-5 py-3.5 text-right"><button v-if="can.manageInventory" class="rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" @click="openEdit(item)"><Pencil class="h-4 w-4" /></button></td>
+                                <td class="px-5 py-3.5 text-right"><div class="flex items-center justify-end gap-1"><button v-if="can.writeOffs && item.type !== 'service' && item.warehouses.length" class="rounded-md p-2 text-neutral-400 hover:bg-warning-50 hover:text-warning-700" :title="$t('inventory.writeOff.action')" @click="openWriteOff(item)"><PackageMinus class="h-4 w-4" /></button><button v-if="can.manageInventory" class="rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" @click="openEdit(item)"><Pencil class="h-4 w-4" /></button></div></td>
                             </tr>
                             <tr v-if="!items.length"><td colspan="7" class="px-5 py-14 text-center text-body-sm text-neutral-400">{{ $t('inventory.items.empty') }}</td></tr>
                         </tbody>
@@ -147,10 +215,10 @@ function submit() {
                             <div class="sm:col-span-2"><label class="mb-1 block text-body-sm font-semibold">Emri i produktit</label><TextInput v-model="form.name" class="w-full" placeholder="p.sh. Coca-Cola 330ml" /><p v-if="form.errors.name" class="mt-1 text-tiny text-error-600">{{ form.errors.name }}</p></div>
                             <div><label class="mb-1 block text-body-sm font-semibold">SKU</label><TextInput v-model="form.sku" class="w-full" /><p v-if="form.errors.sku" class="mt-1 text-tiny text-error-600">{{ form.errors.sku }}</p></div>
                             <div><label class="mb-1 block text-body-sm font-semibold">Barcode</label><TextInput v-model="form.barcode" class="w-full" /></div>
-                            <div><label class="mb-1 block text-body-sm font-semibold">Kategoria</label><TextInput v-model="form.category" class="w-full" placeholder="Pije" /></div>
+                            <div><label class="mb-1 block text-body-sm font-semibold">Kategoria</label><select v-model="form.category_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option :value="null">{{ $t('inventory.categories.none') }}</option><option v-for="category in categories" :key="category.id" :value="category.id">{{ categoryLabel(category) }}</option></select><p v-if="form.errors.category_id" class="mt-1 text-tiny text-error-600">{{ form.errors.category_id }}</p></div>
                             <div><label class="mb-1 block text-body-sm font-semibold">Lloji</label><select v-model="form.type" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="(label, key) in typeLabels" :key="key" :value="key">{{ label }}</option></select></div>
-                            <div><label class="mb-1 block text-body-sm font-semibold">Njësia</label><select v-model="form.unit" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="(label, key) in unitLabels" :key="key" :value="key">{{ label }}</option></select></div>
-                            <div><label class="mb-1 block text-body-sm font-semibold">Stoku minimal</label><TextInput v-model="form.minimum_stock" type="number" min="0" step="0.0001" class="w-full" /></div>
+                            <div v-if="form.type !== 'service'"><label class="mb-1 block text-body-sm font-semibold">Njësia</label><select v-model="form.unit" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="(label, key) in unitLabels" :key="key" :value="key">{{ label }}</option></select></div>
+                            <div v-if="form.type !== 'service'"><label class="mb-1 block text-body-sm font-semibold">Stoku minimal</label><TextInput v-model="form.minimum_stock" type="number" min="0" step="0.0001" class="w-full" /></div>
                             <label v-if="editing !== 'new'" class="flex items-center gap-2 self-end pb-2 text-body-sm font-semibold"><input v-model="form.is_active" type="checkbox" class="rounded border-neutral-300 text-accent-600 focus:ring-accent-500" /> Produkt aktiv</label>
                         </div>
                     </div>
@@ -177,6 +245,85 @@ function submit() {
                 <section v-if="editing === 'new' && form.type !== 'service'" class="rounded-xl border border-accent-200 bg-accent-50/50 p-4"><h4 class="text-body-sm font-bold text-primary-900">Gjendja fillestare</h4><p class="mt-1 text-tiny text-neutral-500">Opsionale. Blerjet e ardhshme regjistrohen nga faturat e blerjes.</p><div class="mt-3 grid gap-3 sm:grid-cols-3"><div><label class="mb-1 block text-tiny font-semibold">Sasia</label><TextInput v-model="form.initial_quantity" type="number" min="0" step="0.0001" class="w-full" /></div><div><label class="mb-1 block text-tiny font-semibold">Kosto / njësi (€)</label><TextInput v-model="form.average_cost" type="number" min="0" step="0.01" class="w-full" /></div><div><label class="mb-1 block text-tiny font-semibold">Magazina</label><select v-model="form.initial_warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option></select></div></div></section>
             </div>
             <template #footer><Button variant="ghost" @click="closeModal">{{ $t('inventory.actions.cancel') }}</Button><Button :loading="form.processing" :disabled="!form.name || !form.sku" @click="submit">{{ $t('inventory.actions.save') }}</Button></template>
+        </Modal>
+
+        <Modal :show="!!writingOff" :title="`${$t('inventory.writeOff.action')} · ${writingOff?.name || ''}`" max-width="md" @close="closeWriteOff">
+            <div class="space-y-4">
+                <p class="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2.5 text-small text-warning-800">{{ $t('inventory.writeOff.hint') }}</p>
+                <div>
+                    <label class="mb-1 block text-body-sm font-semibold">{{ $t('inventory.writeOff.warehouse') }}</label>
+                    <select v-model="writeOffForm.warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
+                        <option v-for="stock in writingOff?.warehouses || []" :key="stock.id" :value="stock.id">{{ stock.name }} ({{ stock.quantity }} {{ unitLabels[writingOff?.unit] }})</option>
+                    </select>
+                    <p v-if="writeOffForm.errors.warehouse_id" class="mt-1 text-tiny text-error-600">{{ writeOffForm.errors.warehouse_id }}</p>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                        <label class="mb-1 block text-body-sm font-semibold">{{ $t('inventory.writeOff.quantity') }}</label>
+                        <TextInput v-model="writeOffForm.quantity" type="number" min="0.0001" :max="writeOffStock" step="0.0001" class="w-full" placeholder="0" />
+                        <p class="mt-1 text-tiny text-neutral-400">{{ $t('inventory.writeOff.available', { value: writeOffStock }) }}</p>
+                        <p v-if="writeOffForm.errors.quantity" class="mt-1 text-tiny text-error-600">{{ writeOffForm.errors.quantity }}</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-body-sm font-semibold">{{ $t('inventory.writeOff.reason') }}</label>
+                        <select v-model="writeOffForm.reason" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
+                            <option v-for="(label, key) in writeOffReasons" :key="key" :value="key">{{ label }}</option>
+                        </select>
+                        <p v-if="writeOffForm.errors.reason" class="mt-1 text-tiny text-error-600">{{ writeOffForm.errors.reason }}</p>
+                    </div>
+                </div>
+                <div>
+                    <label class="mb-1 block text-body-sm font-semibold">{{ $t('inventory.writeOff.notes') }}</label>
+                    <TextInput v-model="writeOffForm.notes" class="w-full" :placeholder="$t('inventory.writeOff.notesPlaceholder')" maxlength="300" />
+                    <p v-if="writeOffForm.errors.notes" class="mt-1 text-tiny text-error-600">{{ writeOffForm.errors.notes }}</p>
+                </div>
+            </div>
+            <template #footer>
+                <Button variant="ghost" @click="closeWriteOff">{{ $t('inventory.actions.cancel') }}</Button>
+                <Button variant="danger" :loading="writeOffForm.processing" :disabled="!writeOffForm.quantity || !writeOffForm.warehouse_id" @click="submitWriteOff"><PackageMinus class="h-4 w-4" /> {{ $t('inventory.writeOff.submit') }}</Button>
+            </template>
+        </Modal>
+
+        <Modal :show="showCategories" :title="$t('inventory.categories.manage')" max-width="lg" @close="showCategories = false">
+            <div class="space-y-4">
+                <form class="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3 sm:flex-row" @submit.prevent="submitCategory">
+                    <div class="min-w-0 flex-1">
+                        <TextInput v-model="categoryForm.name" class="w-full" :placeholder="$t('inventory.categories.namePlaceholder')" maxlength="80" />
+                        <p v-if="categoryForm.errors.name" class="mt-1 text-tiny text-error-600">{{ categoryForm.errors.name }}</p>
+                    </div>
+                    <div class="sm:w-56">
+                        <select v-model="categoryForm.parent_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
+                            <option :value="null">{{ $t('inventory.categories.rootLevel') }}</option>
+                            <option v-for="category in parentOptions" :key="category.id" :value="category.id">{{ categoryLabel(category) }}</option>
+                        </select>
+                        <p v-if="categoryForm.errors.parent_id" class="mt-1 text-tiny text-error-600">{{ categoryForm.errors.parent_id }}</p>
+                    </div>
+                    <Button type="submit" :loading="categoryForm.processing" :disabled="!categoryForm.name.trim()"><Plus class="h-4 w-4" /> {{ $t('inventory.categories.add') }}</Button>
+                </form>
+                <p class="text-tiny text-neutral-500">{{ $t('inventory.categories.depthHint') }}</p>
+
+                <div class="max-h-[380px] divide-y divide-neutral-100 overflow-y-auto rounded-xl border border-neutral-200">
+                    <div v-for="category in categories" :key="category.id" class="flex items-center gap-2 px-3 py-2.5" :style="{ paddingLeft: `${12 + category.depth * 22}px` }">
+                        <template v-if="renaming === category.id">
+                            <TextInput v-model="renameForm.name" class="h-8 flex-1" maxlength="80" @keyup.enter="submitRename(category)" />
+                            <Button size="sm" :loading="renameForm.processing" @click="submitRename(category)">{{ $t('inventory.actions.save') }}</Button>
+                            <Button size="sm" variant="ghost" @click="renaming = null">{{ $t('inventory.actions.cancel') }}</Button>
+                        </template>
+                        <template v-else>
+                            <FolderTree class="h-4 w-4 shrink-0 text-neutral-300" />
+                            <span class="min-w-0 flex-1 truncate text-body-sm font-semibold text-primary-900">{{ category.name }}</span>
+                            <span v-if="category.items_count" class="rounded-full bg-neutral-100 px-2 py-0.5 text-tiny text-neutral-500">{{ $t('inventory.categories.itemCount', { count: category.items_count }) }}</span>
+                            <button class="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" :title="$t('inventory.categories.rename')" @click="startRename(category)"><Pencil class="h-3.5 w-3.5" /></button>
+                            <button class="rounded-md p-1.5 disabled:cursor-not-allowed disabled:opacity-30" :class="'text-neutral-400 hover:bg-error-50 hover:text-error-600'" :disabled="category.items_count > 0 || category.children_count > 0" :title="category.items_count || category.children_count ? $t('inventory.categories.deleteBlocked') : $t('inventory.categories.delete')" @click="deleteCategory(category)"><Trash2 class="h-3.5 w-3.5" /></button>
+                        </template>
+                    </div>
+                    <p v-if="renameForm.errors.name && renaming" class="px-3 py-2 text-tiny text-error-600">{{ renameForm.errors.name }}</p>
+                    <p v-if="!categories.length" class="px-4 py-10 text-center text-body-sm text-neutral-400">{{ $t('inventory.categories.empty') }}</p>
+                </div>
+            </div>
+            <template #footer>
+                <Button variant="ghost" @click="showCategories = false">{{ $t('inventory.actions.cancel') }}</Button>
+            </template>
         </Modal>
     </AppLayout>
 </template>

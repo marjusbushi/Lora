@@ -14,6 +14,14 @@ use Illuminate\Validation\ValidationException;
 
 class InventoryLedger
 {
+    /** Why stock leaves outside a sale — the reason is part of the audit trail. */
+    public const WRITE_OFF_REASONS = [
+        'damaged' => 'Dëmtuar',
+        'lost' => 'Humbur',
+        'expired' => 'Skaduar',
+        'other' => 'Tjetër',
+    ];
+
     public function receiveBillItem(BillItem $billItem, ?int $userId = null): InventoryMovement
     {
         return DB::transaction(function () use ($billItem, $userId) {
@@ -133,6 +141,41 @@ class InventoryLedger
             }
 
             return $transfer;
+        });
+    }
+
+    /**
+     * Controlled stock exit for damaged/lost/expired goods — always a ledger
+     * row (never a silent quantity edit), so purchased 10 − written off 2
+     * keeps reconciling against the movement history.
+     */
+    public function writeOff(
+        InventoryItem $item,
+        Warehouse $warehouse,
+        float $quantity,
+        string $reason,
+        ?string $notes,
+        ?int $userId,
+    ): InventoryMovement {
+        return DB::transaction(function () use ($item, $warehouse, $quantity, $reason, $notes, $userId) {
+            $locked = InventoryItem::query()->lockForUpdate()->findOrFail($item->id);
+            $available = $locked->stock($warehouse->id);
+            if ($available + 0.00005 < $quantity) {
+                throw ValidationException::withMessages([
+                    'quantity' => 'Sasia e kërkuar kalon stokun e disponueshëm ('.$available.').',
+                ]);
+            }
+
+            return InventoryMovement::create([
+                'inventory_item_id' => $locked->id,
+                'warehouse_id' => $warehouse->id,
+                'type' => 'write_off',
+                'quantity' => -$quantity,
+                'unit_cost' => (float) $locked->average_cost,
+                'notes' => (self::WRITE_OFF_REASONS[$reason] ?? $reason).($notes ? ' · '.$notes : ''),
+                'occurred_at' => now(),
+                'created_by' => $userId,
+            ]);
         });
     }
 
