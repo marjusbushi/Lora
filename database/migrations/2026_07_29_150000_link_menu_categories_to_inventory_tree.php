@@ -61,6 +61,13 @@ return new class extends Migration
 
     public function down(): void
     {
+        // Captured before the column disappears: which tree nodes the POS
+        // groups were linked to.
+        $linkedIds = DB::table('menu_categories')
+            ->whereNotNull('inventory_category_id')
+            ->pluck('inventory_category_id')
+            ->unique();
+
         if (in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
             Schema::table('menu_categories', function (Blueprint $table) {
                 $table->dropForeign(['inventory_category_id']);
@@ -70,5 +77,19 @@ return new class extends Migration
             $table->dropIndex(['inventory_category_id']);
             $table->dropColumn('inventory_category_id');
         });
+
+        // Remove nodes that exist purely as POS bridges — linked, holding no
+        // articles and no children — so a rollback restores the exact
+        // pre-upgrade state. Nodes with any real usage are preserved
+        // (best-effort on a lived-in database, exact in the upgrade
+        // rehearsal). Membership computed in PHP: MySQL forbids deleting
+        // from a table referenced in its own subquery (error 1093).
+        $parents = DB::table('inventory_categories')->whereNotNull('parent_id')->pluck('parent_id')->unique();
+        $withItems = DB::table('inventory_items')->whereNotNull('category_id')->pluck('category_id')->unique();
+        $removable = $linkedIds->diff($parents)->diff($withItems);
+
+        if ($removable->isNotEmpty()) {
+            DB::table('inventory_categories')->whereIn('id', $removable->all())->delete();
+        }
     }
 };
