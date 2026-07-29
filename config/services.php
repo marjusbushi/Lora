@@ -98,4 +98,17 @@ return [
         'build_version' => env('FATURE_AL_BUILD_VERSION', env('APP_VERSION', 'dev')),
     ],
 
+    // Laravel Forge — provisions hotel custom domains on the platform's own
+    // server (site per domain + Let's Encrypt). server_ip is what customer
+    // DNS must point at; app_root is the shared document root every domain
+    // serves (both differ between staging and production). Without a token
+    // the panel degrades to clear "manual provisioning" messaging.
+    'forge' => [
+        'token' => env('FORGE_API_TOKEN'),
+        'server_id' => env('FORGE_SERVER_ID'),
+        'server_ip' => env('FORGE_SERVER_IP'),
+        'app_root' => env('FORGE_APP_ROOT'),
+        'site_user' => env('FORGE_SITE_USER', 'lorapms'),
+    ],
+
 ];
