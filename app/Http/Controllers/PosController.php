@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\FolioItem;
+use App\Models\InventoryCategory;
 use App\Models\InventoryMovement;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
@@ -260,6 +261,7 @@ class PosController extends Controller
             'view' => $view,
             'orders' => $orders,
             'menu' => $menu,
+            'menuTree' => $this->menuTreePayload($menu),
             'payCurrencies' => CurrencyRates::payable(),
             'activeReservations' => $activeReservations,
             'filters' => $request->only('status', 'order_id'),
@@ -287,6 +289,49 @@ class PosController extends Controller
                 })->sum('total_amount'),
             ],
         ]);
+    }
+
+    /**
+     * The drill-down skeleton for the sale screen: every tree node whose
+     * linked menu group actually offers something, plus all its ancestors so
+     * the cashier can navigate down to it. Flat, depth-annotated, roots
+     * first, children right below their parent.
+     *
+     * @return list<array{id:int,name:string,parent_id:?int,depth:int}>
+     */
+    private function menuTreePayload($menu): array
+    {
+        $linkedNodeIds = collect($menu)
+            ->filter(fn (MenuCategory $group) => $group->inventory_category_id && $group->items->isNotEmpty())
+            ->pluck('inventory_category_id')
+            ->unique();
+        if ($linkedNodeIds->isEmpty()) {
+            return [];
+        }
+
+        $nodes = InventoryCategory::query()->orderBy('name')->get(['id', 'name', 'parent_id'])->keyBy('id');
+
+        $keep = [];
+        foreach ($linkedNodeIds as $nodeId) {
+            $node = $nodes->get($nodeId);
+            while ($node && ! isset($keep[$node->id])) {
+                $keep[$node->id] = true;
+                $node = $node->parent_id ? $nodes->get($node->parent_id) : null;
+            }
+        }
+
+        $byParent = $nodes->filter(fn ($node) => isset($keep[$node->id]))
+            ->groupBy(fn ($node) => $node->parent_id ?? 0);
+        $flat = [];
+        $walk = function (int $parentKey, int $depth) use (&$walk, $byParent, &$flat) {
+            foreach ($byParent->get($parentKey, collect()) as $node) {
+                $flat[] = ['id' => $node->id, 'name' => $node->name, 'parent_id' => $node->parent_id, 'depth' => $depth];
+                $walk($node->id, $depth + 1);
+            }
+        };
+        $walk(0, 0);
+
+        return $flat;
     }
 
     public function store(Request $request): RedirectResponse

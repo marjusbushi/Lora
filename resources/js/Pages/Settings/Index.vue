@@ -43,6 +43,7 @@ const props = defineProps({
     integrations: { type: Array, default: () => [] },
     posStaff: { type: Array, default: () => [] },
     posAccountMode: { type: String, default: 'shared' },
+    inventoryCategoryTree: { type: Array, default: () => [] },
 });
 
 const toasts = ref(null);
@@ -165,7 +166,7 @@ function selectMobileTab(tabId) {
                     <AmenitiesTab v-else-if="activeTab === 'amenities'" :amenities="amenities" :toasts="toasts" />
                     <FloorsTab v-else-if="activeTab === 'floors'" :floors="floors" :toasts="toasts" />
                     <PosTab v-else-if="activeTab === 'pos'" :settings="settings.pos || {}" :staff="posStaff" :account-mode="posAccountMode" :toasts="toasts" />
-                    <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :inventory-enabled="modules.finance === true" :currency-symbol="settings.financial?.default_currency_symbol || '€'" :toasts="toasts" />
+                    <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :tree="inventoryCategoryTree" :inventory-enabled="modules.finance === true" :currency-symbol="settings.financial?.default_currency_symbol || '€'" :toasts="toasts" />
                     <HousekeepingTab v-else-if="activeTab === 'housekeeping'" :settings="settings.housekeeping || {}" :checklist-defaults="checklistDefaults" :toasts="toasts" />
                     <FinancialTab v-else-if="activeTab === 'financial'" :settings="settings.financial || {}" :toasts="toasts" />
                     <CurrenciesTab v-else-if="activeTab === 'currencies'" :settings="settings.currencies || {}" :toasts="toasts" />

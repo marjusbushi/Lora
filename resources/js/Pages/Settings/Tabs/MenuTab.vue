@@ -14,29 +14,29 @@ const props = defineProps({
     categories: Array,
     inventoryItems: Array,
     warehouses: Array,
+    tree: { type: Array, default: () => [] },
     inventoryEnabled: { type: Boolean, default: false },
     currencySymbol: { type: String, default: '€' },
     toasts: Object,
 });
 
-// Category
+// Indented label for the tree select: Pije / — Alkoolike / —— Verë.
+function treeLabel(node) {
+    return `${'—'.repeat(node.depth)}${node.depth ? ' ' : ''}${node.name}`;
+}
+
+// Category groups come from the inventory tree — here only the POS-side
+// settings (outlet, source warehouse) are edited; names live on the tree.
 const showCatModal = ref(false);
 const editingCat = ref(null);
 const catForm = useForm({ name: '', outlet: '', warehouse_id: null });
 
-function openCreateCat() { editingCat.value = null; catForm.reset(); Object.assign(catForm, { outlet: '', warehouse_id: props.warehouses[0]?.id || null }); showCatModal.value = true; }
 function openEditCat(cat) { editingCat.value = cat; Object.assign(catForm, { name: cat.name, outlet: cat.outlet || '', warehouse_id: cat.warehouse_id || null }); showCatModal.value = true; }
 
 function submitCat() {
-    if (editingCat.value) {
-        catForm.put(route('settings.menu-categories.update', editingCat.value.id), {
-            onSuccess: () => { showCatModal.value = false; props.toasts?.success(translate('admin.generated.k_98bda6c4106b')); },
-        });
-    } else {
-        catForm.post(route('settings.menu-categories.store'), {
-            onSuccess: () => { showCatModal.value = false; catForm.reset(); props.toasts?.success(translate('admin.generated.k_bffb68e4eb11')); },
-        });
-    }
+    catForm.put(route('settings.menu-categories.update', editingCat.value.id), {
+        onSuccess: () => { showCatModal.value = false; props.toasts?.success(translate('admin.generated.k_98bda6c4106b')); },
+    });
 }
 
 function deleteCat(cat) {
@@ -51,24 +51,24 @@ function deleteCat(cat) {
 // Item
 const showItemModal = ref(false);
 const editingItem = ref(null);
-const itemForm = useForm({ menu_category_id: '', name: '', price: '', image: null, inventory_components: [] });
+const itemForm = useForm({ inventory_category_id: null, name: '', price: '', image: null, inventory_components: [] });
 const imagePreview = ref(null);
 const fileInput = ref(null);
 
-function openCreateItem(catId) {
+function openCreateItem(cat) {
     editingItem.value = null;
     itemForm.reset();
-    itemForm.menu_category_id = catId;
+    itemForm.inventory_category_id = cat?.inventory_category_id || null;
     itemForm.inventory_components = [];
     imagePreview.value = null;
     showItemModal.value = true;
 }
 
-function openEditItem(item) {
+function openEditItem(item, cat) {
     editingItem.value = item;
     itemForm.name = item.name;
     itemForm.price = item.price;
-    itemForm.menu_category_id = item.menu_category_id;
+    itemForm.inventory_category_id = cat?.inventory_category_id || null;
     itemForm.image = null;
     itemForm.inventory_components = (item.inventory_components || []).map(component => ({
         inventory_item_id: component.inventory_item_id,
@@ -107,6 +107,7 @@ function submitItem() {
     formData.append('name', itemForm.name);
     formData.append('price', itemForm.price);
     if (itemForm.image) formData.append('image', itemForm.image);
+    if (itemForm.inventory_category_id) formData.append('inventory_category_id', itemForm.inventory_category_id);
     itemForm.inventory_components.forEach((component, index) => {
         formData.append(`inventory_components[${index}][inventory_item_id]`, component.inventory_item_id ?? '');
         formData.append(`inventory_components[${index}][quantity]`, component.quantity ?? '');
@@ -120,7 +121,6 @@ function submitItem() {
             onSuccess: () => { showItemModal.value = false; props.toasts?.success(translate('admin.generated.k_147fcb2c4362')); },
         });
     } else {
-        formData.append('menu_category_id', itemForm.menu_category_id);
         router.post(route('settings.menu-items.store'), formData, {
             forceFormData: true,
             preserveScroll: true,
@@ -147,10 +147,13 @@ function deleteItem(item) {
 
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_78be5e1611cb') }}</h3>
-            <Button size="sm" variant="primary" @click="openCreateCat">{{ $t('admin.generated.k_8b3808420dbb') }}</Button>
+            <Button size="sm" variant="primary" @click="openCreateItem(null)"><Plus class="h-4 w-4" /> Artikull i ri menuje</Button>
         </div>
+        <p class="rounded-lg border border-blue-100 bg-blue-50 px-3.5 py-2.5 text-small text-blue-800">
+            Grupet vijnë automatikisht nga kategoritë e inventarit (Inventari → Artikujt → Menaxho kategoritë). Këtu ndryshohen vetëm cilësimet e POS-it për grup — outlet-i dhe magazina e burimit.
+        </p>
 
         <Card v-for="cat in categories" :key="cat.id">
             <template #header>
@@ -161,9 +164,9 @@ function deleteItem(item) {
                         <Badge v-if="inventoryEnabled && cat.warehouse_id" variant="success" size="sm"><Package class="h-3 w-3" /> {{ warehouses.find(warehouse => warehouse.id === cat.warehouse_id)?.name }}</Badge>
                     </div>
                     <div class="flex gap-1.5">
-                        <Button size="sm" variant="ghost" @click="openCreateItem(cat.id)">{{ $t('admin.generated.k_3acd3ffafdb5') }}</Button>
-                        <Button size="sm" variant="ghost" @click="openEditCat(cat)">{{ $t('admin.generated.k_69b7a8e80aee') }}</Button>
-                        <Button size="sm" variant="ghost" class="text-error-600" @click="deleteCat(cat)">{{ $t('admin.generated.k_94078f0402e2') }}</Button>
+                        <Button size="sm" variant="ghost" @click="openCreateItem(cat)">{{ $t('admin.generated.k_3acd3ffafdb5') }}</Button>
+                        <Button size="sm" variant="ghost" @click="openEditCat(cat)">Cilësimet</Button>
+                        <Button v-if="!cat.inventory_category_id" size="sm" variant="ghost" class="text-error-600" @click="deleteCat(cat)">{{ $t('admin.generated.k_94078f0402e2') }}</Button>
                     </div>
                 </div>
             </template>
@@ -188,7 +191,7 @@ function deleteItem(item) {
                         <Button size="sm" variant="ghost" @click="toggleItem(item)">
                             {{ item.is_available ? $t('admin.generated.k_fe06b9e8b743') : $t('admin.generated.k_31730ad3e645') }}
                         </Button>
-                        <Button v-if="!item.inventory_item_id" size="sm" variant="ghost" @click="openEditItem(item)">{{ $t('admin.generated.k_69b7a8e80aee') }}</Button>
+                        <Button v-if="!item.inventory_item_id" size="sm" variant="ghost" @click="openEditItem(item, cat)">{{ $t('admin.generated.k_69b7a8e80aee') }}</Button>
                         <Button v-if="!item.inventory_item_id" size="sm" variant="ghost" class="text-error-600" @click="deleteItem(item)">{{ $t('admin.generated.k_94078f0402e2') }}</Button>
                     </div>
                 </div>
@@ -200,9 +203,12 @@ function deleteItem(item) {
     </div>
 
     <!-- Category Modal -->
-    <Modal :show="showCatModal" :title="editingCat ? $t('admin.generated.k_fac35fe7bac4') : $t('admin.generated.k_e5e49fbd75f4')" max-width="sm" @close="showCatModal = false">
+    <Modal :show="showCatModal" :title="`Cilësimet e grupit · ${editingCat?.name || ''}`" max-width="sm" @close="showCatModal = false">
         <div class="space-y-4">
-            <FormGroup :label="$t('admin.generated.k_588dd1daa42d')" :error="catForm.errors.name" required>
+            <p v-if="editingCat?.inventory_category_id" class="rounded-lg bg-neutral-50 px-3 py-2 text-small text-neutral-600">
+                Emri "{{ editingCat?.name }}" vjen nga kategoria e inventarit dhe riemërtohet atje.
+            </p>
+            <FormGroup v-else :label="$t('admin.generated.k_588dd1daa42d')" :error="catForm.errors.name" required>
                 <TextInput v-model="catForm.name" :placeholder="$t('admin.generated.k_2454362e8872')" :error="catForm.errors.name" />
             </FormGroup>
             <div class="grid gap-4 sm:grid-cols-2">
@@ -220,7 +226,7 @@ function deleteItem(item) {
         </div>
         <template #footer>
             <Button variant="outline" @click="showCatModal = false">{{ $t('admin.generated.k_71826e412580') }}</Button>
-            <Button variant="primary" :loading="catForm.processing" @click="submitCat">{{ editingCat ? $t('admin.generated.k_f5ca5b683c10') : $t('admin.generated.k_be09ce96c961') }}</Button>
+            <Button variant="primary" :loading="catForm.processing" @click="submitCat">{{ $t('admin.generated.k_f5ca5b683c10') }}</Button>
         </template>
     </Modal>
 
@@ -257,6 +263,13 @@ function deleteItem(item) {
                     <TextInput type="number" v-model="itemForm.price" min="0.01" step="0.01" :error="itemForm.errors?.price" />
                 </FormGroup>
             </div>
+
+            <FormGroup label="Kategoria (nga inventari)" :error="itemForm.errors?.inventory_category_id" required>
+                <select v-model="itemForm.inventory_category_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                    <option :value="null" disabled>Zgjidh kategorinë...</option>
+                    <option v-for="node in tree" :key="node.id" :value="node.id">{{ treeLabel(node) }}</option>
+                </select>
+            </FormGroup>
 
             <section v-if="inventoryEnabled" class="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                 <div class="flex items-start justify-between gap-3">

@@ -116,7 +116,6 @@ class InventoryController extends Controller
                 return $row;
             })->values(),
             'warehouses' => Warehouse::where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get(['id', 'name']),
-            'posCategories' => MenuCategory::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'outlet']),
             'categories' => $categories,
             'filters' => ['search' => $search, 'status' => $status, 'category_id' => $categoryFilter ?: null],
             'can' => [
@@ -333,6 +332,8 @@ class InventoryController extends Controller
         $this->assertCategoryNameFree(trim($data['name']), $category->parent_id, $category->id);
 
         $category->update(['name' => trim($data['name'])]);
+        // The tree owns the names — linked POS menu groups follow.
+        $category->menuCategories()->update(['name' => $category->name]);
 
         return back()->with('success', 'Kategoria u riemërtua.');
     }
@@ -342,7 +343,12 @@ class InventoryController extends Controller
         if ($category->children()->exists() || $category->items()->exists()) {
             return back()->with('error', 'Fshihen vetëm kategoritë bosh — pa nën-kategori dhe pa artikuj.');
         }
+        if ($category->menuCategories()->whereHas('items')->exists()) {
+            return back()->with('error', 'Kategoria mban një grup POS me artikuj menuje — zbraze menunë fillimisht.');
+        }
 
+        // An empty linked POS group dies with its node.
+        $category->menuCategories()->delete();
         $category->delete();
 
         return back()->with('success', 'Kategoria u fshi.');
@@ -449,7 +455,6 @@ class InventoryController extends Controller
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_image' => ['nullable', 'boolean'],
             'sell_in_pos' => ['nullable', 'boolean'],
-            'pos_menu_category_id' => ['nullable', TenantRule::exists('menu_categories')],
             'pos_warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
             'sell_in_rooms' => ['nullable', 'boolean'],
             'room_selling_price' => ['nullable', 'numeric', 'min:0.01', 'max:9999999'],
@@ -470,8 +475,9 @@ class InventoryController extends Controller
         if (($data['sell_in_pos'] ?? false) && $data['type'] !== 'product') {
             throw ValidationException::withMessages(['sell_in_pos' => 'Vetëm produktet mund të publikohen në POS.']);
         }
-        if (($data['sell_in_pos'] ?? false) && empty($data['pos_menu_category_id'])) {
-            throw ValidationException::withMessages(['pos_menu_category_id' => 'Zgjidh kategorinë e POS-it.']);
+        if (($data['sell_in_pos'] ?? false) && empty($data['category_id'])) {
+            // The POS group derives from the article's own category — one system.
+            throw ValidationException::withMessages(['category_id' => 'Cakto kategorinë e artikullit para publikimit në POS.']);
         }
         if (($data['sell_in_pos'] ?? false) && empty($data['pos_warehouse_id'])) {
             throw ValidationException::withMessages(['pos_warehouse_id' => 'Zgjidh magazinën e POS-it.']);
@@ -522,7 +528,6 @@ class InventoryController extends Controller
             'average_cost' => (float) $item->average_cost,
             'selling_price' => $item->selling_price !== null ? (float) $item->selling_price : null,
             'sell_in_pos' => $item->sell_in_pos,
-            'pos_menu_category_id' => $item->posMenuItem?->menu_category_id,
             'pos_warehouse_id' => $item->posMenuItem?->warehouse_id,
             'sell_in_rooms' => $item->sell_in_rooms,
             'room_selling_price' => $item->room_selling_price !== null ? (float) $item->room_selling_price : null,
@@ -548,7 +553,9 @@ class InventoryController extends Controller
         $menuItem = MenuItem::updateOrCreate(
             ['inventory_item_id' => $item->id],
             [
-                'menu_category_id' => $data['pos_menu_category_id'],
+                'menu_category_id' => MenuCategory::forInventoryCategory(
+                    InventoryCategory::findOrFail($item->category_id),
+                )->id,
                 'warehouse_id' => $data['pos_warehouse_id'],
                 'name' => $item->name,
                 'price' => $item->selling_price,
