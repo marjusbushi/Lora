@@ -816,7 +816,7 @@ class ReservationController extends Controller
             'check_out_date' => ['required', 'date', 'after:check_in_date'],
             'status' => ['sometimes', 'in:pending,confirmed'],
             'channel' => ['sometimes', 'nullable', Rule::in(Reservation::CHANNELS)],
-            'channel_ref' => ['nullable', 'string', 'max:120'],
+            'channel_ref' => Reservation::channelRefRules($request->input('channel')),
             'notes' => ['nullable', 'string', 'max:1000'],
             'rooms' => ['required', 'array', 'min:1'],
             'rooms.*.room_id' => ['required', TenantRule::exists('rooms')],
@@ -831,6 +831,9 @@ class ReservationController extends Controller
             'rooms.required' => 'Shto te pakten nje dhome.',
             'rooms.min' => 'Shto te pakten nje dhome.',
             'rooms.*.room_id.required' => 'Zgjidh dhomen per cdo rresht.',
+            'channel_ref.required' => 'Per rezervimet nga OTA numri i rezervimit eshte i detyrueshem — e gjen te extranet-i ose email-i i konfirmimit.',
+            'channel_ref.regex' => 'Numri i rezervimit nuk ka formatin e pritur per kete kanal.',
+            'channel_ref.unique' => 'Ky numer rezervimi ekziston tashme ne sistem per kete kanal.',
         ]);
 
         // No duplicate room within the same booking.
@@ -933,6 +936,12 @@ class ReservationController extends Controller
             throw ValidationException::withMessages([
                 'channel' => 'Burimi i nje rezervimi te sinkronizuar nuk mund te ndryshohet.',
             ]);
+        }
+
+        // The OTA reference of a synced reservation is the channel manager's
+        // identifier — staff edits must never rewrite it.
+        if ($reservation->created_via !== Reservation::CREATED_VIA_STAFF) {
+            $data['channel_ref'] = $reservation->channel_ref;
         }
 
         $room = Room::with('roomType')->findOrFail($data['room_id']);

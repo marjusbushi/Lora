@@ -41,10 +41,13 @@ class ReservationChannelTest extends TestCase
             'status' => 'confirmed',
             'adults' => 2,
             'channel' => 'booking.com',
+            // OTA-sourced manual entries must carry the OTA's booking number.
+            'channel_ref' => '5438361798',
         ])->assertRedirect()->assertSessionHasNoErrors();
 
         $reservation = Reservation::latest('id')->first();
         $this->assertEquals('booking.com', $reservation->channel);
+        $this->assertEquals('5438361798', $reservation->channel_ref);
         $this->assertEquals(Reservation::CREATED_VIA_STAFF, $reservation->created_via);
     }
 
