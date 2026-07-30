@@ -109,6 +109,19 @@ const totalAmount = computed(() => form.rooms.reduce((s, r) => s + (Number(r.tot
 const commission = computed(() => Math.round(totalAmount.value * feePct(form.channel)) / 100);
 const net = computed(() => totalAmount.value - commission.value);
 
+// OTA bookings must carry the OTA's reservation number — without it,
+// cancellations and modifications from the channel can't find the reservation.
+const NUMERIC_REF_CHANNELS = ['booking.com', 'expedia', 'agoda', 'hotels.com', 'trip.com'];
+const isOta = computed(() => form.channel && form.channel !== 'direct');
+const refPlaceholder = computed(() =>
+    NUMERIC_REF_CHANNELS.includes(form.channel) ? 'p.sh. 5438361798' : 'p.sh. HMABC12345'
+);
+// The field only exists for OTA sources — switching back to Direct discards
+// whatever was typed so a stale ref is never submitted with a direct booking.
+watch(() => form.channel, (channel) => {
+    if (channel === 'direct') form.channel_ref = '';
+});
+
 function clampRow(i) {
     const row = form.rooms[i];
     const cap = maxOccFor(row.room_id);
@@ -255,8 +268,9 @@ function submit() {
                 <FormGroup :label="$t('admin.generated.k_fdfb0b54ae04')" :error="form.errors.channel">
                     <Select v-model="form.channel" :options="channelOptions" :error="form.errors.channel" />
                 </FormGroup>
-                <FormGroup label="Referenca e kanalit" :error="form.errors.channel_ref">
-                    <TextInput v-model="form.channel_ref" placeholder="p.sh. Booking #45218" :error="form.errors.channel_ref" />
+                <FormGroup v-if="isOta" label="Numri i rezervimit OTA" :error="form.errors.channel_ref" required>
+                    <TextInput v-model="form.channel_ref" :placeholder="refPlaceholder" :error="form.errors.channel_ref" />
+                    <p class="mt-1 text-tiny text-neutral-500">E gjen te extranet-i ose email-i i konfirmimit — pa të, anulimet nga OTA nuk e gjejnë dot rezervimin.</p>
                 </FormGroup>
                 <FormGroup label="Statusi" :error="form.errors.status">
                     <Select v-model="form.status" :options="[{ value: 'confirmed', label: 'Konfirmuar' }, { value: 'pending', label: 'Në pritje' }]" :error="form.errors.status" />

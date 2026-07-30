@@ -18,6 +18,7 @@ class AuditTimeline
         'reservation.early_departure' => 'U regjistrua largim i parakohshëm',
         'reservation.stay_extended' => 'U zgjat qëndrimi',
         'reservation.move_room' => 'U ndryshua dhoma',
+        'reservation.link_ota' => 'U lidh me booking-un OTA',
         'reservation.cancel' => 'Rezervimi u anulua',
         'reservation.deleted' => 'Rezervimi u fshi',
         'guest.created' => 'Profili i mysafirit u krijua',

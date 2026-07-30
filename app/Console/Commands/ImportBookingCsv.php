@@ -2,13 +2,13 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Concerns\ResolvesTenantContext;
 use App\Models\ChannelSyncLog;
 use App\Models\Guest;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\User;
-use App\Console\Concerns\ResolvesTenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -78,8 +78,19 @@ class ImportBookingCsv extends Command
             $country = trim($row['Booker country'] ?? '');
             $phone = trim($row['Phone number'] ?? '');
 
-            // Resolve the room(s) this booking maps to.
-            $units = array_filter(array_map('trim', explode(',', (string) ($row['Unit type'] ?? ''))));
+            // Resolve the room(s) this booking maps to. Booking.com's export
+            // lists each unit NAME once and carries the count in a separate
+            // "Rooms" column — a booking of 2× the same unit arrives as one
+            // name with Rooms=2, so the name list must be expanded to match.
+            $units = array_values(array_filter(array_map('trim', explode(',', (string) ($row['Unit type'] ?? '')))));
+            $roomsWanted = (int) ($row['Rooms'] ?? $row['Units'] ?? 0);
+            if ($roomsWanted > count($units) && count(array_unique($units)) === 1) {
+                $units = array_fill(0, $roomsWanted, $units[0]);
+            } elseif ($roomsWanted > count($units)) {
+                // Mixed unit names with a higher count are ambiguous (which unit
+                // repeats?) — import what is listed but flag it for the operator.
+                $flagged[] = "#{$book} {$row['Guest Name(s)']} — CSV kërkon {$roomsWanted} dhoma por 'Unit type' rendit vetëm ".count($units).": '".($row['Unit type'] ?? '')."'";
+            }
             $rooms = [];
             $unmapped = [];
             foreach ($units as $unit) {
@@ -163,10 +174,15 @@ class ImportBookingCsv extends Command
         if (isset($roomsByNumber[$unit])) {
             return $roomsByNumber[$unit];
         }
-        // 2) room-type name (exact, case-insensitive), with a known Booking.com alias
+        // 2) room-type name (exact, case-insensitive), with a known Booking.com alias.
+        // Booking.com's "Deluxe Double Room with Balcony and Sea View" is the
+        // hotel's "Deluxe With Sea View" type — confirmed by the hotel's own
+        // Channex channel mapping (Booking.com room_type_code 150548607) and
+        // the public listing; NOT the "Deluxe Double Room With Balcony" type
+        // it was previously aliased to (misfiled ~27 imported bookings).
         $name = strtolower($unit);
         if (str_contains($name, 'balcony') && str_contains($name, 'sea view')) {
-            $name = 'deluxe double room with balcony'; // Booking lists it with a longer marketing name
+            $name = 'deluxe with sea view';
         }
         $type = RoomType::all()->first(fn ($t) => strtolower(trim($t->name)) === $name);
         if (! $type) {

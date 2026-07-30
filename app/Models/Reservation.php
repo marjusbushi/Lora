@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Observers\ReservationObserver;
 use App\Services\MoneySnapshot;
 use App\Services\PricingCurrency;
+use App\Tenancy\TenantRule;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -128,6 +129,46 @@ class Reservation extends TenantModel
         $channel = strtolower(trim((string) $channel));
 
         return $channel === '' || $channel === 'manual' ? 'direct' : $channel;
+    }
+
+    /** Channels whose booking references are purely numeric on the OTA side. */
+    public const NUMERIC_REF_CHANNELS = ['booking.com', 'expedia', 'agoda', 'hotels.com', 'trip.com'];
+
+    /**
+     * Validation rules for channel_ref given the (normalized) channel. For any
+     * third-party source the OTA's reservation number is mandatory: cancellations
+     * and modifications can only reach a reservation through it, and an unlinked
+     * manual copy becomes invisible to the channel manager (Novotny/Morvan cases).
+     * Uniqueness is per channel among non-cancelled rows, so a legitimate
+     * re-entry after a cancel-and-replace still passes.
+     */
+    public static function channelRefRules(mixed $channel, ?int $ignoreReservationId = null): array
+    {
+        // A malformed channel (array, object) is rejected by the channel field's
+        // own rule — stay lenient here so validation answers 422, not a 500.
+        if (! is_string($channel) && $channel !== null) {
+            return ['nullable', 'string', 'max:120'];
+        }
+
+        $channel = static::normalizeChannel($channel);
+        if ($channel === 'direct') {
+            return ['nullable', 'string', 'max:120'];
+        }
+
+        $unique = TenantRule::unique('reservations', 'channel_ref')
+            ->where(fn ($query) => $query->where('channel', $channel)->where('status', '!=', 'cancelled'));
+        if ($ignoreReservationId !== null) {
+            $unique->ignore($ignoreReservationId);
+        }
+
+        return [
+            'required',
+            'string',
+            in_array($channel, self::NUMERIC_REF_CHANNELS, true)
+                ? 'regex:/^\d{6,15}$/'
+                : 'regex:/^[A-Za-z0-9\-]{4,40}$/',
+            $unique,
+        ];
     }
 
     protected function casts(): array

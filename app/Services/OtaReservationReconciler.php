@@ -104,7 +104,24 @@ class OtaReservationReconciler
 
         if ($local->isEmpty() && $remote['cancelled']) {
             // A cancelled remote booking that never occupied PMS inventory is
-            // already safe. Resolve any older warning instead of creating noise.
+            // usually safe — EXCEPT when the desk hand-typed an unlinked copy
+            // that still holds the room for a guest who is no longer coming.
+            $candidates = $this->cancelledTwinCandidates($booking, $remote);
+            if ($candidates->isNotEmpty()) {
+                $manualCandidates = $candidates->count();
+                $detected['cancelled_ota_manual_twin'] = [
+                    'severity' => 'warning',
+                    'reservation_id' => null,
+                    'expected_total' => $remote['total'],
+                    'actual_total' => null,
+                    'details' => [
+                        'candidate_reservation_ids' => $candidates->pluck('id')->values()->all(),
+                        'arrival_date' => $remote['arrival_date'],
+                        'departure_date' => $remote['departure_date'],
+                        'remote_status' => $remote['status'],
+                    ],
+                ];
+            }
         } elseif ($local->isEmpty()) {
             $candidates = $remote['cancelled'] ? collect() : $this->manualCandidates($booking, $remote);
             $manualCandidates = $candidates->count();
@@ -124,7 +141,12 @@ class OtaReservationReconciler
         } else {
             $active = $local->where('status', '!=', 'cancelled');
             $firstId = $local->first()?->id;
-            $actualTotal = round((float) $local->sum('total_amount'), 2);
+            // Every issue reports the ACTIVE (non-cancelled) total: only active
+            // rows occupy inventory, and after a cancel-and-replace revision
+            // (old row cancelled, new row created for the same ref) an all-rows
+            // sum doubles — one basis keeps every alarm's actual-vs-expected
+            // comparison meaningful.
+            $activeTotal = round((float) $active->sum('total_amount'), 2);
             $localCancelled = $active->isEmpty();
 
             if ($localCancelled !== $remote['cancelled']) {
@@ -132,7 +154,7 @@ class OtaReservationReconciler
                     'severity' => 'error',
                     'reservation_id' => $firstId,
                     'expected_total' => $remote['total'],
-                    'actual_total' => $actualTotal,
+                    'actual_total' => $activeTotal,
                     'details' => [
                         'remote_status' => $remote['status'],
                         'local_statuses' => $local->pluck('status')->unique()->values()->all(),
@@ -148,7 +170,7 @@ class OtaReservationReconciler
                         'severity' => 'warning',
                         'reservation_id' => $firstId,
                         'expected_total' => $remote['total'],
-                        'actual_total' => $actualTotal,
+                        'actual_total' => $activeTotal,
                         'details' => [
                             'candidate_reservation_ids' => $candidates->pluck('id')->values()->all(),
                             'arrival_date' => $remote['arrival_date'],
@@ -157,14 +179,21 @@ class OtaReservationReconciler
                     ];
                 }
 
-                if ($remote['currency'] !== '' && $local->pluck('currency')->filter()->unique()->count() === 1) {
-                    $localCurrency = strtoupper((string) $local->first()->currency);
-                    if ($localCurrency !== $remote['currency'] || abs($actualTotal - $remote['total']) > 0.01) {
+                if ($remote['currency'] !== '' && $active->isNotEmpty() && $active->pluck('currency')->filter()->unique()->count() === 1) {
+                    $localCurrency = strtoupper((string) $active->first()->currency);
+                    // Some OTAs (Expedia Collect) report room amounts NET of the
+                    // commission while the PMS stores the GROSS price — either
+                    // basis counts as a match.
+                    $activeCommission = round((float) $active->sum('commission_amount'), 2);
+                    $matchesGross = abs($activeTotal - $remote['total']) <= 0.01;
+                    $matchesNet = $activeCommission > 0
+                        && abs(round($activeTotal - $activeCommission, 2) - $remote['total']) <= 0.01;
+                    if ($localCurrency !== $remote['currency'] || (! $matchesGross && ! $matchesNet)) {
                         $detected['amount_mismatch'] = [
                             'severity' => 'warning',
                             'reservation_id' => $firstId,
                             'expected_total' => $remote['total'],
-                            'actual_total' => $actualTotal,
+                            'actual_total' => $activeTotal,
                             'details' => ['local_currency' => $localCurrency],
                         ];
                     }
@@ -181,7 +210,7 @@ class OtaReservationReconciler
                         'severity' => 'warning',
                         'reservation_id' => $firstId,
                         'expected_total' => $remote['total'],
-                        'actual_total' => $actualTotal,
+                        'actual_total' => $activeTotal,
                         'details' => [
                             'remote_stays' => $remote['stays'],
                             'local_stays' => $localStays,
@@ -232,6 +261,39 @@ class OtaReservationReconciler
             'room_count' => max(1, $rooms->count()),
             'stays' => $stays,
         ];
+    }
+
+    /**
+     * Manual twins of a CANCELLED remote booking. With stay dates present the
+     * regular candidate matching applies (dates + one more signal). Cancelled
+     * -only Channex records can arrive stripped of stay data, so an exact
+     * guest-name match on an unlinked, still-upcoming staff reservation is
+     * the fallback signal.
+     */
+    private function cancelledTwinCandidates(array $booking, array $remote): Collection
+    {
+        if ($remote['arrival_date'] && $remote['departure_date']) {
+            return $this->manualCandidates($booking, $remote);
+        }
+
+        $customer = $booking['customer'] ?? [];
+        $remoteName = $this->normalizeName(trim(
+            (string) ($customer['name'] ?? '').' '.(string) ($customer['surname'] ?? '')
+        ));
+        if ($remoteName === '') {
+            return collect();
+        }
+
+        return Reservation::query()
+            ->where('created_via', Reservation::CREATED_VIA_STAFF)
+            ->where(fn (Builder $query) => $query->whereNull('channel_ref')->orWhere('channel_ref', ''))
+            ->whereNotIn('status', ['cancelled', 'checked_out'])
+            ->whereDate('check_out_date', '>=', today())
+            ->with('guest:id,first_name,last_name')
+            ->get()
+            ->filter(fn (Reservation $reservation) => $this->normalizeName($reservation->guest?->full_name ?? '') === $remoteName)
+            ->take(3)
+            ->values();
     }
 
     private function manualCandidates(array $booking, array $remote): Collection
