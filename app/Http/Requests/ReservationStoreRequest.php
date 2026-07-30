@@ -35,6 +35,7 @@ class ReservationStoreRequest extends FormRequest
             'children' => ['sometimes', 'integer', 'min:0', 'max:10'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'channel' => ['sometimes', 'nullable', Rule::in(Reservation::CHANNELS)],
+            'channel_ref' => Reservation::channelRefRules($this->input('channel')),
             'total_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
         ];
     }
@@ -73,6 +74,9 @@ class ReservationStoreRequest extends FormRequest
         return [
             'check_out_date.after' => 'Data e daljes duhet te jete pas dates se hyrjes.',
             'check_in_date.after_or_equal' => 'Data e hyrjes nuk mund te jete ne te shkuaren.',
+            'channel_ref.required' => 'Per rezervimet nga OTA numri i rezervimit eshte i detyrueshem — e gjen te extranet-i ose email-i i konfirmimit.',
+            'channel_ref.regex' => 'Numri i rezervimit nuk ka formatin e pritur per kete kanal.',
+            'channel_ref.unique' => 'Ky numer rezervimi ekziston tashme ne sistem per kete kanal.',
         ];
     }
 }
