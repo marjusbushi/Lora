@@ -1,6 +1,6 @@
 <script setup>
-import { computed } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { AlertTriangle, ArrowLeft, CalendarDays, CircleCheckBig, Link2, ReceiptText } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
@@ -53,6 +53,23 @@ function dateTime(value) {
 
 function goToPage(url) {
     if (url) router.visit(url, { preserveState: true, preserveScroll: true });
+}
+
+// --- Linking a manual candidate to the OTA booking (the panel's only write) ---
+const perms = usePage().props.auth.user?.permissions || [];
+const canLink = perms.includes('update_reservations');
+const linkBusy = ref(false);
+const linkError = ref('');
+
+function linkCandidate(issue, candidate) {
+    if (!window.confirm(`Lidh rezervimin #${candidate.id} (${candidate.guest || 'pa emër'}) me ${issue.channel} #${issue.external_ref}? Rezervimi manual merr numrin e booking-ut dhe anulimet/ndryshimet nga OTA do ta gjejnë atë.`)) return;
+    linkError.value = '';
+    linkBusy.value = true;
+    router.post(route('reservations.reconciliation.link', issue.id), { reservation_id: candidate.id }, {
+        preserveScroll: true,
+        onError: (errors) => { linkError.value = errors.reservation_id || 'Lidhja dështoi.'; },
+        onFinish: () => { linkBusy.value = false; },
+    });
 }
 </script>
 
@@ -127,15 +144,29 @@ function goToPage(url) {
                     <div v-if="issue.candidates?.length" class="mt-4 rounded-xl border border-accent-200 bg-accent-50/60 p-4">
                         <p class="text-small font-semibold text-accent-900">Mund të jetë futur manualisht</p>
                         <p class="mt-0.5 text-small text-accent-700">Të njëjtat data/dhomë dhe emër ose vlerë. Verifikoje para çdo lidhjeje.</p>
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            <Link
+                        <p v-if="linkError" class="mt-2 text-small font-medium text-error-700">{{ linkError }}</p>
+                        <div class="mt-3 space-y-2">
+                            <div
                                 v-for="candidate in issue.candidates"
                                 :key="candidate.id"
-                                :href="route('reservations.show', candidate.id)"
-                                class="inline-flex items-center gap-2 rounded-lg border border-accent-200 bg-white px-3 py-2 text-small font-semibold text-accent-800 no-underline hover:border-accent-300"
+                                class="flex flex-wrap items-center gap-2"
                             >
-                                #{{ candidate.id }} · {{ candidate.guest || 'Pa emër' }} · Dhoma {{ candidate.room || '—' }} · {{ money(candidate.amount, candidate.currency) }}
-                            </Link>
+                                <Link
+                                    :href="route('reservations.show', candidate.id)"
+                                    class="inline-flex items-center gap-2 rounded-lg border border-accent-200 bg-white px-3 py-2 text-small font-semibold text-accent-800 no-underline hover:border-accent-300"
+                                >
+                                    #{{ candidate.id }} · {{ candidate.guest || 'Pa emër' }} · Dhoma {{ candidate.room || '—' }} · {{ money(candidate.amount, candidate.currency) }}
+                                </Link>
+                                <Button
+                                    v-if="canLink && issue.status === 'open'"
+                                    size="sm"
+                                    variant="primary"
+                                    :disabled="linkBusy"
+                                    @click="linkCandidate(issue, candidate)"
+                                >
+                                    <Link2 class="mr-1.5 h-4 w-4" />Lidh me këtë rezervim
+                                </Button>
+                            </div>
                         </div>
                     </div>
 
