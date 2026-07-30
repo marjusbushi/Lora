@@ -72,10 +72,9 @@ const sourceLocked = computed(() => Boolean(props.reservation?.created_via && pr
 // the ref is the channel manager's identifier and stays read-only.
 const NUMERIC_REF_CHANNELS = ['booking.com', 'expedia', 'agoda', 'hotels.com', 'trip.com'];
 const isOta = computed(() => form.channel && form.channel !== 'direct');
-const refPlaceholder = computed(() => {
-    if (!isOta.value) return 'p.sh. kodi i ofertës (opsionale)';
-    return NUMERIC_REF_CHANNELS.includes(form.channel) ? 'p.sh. 5438361798' : 'p.sh. HMABC12345';
-});
+const refPlaceholder = computed(() =>
+    NUMERIC_REF_CHANNELS.includes(form.channel) ? 'p.sh. 5438361798' : 'p.sh. HMABC12345'
+);
 
 // Auto-fill price = rate × nights, but keep a manually-entered / OTA price.
 let lastSuggest = 0;
@@ -179,9 +178,9 @@ function submit() {
                     <Select v-model="form.channel" :options="channelOptions" :disabled="sourceLocked" :error="form.errors.channel" />
                     <p v-if="sourceLocked" class="mt-1 text-tiny text-neutral-400">{{ $t('admin.generated.k_d038abc79301') }}</p>
                 </FormGroup>
-                <FormGroup :label="isOta ? 'Numri i rezervimit OTA' : 'Referenca e kanalit'" :error="form.errors.channel_ref" :required="isOta && !sourceLocked">
+                <FormGroup v-if="isOta" label="Numri i rezervimit OTA" :error="form.errors.channel_ref" :required="!sourceLocked">
                     <TextInput v-model="form.channel_ref" :disabled="sourceLocked" :placeholder="refPlaceholder" :error="form.errors.channel_ref" />
-                    <p v-if="isOta && !sourceLocked" class="mt-1 text-tiny text-neutral-500">E gjen te extranet-i ose email-i i konfirmimit — pa të, anulimet nga OTA nuk e gjejnë dot rezervimin.</p>
+                    <p v-if="!sourceLocked" class="mt-1 text-tiny text-neutral-500">E gjen te extranet-i ose email-i i konfirmimit — pa të, anulimet nga OTA nuk e gjejnë dot rezervimin.</p>
                 </FormGroup>
                 <FormGroup :label="$t('admin.generated.k_a6216a3caa4d')" :error="form.errors.total_amount">
                     <TextInput type="number" v-model="form.total_amount" min="0" step="0.01" placeholder="0.00" :error="form.errors.total_amount" />
