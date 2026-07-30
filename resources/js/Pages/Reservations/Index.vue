@@ -91,9 +91,24 @@ function listParams() {
         sort: sortBy.value,
     }).filter(([, value]) => value !== undefined && value !== ''));
 }
+let searchDebounce = null;
+let lastAppliedSearch = searchQuery.value.trim();
+
 function applyFilters() {
+    clearTimeout(searchDebounce);
+    lastAppliedSearch = searchQuery.value.trim();
     router.get(route('reservations.index'), listParams(), { preserveState: true, preserveScroll: true, replace: true });
 }
+
+// Live search: typing a guest name filters the list by itself — no Enter
+// or Filtro click needed (both still work). Skips values already applied,
+// so the props-sync watcher below never re-triggers a request.
+watch(searchQuery, (value) => {
+    const trimmed = value.trim();
+    if (trimmed === lastAppliedSearch || trimmed === (props.filters?.search || '')) return;
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(applyFilters, 400);
+});
 function clearFilters() {
     filterStatus.value = '';
     searchQuery.value = '';
