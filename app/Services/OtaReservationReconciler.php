@@ -124,7 +124,12 @@ class OtaReservationReconciler
         } else {
             $active = $local->where('status', '!=', 'cancelled');
             $firstId = $local->first()?->id;
-            $actualTotal = round((float) $local->sum('total_amount'), 2);
+            // Every issue reports the ACTIVE (non-cancelled) total: only active
+            // rows occupy inventory, and after a cancel-and-replace revision
+            // (old row cancelled, new row created for the same ref) an all-rows
+            // sum doubles — one basis keeps every alarm's actual-vs-expected
+            // comparison meaningful.
+            $activeTotal = round((float) $active->sum('total_amount'), 2);
             $localCancelled = $active->isEmpty();
 
             if ($localCancelled !== $remote['cancelled']) {
@@ -132,7 +137,7 @@ class OtaReservationReconciler
                     'severity' => 'error',
                     'reservation_id' => $firstId,
                     'expected_total' => $remote['total'],
-                    'actual_total' => $actualTotal,
+                    'actual_total' => $activeTotal,
                     'details' => [
                         'remote_status' => $remote['status'],
                         'local_statuses' => $local->pluck('status')->unique()->values()->all(),
@@ -148,7 +153,7 @@ class OtaReservationReconciler
                         'severity' => 'warning',
                         'reservation_id' => $firstId,
                         'expected_total' => $remote['total'],
-                        'actual_total' => $actualTotal,
+                        'actual_total' => $activeTotal,
                         'details' => [
                             'candidate_reservation_ids' => $candidates->pluck('id')->values()->all(),
                             'arrival_date' => $remote['arrival_date'],
@@ -157,14 +162,14 @@ class OtaReservationReconciler
                     ];
                 }
 
-                if ($remote['currency'] !== '' && $local->pluck('currency')->filter()->unique()->count() === 1) {
-                    $localCurrency = strtoupper((string) $local->first()->currency);
-                    if ($localCurrency !== $remote['currency'] || abs($actualTotal - $remote['total']) > 0.01) {
+                if ($remote['currency'] !== '' && $active->isNotEmpty() && $active->pluck('currency')->filter()->unique()->count() === 1) {
+                    $localCurrency = strtoupper((string) $active->first()->currency);
+                    if ($localCurrency !== $remote['currency'] || abs($activeTotal - $remote['total']) > 0.01) {
                         $detected['amount_mismatch'] = [
                             'severity' => 'warning',
                             'reservation_id' => $firstId,
                             'expected_total' => $remote['total'],
-                            'actual_total' => $actualTotal,
+                            'actual_total' => $activeTotal,
                             'details' => ['local_currency' => $localCurrency],
                         ];
                     }
@@ -181,7 +186,7 @@ class OtaReservationReconciler
                         'severity' => 'warning',
                         'reservation_id' => $firstId,
                         'expected_total' => $remote['total'],
-                        'actual_total' => $actualTotal,
+                        'actual_total' => $activeTotal,
                         'details' => [
                             'remote_stays' => $remote['stays'],
                             'local_stays' => $localStays,
