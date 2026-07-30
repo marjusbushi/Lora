@@ -154,6 +154,32 @@ class OtaReservationReconciliationTest extends TestCase
         $this->assertSame(0, OtaReconciliationIssue::count());
     }
 
+    public function test_cancel_and_replace_does_not_flag_an_amount_mismatch(): void
+    {
+        // Booking.com re-delivered the booking: the old PMS row was cancelled
+        // and a fresh one created for the SAME channel_ref. Only the active
+        // row occupies inventory — summing the cancelled sibling would double
+        // the local total and raise a phantom amount_mismatch (486 vs 972).
+        $this->reservation([
+            'created_via' => Reservation::CREATED_VIA_CHANNEL_MANAGER,
+            'channel' => 'booking.com',
+            'channel_ref' => '5352744650',
+            'status' => 'cancelled',
+            'total_amount' => 240,
+        ]);
+        $this->reservation([
+            'created_via' => Reservation::CREATED_VIA_CHANNEL_MANAGER,
+            'channel' => 'booking.com',
+            'channel_ref' => '5352744650',
+            'total_amount' => 240,
+        ]);
+
+        $summary = app(OtaReservationReconciler::class)->reconcile([$this->booking()], 'PROP-1');
+
+        $this->assertSame(0, OtaReconciliationIssue::where('issue_type', 'amount_mismatch')->count());
+        $this->assertSame(['checked' => 1, 'clean' => 1, 'issues' => 0, 'manual_candidates' => 0], $summary);
+    }
+
     public function test_price_difference_is_reported_and_resolves_after_correction(): void
     {
         $reservation = $this->reservation([
