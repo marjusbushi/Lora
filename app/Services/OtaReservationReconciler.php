@@ -104,7 +104,24 @@ class OtaReservationReconciler
 
         if ($local->isEmpty() && $remote['cancelled']) {
             // A cancelled remote booking that never occupied PMS inventory is
-            // already safe. Resolve any older warning instead of creating noise.
+            // usually safe — EXCEPT when the desk hand-typed an unlinked copy
+            // that still holds the room for a guest who is no longer coming.
+            $candidates = $this->cancelledTwinCandidates($booking, $remote);
+            if ($candidates->isNotEmpty()) {
+                $manualCandidates = $candidates->count();
+                $detected['cancelled_ota_manual_twin'] = [
+                    'severity' => 'warning',
+                    'reservation_id' => null,
+                    'expected_total' => $remote['total'],
+                    'actual_total' => null,
+                    'details' => [
+                        'candidate_reservation_ids' => $candidates->pluck('id')->values()->all(),
+                        'arrival_date' => $remote['arrival_date'],
+                        'departure_date' => $remote['departure_date'],
+                        'remote_status' => $remote['status'],
+                    ],
+                ];
+            }
         } elseif ($local->isEmpty()) {
             $candidates = $remote['cancelled'] ? collect() : $this->manualCandidates($booking, $remote);
             $manualCandidates = $candidates->count();
@@ -244,6 +261,39 @@ class OtaReservationReconciler
             'room_count' => max(1, $rooms->count()),
             'stays' => $stays,
         ];
+    }
+
+    /**
+     * Manual twins of a CANCELLED remote booking. With stay dates present the
+     * regular candidate matching applies (dates + one more signal). Cancelled
+     * -only Channex records can arrive stripped of stay data, so an exact
+     * guest-name match on an unlinked, still-upcoming staff reservation is
+     * the fallback signal.
+     */
+    private function cancelledTwinCandidates(array $booking, array $remote): Collection
+    {
+        if ($remote['arrival_date'] && $remote['departure_date']) {
+            return $this->manualCandidates($booking, $remote);
+        }
+
+        $customer = $booking['customer'] ?? [];
+        $remoteName = $this->normalizeName(trim(
+            (string) ($customer['name'] ?? '').' '.(string) ($customer['surname'] ?? '')
+        ));
+        if ($remoteName === '') {
+            return collect();
+        }
+
+        return Reservation::query()
+            ->where('created_via', Reservation::CREATED_VIA_STAFF)
+            ->where(fn (Builder $query) => $query->whereNull('channel_ref')->orWhere('channel_ref', ''))
+            ->whereNotIn('status', ['cancelled', 'checked_out'])
+            ->whereDate('check_out_date', '>=', today())
+            ->with('guest:id,first_name,last_name')
+            ->get()
+            ->filter(fn (Reservation $reservation) => $this->normalizeName($reservation->guest?->full_name ?? '') === $remoteName)
+            ->take(3)
+            ->values();
     }
 
     private function manualCandidates(array $booking, array $remote): Collection
