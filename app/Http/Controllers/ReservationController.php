@@ -190,7 +190,7 @@ class ReservationController extends Controller
                 'open' => OtaReconciliationIssue::where('status', 'open')->count(),
                 'critical' => OtaReconciliationIssue::where('status', 'open')->where('severity', 'error')->count(),
                 'manual_candidates' => OtaReconciliationIssue::where('status', 'open')
-                    ->whereIn('issue_type', ['missing_in_pms', 'possible_manual_duplicate'])
+                    ->whereIn('issue_type', ['missing_in_pms', 'possible_manual_duplicate', 'cancelled_ota_manual_twin'])
                     ->get()
                     ->filter(fn (OtaReconciliationIssue $issue) => ! empty($issue->details['candidate_reservation_ids']))
                     ->count(),
