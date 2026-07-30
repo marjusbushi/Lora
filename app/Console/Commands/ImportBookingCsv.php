@@ -78,8 +78,19 @@ class ImportBookingCsv extends Command
             $country = trim($row['Booker country'] ?? '');
             $phone = trim($row['Phone number'] ?? '');
 
-            // Resolve the room(s) this booking maps to.
-            $units = array_filter(array_map('trim', explode(',', (string) ($row['Unit type'] ?? ''))));
+            // Resolve the room(s) this booking maps to. Booking.com's export
+            // lists each unit NAME once and carries the count in a separate
+            // "Rooms" column — a booking of 2× the same unit arrives as one
+            // name with Rooms=2, so the name list must be expanded to match.
+            $units = array_values(array_filter(array_map('trim', explode(',', (string) ($row['Unit type'] ?? '')))));
+            $roomsWanted = (int) ($row['Rooms'] ?? $row['Units'] ?? 0);
+            if ($roomsWanted > count($units) && count(array_unique($units)) === 1) {
+                $units = array_fill(0, $roomsWanted, $units[0]);
+            } elseif ($roomsWanted > count($units)) {
+                // Mixed unit names with a higher count are ambiguous (which unit
+                // repeats?) — import what is listed but flag it for the operator.
+                $flagged[] = "#{$book} {$row['Guest Name(s)']} — CSV kërkon {$roomsWanted} dhoma por 'Unit type' rendit vetëm ".count($units).": '".($row['Unit type'] ?? '')."'";
+            }
             $rooms = [];
             $unmapped = [];
             foreach ($units as $unit) {

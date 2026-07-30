@@ -50,7 +50,7 @@ class BookingCsvImportTest extends TestCase
 
     private function importCsv(array $rows): void
     {
-        $header = ['Book Number', 'Guest Name(s)', 'Status', 'Check-in', 'Check-out', 'Price', 'Commission Amount', 'Adults', 'Children', 'Unit type', 'Remarks', 'Booker country', 'Phone number'];
+        $header = ['Book Number', 'Guest Name(s)', 'Status', 'Check-in', 'Check-out', 'Price', 'Commission Amount', 'Adults', 'Children', 'Rooms', 'Unit type', 'Remarks', 'Booker country', 'Phone number'];
         $fh = fopen($this->csvPath, 'w');
         fputcsv($fh, $header);
         foreach ($rows as $row) {
@@ -93,5 +93,51 @@ class BookingCsvImportTest extends TestCase
 
         $reservation = Reservation::where('channel_ref', '6008957206')->sole();
         $this->assertSame($balcony->id, $reservation->room->room_type_id);
+    }
+
+    public function test_two_rooms_of_the_same_unit_become_two_reservations_with_split_price(): void
+    {
+        // Booking.com's export lists a unit NAME once and carries the count in
+        // the "Rooms" column — Nyemcsok's 2-room booking arrived as one name
+        // with Rooms=2 and collapsed into a single €800 reservation.
+        $this->makeType('Deluxe With Sea View', 3, 203);
+
+        $this->importCsv([[
+            'Book Number' => '5417794562', 'Guest Name(s)' => 'Pál Nyemcsok',
+            'Status' => 'ok', 'Check-in' => '2026-08-18', 'Check-out' => '2026-08-22',
+            'Price' => '800.00', 'Commission Amount' => '96.00', 'Adults' => '2', 'Rooms' => '2',
+            'Unit type' => 'Deluxe Double Room with Balcony and Sea View',
+        ]]);
+
+        $reservations = Reservation::where('channel_ref', '5417794562')->get();
+        $this->assertCount(2, $reservations);
+        $this->assertSame([400.0, 400.0], $reservations->pluck('total_amount')->map(fn ($v) => (float) $v)->all());
+        $this->assertSame(2, $reservations->pluck('room_id')->unique()->count());
+        // The commission belongs to the booking once, not once per room.
+        $this->assertSame(96.0, (float) $reservations->sum('commission_amount'));
+    }
+
+    public function test_mixed_units_with_a_higher_room_count_import_what_is_listed_and_flag_the_gap(): void
+    {
+        $this->makeType('Studio', 2, 301);
+        $this->makeType('Triple Room', 2, 401);
+
+        $header = ['Book Number', 'Guest Name(s)', 'Status', 'Check-in', 'Check-out', 'Price', 'Adults', 'Rooms', 'Unit type'];
+        $fh = fopen($this->csvPath, 'w');
+        fputcsv($fh, $header);
+        fputcsv($fh, array_map(fn (string $col) => [
+            'Book Number' => '7000000001', 'Guest Name(s)' => 'Test Guest',
+            'Status' => 'ok', 'Check-in' => '2026-09-01', 'Check-out' => '2026-09-04',
+            'Price' => '900.00', 'Adults' => '4', 'Rooms' => '3',
+            'Unit type' => 'Studio, Triple Room',
+        ][$col] ?? '', $header));
+        fclose($fh);
+
+        $this->artisan('booking:import', ['file' => $this->csvPath, '--tenant' => Tenant::query()->sole()->id])
+            ->expectsOutputToContain('CSV kërkon 3 dhoma')
+            ->assertSuccessful();
+
+        // Ambiguous which unit repeats — only the two listed units are imported.
+        $this->assertSame(2, Reservation::where('channel_ref', '7000000001')->count());
     }
 }
