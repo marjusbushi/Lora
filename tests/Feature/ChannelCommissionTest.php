@@ -63,6 +63,7 @@ class ChannelCommissionTest extends TestCase
             'status' => 'confirmed',
             'adults' => 2,
             'channel' => 'booking.com',
+            'channel_ref' => '5438361798',
             'total_amount' => 100, // gross price (fee included) entered by staff
         ])->assertRedirect()->assertSessionHasNoErrors();
 
@@ -103,6 +104,7 @@ class ChannelCommissionTest extends TestCase
             'check_out_date' => now()->addDays(5)->toDateString(),
             'adults' => 1,
             'channel' => 'booking.com',
+            'channel_ref' => '6551697526',
             'total_amount' => 200,
             'commission_amount' => 999, // must be ignored — server is authoritative
         ])->assertRedirect()->assertSessionHasNoErrors();

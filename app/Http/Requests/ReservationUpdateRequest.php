@@ -16,6 +16,12 @@ class ReservationUpdateRequest extends FormRequest
         if ($this->exists('channel') && (is_string($channel) || $channel === null)) {
             $this->merge(['channel' => Reservation::normalizeChannel($channel)]);
         }
+
+        // Clients that predate the ref field never send it — keep their edits
+        // working by carrying the reservation's current value through.
+        if (! $this->exists('channel_ref')) {
+            $this->merge(['channel_ref' => $this->route('reservation')?->channel_ref]);
+        }
     }
 
     public function authorize(): bool
@@ -35,7 +41,48 @@ class ReservationUpdateRequest extends FormRequest
             'children' => ['sometimes', 'integer', 'min:0', 'max:10'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'channel' => ['sometimes', 'nullable', Rule::in(Reservation::CHANNELS)],
+            'channel_ref' => $this->channelRefRules(),
             'total_amount' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+        ];
+    }
+
+    /**
+     * Strict ref rules apply only to NEW debt: a changed source or a changed
+     * reference. An untouched legacy value (including a missing one) keeps the
+     * reservation editable — old rows are repaired via the audit tools, not by
+     * blocking an unrelated date change at the desk.
+     */
+    private function channelRefRules(): array
+    {
+        $reservation = $this->route('reservation');
+
+        $requested = $this->input('channel');
+        if (! is_string($requested) && $requested !== null) {
+            // The channel field's own rule rejects malformed payloads — answer
+            // with a 422 there instead of a TypeError here.
+            return ['nullable', 'string', 'max:120'];
+        }
+
+        $channel = Reservation::normalizeChannel($requested ?? $reservation?->channel);
+
+        $channelUnchanged = $reservation
+            && $channel === Reservation::normalizeChannel($reservation->channel);
+        $refUnchanged = $reservation
+            && (string) $this->input('channel_ref') === (string) $reservation->channel_ref;
+
+        if ($channelUnchanged && $refUnchanged) {
+            return ['nullable', 'string', 'max:120'];
+        }
+
+        return Reservation::channelRefRules($channel, $reservation?->id);
+    }
+
+    public function messages(): array
+    {
+        return [
+            'channel_ref.required' => 'Per rezervimet nga OTA numri i rezervimit eshte i detyrueshem — e gjen te extranet-i ose email-i i konfirmimit.',
+            'channel_ref.regex' => 'Numri i rezervimit nuk ka formatin e pritur per kete kanal.',
+            'channel_ref.unique' => 'Ky numer rezervimi ekziston tashme ne sistem per kete kanal.',
         ];
     }
 
