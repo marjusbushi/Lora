@@ -287,6 +287,32 @@ function isPlatformSubdomain(domain) {
     return domain.domain.endsWith('.lorapms.com');
 }
 
+// Copy-paste DNS instructions, ready to forward to the hotel.
+const copied = ref(null);
+
+function copyText(key, text) {
+    navigator.clipboard?.writeText(text).then(() => {
+        copied.value = key;
+        setTimeout(() => { if (copied.value === key) copied.value = null; }, 2000);
+    });
+}
+
+function copyDnsInstructions() {
+    const ip = props.tenant.domainServerIp;
+    copyText('instructions', [
+        'Udhëzime për lidhjen e domain-it me Lora PMS',
+        '',
+        'Te paneli DNS i domain-it tuaj (aty ku e keni blerë) shtoni këto dy records:',
+        '',
+        'Lloji  Host  Vlera',
+        `A      @     ${ip}`,
+        `A      www   ${ip}`,
+        '',
+        'KUJDES: Nuk ndërrohen nameservers — vetëm këto dy A records shtohen.',
+        'Propagimi zgjat nga disa minuta deri në 1 orë.',
+    ].join('\n'));
+}
+
 function saveConfig() {
     const options = { preserveScroll: true, onSuccess: closeDrawer };
     if (configTab.value === 'channex') {
@@ -506,6 +532,26 @@ function toggleStatus() {
                         <div v-else-if="activeDrawer === 'config'">
                             <section v-if="configTab === 'domains'" class="space-y-4">
                                 <div class="flex items-start gap-2.5"><Globe2 class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">Domain-et e hotelit</strong><p class="mt-0.5 text-[10px] text-neutral-500">Cikli: klienti drejton DNS-in → verifikohet → provizionohet siti + SSL → aktiv.</p></div></div>
+
+                                <div class="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+                                    <div class="flex flex-wrap items-start justify-between gap-2">
+                                        <div>
+                                            <p class="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Udhëzimet DNS për klientin</p>
+                                            <p class="mt-0.5 text-[10px] text-emerald-900/70">Klienti i shton këto te paneli DNS i domain-it të vet — pa ndërruar nameservers.</p>
+                                        </div>
+                                        <Button size="sm" variant="outline" :disabled="!tenant.domainServerIp" @click="copyDnsInstructions">{{ copied === 'instructions' ? 'U kopjua ✓' : 'Kopjo udhëzimet' }}</Button>
+                                    </div>
+                                    <div v-if="tenant.domainServerIp" class="mt-3 overflow-x-auto rounded-lg bg-white p-3 ring-1 ring-emerald-100">
+                                        <table class="w-full text-[11px] text-neutral-800">
+                                            <thead><tr class="text-left text-[9px] font-bold uppercase tracking-wide text-neutral-400"><th class="pb-1.5 pr-4">Lloji</th><th class="pb-1.5 pr-4">Host</th><th class="pb-1.5 pr-4">Vlera</th><th class="pb-1.5"></th></tr></thead>
+                                            <tbody>
+                                                <tr><td class="pr-4 font-bold">A</td><td class="pr-4 font-mono">@</td><td class="pr-4 font-mono">{{ tenant.domainServerIp }}</td><td class="py-0.5 text-right"><button type="button" class="rounded-md px-2 py-1 text-[9px] font-bold text-emerald-700 hover:bg-emerald-50" @click="copyText('ip-apex', tenant.domainServerIp)">{{ copied === 'ip-apex' ? 'U kopjua ✓' : 'Kopjo' }}</button></td></tr>
+                                                <tr><td class="pr-4 font-bold">A</td><td class="pr-4 font-mono">www</td><td class="pr-4 font-mono">{{ tenant.domainServerIp }}</td><td class="py-0.5 text-right"><button type="button" class="rounded-md px-2 py-1 text-[9px] font-bold text-emerald-700 hover:bg-emerald-50" @click="copyText('ip-www', tenant.domainServerIp)">{{ copied === 'ip-www' ? 'U kopjua ✓' : 'Kopjo' }}</button></td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p v-else class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200">FORGE_SERVER_IP nuk është konfiguruar në këtë mjedis — vendose te Environment në Forge që të shfaqen udhëzimet.</p>
+                                </div>
                                 <div class="overflow-hidden rounded-xl border border-neutral-200">
                                     <div v-for="domain in tenant.domains" :key="domain.id" class="border-b border-neutral-100 px-3 py-3 last:border-b-0">
                                         <div class="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3">
