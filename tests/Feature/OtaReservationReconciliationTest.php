@@ -180,6 +180,37 @@ class OtaReservationReconciliationTest extends TestCase
         $this->assertSame(['checked' => 1, 'clean' => 1, 'issues' => 0, 'manual_candidates' => 0], $summary);
     }
 
+    public function test_issue_totals_report_only_the_active_rows(): void
+    {
+        // A cancelled sibling exists alongside the live row AND a manual twin.
+        // The duplicate warning must report the active €240 as actual_total —
+        // an all-rows €480 would mislead the desk comparing it to the OTA €240.
+        $this->reservation([
+            'created_via' => Reservation::CREATED_VIA_CHANNEL_MANAGER,
+            'channel' => 'booking.com',
+            'channel_ref' => '5352744650',
+            'status' => 'cancelled',
+            'total_amount' => 240,
+        ]);
+        $this->reservation([
+            'created_via' => Reservation::CREATED_VIA_CHANNEL_MANAGER,
+            'channel' => 'booking.com',
+            'channel_ref' => '5352744650',
+            'total_amount' => 240,
+        ]);
+        $this->reservation([
+            'created_via' => Reservation::CREATED_VIA_STAFF,
+            'channel' => 'booking.com',
+            'channel_ref' => null,
+            'total_amount' => 240,
+        ]);
+
+        app(OtaReservationReconciler::class)->reconcile([$this->booking()], 'PROP-1');
+
+        $issue = OtaReconciliationIssue::where('issue_type', 'possible_manual_duplicate')->sole();
+        $this->assertSame('240.00', $issue->actual_total);
+    }
+
     public function test_price_difference_is_reported_and_resolves_after_correction(): void
     {
         $reservation = $this->reservation([

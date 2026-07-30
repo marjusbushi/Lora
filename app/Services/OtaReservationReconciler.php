@@ -124,10 +124,11 @@ class OtaReservationReconciler
         } else {
             $active = $local->where('status', '!=', 'cancelled');
             $firstId = $local->first()?->id;
-            $actualTotal = round((float) $local->sum('total_amount'), 2);
-            // Only active rows occupy inventory. After a cancel-and-replace
-            // revision (old row cancelled, new row created for the same ref)
-            // the all-rows sum doubles and would raise a phantom mismatch.
+            // Every issue reports the ACTIVE (non-cancelled) total: only active
+            // rows occupy inventory, and after a cancel-and-replace revision
+            // (old row cancelled, new row created for the same ref) an all-rows
+            // sum doubles — one basis keeps every alarm's actual-vs-expected
+            // comparison meaningful.
             $activeTotal = round((float) $active->sum('total_amount'), 2);
             $localCancelled = $active->isEmpty();
 
@@ -136,7 +137,7 @@ class OtaReservationReconciler
                     'severity' => 'error',
                     'reservation_id' => $firstId,
                     'expected_total' => $remote['total'],
-                    'actual_total' => $actualTotal,
+                    'actual_total' => $activeTotal,
                     'details' => [
                         'remote_status' => $remote['status'],
                         'local_statuses' => $local->pluck('status')->unique()->values()->all(),
@@ -152,7 +153,7 @@ class OtaReservationReconciler
                         'severity' => 'warning',
                         'reservation_id' => $firstId,
                         'expected_total' => $remote['total'],
-                        'actual_total' => $actualTotal,
+                        'actual_total' => $activeTotal,
                         'details' => [
                             'candidate_reservation_ids' => $candidates->pluck('id')->values()->all(),
                             'arrival_date' => $remote['arrival_date'],
@@ -185,7 +186,7 @@ class OtaReservationReconciler
                         'severity' => 'warning',
                         'reservation_id' => $firstId,
                         'expected_total' => $remote['total'],
-                        'actual_total' => $actualTotal,
+                        'actual_total' => $activeTotal,
                         'details' => [
                             'remote_stays' => $remote['stays'],
                             'local_stays' => $localStays,
