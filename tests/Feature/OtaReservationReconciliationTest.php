@@ -154,6 +154,55 @@ class OtaReservationReconciliationTest extends TestCase
         $this->assertSame(0, OtaReconciliationIssue::count());
     }
 
+    public function test_cancelled_ota_booking_with_a_manual_twin_is_flagged(): void
+    {
+        // The Morvan case: the desk hand-typed an unlinked copy of an OTA
+        // booking, then the guest cancelled on the OTA. No PMS row carries the
+        // ref, so the cancellation found nothing — but the manual twin still
+        // holds the room for a guest who is not coming.
+        $manual = $this->reservation([
+            'created_via' => Reservation::CREATED_VIA_STAFF,
+            'channel' => 'booking.com',
+            'channel_ref' => null,
+            'total_amount' => 240,
+        ]);
+
+        $summary = app(OtaReservationReconciler::class)->reconcile([
+            $this->booking(['status' => 'cancelled']),
+        ], 'PROP-1');
+
+        $issue = OtaReconciliationIssue::where('issue_type', 'cancelled_ota_manual_twin')->sole();
+        $this->assertSame('open', $issue->status);
+        $this->assertSame([$manual->id], $issue->details['candidate_reservation_ids']);
+        $this->assertSame(1, $summary['manual_candidates']);
+        // Report only — the manual reservation is never touched.
+        $this->assertSame('confirmed', $manual->fresh()->status);
+    }
+
+    public function test_cancelled_stub_without_dates_finds_the_twin_by_guest_name(): void
+    {
+        // Cancelled-only Channex records can arrive stripped of stay data
+        // (production booking 6367603932: arrival/departure null, no rooms).
+        // The guest name is then the only usable signal.
+        $manual = $this->reservation([
+            'created_via' => Reservation::CREATED_VIA_STAFF,
+            'channel' => 'booking.com',
+            'channel_ref' => null,
+            'total_amount' => 100,
+        ]);
+
+        app(OtaReservationReconciler::class)->reconcile([$this->booking([
+            'status' => 'cancelled',
+            'arrival_date' => null,
+            'departure_date' => null,
+            'amount' => '0.00',
+            'rooms' => [],
+        ])], 'PROP-1');
+
+        $issue = OtaReconciliationIssue::where('issue_type', 'cancelled_ota_manual_twin')->sole();
+        $this->assertSame([$manual->id], $issue->details['candidate_reservation_ids']);
+    }
+
     public function test_cancel_and_replace_does_not_flag_an_amount_mismatch(): void
     {
         // Booking.com re-delivered the booking: the old PMS row was cancelled

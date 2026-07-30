@@ -32,6 +32,7 @@ const typeMeta = {
     amount_mismatch: { label: 'Vlerë e ndryshme', variant: 'warning', description: 'Totali në PMS nuk përputhet me totalin e ardhur nga kanali.' },
     stay_mismatch: { label: 'Data të ndryshme', variant: 'warning', description: 'Datat ose numri i dhomave ndryshojnë mes kanalit dhe PMS-së.' },
     status_mismatch: { label: 'Status i ndryshëm', variant: 'error', description: 'Anulimi ose statusi aktiv nuk përputhet mes dy sistemeve.' },
+    cancelled_ota_manual_twin: { label: 'OTA e anuluar — kopje manuale aktive', variant: 'warning', description: 'Booking-u OTA është anuluar, por një rezervim i futur manualisht (pa referencë OTA) duket se e mban ende dhomën të zënë.' },
 };
 
 const cards = computed(() => [
