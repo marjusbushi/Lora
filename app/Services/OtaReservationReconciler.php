@@ -164,7 +164,14 @@ class OtaReservationReconciler
 
                 if ($remote['currency'] !== '' && $active->isNotEmpty() && $active->pluck('currency')->filter()->unique()->count() === 1) {
                     $localCurrency = strtoupper((string) $active->first()->currency);
-                    if ($localCurrency !== $remote['currency'] || abs($activeTotal - $remote['total']) > 0.01) {
+                    // Some OTAs (Expedia Collect) report room amounts NET of the
+                    // commission while the PMS stores the GROSS price — either
+                    // basis counts as a match.
+                    $activeCommission = round((float) $active->sum('commission_amount'), 2);
+                    $matchesGross = abs($activeTotal - $remote['total']) <= 0.01;
+                    $matchesNet = $activeCommission > 0
+                        && abs(round($activeTotal - $activeCommission, 2) - $remote['total']) <= 0.01;
+                    if ($localCurrency !== $remote['currency'] || (! $matchesGross && ! $matchesNet)) {
                         $detected['amount_mismatch'] = [
                             'severity' => 'warning',
                             'reservation_id' => $firstId,

@@ -211,6 +211,64 @@ class OtaReservationReconciliationTest extends TestCase
         $this->assertSame('240.00', $issue->actual_total);
     }
 
+    public function test_net_of_commission_ota_amount_is_accepted_as_a_match(): void
+    {
+        // Channex reports Expedia room amounts NET of the OTA commission while
+        // the PMS stores the GROSS price (production: 704.70 gross − 126.85
+        // commission = 577.85 reported by Channex). Gross OR net must match.
+        $this->reservation([
+            'created_via' => Reservation::CREATED_VIA_CHANNEL_MANAGER,
+            'channel' => 'expedia',
+            'channel_ref' => '2499201075',
+            'total_amount' => 704.70,
+            'commission_amount' => 126.85,
+        ]);
+
+        $summary = app(OtaReservationReconciler::class)->reconcile([$this->booking([
+            'ota_name' => 'Expedia',
+            'ota_reservation_code' => '2499201075',
+            'amount' => '577.85',
+            'rooms' => [[
+                'room_type_id' => 'RT-TRIPLE',
+                'checkin_date' => '2026-08-10',
+                'checkout_date' => '2026-08-13',
+                'amount' => '577.85',
+                'occupancy' => ['adults' => 2, 'children' => 0],
+            ]],
+        ])], 'PROP-1');
+
+        $this->assertSame(0, OtaReconciliationIssue::where('issue_type', 'amount_mismatch')->count());
+        $this->assertSame(['checked' => 1, 'clean' => 1, 'issues' => 0, 'manual_candidates' => 0], $summary);
+    }
+
+    public function test_a_total_matching_neither_gross_nor_net_is_still_reported(): void
+    {
+        $this->reservation([
+            'created_via' => Reservation::CREATED_VIA_CHANNEL_MANAGER,
+            'channel' => 'expedia',
+            'channel_ref' => '2499201075',
+            'total_amount' => 704.70,
+            'commission_amount' => 126.85,
+        ]);
+
+        app(OtaReservationReconciler::class)->reconcile([$this->booking([
+            'ota_name' => 'Expedia',
+            'ota_reservation_code' => '2499201075',
+            'amount' => '500.00',
+            'rooms' => [[
+                'room_type_id' => 'RT-TRIPLE',
+                'checkin_date' => '2026-08-10',
+                'checkout_date' => '2026-08-13',
+                'amount' => '500.00',
+                'occupancy' => ['adults' => 2, 'children' => 0],
+            ]],
+        ])], 'PROP-1');
+
+        $issue = OtaReconciliationIssue::where('issue_type', 'amount_mismatch')->sole();
+        $this->assertSame('500.00', $issue->expected_total);
+        $this->assertSame('704.70', $issue->actual_total);
+    }
+
     public function test_price_difference_is_reported_and_resolves_after_correction(): void
     {
         $reservation = $this->reservation([
