@@ -389,6 +389,32 @@ function marketBadge(d) {
 const leadingBlanks = computed(() => (props.days.length ? props.days[0].dow - 1 : 0));
 const actionableCount = computed(() => props.days.filter((d) => d.actionable && !d.is_past).length);
 
+// ── Month KPIs + the redesigned cell (approved mockup, 2026-07-21) ──
+const todayStr = (() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+})();
+const kpis = computed(() => {
+    const all = props.days;
+    if (!all.length) return null;
+    const occ = Math.round(all.reduce((s, d) => s + (d.occupancy_type_pct || 0), 0) / all.length);
+    const avg = Math.round(all.reduce((s, d) => s + (Number(d.current_price) || 0), 0) / all.length);
+    const medians = all.map((d) => props.market[d.date]?.median).filter((v) => v > 0);
+    const mkt = medians.length ? Math.round(medians.reduce((s, v) => s + v, 0) / medians.length) : null;
+    const gain = all.filter((d) => d.actionable && !d.is_past)
+        .reduce((s, d) => s + (Number(d.suggested_price) - Number(d.current_price)), 0);
+    return { occ, avg, mkt, gain: Math.round(gain) };
+});
+function isFull(d) { return d.total > 0 && d.booked >= d.total; }
+function shortDow(d) { return ['Hën', 'Mar', 'Mër', 'Enj', 'Pre', 'Sht', 'Die'][d.dow - 1] || ''; }
+// Bottom occupancy bar — the standard hotel colour code at a glance.
+function occBar(d) {
+    const occ = d.occupancy_type_pct || 0;
+    if (isFull(d) || occ >= 90) return 'bg-error-400';
+    if (occ >= 65) return 'bg-warning-400';
+    return 'bg-success-300';
+}
+
 function go(month, roomTypeId = props.selectedTypeId) {
     if (navigationLocked.value) return;
     selected.value = null;
@@ -405,14 +431,13 @@ function longDate(date) {
 }
 function fmtPrice(v) { const n = Number(v) || 0; return n % 1 === 0 ? String(n) : n.toFixed(2); }
 
-// Demand heat: cell background darkens as the night fills (standard hotel code:
-// white=free, amber=filling, red=full). Holidays keep the flag, weekends a dot.
+// Approved mockup: occupancy magnitude lives in the bottom BAR; the cell
+// background stays calm — red only when the night is sold out, a soft tint
+// for weekend columns.
 function cellTone(d) {
-    const occ = d.occupancy_pct || 0;
-    if (d.total > 0 && d.booked >= d.total) return 'bg-error-100 border-error-200 hover:border-error-300';
-    if (occ >= 70) return 'bg-warning-100 border-warning-200 hover:border-warning-300';
-    if (occ >= 40) return 'bg-warning-50 border-warning-100 hover:border-warning-200';
-    return 'bg-white border-neutral-100 hover:border-neutral-200';
+    if (isFull(d)) return 'bg-error-50 border-error-200 hover:border-error-300';
+    if (d.is_weekend) return 'bg-neutral-50 border-neutral-100 hover:border-neutral-300';
+    return 'bg-white border-neutral-100 hover:border-neutral-300';
 }
 
 function pick(d) { if (!d.is_past) { selected.value = d; manualPrice.value = ''; explainText.value = ''; } }
@@ -533,8 +558,23 @@ function syncLabel(ts) {
                         <span aria-hidden="true">≈</span>
                         {{ roundingPolicyLabel }}
                     </span>
-                    <span v-if="actionableCount" class="inline-flex items-center gap-2 text-tiny text-neutral-500">
-                        {{ actionableCount }} {{ $t('admin.generated.k_0fb9c71df27a') }} <Button size="sm" variant="outline" :disabled="navigationLocked" @click="askBulkMonth">{{ $t('admin.generated.k_47b01d6519f6') }}</Button>
+                </div>
+
+                <!-- month KPIs: the value of the month at one glance -->
+                <div v-if="kpis" class="flex flex-wrap items-center gap-2 mb-5">
+                    <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
+                        <i class="w-2 h-2 rounded-full" :class="kpis.occ >= 90 ? 'bg-error-400' : kpis.occ >= 65 ? 'bg-warning-400' : 'bg-success-400'" />
+                        Zënia e muajit <b class="text-primary-900 tabular-nums">{{ kpis.occ }}%</b>
+                    </span>
+                    <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
+                        Çmimi mesatar <b class="text-primary-900 tabular-nums">{{ currency }}{{ kpis.avg }}</b>
+                    </span>
+                    <span v-if="marketEnabled && kpis.mkt" class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
+                        ⌂ Tregu mesatar <b class="text-primary-900 tabular-nums">{{ currency }}{{ kpis.mkt }}</b>
+                    </span>
+                    <span v-if="actionableCount" class="inline-flex items-center gap-2 rounded-full border border-success-300 bg-success-50 px-3 py-1 text-tiny font-semibold text-success-700">
+                        {{ actionableCount }} sugjerime<template v-if="kpis.gain > 0"> → <b class="tabular-nums">+{{ currency }}{{ kpis.gain }}</b></template>
+                        <Button size="sm" variant="outline" :disabled="navigationLocked" @click="askBulkMonth">{{ $t('admin.generated.k_47b01d6519f6') }}</Button>
                     </span>
                 </div>
 
@@ -556,37 +596,57 @@ function syncLabel(ts) {
 {{ $t('admin.generated.k_3bd5e4318173') }} </div>
 
                 <template v-else>
-                    <!-- weekday header -->
-                    <div class="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2">
-                        <span v-for="d in dows" :key="d" class="text-tiny font-bold uppercase tracking-wide text-neutral-400 text-center">{{ d }}</span>
+                    <!-- weekday header (desktop; mobile cells carry their own day name) -->
+                    <div class="hidden sm:grid grid-cols-7 gap-1.5 sm:gap-2 mb-2">
+                        <span v-for="(d, i) in dows" :key="d" class="text-tiny font-bold uppercase tracking-wide text-center" :class="i >= 5 ? 'text-warning-600/70' : 'text-neutral-400'">{{ d }}</span>
                     </div>
 
-                    <!-- calendar grid: price + VISIBLE suggestion on every cell -->
-                    <div class="grid grid-cols-7 gap-1.5 sm:gap-2">
-                        <div v-for="b in leadingBlanks" :key="'b' + b" />
+                    <!-- calendar: 7-col grid on desktop, vertical day list on phones.
+                         Cell hierarchy per the approved mockup: the SUGGESTION is the
+                         hero number, "Tani" small above it, occupancy bar at the bottom. -->
+                    <div class="grid grid-cols-1 sm:grid-cols-7 gap-1.5 sm:gap-2">
+                        <div v-for="b in leadingBlanks" :key="'b' + b" class="hidden sm:block" />
                         <div
                             v-for="d in days"
                             :key="d.date"
                             :class="[
-                                'min-h-[84px] sm:min-h-[96px] rounded-xl border p-1.5 sm:p-2 relative transition',
+                                'group min-h-[76px] sm:min-h-[96px] rounded-xl border p-1.5 sm:p-2 pb-3.5 relative transition',
                                 cellTone(d),
-                                d.is_past ? 'opacity-45 pointer-events-none' : 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md',
+                                d.is_past ? 'opacity-45 pointer-events-none' : 'cursor-pointer sm:hover:-translate-y-0.5 hover:shadow-md',
                                 selected && selected.date === d.date ? 'ring-2 ring-ionian ring-offset-1' : '',
+                                d.date === todayStr ? 'ring-2 ring-primary-700 ring-offset-1' : '',
                             ]"
                             @click="pick(d)"
                         >
-                            <div class="flex items-start justify-between">
+                            <div class="flex items-start justify-between gap-1">
                                 <span :class="['text-tiny font-bold', d.holiday ? 'text-error-600' : 'text-neutral-400']">
-                                    {{ dayNum(d) }}<span v-if="d.is_weekend" class="text-warning-500">·</span>
+                                    <span class="sm:hidden uppercase mr-1">{{ shortDow(d) }}</span>{{ dayNum(d) }}
                                 </span>
-                                <span v-if="d.holiday" class="text-error-600 text-tiny leading-none" :title="d.holiday">⚑</span>
+                                <span class="flex items-center gap-1">
+                                    <span v-if="d.date === todayStr" class="text-[9px] font-extrabold text-white bg-primary-900 rounded-full px-1.5 py-0.5 leading-none">SOT</span>
+                                    <span v-if="d.holiday" class="text-error-600 text-tiny leading-none" :title="d.holiday">⚑</span>
+                                    <span v-if="isFull(d)" class="text-[9px] font-extrabold text-white bg-error-500 rounded-full px-1.5 py-0.5 leading-none">{{ $t('admin.generated.k_d083746b5f78') }}</span>
+                                </span>
                             </div>
 
-                            <div class="mt-1 text-body-sm sm:text-h4 font-bold text-primary-900 tabular-nums leading-none">{{ currency }}{{ fmtPrice(d.current_price) }}</div>
-
-                            <!-- THE suggestion, visible on the grid -->
-                            <div v-if="d.actionable" class="mt-1 text-tiny font-bold tabular-nums leading-none" :class="d.adjustment_pct > 0 ? 'text-success-700' : 'text-info-700'">
-                                {{ d.adjustment_pct > 0 ? '▲' : '▼' }} {{ currency }}{{ fmtPrice(d.suggested_price) }}<span v-if="d.clamped" :title="'I ndalur te kufiri ' + (d.clamped === 'max' ? $t('admin.generated.k_a79d1410fa68') : $t('admin.generated.k_3925eeee4836'))"> 🔒</span>
+                            <!-- with a suggestion: "Tani" small, the suggested price IS the number -->
+                            <template v-if="d.actionable">
+                                <div class="mt-0.5 text-[10px] text-neutral-400 leading-tight">
+                                    Tani <b class="text-neutral-600 tabular-nums font-semibold">{{ currency }}{{ fmtPrice(d.current_price) }}</b>
+                                </div>
+                                <div class="flex items-baseline gap-1 flex-wrap">
+                                    <span class="text-body-sm sm:text-h4 font-extrabold tabular-nums leading-none" :class="d.adjustment_pct > 0 ? 'text-success-800' : 'text-info-800'">
+                                        {{ currency }}{{ fmtPrice(d.suggested_price) }}
+                                    </span>
+                                    <span class="text-[10px] font-extrabold rounded-full px-1.5 py-0.5 leading-none" :class="d.adjustment_pct > 0 ? 'bg-success-50 text-success-700' : 'bg-info-50 text-info-700'">
+                                        {{ d.adjustment_pct > 0 ? '▲ +' : '▼ ' }}{{ d.adjustment_pct }}%
+                                    </span>
+                                    <span v-if="d.clamped" class="text-[10px] leading-none" :title="'I ndalur te kufiri ' + (d.clamped === 'max' ? $t('admin.generated.k_a79d1410fa68') : $t('admin.generated.k_3925eeee4836'))">🔒</span>
+                                </div>
+                            </template>
+                            <!-- quiet / full day: just the live price, calm -->
+                            <div v-else class="mt-1 text-body-sm sm:text-h4 tabular-nums leading-none" :class="isFull(d) ? 'font-extrabold text-primary-900' : 'font-bold text-neutral-600'">
+                                {{ currency }}{{ fmtPrice(d.current_price) }}
                             </div>
 
                             <!-- rate shopping: market median pill, coloured by our position -->
@@ -599,18 +659,31 @@ function syncLabel(ts) {
                                 ⌂ {{ currency }}{{ fmtPrice(market[d.date].median) }}
                             </div>
 
-                            <span v-if="d.total > 0 && d.booked >= d.total" class="absolute bottom-1.5 left-2 text-[10px] font-bold text-white bg-primary-900 rounded px-1.5 py-0.5 leading-none">{{ $t('admin.generated.k_d083746b5f78') }}</span>
-                            <span v-if="d.has_override" class="absolute bottom-2 right-2 w-2 h-2 rounded-full bg-info-500" :title="$t('admin.generated.k_53c8a7e2a8b4')" />
+                            <!-- hover quick-accept: approve a clear day without opening the panel -->
+                            <button
+                                v-if="d.actionable && !d.is_past"
+                                class="hidden sm:group-hover:flex absolute top-1.5 right-1.5 h-6 w-6 items-center justify-center rounded-full bg-primary-900 text-white text-tiny font-bold shadow hover:bg-primary-700"
+                                :title="'Prano ' + currency + fmtPrice(d.suggested_price)"
+                                :disabled="applySaving"
+                                @click.stop="apply(d, null, true)"
+                            >✓</button>
+
+                            <span v-if="d.has_override" class="absolute bottom-3 right-2 w-2 h-2 rounded-full bg-info-500" :title="$t('admin.generated.k_53c8a7e2a8b4')" />
+
+                            <!-- occupancy bar: how full the night is, at a glance -->
+                            <span class="absolute left-2 right-2 bottom-1.5 h-1 rounded-full bg-neutral-100 overflow-hidden">
+                                <i class="block h-full rounded-full" :class="occBar(d)" :style="{ width: Math.min(d.occupancy_type_pct || 0, 100) + '%' }" />
+                            </span>
                         </div>
                     </div>
 
                     <!-- legend -->
                     <div class="flex flex-wrap gap-x-5 gap-y-2 mt-5 text-tiny text-neutral-500">
+                        <span><b class="text-primary-900">{{ currency }}135</b> = sugjerimi (numri i madh) · Tani = çmimi live</span>
                         <span><span class="text-success-700 font-bold mr-1">▲</span>{{ $t('admin.generated.k_ab198a82455d') }}</span>
                         <span><span class="text-info-700 font-bold mr-1">▼</span>{{ $t('admin.generated.k_4af68492052d') }}</span>
                         <span><span class="font-bold mr-1">🔒</span>{{ $t('admin.generated.k_1a7e22f88381') }}</span>
-                        <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-warning-100 border border-warning-200 mr-1.5 align-[-1px]" />{{ $t('admin.generated.k_18d3d8e875a8') }}</span>
-                        <span><i class="inline-block w-2.5 h-2.5 rounded-sm bg-error-100 border border-error-200 mr-1.5 align-[-1px]" />{{ $t('admin.generated.k_da853b04a9bf') }}</span>
+                        <span>Vija poshtë = zënia: <i class="inline-block w-2.5 h-1 rounded-full bg-success-300 mx-1 align-[2px]" />qetë <i class="inline-block w-2.5 h-1 rounded-full bg-warning-400 mx-1 align-[2px]" />po mbushet <i class="inline-block w-2.5 h-1 rounded-full bg-error-400 mx-1 align-[2px]" />nxehtë</span>
                         <span><span class="text-error-600 font-bold mr-1">⚑</span>{{ $t('admin.generated.k_e9b445ba65ca') }}</span>
                         <span v-if="marketEnabled"><span class="font-bold mr-1">⌂</span>{{ $t('admin.generated.k_fbef875466bf') }}</span>
                         <span><i class="inline-block w-2 h-2 rounded-full bg-info-500 mr-1.5 align-[0px]" />{{ $t('admin.generated.k_647217d35b40') }}</span>
