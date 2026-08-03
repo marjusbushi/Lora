@@ -23,7 +23,7 @@
                 <tr><td style="padding:8px 0;color:#8A8276;">Check-in</td><td style="padding:8px 0;text-align:right;">{{ optional($reservation->check_in_date)->format('d/m/Y') }}</td></tr>
                 <tr><td style="padding:8px 0;color:#8A8276;">Check-out</td><td style="padding:8px 0;text-align:right;">{{ optional($reservation->check_out_date)->format('d/m/Y') }}</td></tr>
                 <tr><td style="padding:8px 0;color:#8A8276;">Persona</td><td style="padding:8px 0;text-align:right;">{{ $reservation->adults }}</td></tr>
-                <tr><td style="padding:12px 0 0;border-top:1px solid #EFE9DE;color:#8A8276;">Total</td><td style="padding:12px 0 0;border-top:1px solid #EFE9DE;text-align:right;font-weight:bold;color:#9A7B4F;">€{{ $reservation->total_amount }}</td></tr>
+                <tr><td style="padding:12px 0 0;border-top:1px solid #EFE9DE;color:#8A8276;">Total</td><td style="padding:12px 0 0;border-top:1px solid #EFE9DE;text-align:right;font-weight:bold;color:#9A7B4F;">{{ $currencySymbol }}{{ $reservation->total_amount }}</td></tr>
             </table>
             @if($reservation->notes)
                 <p style="margin:16px 0 0;font-size:13px;color:#8A8276;">Shënime: {{ $reservation->notes }}</p>
