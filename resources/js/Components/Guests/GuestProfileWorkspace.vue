@@ -33,7 +33,7 @@ import {
 } from 'lucide-vue-next';
 
 
-const { symbol: currencySymbol } = useCurrency();
+const { pricingSymbol: currencySymbol } = useCurrency();
 const props = defineProps({
     initialGuest: { type: Object, required: true },
     stats: { type: Object, required: true },
