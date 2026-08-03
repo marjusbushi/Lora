@@ -12,7 +12,7 @@ import TextInput from '@/Components/UI/TextInput.vue';
 import { money } from '@/Pages/Finance/financeShared.js';
 import { translate } from '@/i18n';
 
-const { symbol: currencySymbol } = useCurrency();
+const { baseSymbol: currencySymbol } = useCurrency();
 
 const props = defineProps({ items: Array, warehouses: Array, categories: { type: Array, default: () => [] }, filters: Object, can: Object });
 const search = ref(props.filters.search || '');

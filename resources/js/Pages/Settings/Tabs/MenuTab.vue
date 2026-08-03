@@ -20,7 +20,7 @@ const props = defineProps({
     toasts: Object,
 });
 
-const { symbol: currencySymbol } = useCurrency();
+const { baseSymbol: currencySymbol } = useCurrency();
 
 // Indented label for the tree select: Pije / — Alkoolike / —— Verë.
 function treeLabel(node) {

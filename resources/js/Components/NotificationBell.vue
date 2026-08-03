@@ -8,7 +8,7 @@ import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
 
 const currentUserId = Number(usePage().props.auth.user?.id || 0);
-const { symbol: currencySymbol } = useCurrency();
+const { pricingSymbol: currencySymbol } = useCurrency();
 const LAST_ID_KEY = `notif_last_received_reservation_id_v2:${currentUserId}`;
 const UNREAD_IDS_KEY = `notif_unread_reservation_ids_v2:${currentUserId}`;
 const SOUND_KEY = `notif_reservation_sound_enabled:${currentUserId}`;
