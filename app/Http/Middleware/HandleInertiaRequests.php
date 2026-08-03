@@ -129,6 +129,16 @@ class HandleInertiaRequests extends Middleware
             // Cached so the shared prop costs one cache lookup, not 6 SELECTs per request.
             // Invalidated in Setting::set().
             'settings' => $settings,
+            // Dedicated key for the two tenant currencies. Pages like Settings
+            // pass their OWN 'settings' prop, which SHADOWS the shared one in
+            // Inertia — currency lookups through 'settings' silently fell back
+            // to € there (the Saturn POS-menu bug). This key is never shadowed.
+            'currencies' => [
+                'base_code' => $settings['currency'] ?? 'EUR',
+                'base_symbol' => $settings['currency_symbol'] ?? '€',
+                'pricing_code' => $settings['pricing_currency'] ?? ($settings['currency'] ?? 'EUR'),
+                'pricing_symbol' => $settings['pricing_currency_symbol'] ?? ($settings['currency_symbol'] ?? '€'),
+            ],
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

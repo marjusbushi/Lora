@@ -15,10 +15,15 @@ import { usePage } from '@inertiajs/vue3';
 export function useCurrency() {
     const page = usePage();
 
-    const baseCode = computed(() => page.props.settings?.currency || 'EUR');
-    const baseSymbol = computed(() => page.props.settings?.currency_symbol || '€');
-    const pricingCode = computed(() => page.props.settings?.pricing_currency || baseCode.value);
-    const pricingSymbol = computed(() => page.props.settings?.pricing_currency_symbol || baseSymbol.value);
+    // Read the DEDICATED shared key, never `settings`: pages like Settings
+    // pass their own `settings` prop which shadows the shared one in Inertia,
+    // and the lookup would silently fall back to € (the Saturn POS-menu bug).
+    const currencies = computed(() => page.props.currencies || {});
+
+    const baseCode = computed(() => currencies.value.base_code || 'EUR');
+    const baseSymbol = computed(() => currencies.value.base_symbol || '€');
+    const pricingCode = computed(() => currencies.value.pricing_code || baseCode.value);
+    const pricingSymbol = computed(() => currencies.value.pricing_symbol || baseSymbol.value);
 
     return { baseCode, baseSymbol, pricingCode, pricingSymbol };
 }

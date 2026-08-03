@@ -2,6 +2,7 @@
 import { translate } from '@/i18n';
 import { ref, computed } from 'vue';
 import { useForm, usePage, router } from '@inertiajs/vue3';
+import { useCurrency } from '@/composables/useCurrency';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
@@ -13,7 +14,7 @@ import Checkbox from '@/Components/UI/Checkbox.vue';
 
 const props = defineProps({ roomTypes: Array, amenities: { type: Array, default: () => [] }, toasts: Object });
 
-const pricingSymbol = usePage().props.settings?.pricing_currency_symbol || '€';
+const { pricingSymbol } = useCurrency();
 
 const showModal = ref(false);
 const showImagesModal = ref(false);
