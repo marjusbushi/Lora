@@ -474,6 +474,7 @@ class PosController extends Controller
             'payments.*.amount' => ['required_with:payments', 'numeric', 'min:0.01', 'max:99999999.99'],
             'payments.*.currency' => ['nullable', 'string', Rule::in($payableCurrencies)],
             'payments.*.tendered_amount' => ['nullable', 'numeric', 'min:0.01', 'max:99999999.99'],
+            'payments.*.exchange_rate' => ['nullable', 'numeric', 'min:0.000001', 'max:9999999'],
             'reservation_id' => ['nullable', TenantRule::exists('reservations')->where('status', 'checked_in')],
             'discount_amount' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'discount_reason' => ['nullable', 'string', 'max:255'],
@@ -525,8 +526,10 @@ class PosController extends Controller
                 $tenders = collect([['method' => $data['payment_method'], 'amount' => $total]]);
             }
 
-            // Foreign-currency tenders: the server's live rate is authoritative;
-            // the base equivalent is recomputed from what the customer hands over.
+            // Foreign-currency tenders: a manual per-sale rate wins when the
+            // till agreed one (frozen on the tender, this invoice only);
+            // otherwise the server's live rate is authoritative. The base
+            // equivalent is recomputed from what the customer hands over.
             $baseCurrency = BaseCurrency::code();
             $fxTolerance = 0.0;
             $tenders = $tenders->map(function (array $tender) use ($baseCurrency, &$fxTolerance) {
@@ -541,9 +544,10 @@ class PosController extends Controller
                 if ($tender['method'] === 'room_charge') {
                     throw ValidationException::withMessages(['payments' => 'Pagesa në dhomë regjistrohet vetëm në monedhën bazë.']);
                 }
-                $rate = CurrencyRates::between($currency, $baseCurrency);
+                $manualRate = (float) ($tender['exchange_rate'] ?? 0);
+                $rate = $manualRate > 0 ? $manualRate : CurrencyRates::between($currency, $baseCurrency);
                 if (! $rate) {
-                    throw ValidationException::withMessages(['payments' => "Kursi {$currency}/{$baseCurrency} mungon — kontrollo Cilësimet → Monedhat."]);
+                    throw ValidationException::withMessages(['payments' => "Kursi {$currency}/{$baseCurrency} mungon — vendose manualisht te pagesa ose te Cilësimet → Monedhat."]);
                 }
                 $tendered = round((float) ($tender['tendered_amount'] ?? $tender['amount']), 2);
                 $tender['currency'] = $currency;
