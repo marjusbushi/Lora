@@ -120,6 +120,25 @@ class PosInventoryTest extends TestCase
         $this->assertSame(20.0, $product->fresh()->stock($central->id));
     }
 
+    public function test_menu_item_with_sales_history_refuses_deletion_with_a_clear_message(): void
+    {
+        $admin = $this->admin();
+        $category = MenuCategory::create(['name' => 'Pije', 'sort_order' => 1]);
+        $sold = MenuItem::create(['menu_category_id' => $category->id, 'name' => 'Cola', 'price' => 3, 'is_available' => true]);
+        $unsold = MenuItem::create(['menu_category_id' => $category->id, 'name' => 'Fanta', 'price' => 3, 'is_available' => true]);
+        $order = PosOrder::create(['status' => 'completed', 'payment_method' => 'cash', 'total_amount' => 3, 'paid_at' => now(), 'created_by' => $admin->id]);
+        PosOrderItem::create(['pos_order_id' => $order->id, 'menu_item_id' => $sold->id, 'quantity' => 1, 'unit_price' => 3, 'total_price' => 3]);
+
+        // Sales history is protected: a clear error instead of the old FK 500.
+        $this->actingAs($admin)->delete(route('settings.menu-items.destroy', $sold))
+            ->assertRedirect()->assertSessionHas('error');
+        $this->assertNotNull($sold->fresh());
+
+        $this->actingAs($admin)->delete(route('settings.menu-items.destroy', $unsold))
+            ->assertRedirect()->assertSessionHas('success');
+        $this->assertNull(MenuItem::find($unsold->id));
+    }
+
     public function test_menu_settings_save_warehouse_and_inventory_recipe(): void
     {
         $admin = $this->admin();

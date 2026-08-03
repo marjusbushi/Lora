@@ -12,6 +12,7 @@ use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
+use App\Models\PosOrderItem;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
@@ -1014,6 +1015,12 @@ class SettingsController extends Controller
     {
         if ($menuItem->inventory_item_id) {
             return back()->with('error', 'Ky produkt menaxhohet nga Inventari dhe nuk mund të fshihet nga menuja POS.');
+        }
+
+        // Items on recorded POS orders are sales history — the database refuses
+        // the delete (FK RESTRICT) and the desk used to get a bare 500 for it.
+        if (PosOrderItem::where('menu_item_id', $menuItem->id)->exists()) {
+            return back()->with('error', "\"{$menuItem->name}\" ka shitje të regjistruara dhe nuk mund të fshihet — përdor \"Caktivizo\" që të hiqet nga POS-i duke ruajtur historikun.");
         }
 
         $menuItem->delete();
