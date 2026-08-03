@@ -93,6 +93,47 @@ class PosMulticurrencyPaymentTest extends TestCase
         $this->assertSame(10.0, $euroArka->balance());
     }
 
+    public function test_manual_per_sale_rate_overrides_the_platform_rate(): void
+    {
+        $admin = $this->admin();
+        $this->lekBaseWithRates(); // platform: 1 EUR = 93.72 L
+        $this->openShift($admin);
+        $order = $this->openOrder($admin, 1000.00);
+
+        // The till agreed a round 1 € = 100 L for THIS sale only.
+        $this->actingAs($admin)->post(route('pos.complete', $order), [
+            'payments' => [
+                ['method' => 'cash', 'amount' => 1000.00, 'currency' => 'EUR', 'tendered_amount' => 10, 'exchange_rate' => 100],
+            ],
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $tender = PosOrderPayment::query()->sole();
+        $this->assertSame(100.0, (float) $tender->exchange_rate); // frozen manual rate, not 93.72
+        $this->assertSame(10.0, (float) $tender->tendered_amount);
+        $this->assertSame(1000.0, (float) $tender->amount);
+
+        $ledger = FinancePayment::query()->where('sourceable_type', PosOrderPayment::class)->sole();
+        $this->assertSame(10.0, (float) $ledger->amount);
+        $this->assertSame(1000.0, (float) $ledger->amount_base);
+    }
+
+    public function test_manual_rate_lets_a_sale_through_even_without_a_platform_rate(): void
+    {
+        $admin = $this->admin();
+        $this->lekBaseWithRates();
+        PlatformSetting::set('currencies.rates', [], 'json'); // no live rates at all
+        $this->openShift($admin);
+        $order = $this->openOrder($admin, 500.00);
+
+        $this->actingAs($admin)->post(route('pos.complete', $order), [
+            'payments' => [
+                ['method' => 'cash', 'amount' => 500.00, 'currency' => 'EUR', 'tendered_amount' => 5, 'exchange_rate' => 100],
+            ],
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $this->assertSame(100.0, (float) PosOrderPayment::query()->sole()->exchange_rate);
+    }
+
     public function test_split_base_cash_and_foreign_card_reconcile_exactly(): void
     {
         $admin = $this->admin();
