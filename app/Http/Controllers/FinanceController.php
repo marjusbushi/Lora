@@ -440,6 +440,7 @@ class FinanceController extends Controller
             'mode' => ['required', Rule::in([
                 FinanceLedger::POS_MODE_SHARED,
                 FinanceLedger::POS_MODE_SPLIT_CASH,
+                FinanceLedger::POS_MODE_SPLIT_BANK,
                 FinanceLedger::POS_MODE_SPLIT_ALL,
             ])],
         ]);

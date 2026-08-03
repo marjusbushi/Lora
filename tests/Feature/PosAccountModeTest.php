@@ -99,6 +99,30 @@ class PosAccountModeTest extends TestCase
         $this->assertSame('general', $cardLedger->account->scope);
     }
 
+    public function test_split_bank_routes_pos_cards_to_the_bar_bank_but_cash_to_the_shared_drawer(): void
+    {
+        $admin = $this->admin();
+        Setting::set('finance.pos_account_mode', 'split_bank', 'text');
+        $this->openShift($admin);
+        $this->completeCash($admin, 25.00);
+
+        $cardOrder = $this->openOrder($admin, 40.00);
+        $this->actingAs($admin)->post(route('pos.complete', $cardOrder), ['payment_method' => 'card'])
+            ->assertSessionHasNoErrors()->assertRedirect();
+        $this->restoreTenant();
+
+        // The mirror image of split_cash: cards get the dedicated POS bank,
+        // cash stays in the hotel's shared drawer.
+        $barBank = FinanceAccount::query()->where('scope', 'pos')->sole();
+        $this->assertSame('Banka Bar/Restorant', $barBank->name);
+        $this->assertSame('bank', $barBank->type);
+        $this->assertSame(40.00, $barBank->balance());
+
+        $cashLedger = FinancePayment::query()->where('method', 'cash')->sole();
+        $this->assertSame('Arka', $cashLedger->account->name);
+        $this->assertSame('general', $cashLedger->account->scope);
+    }
+
     public function test_split_all_routes_pos_cards_to_the_bar_bank(): void
     {
         $admin = $this->admin();
