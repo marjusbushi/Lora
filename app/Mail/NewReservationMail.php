@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\Reservation;
 use App\Models\Setting;
+use App\Services\BaseCurrency;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -14,9 +15,7 @@ class NewReservationMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public Reservation $reservation)
-    {
-    }
+    public function __construct(public Reservation $reservation) {}
 
     public function envelope(): Envelope
     {
@@ -29,6 +28,9 @@ class NewReservationMail extends Mailable
     {
         return new Content(view: 'emails.new-reservation', with: [
             'hotelName' => $this->hotelName(),
+            // The reservation's own currency — a booking in ALL must not
+            // arrive in the inbox wearing a euro sign.
+            'currencySymbol' => BaseCurrency::symbol($this->reservation->currency),
         ]);
     }
 

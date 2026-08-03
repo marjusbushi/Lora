@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
+import { useCurrency } from '@/composables/useCurrency';
 import { AlertTriangle, BedDouble, FolderTree, ImagePlus, Package, PackageMinus, Pencil, Plus, Search, ShoppingBasket, Trash2 } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
@@ -10,6 +11,8 @@ import Modal from '@/Components/UI/Modal.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import { money } from '@/Pages/Finance/financeShared.js';
 import { translate } from '@/i18n';
+
+const { symbol: currencySymbol } = useCurrency();
 
 const props = defineProps({ items: Array, warehouses: Array, categories: { type: Array, default: () => [] }, filters: Object, can: Object });
 const search = ref(props.filters.search || '');
@@ -228,7 +231,7 @@ function deleteCategory(category) {
                         <label class="flex cursor-pointer items-start justify-between gap-4"><span class="flex gap-3"><span class="grid h-10 w-10 place-items-center rounded-lg bg-blue-100 text-blue-700"><ShoppingBasket class="h-5 w-5" /></span><span><strong class="block text-primary-900">Shitet në POS</strong><small class="text-neutral-500">Shfaqe si produkt në bar/restorant.</small></span></span><input v-model="form.sell_in_pos" type="checkbox" class="mt-2 rounded border-neutral-300 text-accent-600 focus:ring-accent-500" /></label>
                         <div v-if="form.sell_in_pos" class="mt-4 grid gap-3 sm:grid-cols-2">
                             <div><label class="mb-1 block text-tiny font-bold">Magazina POS</label><select v-model="form.pos_warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option></select><p v-if="form.errors.pos_warehouse_id" class="mt-1 text-tiny text-error-600">{{ form.errors.pos_warehouse_id }}</p></div>
-                            <div><label class="mb-1 block text-tiny font-bold">Çmimi në POS (€)</label><TextInput v-model="form.selling_price" type="number" min="0.01" step="0.01" class="w-full" /><p v-if="form.errors.selling_price" class="mt-1 text-tiny text-error-600">{{ form.errors.selling_price }}</p></div>
+                            <div><label class="mb-1 block text-tiny font-bold">Çmimi në POS ({{ currencySymbol }})</label><TextInput v-model="form.selling_price" type="number" min="0.01" step="0.01" class="w-full" /><p v-if="form.errors.selling_price" class="mt-1 text-tiny text-error-600">{{ form.errors.selling_price }}</p></div>
                             <p class="sm:col-span-2 rounded-lg bg-blue-50 px-3 py-2 text-tiny text-blue-800">Në POS artikulli shfaqet nën kategorinë e vet të inventarit ("Kategoria" sipër).</p>
                         </div>
                     </div>
@@ -236,12 +239,12 @@ function deleteCategory(category) {
                         <label class="flex cursor-pointer items-start justify-between gap-4"><span class="flex gap-3"><span class="grid h-10 w-10 place-items-center rounded-lg bg-violet-100 text-violet-700"><BedDouble class="h-5 w-5" /></span><span><strong class="block text-primary-900">Shitet në dhoma</strong><small class="text-neutral-500">Shfaqe në minibar dhe folio.</small></span></span><input v-model="form.sell_in_rooms" type="checkbox" class="mt-2 rounded border-neutral-300 text-accent-600 focus:ring-accent-500" /></label>
                         <div v-if="form.sell_in_rooms" class="mt-4 grid gap-3 sm:grid-cols-2">
                             <div><label class="mb-1 block text-tiny font-bold">Magazina e dhomave</label><select v-model="form.room_warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option></select><p v-if="form.errors.room_warehouse_id" class="mt-1 text-tiny text-error-600">{{ form.errors.room_warehouse_id }}</p></div>
-                            <div><label class="mb-1 block text-tiny font-bold">Çmimi në dhomë (€)</label><TextInput v-model="form.room_selling_price" type="number" min="0.01" step="0.01" class="w-full" /><p v-if="form.errors.room_selling_price" class="mt-1 text-tiny text-error-600">{{ form.errors.room_selling_price }}</p></div>
+                            <div><label class="mb-1 block text-tiny font-bold">Çmimi në dhomë ({{ currencySymbol }})</label><TextInput v-model="form.room_selling_price" type="number" min="0.01" step="0.01" class="w-full" /><p v-if="form.errors.room_selling_price" class="mt-1 text-tiny text-error-600">{{ form.errors.room_selling_price }}</p></div>
                         </div>
                     </div>
                 </section>
 
-                <section v-if="editing === 'new' && form.type !== 'service'" class="rounded-xl border border-accent-200 bg-accent-50/50 p-4"><h4 class="text-body-sm font-bold text-primary-900">Gjendja fillestare</h4><p class="mt-1 text-tiny text-neutral-500">Opsionale. Blerjet e ardhshme regjistrohen nga faturat e blerjes.</p><div class="mt-3 grid gap-3 sm:grid-cols-3"><div><label class="mb-1 block text-tiny font-semibold">Sasia</label><TextInput v-model="form.initial_quantity" type="number" min="0" step="0.0001" class="w-full" /></div><div><label class="mb-1 block text-tiny font-semibold">Kosto / njësi (€)</label><TextInput v-model="form.average_cost" type="number" min="0" step="0.01" class="w-full" /></div><div><label class="mb-1 block text-tiny font-semibold">Magazina</label><select v-model="form.initial_warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option></select></div></div></section>
+                <section v-if="editing === 'new' && form.type !== 'service'" class="rounded-xl border border-accent-200 bg-accent-50/50 p-4"><h4 class="text-body-sm font-bold text-primary-900">Gjendja fillestare</h4><p class="mt-1 text-tiny text-neutral-500">Opsionale. Blerjet e ardhshme regjistrohen nga faturat e blerjes.</p><div class="mt-3 grid gap-3 sm:grid-cols-3"><div><label class="mb-1 block text-tiny font-semibold">Sasia</label><TextInput v-model="form.initial_quantity" type="number" min="0" step="0.0001" class="w-full" /></div><div><label class="mb-1 block text-tiny font-semibold">Kosto / njësi ({{ currencySymbol }})</label><TextInput v-model="form.average_cost" type="number" min="0" step="0.01" class="w-full" /></div><div><label class="mb-1 block text-tiny font-semibold">Magazina</label><select v-model="form.initial_warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option></select></div></div></section>
             </div>
             <template #footer><Button variant="ghost" @click="closeModal">{{ $t('inventory.actions.cancel') }}</Button><Button :loading="form.processing" :disabled="!form.name || !form.sku" @click="submit">{{ $t('inventory.actions.save') }}</Button></template>
         </Modal>

@@ -2,8 +2,11 @@
 import { getIntlLocale, translate } from '@/i18n';
 import { ref, computed, watch } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
+import { useCurrency } from '@/composables/useCurrency';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
+
+const { code: currencyCode } = useCurrency();
 const props = defineProps({
     threads: Array,
     selected: Object,
@@ -136,7 +139,7 @@ function fdate(value) {
     return value ? new Intl.DateTimeFormat(getIntlLocale(), { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value)) : '—';
 }
 function money(v) {
-    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v || 0);
+    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currencyCode.value, maximumFractionDigits: 0 }).format(v || 0);
 }
 
 const messageRows = computed(() => {
