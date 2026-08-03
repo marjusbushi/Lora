@@ -23,10 +23,12 @@ use Illuminate\Database\Eloquent\Model;
  */
 class FinanceLedger
 {
-    /** Where POS money lands, per hotel: the shared hotel accounts (default), a separate POS cash drawer, or separate POS cash AND bank accounts. */
+    /** Where POS money lands, per hotel: the shared hotel accounts (default), a separate POS cash drawer, a separate POS bank, or separate POS cash AND bank accounts. */
     public const POS_MODE_SHARED = 'shared';
 
     public const POS_MODE_SPLIT_CASH = 'split_cash';
+
+    public const POS_MODE_SPLIT_BANK = 'split_bank';
 
     public const POS_MODE_SPLIT_ALL = 'split_all';
 
@@ -34,7 +36,7 @@ class FinanceLedger
     {
         $mode = Setting::get('finance.pos_account_mode');
 
-        return in_array($mode, [self::POS_MODE_SPLIT_CASH, self::POS_MODE_SPLIT_ALL], true)
+        return in_array($mode, [self::POS_MODE_SPLIT_CASH, self::POS_MODE_SPLIT_BANK, self::POS_MODE_SPLIT_ALL], true)
             ? $mode
             : self::POS_MODE_SHARED;
     }
@@ -47,10 +49,13 @@ class FinanceLedger
         $currency = strtoupper($currency ?: BaseCurrency::code());
 
         // POS money gets its own Bar/Restorant accounts only when the hotel
-        // opted in: cash in both split modes, cards only in split_all. Scope
-        // — not the (renamable) name — is the routing key.
+        // opted in: cash in the split_cash/split_all modes, cards in the
+        // split_bank/split_all modes. Scope — not the (renamable) name — is
+        // the routing key.
         $mode = self::posAccountMode();
-        $scope = $pos && ($type === 'cash' ? $mode !== self::POS_MODE_SHARED : $mode === self::POS_MODE_SPLIT_ALL)
+        $scope = $pos && ($type === 'cash'
+                ? in_array($mode, [self::POS_MODE_SPLIT_CASH, self::POS_MODE_SPLIT_ALL], true)
+                : in_array($mode, [self::POS_MODE_SPLIT_BANK, self::POS_MODE_SPLIT_ALL], true))
             ? 'pos'
             : 'general';
 
