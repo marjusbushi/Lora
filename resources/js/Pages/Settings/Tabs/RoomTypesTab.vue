@@ -133,48 +133,91 @@ function deleteType(type) {
     });
 }
 
+// A 47-photo iPhone batch used to convert one-by-one (minutes of WASM HEIC
+// decoding) and then upload as ONE ~14MB request with no visible progress.
+// Now: conversion runs a few photos at a time, and the upload goes out in
+// small batches — partial success survives a network hiccup, and the counter
+// moves the whole way through.
+const CONVERT_CONCURRENCY = 3;
+const UPLOAD_BATCH_SIZE = 10;
+
+async function prepareAllImages(files) {
+    const prepared = [];
+    let done = 0;
+    let next = 0;
+    const workers = Array.from({ length: Math.min(CONVERT_CONCURRENCY, files.length) }, async () => {
+        while (next < files.length) {
+            const index = next++;
+            try {
+                const file = await prepareImage(files[index]);
+                prepared[index] = file;
+            } catch (e) {
+                props.toasts?.error(translate('admin.generated.k_24d20006e9fc', { p0: files[index].name || index + 1 }));
+            }
+            uploadStatus.value = translate('admin.generated.k_24d4d2fa2511', { p0: ++done, p1: files.length });
+        }
+    });
+    await Promise.all(workers);
+
+    return prepared.filter(Boolean);
+}
+
+function uploadBatch(batch, batchNo, batchCount, uploadedSoFar, total) {
+    return new Promise((resolve) => {
+        const formData = new FormData();
+        batch.forEach((f) => formData.append('images[]', f));
+
+        router.post(route('settings.room-types.images.upload', selectedType.value.id), formData, {
+            forceFormData: true,
+            preserveScroll: true,
+            preserveState: true,
+            onProgress: (event) => {
+                const pct = event?.percentage ? ` ${Math.round(event.percentage)}%` : '';
+                uploadStatus.value = `Po ngarkohen foto ${uploadedSoFar + 1}–${uploadedSoFar + batch.length} nga ${total}...${pct}`;
+            },
+            onSuccess: () => resolve(true),
+            // Surface the real reason instead of failing silently (this was the whole bug).
+            onError: (errors) => {
+                const first = Object.values(errors || {})[0];
+                props.toasts?.error(first || translate('admin.generated.k_5553defcbf3d'));
+                resolve(false);
+            },
+        });
+    });
+}
+
 async function uploadImages() {
     const files = imageFiles.value?.files;
     if (!files?.length || uploading.value) return;
 
     uploading.value = true;
-    const prepared = [];
-    for (let i = 0; i < files.length; i++) {
-        uploadStatus.value = translate('admin.generated.k_24d4d2fa2511', { p0: i + 1, p1: files.length });
-        try {
-            prepared.push(await prepareImage(files[i]));
-        } catch (e) {
-            props.toasts?.error(translate('admin.generated.k_24d20006e9fc', { p0: files[i].name || i + 1 }));
-        }
-    }
+    try {
+        const prepared = await prepareAllImages(Array.from(files));
+        if (!prepared.length) return;
 
-    if (!prepared.length) {
+        const batches = [];
+        for (let i = 0; i < prepared.length; i += UPLOAD_BATCH_SIZE) {
+            batches.push(prepared.slice(i, i + UPLOAD_BATCH_SIZE));
+        }
+
+        let uploaded = 0;
+        for (let i = 0; i < batches.length; i++) {
+            const ok = await uploadBatch(batches[i], i + 1, batches.length, uploaded, prepared.length);
+            if (!ok) {
+                // Everything before this batch is already saved — say so honestly.
+                if (uploaded > 0) props.toasts?.error(`${uploaded} foto u ruajtën; ngarkimi u ndal te fotoja ${uploaded + 1}.`);
+
+                return;
+            }
+            uploaded += batches[i].length;
+        }
+
+        props.toasts?.success(translate('admin.generated.k_72b21cef3f46'));
+        if (imageFiles.value) imageFiles.value.value = '';
+    } finally {
         uploading.value = false;
         uploadStatus.value = '';
-        return;
     }
-
-    const formData = new FormData();
-    prepared.forEach((f) => formData.append('images[]', f));
-    uploadStatus.value = `Po ngarkohen ${prepared.length} foto...`;
-
-    router.post(route('settings.room-types.images.upload', selectedType.value.id), formData, {
-        forceFormData: true,
-        preserveScroll: true,
-        onSuccess: () => {
-            props.toasts?.success(translate('admin.generated.k_72b21cef3f46'));
-            if (imageFiles.value) imageFiles.value.value = '';
-        },
-        // Surface the real reason instead of failing silently (this was the whole bug).
-        onError: (errors) => {
-            const first = Object.values(errors || {})[0];
-            props.toasts?.error(first || translate('admin.generated.k_5553defcbf3d'));
-        },
-        onFinish: () => {
-            uploading.value = false;
-            uploadStatus.value = '';
-        },
-    });
 }
 
 function deleteImage(imageId) {
