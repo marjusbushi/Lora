@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -21,10 +22,36 @@ class ForgeClient
         return $this->token() !== '' && $this->serverId() !== '';
     }
 
-    /** The public IP hotel DNS must point at (differs per environment). */
+    /**
+     * The public IP hotel DNS must point at (differs per environment).
+     *
+     * FORGE_SERVER_IP wins when set (proxies/CDN can make it differ), but the
+     * default is self-detection: client domains must point at the same front
+     * door that serves this app, so resolving our own APP_URL host is the
+     * right answer without any configuration. Loopback/private results (local
+     * dev) are suppressed so nonsense instructions are never shown.
+     */
     public static function serverIp(): string
     {
-        return trim((string) config('services.forge.server_ip', ''));
+        $configured = trim((string) config('services.forge.server_ip', ''));
+        if ($configured !== '') {
+            return $configured;
+        }
+
+        $host = parse_url((string) config('app.url'), PHP_URL_HOST);
+        if (! is_string($host) || $host === '') {
+            return '';
+        }
+
+        $ip = filter_var($host, FILTER_VALIDATE_IP)
+            ? $host
+            : Cache::remember('forge.server_ip.resolved.'.$host, now()->addHour(), function () use ($host) {
+                $resolved = gethostbyname($host);
+
+                return $resolved === $host ? '' : $resolved;
+            });
+
+        return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) ? $ip : '';
     }
 
     /** The shared application document root every domain site serves. */

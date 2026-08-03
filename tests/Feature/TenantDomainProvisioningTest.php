@@ -144,6 +144,24 @@ class TenantDomainProvisioningTest extends TestCase
         $this->assertStringContainsString('Certifikata', $fresh->status_message);
     }
 
+    public function test_server_ip_falls_back_to_the_platforms_own_address(): void
+    {
+        // Without FORGE_SERVER_IP the platform detects its own front door from
+        // APP_URL — client domains must point exactly where this app is served.
+        config(['services.forge.server_ip' => '', 'app.url' => 'https://116.203.132.84']);
+        $this->assertSame('116.203.132.84', ForgeClient::serverIp());
+
+        // Explicit configuration always wins over detection.
+        config(['services.forge.server_ip' => '178.104.114.222']);
+        $this->assertSame('178.104.114.222', ForgeClient::serverIp());
+    }
+
+    public function test_server_ip_suppresses_loopback_so_dev_shows_no_nonsense_instructions(): void
+    {
+        config(['services.forge.server_ip' => '', 'app.url' => 'http://localhost']);
+        $this->assertSame('', ForgeClient::serverIp());
+    }
+
     public function test_domain_actions_are_super_admin_only(): void
     {
         $this->fakeDns(['178.104.114.222']);
