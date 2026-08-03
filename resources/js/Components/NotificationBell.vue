@@ -1,12 +1,14 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
+import { useCurrency } from '@/composables/useCurrency';
 import { Bell, Volume2, VolumeX } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
 const currentUserId = Number(usePage().props.auth.user?.id || 0);
+const { symbol: currencySymbol } = useCurrency();
 const LAST_ID_KEY = `notif_last_received_reservation_id_v2:${currentUserId}`;
 const UNREAD_IDS_KEY = `notif_unread_reservation_ids_v2:${currentUserId}`;
 const SOUND_KEY = `notif_reservation_sound_enabled:${currentUserId}`;
@@ -229,7 +231,7 @@ onUnmounted(() => {
                 >
                     <div class="flex items-center justify-between gap-2">
                         <span class="text-body-sm font-medium text-primary-900 truncate">{{ r.guest }}</span>
-                        <span class="text-tiny text-accent-700 whitespace-nowrap">€{{ r.total }}</span>
+                        <span class="text-tiny text-accent-700 whitespace-nowrap">{{ currencySymbol }}{{ r.total }}</span>
                     </div>
                     <div class="text-small text-neutral-500 mt-0.5">
 {{ $t('admin.generated.k_bdd4ab5b92b8') }} {{ r.room }} · {{ r.check_in }} → {{ r.check_out }}
@@ -259,7 +261,7 @@ onUnmounted(() => {
                     <span class="min-w-0">
                         <span class="block text-body-sm font-semibold">{{ $t('admin.generated.k_cae91dcb7b31') }}</span>
                         <span class="block text-body-sm text-neutral-300 truncate">{{ toast.guest }} {{ $t('admin.generated.k_854094340734') }} {{ toast.room }}</span>
-                        <span class="block text-tiny text-neutral-400 mt-0.5">{{ toast.check_in }} → {{ toast.check_out }} · €{{ toast.total }}</span>
+                        <span class="block text-tiny text-neutral-400 mt-0.5">{{ toast.check_in }} → {{ toast.check_out }} · {{ currencySymbol }}{{ toast.total }}</span>
                     </span>
                 </button>
             </Transition>

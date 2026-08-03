@@ -9,6 +9,7 @@ import Modal from '@/Components/UI/Modal.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import { Package, Plus, Trash2 } from 'lucide-vue-next';
+import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
     categories: Array,
@@ -16,9 +17,10 @@ const props = defineProps({
     warehouses: Array,
     tree: { type: Array, default: () => [] },
     inventoryEnabled: { type: Boolean, default: false },
-    currencySymbol: { type: String, default: '€' },
     toasts: Object,
 });
+
+const { symbol: currencySymbol } = useCurrency();
 
 // Indented label for the tree select: Pije / — Alkoolike / —— Verë.
 function treeLabel(node) {
@@ -259,7 +261,7 @@ function deleteItem(item) {
                 <FormGroup :label="$t('admin.generated.k_588dd1daa42d')" :error="itemForm.errors?.name" required>
                     <TextInput v-model="itemForm.name" :placeholder="$t('admin.generated.k_f52281cd0a63')" :error="itemForm.errors?.name" />
                 </FormGroup>
-                <FormGroup :label="$t('admin.generated.k_0b3c36d88455')" :error="itemForm.errors?.price" required>
+                <FormGroup :label="`Çmimi (${currencySymbol})`" :error="itemForm.errors?.price" required>
                     <TextInput type="number" v-model="itemForm.price" min="0.01" step="0.01" :error="itemForm.errors?.price" />
                 </FormGroup>
             </div>
