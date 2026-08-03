@@ -41,11 +41,20 @@ function submitCat() {
     });
 }
 
+// A refused action still completes the Inertia visit (redirect-back with a
+// flash error), so onSuccess fires — read the flash before claiming victory,
+// or the server's explanation drowns under a false "deleted" toast.
+function flashToast(page, successMessage) {
+    const flashError = page?.props?.flash?.error;
+    if (flashError) props.toasts?.error(flashError);
+    else props.toasts?.success(successMessage);
+}
+
 function deleteCat(cat) {
     if (!confirm(`Fshi kategorine "${cat.name}"?`)) return;
     router.delete(route('settings.menu-categories.destroy', cat.id), {
         preserveScroll: true,
-        onSuccess: () => props.toasts?.success(translate('admin.generated.k_4d43fb45068e')),
+        onSuccess: (page) => flashToast(page, translate('admin.generated.k_4d43fb45068e')),
         onError: () => props.toasts?.error(translate('admin.generated.k_5af41fa6dae3')),
     });
 }
@@ -142,7 +151,7 @@ function deleteItem(item) {
     if (!confirm(`Fshi "${item.name}"?`)) return;
     router.delete(route('settings.menu-items.destroy', item.id), {
         preserveScroll: true,
-        onSuccess: () => props.toasts?.success(translate('admin.generated.k_8ee8e0129285')),
+        onSuccess: (page) => flashToast(page, translate('admin.generated.k_8ee8e0129285')),
     });
 }
 </script>
