@@ -58,10 +58,19 @@ function openTask(task) {
             if (data?.url && tab) {
                 tab.location.href = data.url;
             } else {
+                // A blocked popup or an empty reply must not fail in silence.
                 tab?.close();
+                window.alert(tab ? 'Hapja dështoi — serveri nuk ktheu adresë. Provo sërish.' : 'Shfletuesi bllokoi dritaren e re — lejo popup-et për këtë faqe dhe provo sërish.');
             }
         })
-        .catch(() => tab?.close())
+        .catch((error) => {
+            // The tab used to just close with no explanation ("it just closed").
+            tab?.close();
+            const message = error?.response?.data?.message
+                || (error?.response?.status === 419 ? 'Sesioni i faqes ka skaduar — rifresko faqen (F5) dhe provo sërish.' : null)
+                || 'Hapja dështoi — rifresko faqen dhe provo sërish.';
+            window.alert(message);
+        })
         .finally(() => { openingTask.value = null; });
 }
 function saveMaster() { masterForm.patch(`/super-admin/onboarding/${props.tenant.id}`, { preserveScroll: true, onSuccess: () => { showSettings.value = false; } }); }
