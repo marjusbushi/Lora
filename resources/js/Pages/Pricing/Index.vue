@@ -721,7 +721,7 @@ function fmtRange(s) {
                                 <th class="px-3 pb-2 text-left text-label text-neutral-600 align-bottom">{{ $t('admin.generated.k_a6aa7eff1daa') }}</th>
                                 <th class="px-3 pb-2 text-left align-bottom">
                                     <span class="inline-block rounded-lg bg-primary-950 px-2.5 py-1.5 text-tiny font-extrabold leading-tight text-white shadow-sm">
-                                        {{ $t('admin.generated.k_17da06e5a5dd') }}
+                                        Çmimi bazë ({{ currencyCode }})
                                         <small class="block text-[9px] font-bold opacity-80">gjithë viti · themeli</small>
                                     </span>
                                 </th>

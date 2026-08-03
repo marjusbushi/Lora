@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
+import { useCurrency } from '@/composables/useCurrency';
 import { getIntlLocale, translate } from '@/i18n';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -31,6 +32,8 @@ import {
     X,
 } from 'lucide-vue-next';
 
+
+const { symbol: currencySymbol } = useCurrency();
 const props = defineProps({
     initialGuest: { type: Object, required: true },
     stats: { type: Object, required: true },
@@ -326,7 +329,7 @@ onBeforeUnmount(() => clearTimeout(analysisTimer));
         <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Card><div class="flex items-center justify-between"><div><p class="text-tiny text-neutral-500">{{ $t('admin.guestProfileDesign.stays') }}</p><p class="mt-1 text-h3 text-primary-900">{{ stats.total_stays }}</p></div><span class="grid h-10 w-10 place-items-center rounded-xl bg-accent-50 text-accent-700"><BedDouble class="h-5 w-5" /></span></div></Card>
             <Card><div class="flex items-center justify-between"><div><p class="text-tiny text-neutral-500">{{ $t('admin.guestProfileDesign.nights') }}</p><p class="mt-1 text-h3 text-primary-900">{{ stats.total_nights }}</p></div><span class="grid h-10 w-10 place-items-center rounded-xl bg-info-50 text-info-700"><CalendarDays class="h-5 w-5" /></span></div></Card>
-            <Card><div class="flex items-center justify-between"><div><p class="text-tiny text-neutral-500">{{ $t('admin.guestProfileDesign.value') }}</p><p class="mt-1 text-h3 text-primary-900">€{{ Number(stats.lifetime_spend).toFixed(2) }}</p></div><span class="grid h-10 w-10 place-items-center rounded-xl bg-success-50 text-success-700"><Wallet class="h-5 w-5" /></span></div></Card>
+            <Card><div class="flex items-center justify-between"><div><p class="text-tiny text-neutral-500">{{ $t('admin.guestProfileDesign.value') }}</p><p class="mt-1 text-h3 text-primary-900">{{ currencySymbol }}{{ Number(stats.lifetime_spend).toFixed(2) }}</p></div><span class="grid h-10 w-10 place-items-center rounded-xl bg-success-50 text-success-700"><Wallet class="h-5 w-5" /></span></div></Card>
             <Card><div class="flex items-center justify-between"><div><p class="text-tiny text-neutral-500">{{ $t('admin.guestProfileDesign.lastStay') }}</p><p class="mt-1 text-body-sm font-extrabold text-primary-900">{{ latestStay }}</p></div><span class="grid h-10 w-10 place-items-center rounded-xl bg-warning-50 text-warning-700"><Clock3 class="h-5 w-5" /></span></div></Card>
         </div>
 
@@ -387,7 +390,7 @@ onBeforeUnmount(() => clearTimeout(analysisTimer));
             <div class="space-y-4 xl:col-span-8">
                 <Card :padding="false">
                     <template #header><div><h2 class="text-body font-bold text-primary-900">{{ $t('admin.guestProfileDesign.stayHistory') }}</h2><p class="text-tiny text-neutral-400">{{ $t('admin.guestProfileDesign.staySubtitle') }}</p></div></template>
-                    <div class="overflow-x-auto"><table class="min-w-full"><thead class="bg-neutral-50 text-left text-tiny uppercase tracking-wide text-neutral-500"><tr><th class="px-5 py-3">{{ $t('admin.guestProfileDesign.room') }}</th><th class="px-5 py-3">{{ $t('admin.guestProfileDesign.period') }}</th><th class="px-5 py-3">{{ $t('admin.guestProfileDesign.status') }}</th><th class="px-5 py-3 text-right">{{ $t('admin.guestProfileDesign.total') }}</th></tr></thead><tbody class="divide-y divide-neutral-100"><tr v-for="stay in stays" :key="stay.id" class="hover:bg-neutral-50"><td class="px-5 py-3"><Link v-if="!demo" :href="route('reservations.show', stay.id)" class="text-body-sm font-bold text-primary-900 no-underline hover:underline">{{ stay.room }}</Link><p v-else class="text-body-sm font-bold text-primary-900">{{ stay.room }}</p><p class="text-[10px] text-neutral-400">{{ stay.room_type }}</p></td><td class="whitespace-nowrap px-5 py-3 text-body-sm text-neutral-600">{{ formatDate(stayValue(stay, 'check_in')) }} → {{ formatDate(stayValue(stay, 'check_out')) }}</td><td class="px-5 py-3"><Badge :variant="stayStatusVariants[stay.status] || 'neutral'" dot>{{ $t(`admin.guestProfileDesign.statuses.${stay.status}`) }}</Badge></td><td class="px-5 py-3 text-right text-body-sm font-bold text-primary-900">€{{ Number(stay.total ?? stay.total_amount).toFixed(2) }}</td></tr></tbody></table></div>
+                    <div class="overflow-x-auto"><table class="min-w-full"><thead class="bg-neutral-50 text-left text-tiny uppercase tracking-wide text-neutral-500"><tr><th class="px-5 py-3">{{ $t('admin.guestProfileDesign.room') }}</th><th class="px-5 py-3">{{ $t('admin.guestProfileDesign.period') }}</th><th class="px-5 py-3">{{ $t('admin.guestProfileDesign.status') }}</th><th class="px-5 py-3 text-right">{{ $t('admin.guestProfileDesign.total') }}</th></tr></thead><tbody class="divide-y divide-neutral-100"><tr v-for="stay in stays" :key="stay.id" class="hover:bg-neutral-50"><td class="px-5 py-3"><Link v-if="!demo" :href="route('reservations.show', stay.id)" class="text-body-sm font-bold text-primary-900 no-underline hover:underline">{{ stay.room }}</Link><p v-else class="text-body-sm font-bold text-primary-900">{{ stay.room }}</p><p class="text-[10px] text-neutral-400">{{ stay.room_type }}</p></td><td class="whitespace-nowrap px-5 py-3 text-body-sm text-neutral-600">{{ formatDate(stayValue(stay, 'check_in')) }} → {{ formatDate(stayValue(stay, 'check_out')) }}</td><td class="px-5 py-3"><Badge :variant="stayStatusVariants[stay.status] || 'neutral'" dot>{{ $t(`admin.guestProfileDesign.statuses.${stay.status}`) }}</Badge></td><td class="px-5 py-3 text-right text-body-sm font-bold text-primary-900">{{ currencySymbol }}{{ Number(stay.total ?? stay.total_amount).toFixed(2) }}</td></tr></tbody></table></div>
                     <p v-if="!stays.length" class="px-5 py-10 text-center text-body-sm text-neutral-500">{{ $t('admin.guestProfileDesign.noStays') }}</p>
                 </Card>
 
