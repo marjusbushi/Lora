@@ -6,7 +6,7 @@ import { useCurrency } from '@/composables/useCurrency';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
 
-const { code: currencyCode } = useCurrency();
+const { pricingCode: currencyCode } = useCurrency();
 const props = defineProps({
     threads: Array,
     selected: Object,
