@@ -118,6 +118,7 @@ function digitsOnly(event) {
                         v-for="option in [
                             { value: 'shared', title: 'Në llogaritë e hotelit', text: 'Cash te Arka, kartat te Banka' },
                             { value: 'split_cash', title: 'Arkë e veçantë për POS', text: 'Cash-i i barit në sirtarin e vet; kartat te Banka' },
+                            { value: 'split_bank', title: 'Bankë e veçantë për POS', text: 'Cash-i te Arka e hotelit; kartat në bankën e vet të POS-it' },
                             { value: 'split_all', title: 'Arkë & bankë të veçanta', text: 'Gjithçka nga POS në llogaritë Bar/Restorant' },
                         ]"
                         :key="option.value"
