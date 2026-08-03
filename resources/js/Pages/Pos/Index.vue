@@ -1,6 +1,6 @@
 <script setup>
 import { getIntlLocale, i18n, translate } from '@/i18n';
-import { ref, computed, nextTick, onMounted } from 'vue';
+import { ref, computed, nextTick, onMounted, watch } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -76,18 +76,29 @@ const multiCurrency = computed(() => (props.payCurrencies || []).length > 1);
 function fxRateFor(code) {
     return Number((props.payCurrencies || []).find((entry) => entry.code === code)?.rate || 1);
 }
-function toTendered(baseAmount, code) {
-    const rate = fxRateFor(code);
+// The till may agree a round rate for THIS sale (1 € = 100 L) that differs
+// from the platform rate — editable, prefilled with the live rate, and
+// frozen on the tender the server records.
+const payFxRate = ref('');
+const splitCashFxRate = ref('');
+watch(payCurrency, (code) => { payFxRate.value = code && code !== posBaseCurrency.value ? String(fxRateFor(code)) : ''; });
+watch(splitCashCurrency, (code) => { splitCashFxRate.value = code && code !== posBaseCurrency.value ? String(fxRateFor(code)) : ''; });
+function effectiveRate(code, manual) {
+    const value = Number(manual);
+    return value > 0 ? value : fxRateFor(code);
+}
+function toTendered(baseAmount, code, manual) {
+    const rate = effectiveRate(code, manual);
     return rate > 0 ? Math.round((baseAmount / rate) * 100) / 100 : 0;
 }
 const payTendered = computed(() => (
     payCurrency.value && payCurrency.value !== posBaseCurrency.value && paymentMethod.value !== 'room_charge'
-        ? toTendered(paymentTotal.value, payCurrency.value)
+        ? toTendered(paymentTotal.value, payCurrency.value, payFxRate.value)
         : null
 ));
 const splitCashTendered = computed(() => (
     splitCashCurrency.value && splitCashCurrency.value !== posBaseCurrency.value && splitCash.value > 0
-        ? toTendered(splitCash.value, splitCashCurrency.value)
+        ? toTendered(splitCash.value, splitCashCurrency.value, splitCashFxRate.value)
         : null
 ));
 const selectedPayReservation = ref('');
@@ -487,6 +498,7 @@ function submitPay() {
                 if (splitCashTendered.value !== null) {
                     cashTender.currency = splitCashCurrency.value;
                     cashTender.tendered_amount = splitCashTendered.value;
+                    cashTender.exchange_rate = effectiveRate(splitCashCurrency.value, splitCashFxRate.value);
                 }
                 payments.push(cashTender);
             }
@@ -496,6 +508,7 @@ function submitPay() {
             if (payTendered.value !== null) {
                 tender.currency = payCurrency.value;
                 tender.tendered_amount = payTendered.value;
+                tender.exchange_rate = effectiveRate(payCurrency.value, payFxRate.value);
             }
             payments.push(tender);
         }
@@ -920,11 +933,15 @@ onMounted(() => {
                                     </select>
                                 </div>
                                 <template v-if="payTendered !== null">
-                                    <div class="mt-3 flex items-center justify-between text-body-sm">
+                                    <div class="mt-3 flex items-center justify-between gap-3 text-body-sm">
+                                        <span class="text-neutral-500">Kursi (1 {{ payCurrency }} në {{ posBaseCurrency }})</span>
+                                        <input v-model="payFxRate" type="number" min="0.000001" step="any" class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
+                                    </div>
+                                    <div class="mt-2 flex items-center justify-between text-body-sm">
                                         <span class="text-neutral-500">Merr nga klienti</span>
                                         <strong class="text-lg">{{ payTendered.toFixed(2) }} {{ payCurrency }}</strong>
                                     </div>
-                                    <p class="mt-1 text-small text-neutral-400">1 {{ payCurrency }} = {{ fxRateFor(payCurrency).toFixed(2) }} {{ posBaseCurrency }} · shkon në llogarinë {{ payCurrency }}</p>
+                                    <p class="mt-1 text-small text-neutral-400">Kursi vlen vetëm për këtë faturë · shkon në llogarinë {{ payCurrency }}</p>
                                 </template>
                             </div>
 
@@ -935,6 +952,10 @@ onMounted(() => {
                                     <select v-model="splitCashCurrency" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
                                         <option v-for="entry in payCurrencies" :key="entry.code" :value="entry.code">{{ entry.code }}</option>
                                     </select>
+                                </div>
+                                <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between gap-3 text-body-sm">
+                                    <span class="text-neutral-500">Kursi (1 {{ splitCashCurrency }} në {{ posBaseCurrency }})</span>
+                                    <input v-model="splitCashFxRate" type="number" min="0.000001" step="any" class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
                                 </div>
                                 <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between text-body-sm">
                                     <span class="text-neutral-500">Merr cash nga klienti</span>
