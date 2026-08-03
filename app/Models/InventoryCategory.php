@@ -68,4 +68,29 @@ class InventoryCategory extends TenantModel
 
         return $depth;
     }
+
+    /**
+     * Every category id mapped to the NAME of its root ancestor — one query
+     * for the whole tree, so spend rollups group leaves under their root
+     * ("Energji Elektrike" reports as "Shpenzime Fikse").
+     *
+     * @return array<int, string>
+     */
+    public static function rootNameMap(): array
+    {
+        $nodes = static::query()->get(['id', 'parent_id', 'name'])->keyBy('id');
+
+        $map = [];
+        foreach ($nodes as $id => $node) {
+            $root = $node;
+            $guard = 0;
+            while ($root->parent_id !== null && $guard < 3 && $nodes->has($root->parent_id)) {
+                $root = $nodes->get($root->parent_id);
+                $guard++;
+            }
+            $map[$id] = $root->name;
+        }
+
+        return $map;
+    }
 }
