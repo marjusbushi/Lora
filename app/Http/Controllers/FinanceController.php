@@ -778,13 +778,11 @@ class FinanceController extends Controller
         $today = CarbonImmutable::today();
 
         // This month's spend per category (paid or not — commitment view),
-        // plus the auto OTA commissions which are never ledger rows.
+        // plus the auto OTA commissions which are never ledger rows. The
+        // breakdown reads the LINES (item → tree root), so mixed bills split
+        // accurately instead of following one hand-picked document category.
         $monthStart = $today->startOfMonth();
-        $byCategory = Bill::where('issue_date', '>=', $monthStart->toDateString())
-            ->get(['category', 'total_base'])
-            ->groupBy('category')
-            ->map(fn ($g) => round((float) $g->sum('total_base'), 2))
-            ->sortDesc();
+        $byCategory = Bill::spendByItemCategory($monthStart->toDateString());
         $commissions = (float) Reservation::whereNotIn('status', ['cancelled'])
             ->whereDate('check_in_date', '>=', $monthStart->toDateString())
             ->sum('commission_amount');
@@ -833,7 +831,9 @@ class FinanceController extends Controller
             'accounts' => $this->visibleAccounts($request),
             'suppliers' => Supplier::where('is_active', true)->orderBy('name')
                 ->get(['id', 'name', 'nipt', 'category', 'payment_terms_days']),
-            'categories' => Bill::categories(),
+            // Filter options are the categories that actually exist on bills
+            // (auto-derived tree roots + legacy hand-picked names).
+            'categories' => Bill::query()->whereNotNull('category')->distinct()->orderBy('category')->pluck('category')->values(),
             'filters' => ['filter' => $filter, 'category' => $category, 'search' => $search, 'bill_id' => $billId],
             'byCategory' => $byCategory,
             'summary' => $summary,
@@ -929,7 +929,8 @@ class FinanceController extends Controller
         $data = $request->validate([
             'supplier_id' => ['required', 'integer', TenantRule::exists('suppliers')],
             'number' => ['nullable', 'string', 'max:60'],
-            'category' => ['required', 'string', 'max:60', Rule::in(Bill::categories())],
+            // The expense category is DERIVED from the lines after save — the
+            // items know what was bought better than a hand-picked dropdown.
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'currency' => ['required', Rule::in(config('lora.tenant_currencies', ['EUR', 'ALL']))],
@@ -991,7 +992,10 @@ class FinanceController extends Controller
         }
 
         DB::transaction(function () use ($data, $lines, $request) {
-            $bill = Bill::create(collect($data)->except(['items', 'receive_stock'])->all() + ['status' => 'open']);
+            $bill = Bill::create(collect($data)->except(['items', 'receive_stock'])->all() + [
+                'status' => 'open',
+                'category' => Bill::UNCATEGORIZED,
+            ]);
             if (! $bill->number) {
                 $bill->update(['number' => $this->automaticBillNumber($bill)]);
             }
@@ -1023,6 +1027,13 @@ class FinanceController extends Controller
                     $this->inventoryLedger->receiveBillItem($line, $request->user()->id);
                 }
             }
+
+            // The stored category keeps the list filter and supplier views
+            // working — auto-filled from what the bill actually contains.
+            $dominant = $bill->fresh()->dominantItemCategory();
+            if ($dominant) {
+                $bill->update(['category' => $dominant]);
+            }
         });
 
         return redirect()->route('finance.bills')->with('success', $lines->isNotEmpty()
@@ -1042,7 +1053,7 @@ class FinanceController extends Controller
         $rules = [
             'supplier_id' => ['required', 'integer', TenantRule::exists('suppliers')],
             'number' => ['nullable', 'string', 'max:60'],
-            'category' => ['required', 'string', 'max:60', Rule::in(Bill::categories())],
+            // Category is derived from the lines after save, never hand-picked.
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'notes' => ['nullable', 'string', 'max:500'],
@@ -1177,6 +1188,9 @@ class FinanceController extends Controller
                     $this->inventoryLedger->receiveBillItem($line, $request->user()->id);
                 }
             }
+
+            $dominant = $lockedBill->fresh()->dominantItemCategory();
+            $lockedBill->update(['category' => $dominant ?? ($lockedBill->category ?: Bill::UNCATEGORIZED)]);
         });
 
         return redirect()->route('finance.bills')->with('success', 'Fatura u përditësua.');
