@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\BaseCurrency;
+use Illuminate\Support\Collection;
 
 /**
  * A supplier purchase invoice (payable). It may be in the base or a foreign currency — the fx rate is
@@ -23,6 +24,68 @@ class Bill extends TenantModel
         $custom = Setting::get('financial.expense_categories', null);
 
         return is_array($custom) && $custom !== [] ? array_values($custom) : self::DEFAULT_CATEGORIES;
+    }
+
+    public const UNCATEGORIZED = 'Të tjera';
+
+    /**
+     * Line-accurate spend per ROOT inventory-tree category, in the base
+     * currency. The document-level category is a human approximation — the
+     * lines know exactly what was bought, so a mixed bill splits correctly.
+     * Lines whose item has no tree category land in "Të tjera".
+     *
+     * @return Collection<string, float> category name => spend, sorted desc
+     */
+    public static function spendByItemCategory(string $from, ?string $to = null): Collection
+    {
+        $rootNames = InventoryCategory::rootNameMap();
+
+        $bills = static::query()
+            ->whereDate('issue_date', '>=', $from)
+            ->when($to, fn ($q) => $q->whereDate('issue_date', '<=', $to))
+            ->with(['items:id,bill_id,inventory_item_id,line_total', 'items.item:id,category_id'])
+            ->get(['id', 'category', 'total', 'total_base']);
+
+        $spend = [];
+        foreach ($bills as $bill) {
+            // Scale each line from the document currency to the frozen base
+            // total, so foreign-currency bills split accurately too.
+            $ratio = (float) $bill->total > 0 ? (float) $bill->total_base / (float) $bill->total : 0.0;
+
+            if ($bill->items->isEmpty()) {
+                // A totals-only bill has no lines to read — its stored
+                // (auto-derived or legacy) category is the best truth we have.
+                $name = $bill->category ?: self::UNCATEGORIZED;
+                $spend[$name] = ($spend[$name] ?? 0.0) + (float) $bill->total_base;
+
+                continue;
+            }
+
+            foreach ($bill->items as $line) {
+                $name = $rootNames[$line->item?->category_id] ?? self::UNCATEGORIZED;
+                $spend[$name] = ($spend[$name] ?? 0.0) + round((float) $line->line_total * $ratio, 2);
+            }
+        }
+
+        return collect($spend)->map(fn ($v) => round($v, 2))->sortDesc();
+    }
+
+    /** The root tree category carrying most of this bill's value — used to auto-fill the stored category. */
+    public function dominantItemCategory(): ?string
+    {
+        $this->loadMissing('items.item:id,category_id');
+        if ($this->items->isEmpty()) {
+            return null;
+        }
+
+        $rootNames = InventoryCategory::rootNameMap();
+
+        return $this->items
+            ->groupBy(fn (BillItem $line) => $rootNames[$line->item?->category_id] ?? self::UNCATEGORIZED)
+            ->map(fn ($lines) => (float) $lines->sum('line_total'))
+            ->sortDesc()
+            ->keys()
+            ->first();
     }
 
     protected $fillable = [

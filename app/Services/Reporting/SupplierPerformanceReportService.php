@@ -3,6 +3,7 @@
 namespace App\Services\Reporting;
 
 use App\Models\Bill;
+use App\Models\InventoryCategory;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -39,7 +40,7 @@ final class SupplierPerformanceReportService
                 'supplier:id,name,category,payment_terms_days,is_active',
                 'payments:id,bill_id,direction,amount_base,paid_at',
                 'items:id,bill_id,inventory_item_id,description,quantity,unit,unit_cost,line_total,received_at',
-                'items.item:id,name,sku,unit,type',
+                'items.item:id,name,sku,unit,type,category_id',
             ])
             ->get(['id', 'supplier_id', 'number', 'category', 'issue_date', 'due_date', 'currency', 'total', 'total_base']);
 
@@ -79,14 +80,54 @@ final class SupplierPerformanceReportService
                 'top_supplier_share' => (float) ($supplierRows->max('spend_share') ?? 0),
             ],
             'suppliers' => $supplierRows->all(),
-            'categories' => $currentBills->groupBy(fn (Bill $bill) => $bill->category ?: '—')
-                ->map(fn (Collection $rows, string $category) => [
-                    'category' => $category,
-                    'spend' => round((float) $rows->sum('total_base'), 2),
-                    'bill_count' => $rows->count(),
-                ])->sortByDesc('spend')->values()->all(),
+            'categories' => $this->lineAccurateCategories($currentBills),
             'top_items' => $this->topItems($currentBills),
         ];
+    }
+
+    /**
+     * Spend per ROOT inventory-tree category, read from the LINES — a mixed
+     * bill splits across categories instead of following one hand-picked
+     * document label. Totals-only bills fall back to their stored category.
+     *
+     * @return list<array{category: string, spend: float, bill_count: int}>
+     */
+    private function lineAccurateCategories(Collection $currentBills): array
+    {
+        $rootNames = InventoryCategory::rootNameMap();
+        $spend = [];
+        $billsPerCategory = [];
+
+        foreach ($currentBills as $bill) {
+            $ratio = (float) $bill->total > 0 ? (float) $bill->total_base / (float) $bill->total : 0.0;
+            $touched = [];
+
+            if ($bill->items->isEmpty()) {
+                $name = $bill->category ?: Bill::UNCATEGORIZED;
+                $spend[$name] = ($spend[$name] ?? 0.0) + (float) $bill->total_base;
+                $touched[$name] = true;
+            } else {
+                foreach ($bill->items as $line) {
+                    $name = $rootNames[$line->item?->category_id] ?? Bill::UNCATEGORIZED;
+                    $spend[$name] = ($spend[$name] ?? 0.0) + round((float) $line->line_total * $ratio, 2);
+                    $touched[$name] = true;
+                }
+            }
+
+            foreach (array_keys($touched) as $name) {
+                $billsPerCategory[$name] = ($billsPerCategory[$name] ?? 0) + 1;
+            }
+        }
+
+        return collect($spend)
+            ->map(fn (float $amount, string $name) => [
+                'category' => $name,
+                'spend' => round($amount, 2),
+                'bill_count' => $billsPerCategory[$name] ?? 0,
+            ])
+            ->sortByDesc('spend')
+            ->values()
+            ->all();
     }
 
     private function supplierRow(Collection $bills, CarbonInterface $from, CarbonInterface $end): array

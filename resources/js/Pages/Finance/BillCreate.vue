@@ -68,7 +68,6 @@ function emptyLine() {
 const form = useForm({
     supplier_id: props.bill?.supplier_id ?? null,
     number: props.bill?.number || '',
-    category: props.bill?.category || props.categories[0] || t('admin.finance.billCreate.other'),
     issue_date: props.bill?.issue_date || localDateString(),
     due_date: props.bill?.due_date || null,
     currency: props.bill?.currency || props.baseCurrency,
@@ -115,7 +114,6 @@ watch(invoiceTotal, (total) => {
 watch(() => form.supplier_id, () => {
     const supplier = selectedSupplier.value;
     if (!supplier) return;
-    if (supplier.category && props.categories.includes(supplier.category)) form.category = supplier.category;
     applyPaymentTerms();
 });
 
@@ -190,7 +188,6 @@ function removeLine(index) {
 async function applyAiImport(result) {
     form.supplier_id = result.supplier?.match?.id || null;
     form.number = result.invoice?.number || '';
-    form.category = props.categories.includes(result.invoice?.category) ? result.invoice.category : (props.categories[0] || form.category);
     form.issue_date = result.invoice?.issue_date || localDateString();
     form.currency = props.currencies.includes(result.invoice?.currency) ? result.invoice.currency : props.baseCurrency;
     form.items = (result.items || []).map((item) => ({
@@ -203,7 +200,7 @@ async function applyAiImport(result) {
             name: item.description,
             sku: item.sku || '',
             barcode: item.barcode || '',
-            category: item.category || form.category,
+            category: item.category || '',
             type: item.item_type || 'product',
             unit: item.unit || 'piece',
         },
@@ -312,12 +309,6 @@ function submit() {
                                 <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.currency') }}</label>
                                 <select v-model="form.currency" :disabled="formLocked" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-500 focus:border-accent-500 focus:ring-accent-500">
                                     <option v-for="currency in currencies" :key="currency" :value="currency">{{ currency }}</option>
-                                </select>
-                            </div>
-                            <div :class="form.currency === baseCurrency ? 'sm:col-span-2' : ''">
-                                <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.category') }}</label>
-                                <select v-model="form.category" :disabled="readOnly" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm disabled:bg-neutral-100 disabled:text-neutral-500 focus:border-accent-500 focus:ring-accent-500">
-                                    <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
                                 </select>
                             </div>
                             <div v-if="form.currency !== baseCurrency">
