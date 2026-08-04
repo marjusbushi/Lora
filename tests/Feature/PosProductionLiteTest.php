@@ -172,6 +172,39 @@ class PosProductionLiteTest extends TestCase
         $this->assertSame(0.0, (float) $stuck->over_short);
     }
 
+    public function test_card_terminal_total_is_checked_and_recorded_at_close(): void
+    {
+        // 100 by card, drawer holds only the 20 float. The terminal's printed
+        // total says 90 — the 10 mismatch must survive on the shift record.
+        $order = $this->openOrder($this->menuItem());
+        $this->actingAs($this->admin)->post(route('pos.complete', $order), [
+            'payment_method' => 'card',
+        ])->assertSessionHasNoErrors();
+
+        $this->actingAs($this->admin)->post(route('pos.shift.close', $this->shift), [
+            'counted_cash' => 20,
+            'counted_card' => 90,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->shift->refresh();
+        $this->assertSame('closed', $this->shift->status);
+        $this->assertSame(90.0, (float) $this->shift->counted_card);
+        $this->assertSame(-10.0, (float) $this->shift->card_over_short);
+        $this->assertSame(0.0, (float) $this->shift->over_short); // cash side untouched
+    }
+
+    public function test_close_without_a_card_count_leaves_the_card_check_empty(): void
+    {
+        $this->actingAs($this->admin)->post(route('pos.shift.close', $this->shift), [
+            'counted_cash' => 20,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->shift->refresh();
+        $this->assertSame('closed', $this->shift->status);
+        $this->assertNull($this->shift->counted_card);
+        $this->assertNull($this->shift->card_over_short);
+    }
+
     public function test_shift_cannot_close_while_it_has_open_orders(): void
     {
         $this->openOrder($this->menuItem());

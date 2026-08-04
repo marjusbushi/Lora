@@ -137,7 +137,19 @@ const showCloseShift = ref(false);
 const hasOpenShift = computed(() => !!props.currentShift);
 
 const openShiftForm = useForm({ opening_float: props.defaultOpeningFloat ?? 0, currencies: [] });
-const closeShiftForm = useForm({ counted_cash: '', closing_note: '' });
+const closeShiftForm = useForm({ counted_cash: '', counted_card: '', closing_note: '' });
+
+// The card terminal prints its own daily total — the waiter types it here and
+// it must MATCH the system's card sales, same discipline as counting cash.
+const countedCardNum = computed(() => {
+    const v = parseFloat(closeShiftForm.counted_card);
+    return isNaN(v) ? null : v;
+});
+const cardVariance = computed(() => {
+    if (countedCardNum.value === null) return null;
+    return Math.round((countedCardNum.value - Number(closeShiftTarget.value?.card_sales ?? 0)) * 100) / 100;
+});
+const cardCountRequired = computed(() => Number(closeShiftTarget.value?.card_sales ?? 0) > 0);
 
 // ===== Foreign currencies in the drawer (opening floats + close counting) =====
 const foreignPayCurrencies = computed(() =>
@@ -261,6 +273,10 @@ function submitCloseShift() {
     if (countedNum.value === null) { toasts.value?.error(translate('admin.generated.k_af8603fe2aff')); return; }
     if (!allCurrenciesCounted.value) {
         toasts.value?.error('Numëro edhe monedhat e tjera të sirtarit para mbylljes.');
+        return;
+    }
+    if (cardCountRequired.value && countedCardNum.value === null) {
+        toasts.value?.error('Shkruaj totalin nga POS-i fizik i kartës para mbylljes.');
         return;
     }
     closeShiftForm
@@ -1262,7 +1278,7 @@ onMounted(() => {
                     <table class="min-w-full divide-y divide-neutral-200">
                         <thead class="bg-neutral-50"><tr><th class="px-5 py-3 text-left text-label text-neutral-600">Turni</th><th class="px-5 py-3 text-left text-label text-neutral-600">Punonjësi</th><th class="px-5 py-3 text-left text-label text-neutral-600">Hapur</th><th class="px-5 py-3 text-left text-label text-neutral-600">Mbyllur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Shitjet</th><th class="px-5 py-3 text-right text-label text-neutral-600">Cash i pritur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Diferenca</th><th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th><th class="px-5 py-3 text-right text-label text-neutral-600">Veprime</th></tr></thead>
                         <tbody class="divide-y divide-neutral-100 bg-white">
-                            <tr v-for="shift in shiftHistory" :key="shift.id" class="hover:bg-neutral-50"><td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ shift.id }}</td><td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ shift.user_name || '—' }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.opened_at) }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.closed_at) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-semibold">{{ money(shift.total_sales) }}</td><td class="px-5 py-3.5 text-right text-body-sm">{{ money(shift.expected_cash) }}<div v-for="line in shift.currencies || []" :key="line.currency" class="text-tiny text-neutral-500">{{ moneyIn(line.currency, line.expected_amount) }}</div></td><td class="px-5 py-3.5 text-right text-body-sm font-bold" :class="Math.abs(Number(shift.over_short || 0)) < 0.01 ? 'text-success-700' : 'text-error-700'">{{ shift.over_short === null ? '—' : money(shift.over_short) }}<div v-for="line in shift.currencies || []" :key="'os-' + line.currency" class="text-tiny font-normal" :class="line.over_short === null ? 'text-neutral-400' : (Math.abs(Number(line.over_short)) < 0.01 ? 'text-success-600' : 'text-error-600')">{{ line.over_short === null ? '' : `${line.currency} ${Number(line.over_short) > 0 ? '+' : ''}${Number(line.over_short).toFixed(2)}` }}</div></td><td class="px-5 py-3.5"><Badge :variant="shift.status === 'open' ? 'success' : 'neutral'" dot size="sm">{{ shift.status === 'open' ? 'Hapur' : 'Mbyllur' }}</Badge></td><td class="px-5 py-3.5 text-right"><Button v-if="canCloseRow(shift)" size="sm" variant="outline" @click="openCloseModal(shift)">Mbyll turnin</Button></td></tr>
+                            <tr v-for="shift in shiftHistory" :key="shift.id" class="hover:bg-neutral-50"><td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ shift.id }}</td><td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ shift.user_name || '—' }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.opened_at) }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.closed_at) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-semibold">{{ money(shift.total_sales) }}</td><td class="px-5 py-3.5 text-right text-body-sm">{{ money(shift.expected_cash) }}<div v-for="line in shift.currencies || []" :key="line.currency" class="text-tiny text-neutral-500">{{ moneyIn(line.currency, line.expected_amount) }}</div></td><td class="px-5 py-3.5 text-right text-body-sm font-bold" :class="Math.abs(Number(shift.over_short || 0)) < 0.01 ? 'text-success-700' : 'text-error-700'">{{ shift.over_short === null ? '—' : money(shift.over_short) }}<div v-for="line in shift.currencies || []" :key="'os-' + line.currency" class="text-tiny font-normal" :class="line.over_short === null ? 'text-neutral-400' : (Math.abs(Number(line.over_short)) < 0.01 ? 'text-success-600' : 'text-error-600')">{{ line.over_short === null ? '' : `${line.currency} ${Number(line.over_short) > 0 ? '+' : ''}${Number(line.over_short).toFixed(2)}` }}</div><div v-if="shift.card_over_short !== null && shift.card_over_short !== undefined" class="text-tiny font-normal" :class="Math.abs(Number(shift.card_over_short)) < 0.01 ? 'text-success-600' : 'text-error-600'">Kartë {{ Number(shift.card_over_short) > 0 ? '+' : '' }}{{ Number(shift.card_over_short).toFixed(2) }}</div></td><td class="px-5 py-3.5"><Badge :variant="shift.status === 'open' ? 'success' : 'neutral'" dot size="sm">{{ shift.status === 'open' ? 'Hapur' : 'Mbyllur' }}</Badge></td><td class="px-5 py-3.5 text-right"><Button v-if="canCloseRow(shift)" size="sm" variant="outline" @click="openCloseModal(shift)">Mbyll turnin</Button></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1384,9 +1400,15 @@ onMounted(() => {
 
                     <!-- Reported but not in drawer -->
                     <div class="rounded-lg bg-neutral-50/70 px-4 py-3 text-small text-neutral-500 space-y-1">
-                        <p class="font-medium text-neutral-600">{{ $t('admin.generated.k_fc36fa7bd197') }}</p>
-                        <div class="flex justify-between"><span>{{ $t('admin.generated.k_af92a6e399a8') }}</span><span>{{ money(closeShiftTarget.card_sales) }}</span></div>
-                        <div class="flex justify-between"><span>{{ $t('admin.generated.k_2ed6d0f4fac5') }}</span><span>{{ money(closeShiftTarget.room_charge_sales) }}</span></div>
+                        <p class="font-medium text-neutral-600">Shitje me Kartë</p>
+                        <div class="flex justify-between"><span>{{ $t('admin.generated.k_af92a6e399a8') }} (sistemi)</span><span class="font-semibold text-primary-900">{{ money(closeShiftTarget.card_sales) }}</span></div>
+                        <div v-if="countedCardNum !== null" class="flex justify-between border-t border-neutral-200 pt-1">
+                            <span>POS-i fizik i kartës</span>
+                            <span class="font-medium" :class="cardVariance === 0 ? 'text-success-600' : 'text-error-600'">
+                                {{ money(countedCardNum) }}<template v-if="cardVariance !== 0"> ({{ cardVariance > 0 ? '+' : '' }}{{ cardVariance.toFixed(2) }})</template>
+                            </span>
+                        </div>
+                        <div class="flex justify-between border-t border-neutral-200 pt-1"><span>{{ $t('admin.generated.k_2ed6d0f4fac5') }}</span><span>{{ money(closeShiftTarget.room_charge_sales) }}</span></div>
                         <div class="flex justify-between border-t border-neutral-200 pt-1 text-neutral-600"><span>{{ $t('admin.generated.k_d11885dd3f1b') }} {{ closeShiftTarget.completed_orders }} {{ $t('admin.generated.k_d422b6155234') }}</span><span>{{ money(totalSales) }}</span></div>
                     </div>
 
@@ -1407,6 +1429,11 @@ onMounted(() => {
                 <!-- mandatory count input -->
                 <FormGroup :label="$t('admin.generated.k_bce57025cf34')" :error="closeShiftForm.errors.counted_cash" required class="print:hidden">
                     <TextInput type="number" step="0.01" min="0" v-model="closeShiftForm.counted_cash" placeholder="0.00" :error="closeShiftForm.errors.counted_cash" />
+                </FormGroup>
+
+                <FormGroup label="Totali nga POS-i fizik i kartës" :error="closeShiftForm.errors.counted_card" :required="cardCountRequired" class="print:hidden">
+                    <TextInput type="number" step="0.01" min="0" v-model="closeShiftForm.counted_card" placeholder="0.00" :error="closeShiftForm.errors.counted_card" />
+                    <p class="mt-1 text-small text-neutral-400">Shkruaj totalin e printuar nga terminali i kartës — duhet të përputhet me shitjet me kartë të sistemit.</p>
                 </FormGroup>
 
                 <!-- one count per foreign currency in the drawer -->
@@ -1433,7 +1460,7 @@ onMounted(() => {
             <template #footer>
                 <Button variant="outline" @click="showCloseShift = false">{{ $t('admin.generated.k_182fb16b9fb0') }}</Button>
                 <Button variant="outline" :disabled="countedNum === null" @click="printZReport">{{ $t('admin.generated.k_95ddf85f4a7e') }}</Button>
-                <Button variant="primary" :loading="closeShiftForm.processing" :disabled="countedNum === null || !allCurrenciesCounted" @click="submitCloseShift">{{ $t('admin.generated.k_aca11a3b5c75') }}</Button>
+                <Button variant="primary" :loading="closeShiftForm.processing" :disabled="countedNum === null || !allCurrenciesCounted || (cardCountRequired && countedCardNum === null)" @click="submitCloseShift">{{ $t('admin.generated.k_aca11a3b5c75') }}</Button>
             </template>
         </Modal>
 
