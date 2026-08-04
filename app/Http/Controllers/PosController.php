@@ -117,7 +117,7 @@ class PosController extends Controller
         $shift = PosShift::currentFor(auth()->id());
 
         $shiftHistory = $view === 'shifts'
-            ? PosShift::with(['user:id,name', 'closedBy:id,name'])
+            ? PosShift::with(['user:id,name', 'closedBy:id,name', 'currencies'])
                 ->orderByDesc('opened_at')
                 ->limit(30)
                 ->get()
@@ -138,7 +138,7 @@ class PosController extends Controller
                         'opened_at' => $item->opened_at?->toIso8601String(),
                         'closed_at' => $item->closed_at?->toIso8601String(),
                         'opening_float' => (float) $item->opening_float,
-                        'expected_cash' => $live ? round((float) $item->opening_float + $cash, 2) : (float) $item->expected_cash,
+                        'expected_cash' => $live ? $item->liveExpectedCash($cash) : (float) $item->expected_cash,
                         'counted_cash' => $item->counted_cash === null ? null : (float) $item->counted_cash,
                         'over_short' => $item->over_short === null ? null : (float) $item->over_short,
                         'cash_sales' => $cash,
@@ -150,6 +150,9 @@ class PosController extends Controller
                         'completed_orders' => $live ? (int) $item->orders()->where('status', 'completed')->count() : (int) $item->total_orders,
                         'open_orders' => $live ? (int) $item->orders()->where('status', 'open')->count() : 0,
                         'closing_note' => $item->closing_note,
+                        // Foreign drawer lines — live for open shifts so the
+                        // (force-)close modal shows real per-currency expected.
+                        'currencies' => $item->currencyLines(),
                     ];
                 })->values()
             : collect();
@@ -171,8 +174,10 @@ class PosController extends Controller
                 'cash_sales' => $cash,
                 'card_sales' => $card,
                 'room_charge_sales' => $room,
-                // Only cash drives the drawer; card + room_charge are reported separately.
-                'expected_cash' => round((float) $shift->opening_float + $cash, 2),
+                // Only cash drives the drawer; card + room_charge are reported
+                // separately, and foreign cash lives in its own currency line.
+                'expected_cash' => $shift->liveExpectedCash($cash),
+                'currencies' => $shift->currencyLines(),
             ];
         }
 
