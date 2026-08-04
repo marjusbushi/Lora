@@ -1,7 +1,7 @@
 <script setup>
 import { getIntlLocale, i18n, translate } from '@/i18n';
 import { ref, computed, nextTick, onMounted, watch } from 'vue';
-import { useForm, router } from '@inertiajs/vue3';
+import { useForm, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
@@ -28,6 +28,7 @@ const props = defineProps({
     currentShift: { type: Object, default: null },
     canOpenShift: { type: Boolean, default: false },
     canCloseShift: { type: Boolean, default: false },
+    canCloseAnyShift: { type: Boolean, default: false },
     defaultOpeningFloat: { type: Number, default: 0 },
     receiptSettings: { type: Object, default: () => ({}) },
     tableContext: { type: Object, default: null },
@@ -133,15 +134,29 @@ function submitOpenShift() {
     });
 }
 
-function openCloseModal() {
+// The close modal targets the viewer's own shift by default, but an admin
+// with close_any_pos_shift may force-close ANY open shift from the history
+// list (a waiter went home without closing - the backend always supported
+// it; the button did not exist).
+const closeShiftTarget = ref(null);
+const currentUserId = Number(usePage().props.auth.user?.id || 0);
+
+function openCloseModal(target = null) {
+    // Guard: the banner emits @close with an event object - only a real
+    // shift row (has an id) may become the target.
+    closeShiftTarget.value = target && target.id ? target : props.currentShift;
     closeShiftForm.reset();
     closeShiftForm.clearErrors();
     showCloseShift.value = true;
 }
 
-const expectedCash = computed(() => Number(props.currentShift?.expected_cash ?? 0));
+function canCloseRow(shift) {
+    return shift.status === 'open' && (props.canCloseAnyShift || (props.canCloseShift && Number(shift.user_id) === currentUserId));
+}
+
+const expectedCash = computed(() => Number(closeShiftTarget.value?.expected_cash ?? 0));
 const totalSales = computed(() => {
-    const s = props.currentShift;
+    const s = closeShiftTarget.value;
     if (!s) return 0;
     return Number(s.cash_sales) + Number(s.card_sales) + Number(s.room_charge_sales);
 });
@@ -167,7 +182,7 @@ const varianceClass = computed(() => {
 
 function submitCloseShift() {
     if (countedNum.value === null) { toasts.value?.error(translate('admin.generated.k_af8603fe2aff')); return; }
-    closeShiftForm.post(route('pos.shift.close', props.currentShift.id), {
+    closeShiftForm.post(route('pos.shift.close', closeShiftTarget.value.id), {
         preserveScroll: true,
         onSuccess: () => { showCloseShift.value = false; toasts.value?.success(translate('admin.generated.k_f49b27350297')); },
         onError: () => toasts.value?.error(translate('admin.generated.k_59a4e2c1c1c1')),
@@ -1146,9 +1161,9 @@ onMounted(() => {
                 <div class="border-b border-neutral-200 px-5 py-4"><h2 class="text-h4 text-primary-900">Historiku i turneve</h2><p class="mt-1 text-small text-neutral-500">30 turnet e fundit dhe diferencat e numërimit të arkës.</p></div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-neutral-200">
-                        <thead class="bg-neutral-50"><tr><th class="px-5 py-3 text-left text-label text-neutral-600">Turni</th><th class="px-5 py-3 text-left text-label text-neutral-600">Punonjësi</th><th class="px-5 py-3 text-left text-label text-neutral-600">Hapur</th><th class="px-5 py-3 text-left text-label text-neutral-600">Mbyllur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Shitjet</th><th class="px-5 py-3 text-right text-label text-neutral-600">Cash i pritur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Diferenca</th><th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th></tr></thead>
+                        <thead class="bg-neutral-50"><tr><th class="px-5 py-3 text-left text-label text-neutral-600">Turni</th><th class="px-5 py-3 text-left text-label text-neutral-600">Punonjësi</th><th class="px-5 py-3 text-left text-label text-neutral-600">Hapur</th><th class="px-5 py-3 text-left text-label text-neutral-600">Mbyllur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Shitjet</th><th class="px-5 py-3 text-right text-label text-neutral-600">Cash i pritur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Diferenca</th><th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th><th class="px-5 py-3 text-right text-label text-neutral-600">Veprime</th></tr></thead>
                         <tbody class="divide-y divide-neutral-100 bg-white">
-                            <tr v-for="shift in shiftHistory" :key="shift.id" class="hover:bg-neutral-50"><td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ shift.id }}</td><td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ shift.user_name || '—' }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.opened_at) }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.closed_at) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-semibold">{{ money(shift.total_sales) }}</td><td class="px-5 py-3.5 text-right text-body-sm">{{ money(shift.expected_cash) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-bold" :class="Math.abs(Number(shift.over_short || 0)) < 0.01 ? 'text-success-700' : 'text-error-700'">{{ shift.over_short === null ? '—' : money(shift.over_short) }}</td><td class="px-5 py-3.5"><Badge :variant="shift.status === 'open' ? 'success' : 'neutral'" dot size="sm">{{ shift.status === 'open' ? 'Hapur' : 'Mbyllur' }}</Badge></td></tr>
+                            <tr v-for="shift in shiftHistory" :key="shift.id" class="hover:bg-neutral-50"><td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ shift.id }}</td><td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ shift.user_name || '—' }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.opened_at) }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.closed_at) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-semibold">{{ money(shift.total_sales) }}</td><td class="px-5 py-3.5 text-right text-body-sm">{{ money(shift.expected_cash) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-bold" :class="Math.abs(Number(shift.over_short || 0)) < 0.01 ? 'text-success-700' : 'text-error-700'">{{ shift.over_short === null ? '—' : money(shift.over_short) }}</td><td class="px-5 py-3.5"><Badge :variant="shift.status === 'open' ? 'success' : 'neutral'" dot size="sm">{{ shift.status === 'open' ? 'Hapur' : 'Mbyllur' }}</Badge></td><td class="px-5 py-3.5 text-right"><Button v-if="canCloseRow(shift)" size="sm" variant="outline" @click="openCloseModal(shift)">Mbyll turnin</Button></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1219,21 +1234,21 @@ onMounted(() => {
 
         <!-- Close shift modal (Z-Report) -->
         <Modal :show="showCloseShift" :title="$t('admin.generated.k_d693052380a0')" max-width="md" @close="showCloseShift = false">
-            <div v-if="currentShift" class="space-y-4">
+            <div v-if="closeShiftTarget" class="space-y-4">
                 <div id="zreport" class="space-y-4">
                     <!-- Drawer expected -->
                     <div class="rounded-lg bg-neutral-50 border border-neutral-200 p-4 space-y-1.5 text-body-sm">
-                        <div class="flex justify-between text-neutral-600"><span>{{ $t('admin.generated.k_afaffdd6fba2') }}</span><span>{{ money(currentShift.opening_float) }}</span></div>
-                        <div class="flex justify-between text-neutral-600"><span>{{ $t('admin.generated.k_880339104862') }}</span><span>{{ money(currentShift.cash_sales) }}</span></div>
+                        <div class="flex justify-between text-neutral-600"><span>{{ $t('admin.generated.k_afaffdd6fba2') }}</span><span>{{ money(closeShiftTarget.opening_float) }}</span></div>
+                        <div class="flex justify-between text-neutral-600"><span>{{ $t('admin.generated.k_880339104862') }}</span><span>{{ money(closeShiftTarget.cash_sales) }}</span></div>
                         <div class="flex justify-between font-semibold text-primary-900 border-t border-neutral-200 pt-1.5"><span>{{ $t('admin.generated.k_81ed24491855') }}</span><span>{{ money(expectedCash) }}</span></div>
                     </div>
 
                     <!-- Reported but not in drawer -->
                     <div class="rounded-lg bg-neutral-50/70 px-4 py-3 text-small text-neutral-500 space-y-1">
                         <p class="font-medium text-neutral-600">{{ $t('admin.generated.k_fc36fa7bd197') }}</p>
-                        <div class="flex justify-between"><span>{{ $t('admin.generated.k_af92a6e399a8') }}</span><span>{{ money(currentShift.card_sales) }}</span></div>
-                        <div class="flex justify-between"><span>{{ $t('admin.generated.k_2ed6d0f4fac5') }}</span><span>{{ money(currentShift.room_charge_sales) }}</span></div>
-                        <div class="flex justify-between border-t border-neutral-200 pt-1 text-neutral-600"><span>{{ $t('admin.generated.k_d11885dd3f1b') }} {{ currentShift.completed_orders }} {{ $t('admin.generated.k_d422b6155234') }}</span><span>{{ money(totalSales) }}</span></div>
+                        <div class="flex justify-between"><span>{{ $t('admin.generated.k_af92a6e399a8') }}</span><span>{{ money(closeShiftTarget.card_sales) }}</span></div>
+                        <div class="flex justify-between"><span>{{ $t('admin.generated.k_2ed6d0f4fac5') }}</span><span>{{ money(closeShiftTarget.room_charge_sales) }}</span></div>
+                        <div class="flex justify-between border-t border-neutral-200 pt-1 text-neutral-600"><span>{{ $t('admin.generated.k_d11885dd3f1b') }} {{ closeShiftTarget.completed_orders }} {{ $t('admin.generated.k_d422b6155234') }}</span><span>{{ money(totalSales) }}</span></div>
                     </div>
 
                     <!-- counted result (prints with the report once typed) -->
@@ -1247,8 +1262,8 @@ onMounted(() => {
                 </div>
 
                 <!-- open orders warning -->
-                <div v-if="currentShift.open_orders" class="rounded-lg bg-warning-50 border border-warning-200 px-3 py-2 text-small text-warning-800 print:hidden">
-                    ⚠️ {{ currentShift.open_orders }} {{ $t('admin.generated.k_6b58c32bad4e') }} </div>
+                <div v-if="closeShiftTarget.open_orders" class="rounded-lg bg-warning-50 border border-warning-200 px-3 py-2 text-small text-warning-800 print:hidden">
+                    ⚠️ {{ closeShiftTarget.open_orders }} {{ $t('admin.generated.k_6b58c32bad4e') }} </div>
 
                 <!-- mandatory count input -->
                 <FormGroup :label="$t('admin.generated.k_bce57025cf34')" :error="closeShiftForm.errors.counted_cash" required class="print:hidden">

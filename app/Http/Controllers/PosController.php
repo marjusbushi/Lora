@@ -121,8 +121,10 @@ class PosController extends Controller
                 ->orderByDesc('opened_at')
                 ->limit(30)
                 ->get()
-                ->map(function (PosShift $item) use ($shift) {
-                    $live = $item->id === $shift?->id ? $item->liveTotals() : null;
+                ->map(function (PosShift $item) {
+                    // Live totals for EVERY open shift (not just the viewer's own):
+                    // the force-close modal must show the real expected cash.
+                    $live = $item->status === 'open' ? $item->liveTotals() : null;
                     $cash = $live['cash'] ?? (float) $item->cash_sales;
                     $card = $live['card'] ?? (float) $item->card_sales;
                     $room = $live['room_charge'] ?? (float) $item->room_charge_sales;
@@ -130,6 +132,7 @@ class PosController extends Controller
                     return [
                         'id' => $item->id,
                         'status' => $item->status,
+                        'user_id' => $item->user_id,
                         'user_name' => $item->user?->name,
                         'closed_by_name' => $item->closedBy?->name,
                         'opened_at' => $item->opened_at?->toIso8601String(),
@@ -143,6 +146,9 @@ class PosController extends Controller
                         'room_charge_sales' => $room,
                         'total_sales' => round($cash + $card + $room, 2),
                         'total_orders' => $live ? (int) $item->orders()->where('status', 'completed')->count() : (int) $item->total_orders,
+                        // The force-close modal reuses the same Z-report body.
+                        'completed_orders' => $live ? (int) $item->orders()->where('status', 'completed')->count() : (int) $item->total_orders,
+                        'open_orders' => $live ? (int) $item->orders()->where('status', 'open')->count() : 0,
                         'closing_note' => $item->closing_note,
                     ];
                 })->values()
@@ -269,6 +275,7 @@ class PosController extends Controller
             'currentShift' => $currentShift,
             'canOpenShift' => $request->user()->can('open_pos_shift'),
             'canCloseShift' => $request->user()->can('close_pos_shift'),
+            'canCloseAnyShift' => $request->user()->can('close_any_pos_shift'),
             'defaultOpeningFloat' => (float) Setting::get('pos.default_opening_float', 0),
             'receiptSettings' => $this->receiptSettings(),
             'tableContext' => $tableContext,
