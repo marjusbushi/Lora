@@ -40,6 +40,21 @@ const props = defineProps({
 
 const toasts = ref(null);
 const showOrdersPanel = ref(Boolean(props.filters?.order_id));
+
+function openOrdersPanel() {
+    showOrdersPanel.value = true;
+    // A pay/receipt deep-link (?order_id=N) narrows the server-side orders
+    // list to that single order — reopening the panel would show only it and
+    // hide every other open order. Refetch the real list; preserveState
+    // keeps the current cart untouched.
+    if (props.filters?.order_id) {
+        router.visit(route('pos.index'), {
+            preserveState: true,
+            preserveScroll: true,
+            only: ['orders', 'filters', 'stats'],
+        });
+    }
+}
 const selectedOrder = ref(null);
 const editingOrderId = ref(null);
 const showReceipt = ref(false);
@@ -707,7 +722,7 @@ onMounted(() => {
                     <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">Shitje sot</p>
                     <p class="text-h4 text-accent-700">{{ money(stats.today_revenue) }}</p>
                 </div>
-                <Button variant="outline" class="h-[58px]" @click="showOrdersPanel = true">
+                <Button variant="outline" class="h-[58px]" @click="openOrdersPanel">
                     <ReceiptText class="h-4 w-4" /> Porositë e hapura
                     <span class="rounded-md bg-warning-50 px-1.5 py-0.5 text-tiny font-semibold text-warning-700">{{ stats.open }}</span>
                 </Button>
