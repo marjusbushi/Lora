@@ -31,7 +31,11 @@ class PosTableServiceController extends Controller
 
     public function index(Request $request): Response|RedirectResponse
     {
-        if ($this->posSalespeople->settings()['service_mode'] === 'direct') {
+        // Direct-mode hotels route NEW sales to the sale screen — but an
+        // explicit deep-link to a table (Paguaj on a legacy table order after
+        // the hotel switched modes) must still open, or those open orders
+        // become unpayable and uncancelable from the UI.
+        if ($this->posSalespeople->settings()['service_mode'] === 'direct' && ! $request->integer('table')) {
             return redirect()->route('pos.index', ['direct' => 1]);
         }
 
