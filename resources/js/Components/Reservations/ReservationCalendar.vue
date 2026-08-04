@@ -62,6 +62,14 @@ const conflictingReservationIds = computed(() => new Set(activeConflicts.value.f
 
 const perms = usePage().props.auth.user?.permissions || [];
 const currencyCode = usePage().props.tenant?.currency || 'EUR';
+
+// Guest chat lives behind the Channel Manager module — without it there is
+// no Messages page to deep-link into, so the bar icon stays hidden.
+const canOpenGuestChat = (usePage().props.modules || {}).channel_manager === true;
+
+function openGuestChat(reservation) {
+    router.visit(route('messages.index', { thread: reservation.message_thread_id }));
+}
 const canCreate = props.demo || perms.includes('create_reservations');
 const canUpdate = props.demo || perms.includes('update_reservations');
 
@@ -582,7 +590,14 @@ function doCheckOut(res) {
                                         :style="reservationStyle(reservation)"
                                         @click="openDetail(reservation)"
                                     >
-                                        <span class="flex items-center gap-1.5 truncate text-[11px] font-extrabold"><span class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ backgroundColor: channelMeta(reservation.channel).color }" />{{ reservation.guest?.first_name }} {{ reservation.guest?.last_name }}</span>
+                                        <span class="flex items-center gap-1.5 text-[11px] font-extrabold"><span class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ backgroundColor: channelMeta(reservation.channel).color }" /><span class="truncate">{{ reservation.guest?.first_name }} {{ reservation.guest?.last_name }}</span><span
+                                            v-if="canOpenGuestChat && reservation.message_thread_id"
+                                            role="button"
+                                            class="relative ml-auto inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-white/70"
+                                            :title="reservation.unread_messages > 0 ? `${reservation.unread_messages} mesazhe të palexuara — hap bisedën` : 'Hap bisedën e mysafirit'"
+                                            :aria-label="`Mesazhet e ${reservation.guest?.first_name || ''} ${reservation.guest?.last_name || ''}`"
+                                            @click.stop="openGuestChat(reservation)"
+                                        ><MessageSquare class="h-3.5 w-3.5" :class="reservation.unread_messages > 0 ? 'text-accent-700' : 'text-neutral-500'" /><span v-if="reservation.unread_messages > 0" class="absolute -right-1.5 -top-1.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-error-500 px-0.5 text-[8px] font-bold leading-none text-white ring-1 ring-white">{{ reservation.unread_messages > 9 ? '9+' : reservation.unread_messages }}</span></span></span>
                                         <span class="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-75"><span class="truncate">{{ channelMeta(reservation.channel).label }}</span><span class="shrink-0 font-bold" :class="Number(reservation.paid_amount) >= Number(reservation.total_amount) ? 'text-success-700' : 'text-warning-700'" aria-hidden="true">{{ currencyCode }}</span></span>
                                     </button>
                                 </div>
