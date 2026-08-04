@@ -14,6 +14,7 @@ use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
+use App\Models\MessageThread;
 use App\Models\OtaReconciliationIssue;
 use App\Models\Payment;
 use App\Models\PosOrder;
@@ -255,7 +256,16 @@ class ReservationController extends Controller
             ->whereNotIn('status', ['cancelled'])
             ->where('check_in_date', '<=', $endDate)
             ->where('check_out_date', '>=', $startDate)
-            ->get()
+            ->get();
+
+        // Guest chat per reservation: the calendar bar shows a message icon
+        // that deep-links to the thread, loud when something is unread.
+        $threads = MessageThread::query()
+            ->whereIn('reservation_id', $reservations->pluck('id'))
+            ->get(['id', 'reservation_id', 'unread_count'])
+            ->keyBy('reservation_id');
+
+        $reservations = $reservations
             // Send plain local Y-m-d (not ISO UTC datetimes) so the calendar's
             // string date comparisons line up — fixes the off-by-one / out-of-sync bars.
             ->map(fn ($r) => [
@@ -282,6 +292,8 @@ class ReservationController extends Controller
                 ),
                 'booking_group_id' => $r->booking_group_id,
                 'created_at' => $r->created_at?->toIso8601String(),
+                'message_thread_id' => $threads->get($r->id)?->id,
+                'unread_messages' => (int) ($threads->get($r->id)?->unread_count ?? 0),
                 'guest' => $r->guest ? [
                     'id' => $r->guest->id,
                     'first_name' => $r->guest->first_name,

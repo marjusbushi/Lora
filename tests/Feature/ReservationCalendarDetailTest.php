@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Guest;
+use App\Models\MessageThread;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
@@ -88,5 +89,50 @@ class ReservationCalendarDetailTest extends TestCase
                     ->etc()
                 )
             );
+    }
+
+    public function test_calendar_carries_the_guest_chat_thread_and_unread_count(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $type = RoomType::create(['name' => 'Family', 'base_price' => 100, 'max_occupancy' => 4, 'amenities' => []]);
+        $room = Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
+        $roomB = Room::create(['room_type_id' => $type->id, 'room_number' => '102', 'floor' => 1, 'status' => 'available']);
+        $guest = Guest::create(['first_name' => 'Ana', 'last_name' => 'Berisha', 'email' => 'ana@test.local']);
+
+        $base = [
+            'guest_id' => $guest->id,
+            'created_by' => $admin->id,
+            'check_in_date' => now()->startOfWeek()->addDay()->toDateString(),
+            'check_out_date' => now()->startOfWeek()->addDays(3)->toDateString(),
+            'status' => 'confirmed',
+            'total_amount' => 100,
+            'adults' => 2,
+        ];
+        $withChat = Reservation::create($base + ['room_id' => $room->id]);
+        $silent = Reservation::create($base + ['room_id' => $roomB->id]);
+
+        $thread = MessageThread::create([
+            'channex_thread_id' => 'TH-CAL',
+            'channel' => 'booking.com',
+            'guest_name' => 'Ana Berisha',
+            'reservation_id' => $withChat->id,
+            'unread_count' => 3,
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('reservations.calendar'));
+        $response->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('Reservations/CalendarLive')
+            ->has('reservations', 2));
+
+        // The calendar query has no ORDER BY — match rows by id, not position.
+        $rows = collect($response->viewData('page')['props']['reservations']);
+        $chatRow = $rows->firstWhere('id', $withChat->id);
+        $silentRow = $rows->firstWhere('id', $silent->id);
+        $this->assertSame($thread->id, $chatRow['message_thread_id']);
+        $this->assertSame(3, $chatRow['unread_messages']);
+        $this->assertNull($silentRow['message_thread_id']);
+        $this->assertSame(0, $silentRow['unread_messages']);
     }
 }
