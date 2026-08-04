@@ -97,8 +97,12 @@ function fxRateFor(code) {
 // frozen on the tender the server records.
 const payFxRate = ref('');
 const splitCashFxRate = ref('');
-watch(payCurrency, (code) => { payFxRate.value = code && code !== posBaseCurrency.value ? String(fxRateFor(code)) : ''; });
-watch(splitCashCurrency, (code) => { splitCashFxRate.value = code && code !== posBaseCurrency.value ? String(fxRateFor(code)) : ''; });
+// The rate stays locked (text + pen) until the pen is clicked — an editable
+// field right on the checkout path invites accidental rate changes.
+const payFxEditing = ref(false);
+const splitFxEditing = ref(false);
+watch(payCurrency, (code) => { payFxRate.value = code && code !== posBaseCurrency.value ? String(fxRateFor(code)) : ''; payFxEditing.value = false; });
+watch(splitCashCurrency, (code) => { splitCashFxRate.value = code && code !== posBaseCurrency.value ? String(fxRateFor(code)) : ''; splitFxEditing.value = false; });
 function effectiveRate(code, manual) {
     const value = Number(manual);
     return value > 0 ? value : fxRateFor(code);
@@ -132,8 +136,47 @@ const showOpenShift = ref(false);
 const showCloseShift = ref(false);
 const hasOpenShift = computed(() => !!props.currentShift);
 
-const openShiftForm = useForm({ opening_float: props.defaultOpeningFloat ?? 0 });
+const openShiftForm = useForm({ opening_float: props.defaultOpeningFloat ?? 0, currencies: [] });
 const closeShiftForm = useForm({ counted_cash: '', closing_note: '' });
+
+// ===== Foreign currencies in the drawer (opening floats + close counting) =====
+const foreignPayCurrencies = computed(() =>
+    (props.payCurrencies || []).filter((entry) => entry.code !== posBaseCurrency.value));
+
+function addOpeningCurrency() {
+    const used = openShiftForm.currencies.map((line) => line.currency);
+    const next = foreignPayCurrencies.value.find((entry) => !used.includes(entry.code));
+    if (next) openShiftForm.currencies.push({ currency: next.code, amount: '' });
+}
+
+function removeOpeningCurrency(index) {
+    openShiftForm.currencies.splice(index, 1);
+}
+
+function moneyIn(code, v) {
+    try {
+        return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: code }).format(Number(v ?? 0));
+    } catch {
+        return `${Number(v ?? 0).toFixed(2)} ${code}`;
+    }
+}
+
+// Per-currency counted inputs of the close modal, keyed by currency code.
+const countedCurrencies = ref({});
+const closeCurrencyLines = computed(() => closeShiftTarget.value?.currencies || []);
+
+function countedCurrencyNum(code) {
+    const v = parseFloat(countedCurrencies.value[code]);
+    return isNaN(v) ? null : v;
+}
+
+function currencyVariance(line) {
+    const counted = countedCurrencyNum(line.currency);
+    return counted === null ? null : Math.round((counted - Number(line.expected_amount)) * 100) / 100;
+}
+
+const allCurrenciesCounted = computed(() =>
+    closeCurrencyLines.value.every((line) => countedCurrencyNum(line.currency) !== null));
 
 function money(v) {
     return new Intl.NumberFormat(getIntlLocale(), {
@@ -151,11 +194,19 @@ function flashAware(page, onRefused, onDone) {
 }
 
 function submitOpenShift() {
-    openShiftForm.post(route('pos.shift.open'), {
-        preserveScroll: true,
-        onSuccess: (page) => flashAware(page, null, () => { showOpenShift.value = false; toasts.value?.success(translate('admin.generated.k_e69c80a44157')); }),
-        onError: () => toasts.value?.error(translate('admin.generated.k_384ff02204f8')),
-    });
+    openShiftForm
+        .transform((data) => ({
+            ...data,
+            // Only rows with a real amount travel; empty rows are UI leftovers.
+            currencies: data.currencies
+                .filter((line) => line.currency && parseFloat(line.amount) > 0)
+                .map((line) => ({ currency: line.currency, amount: parseFloat(line.amount) })),
+        }))
+        .post(route('pos.shift.open'), {
+            preserveScroll: true,
+            onSuccess: (page) => flashAware(page, null, () => { showOpenShift.value = false; openShiftForm.reset(); toasts.value?.success(translate('admin.generated.k_e69c80a44157')); }),
+            onError: () => toasts.value?.error(translate('admin.generated.k_384ff02204f8')),
+        });
 }
 
 // The close modal targets the viewer's own shift by default, but an admin
@@ -171,6 +222,8 @@ function openCloseModal(target = null) {
     closeShiftTarget.value = target && target.id ? target : props.currentShift;
     closeShiftForm.reset();
     closeShiftForm.clearErrors();
+    countedCurrencies.value = Object.fromEntries(
+        (closeShiftTarget.value?.currencies || []).map((line) => [line.currency, '']));
     showCloseShift.value = true;
 }
 
@@ -206,13 +259,25 @@ const varianceClass = computed(() => {
 
 function submitCloseShift() {
     if (countedNum.value === null) { toasts.value?.error(translate('admin.generated.k_af8603fe2aff')); return; }
-    closeShiftForm.post(route('pos.shift.close', closeShiftTarget.value.id), {
-        preserveScroll: true,
-        // Keep the modal OPEN on refusal (open orders etc.) so the reason is
-        // read in context and the count is not lost.
-        onSuccess: (page) => flashAware(page, null, () => { showCloseShift.value = false; toasts.value?.success(translate('admin.generated.k_f49b27350297')); }),
-        onError: () => toasts.value?.error(translate('admin.generated.k_59a4e2c1c1c1')),
-    });
+    if (!allCurrenciesCounted.value) {
+        toasts.value?.error('Numëro edhe monedhat e tjera të sirtarit para mbylljes.');
+        return;
+    }
+    closeShiftForm
+        .transform((data) => ({
+            ...data,
+            counted_currencies: closeCurrencyLines.value.map((line) => ({
+                currency: line.currency,
+                counted: countedCurrencyNum(line.currency),
+            })),
+        }))
+        .post(route('pos.shift.close', closeShiftTarget.value.id), {
+            preserveScroll: true,
+            // Keep the modal OPEN on refusal (open orders etc.) so the reason is
+            // read in context and the count is not lost.
+            onSuccess: (page) => flashAware(page, null, () => { showCloseShift.value = false; toasts.value?.success(translate('admin.generated.k_f49b27350297')); }),
+            onError: () => toasts.value?.error(translate('admin.generated.k_59a4e2c1c1c1')),
+        });
 }
 
 function printZReport() {
@@ -976,7 +1041,11 @@ onMounted(() => {
                                 <template v-if="payTendered !== null">
                                     <div class="mt-3 flex items-center justify-between gap-3 text-body-sm">
                                         <span class="text-neutral-500">Kursi (1 {{ payCurrency }} në {{ posBaseCurrency }})</span>
-                                        <input v-model="payFxRate" type="number" min="0.000001" step="any" class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
+                                        <input v-if="payFxEditing" v-model="payFxRate" type="number" min="0.000001" step="any" autofocus class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
+                                        <span v-else class="inline-flex items-center gap-1">
+                                            <span class="font-medium text-primary-900">{{ payFxRate }}</span>
+                                            <button type="button" class="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-accent-700" aria-label="Ndrysho kursin" @click="payFxEditing = true"><Pencil class="h-4 w-4" /></button>
+                                        </span>
                                     </div>
                                     <div class="mt-2 flex items-center justify-between text-body-sm">
                                         <span class="text-neutral-500">Merr nga klienti</span>
@@ -996,7 +1065,11 @@ onMounted(() => {
                                 </div>
                                 <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between gap-3 text-body-sm">
                                     <span class="text-neutral-500">Kursi (1 {{ splitCashCurrency }} në {{ posBaseCurrency }})</span>
-                                    <input v-model="splitCashFxRate" type="number" min="0.000001" step="any" class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
+                                    <input v-if="splitFxEditing" v-model="splitCashFxRate" type="number" min="0.000001" step="any" autofocus class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
+                                    <span v-else class="inline-flex items-center gap-1">
+                                        <span class="font-medium text-primary-900">{{ splitCashFxRate }}</span>
+                                        <button type="button" class="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-accent-700" aria-label="Ndrysho kursin" @click="splitFxEditing = true"><Pencil class="h-4 w-4" /></button>
+                                    </span>
                                 </div>
                                 <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between text-body-sm">
                                     <span class="text-neutral-500">Merr cash nga klienti</span>
@@ -1189,7 +1262,7 @@ onMounted(() => {
                     <table class="min-w-full divide-y divide-neutral-200">
                         <thead class="bg-neutral-50"><tr><th class="px-5 py-3 text-left text-label text-neutral-600">Turni</th><th class="px-5 py-3 text-left text-label text-neutral-600">Punonjësi</th><th class="px-5 py-3 text-left text-label text-neutral-600">Hapur</th><th class="px-5 py-3 text-left text-label text-neutral-600">Mbyllur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Shitjet</th><th class="px-5 py-3 text-right text-label text-neutral-600">Cash i pritur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Diferenca</th><th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th><th class="px-5 py-3 text-right text-label text-neutral-600">Veprime</th></tr></thead>
                         <tbody class="divide-y divide-neutral-100 bg-white">
-                            <tr v-for="shift in shiftHistory" :key="shift.id" class="hover:bg-neutral-50"><td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ shift.id }}</td><td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ shift.user_name || '—' }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.opened_at) }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.closed_at) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-semibold">{{ money(shift.total_sales) }}</td><td class="px-5 py-3.5 text-right text-body-sm">{{ money(shift.expected_cash) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-bold" :class="Math.abs(Number(shift.over_short || 0)) < 0.01 ? 'text-success-700' : 'text-error-700'">{{ shift.over_short === null ? '—' : money(shift.over_short) }}</td><td class="px-5 py-3.5"><Badge :variant="shift.status === 'open' ? 'success' : 'neutral'" dot size="sm">{{ shift.status === 'open' ? 'Hapur' : 'Mbyllur' }}</Badge></td><td class="px-5 py-3.5 text-right"><Button v-if="canCloseRow(shift)" size="sm" variant="outline" @click="openCloseModal(shift)">Mbyll turnin</Button></td></tr>
+                            <tr v-for="shift in shiftHistory" :key="shift.id" class="hover:bg-neutral-50"><td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ shift.id }}</td><td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ shift.user_name || '—' }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.opened_at) }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.closed_at) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-semibold">{{ money(shift.total_sales) }}</td><td class="px-5 py-3.5 text-right text-body-sm">{{ money(shift.expected_cash) }}<div v-for="line in shift.currencies || []" :key="line.currency" class="text-tiny text-neutral-500">{{ moneyIn(line.currency, line.expected_amount) }}</div></td><td class="px-5 py-3.5 text-right text-body-sm font-bold" :class="Math.abs(Number(shift.over_short || 0)) < 0.01 ? 'text-success-700' : 'text-error-700'">{{ shift.over_short === null ? '—' : money(shift.over_short) }}<div v-for="line in shift.currencies || []" :key="'os-' + line.currency" class="text-tiny font-normal" :class="line.over_short === null ? 'text-neutral-400' : (Math.abs(Number(line.over_short)) < 0.01 ? 'text-success-600' : 'text-error-600')">{{ line.over_short === null ? '' : `${line.currency} ${Number(line.over_short) > 0 ? '+' : ''}${Number(line.over_short).toFixed(2)}` }}</div></td><td class="px-5 py-3.5"><Badge :variant="shift.status === 'open' ? 'success' : 'neutral'" dot size="sm">{{ shift.status === 'open' ? 'Hapur' : 'Mbyllur' }}</Badge></td><td class="px-5 py-3.5 text-right"><Button v-if="canCloseRow(shift)" size="sm" variant="outline" @click="openCloseModal(shift)">Mbyll turnin</Button></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1251,6 +1324,31 @@ onMounted(() => {
                     <TextInput type="number" step="0.01" min="0" v-model="openShiftForm.opening_float" placeholder="0.00" :error="openShiftForm.errors.opening_float" />
                 </FormGroup>
                 <p class="text-small text-neutral-500">{{ $t('admin.generated.k_069e17f28ade') }}</p>
+
+                <!-- Foreign cash already in the drawer at shift start -->
+                <div v-if="openShiftForm.currencies.length" class="space-y-2">
+                    <div v-for="(line, index) in openShiftForm.currencies" :key="index" class="flex items-center gap-2">
+                        <select
+                            v-model="line.currency"
+                            class="h-11 w-24 shrink-0 rounded-lg border border-neutral-300 px-2 text-body-sm focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+                        >
+                            <option
+                                v-for="entry in foreignPayCurrencies"
+                                :key="entry.code"
+                                :value="entry.code"
+                                :disabled="openShiftForm.currencies.some((other, i) => i !== index && other.currency === entry.code)"
+                            >{{ entry.code }}</option>
+                        </select>
+                        <TextInput type="number" step="0.01" min="0" v-model="line.amount" placeholder="0.00" class="flex-1" />
+                        <button type="button" class="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100 hover:text-error-600" @click="removeOpeningCurrency(index)"><X class="h-4 w-4" /></button>
+                    </div>
+                </div>
+                <Button
+                    v-if="foreignPayCurrencies.length && openShiftForm.currencies.length < foreignPayCurrencies.length"
+                    variant="ghost"
+                    size="sm"
+                    @click="addOpeningCurrency"
+                >+ Shto gjendje për monedha të tjera</Button>
             </div>
             <template #footer>
                 <Button variant="outline" @click="showOpenShift = false">{{ $t('admin.generated.k_182fb16b9fb0') }}</Button>
@@ -1265,8 +1363,23 @@ onMounted(() => {
                     <!-- Drawer expected -->
                     <div class="rounded-lg bg-neutral-50 border border-neutral-200 p-4 space-y-1.5 text-body-sm">
                         <div class="flex justify-between text-neutral-600"><span>{{ $t('admin.generated.k_afaffdd6fba2') }}</span><span>{{ money(closeShiftTarget.opening_float) }}</span></div>
-                        <div class="flex justify-between text-neutral-600"><span>{{ $t('admin.generated.k_880339104862') }}</span><span>{{ money(closeShiftTarget.cash_sales) }}</span></div>
+                        <!-- Base cash only — foreign cash is expected in its own line below. -->
+                        <div class="flex justify-between text-neutral-600"><span>{{ $t('admin.generated.k_880339104862') }}</span><span>{{ money(expectedCash - Number(closeShiftTarget.opening_float || 0)) }}</span></div>
                         <div class="flex justify-between font-semibold text-primary-900 border-t border-neutral-200 pt-1.5"><span>{{ $t('admin.generated.k_81ed24491855') }}</span><span>{{ money(expectedCash) }}</span></div>
+                    </div>
+
+                    <!-- Foreign currencies in the drawer (floats + cash taken) -->
+                    <div v-for="line in closeCurrencyLines" :key="line.currency" class="rounded-lg bg-neutral-50 border border-neutral-200 p-4 space-y-1.5 text-body-sm">
+                        <div class="flex justify-between text-neutral-600"><span>{{ $t('admin.generated.k_afaffdd6fba2') }} ({{ line.currency }})</span><span>{{ moneyIn(line.currency, line.opening_amount) }}</span></div>
+                        <div class="flex justify-between text-neutral-600"><span>{{ $t('admin.generated.k_880339104862') }}</span><span>{{ moneyIn(line.currency, line.cash_received) }}</span></div>
+                        <div class="flex justify-between font-semibold text-primary-900 border-t border-neutral-200 pt-1.5"><span>{{ $t('admin.generated.k_81ed24491855') }}</span><span>{{ moneyIn(line.currency, line.expected_amount) }}</span></div>
+                        <div v-if="currencyVariance(line) !== null" class="flex justify-between text-body-sm border-t border-neutral-100 pt-1.5">
+                            <span class="text-neutral-600">{{ $t('admin.generated.k_d914e17d696d') }}</span>
+                            <span class="font-medium" :class="currencyVariance(line) === 0 ? 'text-success-600' : (currencyVariance(line) < 0 ? 'text-error-600' : 'text-warning-600')">
+                                {{ moneyIn(line.currency, countedCurrencyNum(line.currency)) }}
+                                <template v-if="currencyVariance(line) !== 0">({{ currencyVariance(line) > 0 ? '+' : '' }}{{ currencyVariance(line).toFixed(2) }})</template>
+                            </span>
+                        </div>
                     </div>
 
                     <!-- Reported but not in drawer -->
@@ -1296,6 +1409,17 @@ onMounted(() => {
                     <TextInput type="number" step="0.01" min="0" v-model="closeShiftForm.counted_cash" placeholder="0.00" :error="closeShiftForm.errors.counted_cash" />
                 </FormGroup>
 
+                <!-- one count per foreign currency in the drawer -->
+                <FormGroup
+                    v-for="line in closeCurrencyLines"
+                    :key="'count-' + line.currency"
+                    :label="`${$t('admin.generated.k_bce57025cf34')} (${line.currency})`"
+                    required
+                    class="print:hidden"
+                >
+                    <TextInput type="number" step="0.01" min="0" v-model="countedCurrencies[line.currency]" placeholder="0.00" />
+                </FormGroup>
+
                 <FormGroup :label="$t('admin.generated.k_fd404602b8ba')" :error="closeShiftForm.errors.closing_note" class="print:hidden">
                     <textarea
                         v-model="closeShiftForm.closing_note"
@@ -1309,7 +1433,7 @@ onMounted(() => {
             <template #footer>
                 <Button variant="outline" @click="showCloseShift = false">{{ $t('admin.generated.k_182fb16b9fb0') }}</Button>
                 <Button variant="outline" :disabled="countedNum === null" @click="printZReport">{{ $t('admin.generated.k_95ddf85f4a7e') }}</Button>
-                <Button variant="primary" :loading="closeShiftForm.processing" :disabled="countedNum === null" @click="submitCloseShift">{{ $t('admin.generated.k_aca11a3b5c75') }}</Button>
+                <Button variant="primary" :loading="closeShiftForm.processing" :disabled="countedNum === null || !allCurrenciesCounted" @click="submitCloseShift">{{ $t('admin.generated.k_aca11a3b5c75') }}</Button>
             </template>
         </Modal>
 
