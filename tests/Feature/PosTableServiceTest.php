@@ -8,6 +8,7 @@ use App\Models\PosOrder;
 use App\Models\PosOrderRound;
 use App\Models\PosShift;
 use App\Models\PosTable;
+use App\Models\Setting;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -44,6 +45,25 @@ class PosTableServiceTest extends TestCase
             'price' => 1.5,
             'is_available' => true,
         ]);
+    }
+
+    public function test_direct_mode_redirects_new_sales_but_still_opens_a_deep_linked_table(): void
+    {
+        Setting::set('pos.service_mode', 'direct', 'text');
+
+        // Plain visits route to the sale screen — direct-mode hotels do not
+        // work with the table map.
+        $this->actingAs($this->admin)->get(route('pos.tables'))
+            ->assertRedirect(route('pos.index', ['direct' => 1]));
+
+        // But a legacy TABLE order from before the mode switch must remain
+        // reachable (Paguaj deep-links here), or it can never be settled.
+        $table = PosTable::create(['number' => 5, 'name' => 'Tavolina 5', 'area' => 'Salla', 'seats' => 4, 'sort_order' => 1, 'is_active' => true]);
+        PosOrder::create(['status' => 'open', 'pos_table_id' => $table->id, 'total_amount' => 10, 'created_by' => $this->admin->id]);
+
+        $this->actingAs($this->admin)->get(route('pos.tables', ['table' => $table->id, 'action' => 'pay']))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->component('Pos/Tables'));
     }
 
     public function test_table_workspace_creates_ten_default_tables(): void
