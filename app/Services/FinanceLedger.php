@@ -7,6 +7,7 @@ use App\Models\FinancePayment;
 use App\Models\Payment;
 use App\Models\PosOrderPayment;
 use App\Models\PosShift;
+use App\Models\PosShiftCurrency;
 use App\Models\Setting;
 use Illuminate\Database\Eloquent\Model;
 
@@ -201,9 +202,12 @@ class FinanceLedger
     {
         if ($shift->status !== 'closed' || ! $shift->closed_at) {
             $this->removeFor($shift); // re-opened shift leaves no ledger row
+            $shift->currencies()->get()->each(fn (PosShiftCurrency $line) => $this->removeFor($line));
 
             return null;
         }
+
+        $this->recordShiftCurrencyVariances($shift);
 
         // New tenders reach Arka/Banka at payment time. Orders completed before the
         // tender table existed are posted here, even when the shift spans deployment.
@@ -241,6 +245,46 @@ class FinanceLedger
                 'created_by' => $shift->closed_by,
             ],
         );
+    }
+
+    /**
+     * Post each foreign currency's counted over/short into THAT currency's POS
+     * cash account (mirroring how foreign tenders land there), with the base
+     * equivalent frozen at the close-time rate. Zero variances leave no row.
+     */
+    protected function recordShiftCurrencyVariances(PosShift $shift): void
+    {
+        foreach ($shift->currencies()->get() as $line) {
+            $variance = (float) $line->over_short;
+
+            if ($variance == 0.0 || $line->counted_amount === null) {
+                $this->removeFor($line);
+
+                continue;
+            }
+
+            $fx = $this->fxRate($line->currency); // source units per 1 base unit
+
+            $ledger = FinancePayment::firstOrNew([
+                'sourceable_type' => PosShiftCurrency::class,
+                'sourceable_id' => $line->id,
+            ]);
+            $ledger->fill([
+                'direction' => $variance > 0 ? 'in' : 'out',
+                'account_id' => self::accountFor('cash', $line->currency, pos: true)->id,
+                'amount' => abs($variance),
+                'currency' => $line->currency,
+                'fx_rate' => round($fx, 6),
+                'method' => 'cash',
+                'source' => 'auto',
+                'description' => 'Diferencë turni POS ('.$line->currency.') — '
+                    .($shift->user?->name ?? ('turni #'.$shift->id))
+                    .sprintf(' (%+.2f)', $variance),
+                'paid_at' => $shift->closed_at,
+                'created_by' => $shift->closed_by,
+            ]);
+            $ledger->withFrozenAmountBase(round(abs($variance) / $fx, 2))->save();
+        }
     }
 
     public function removeFor(Model $source): void
