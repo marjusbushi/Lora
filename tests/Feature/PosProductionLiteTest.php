@@ -142,6 +142,36 @@ class PosProductionLiteTest extends TestCase
         $this->assertSame('cancelled', $order->fresh()->status);
     }
 
+    public function test_admin_force_closes_another_users_shift_but_a_waiter_cannot(): void
+    {
+        // The waiter went home without closing — the classic stuck-open shift.
+        $waiter = User::factory()->create();
+        $waiter->assignRole('receptionist');
+        $stuck = PosShift::create([
+            'user_id' => $waiter->id,
+            'status' => 'open',
+            'opening_float' => 50,
+            'opened_at' => now()->subHours(9),
+        ]);
+
+        // Another non-privileged user may NOT close somebody else's shift.
+        $other = User::factory()->create();
+        $other->assignRole('receptionist');
+        $this->actingAs($other)->post(route('pos.shift.close', $stuck), [
+            'counted_cash' => 50,
+        ])->assertForbidden();
+
+        // An admin (close_any_pos_shift) may.
+        $this->actingAs($this->admin)->post(route('pos.shift.close', $stuck), [
+            'counted_cash' => 50,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $stuck->refresh();
+        $this->assertSame('closed', $stuck->status);
+        $this->assertSame($this->admin->id, (int) $stuck->closed_by);
+        $this->assertSame(0.0, (float) $stuck->over_short);
+    }
+
     public function test_shift_cannot_close_while_it_has_open_orders(): void
     {
         $this->openOrder($this->menuItem());
