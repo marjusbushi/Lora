@@ -97,8 +97,12 @@ function fxRateFor(code) {
 // frozen on the tender the server records.
 const payFxRate = ref('');
 const splitCashFxRate = ref('');
-watch(payCurrency, (code) => { payFxRate.value = code && code !== posBaseCurrency.value ? String(fxRateFor(code)) : ''; });
-watch(splitCashCurrency, (code) => { splitCashFxRate.value = code && code !== posBaseCurrency.value ? String(fxRateFor(code)) : ''; });
+// The rate stays locked (text + pen) until the pen is clicked — an editable
+// field right on the checkout path invites accidental rate changes.
+const payFxEditing = ref(false);
+const splitFxEditing = ref(false);
+watch(payCurrency, (code) => { payFxRate.value = code && code !== posBaseCurrency.value ? String(fxRateFor(code)) : ''; payFxEditing.value = false; });
+watch(splitCashCurrency, (code) => { splitCashFxRate.value = code && code !== posBaseCurrency.value ? String(fxRateFor(code)) : ''; splitFxEditing.value = false; });
 function effectiveRate(code, manual) {
     const value = Number(manual);
     return value > 0 ? value : fxRateFor(code);
@@ -976,7 +980,11 @@ onMounted(() => {
                                 <template v-if="payTendered !== null">
                                     <div class="mt-3 flex items-center justify-between gap-3 text-body-sm">
                                         <span class="text-neutral-500">Kursi (1 {{ payCurrency }} në {{ posBaseCurrency }})</span>
-                                        <input v-model="payFxRate" type="number" min="0.000001" step="any" class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
+                                        <input v-if="payFxEditing" v-model="payFxRate" type="number" min="0.000001" step="any" autofocus class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
+                                        <span v-else class="inline-flex items-center gap-1">
+                                            <span class="font-medium text-primary-900">{{ payFxRate }}</span>
+                                            <button type="button" class="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-accent-700" aria-label="Ndrysho kursin" @click="payFxEditing = true"><Pencil class="h-4 w-4" /></button>
+                                        </span>
                                     </div>
                                     <div class="mt-2 flex items-center justify-between text-body-sm">
                                         <span class="text-neutral-500">Merr nga klienti</span>
@@ -996,7 +1004,11 @@ onMounted(() => {
                                 </div>
                                 <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between gap-3 text-body-sm">
                                     <span class="text-neutral-500">Kursi (1 {{ splitCashCurrency }} në {{ posBaseCurrency }})</span>
-                                    <input v-model="splitCashFxRate" type="number" min="0.000001" step="any" class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
+                                    <input v-if="splitFxEditing" v-model="splitCashFxRate" type="number" min="0.000001" step="any" autofocus class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
+                                    <span v-else class="inline-flex items-center gap-1">
+                                        <span class="font-medium text-primary-900">{{ splitCashFxRate }}</span>
+                                        <button type="button" class="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-accent-700" aria-label="Ndrysho kursin" @click="splitFxEditing = true"><Pencil class="h-4 w-4" /></button>
+                                    </span>
                                 </div>
                                 <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between text-body-sm">
                                     <span class="text-neutral-500">Merr cash nga klienti</span>
