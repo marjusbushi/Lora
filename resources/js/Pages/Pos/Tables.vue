@@ -270,8 +270,8 @@ onMounted(() => {
                     <Button class="h-12 shrink-0 whitespace-nowrap" variant="primary" :disabled="!selectedTable" @click="openOrder"><Plus class="h-5 w-5" /> Porosi</Button>
                     <Button class="h-12 shrink-0 whitespace-nowrap" variant="outline" :disabled="!selectedOrder" @click="showSummaryModal = true"><FileText class="h-5 w-5" /> Përmbledhje</Button>
                     <Button class="h-12 shrink-0 whitespace-nowrap" variant="success" :disabled="!selectedOrder" @click="openPayment"><Banknote class="h-5 w-5" /> Paguaj</Button>
-                    <span v-if="posSettings.service_mode === 'hybrid'" class="mx-1 h-8 w-px shrink-0 bg-neutral-200" aria-hidden="true"></span>
-                    <Button v-if="posSettings.service_mode === 'hybrid'" class="h-12 shrink-0 whitespace-nowrap" variant="ghost" :href="route('pos.index', { direct: 1 })">Shitje direkte</Button>
+                    <span v-if="posSettings.service_mode !== 'tables'" class="mx-1 h-8 w-px shrink-0 bg-neutral-200" aria-hidden="true"></span>
+                    <Button v-if="posSettings.service_mode !== 'tables'" class="h-12 shrink-0 whitespace-nowrap" variant="ghost" :href="route('pos.index', { direct: 1 })">Shitje direkte</Button>
                 </div>
             </div>
 
