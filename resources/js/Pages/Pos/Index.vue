@@ -276,7 +276,7 @@ function submitCloseShift() {
         return;
     }
     if (cardCountRequired.value && countedCardNum.value === null) {
-        toasts.value?.error('Shkruaj totalin nga POS-i fizik i kartës para mbylljes.');
+        toasts.value?.error('Shkruaj totalin nga Pagesat me Kartë para mbylljes.');
         return;
     }
     closeShiftForm
@@ -1403,7 +1403,7 @@ onMounted(() => {
                         <p class="font-medium text-neutral-600">Shitje me Kartë</p>
                         <div class="flex justify-between"><span>{{ $t('admin.generated.k_af92a6e399a8') }} (sistemi)</span><span class="font-semibold text-primary-900">{{ money(closeShiftTarget.card_sales) }}</span></div>
                         <div v-if="countedCardNum !== null" class="flex justify-between border-t border-neutral-200 pt-1">
-                            <span>POS-i fizik i kartës</span>
+                            <span>Totali nga Pagesat me Kartë</span>
                             <span class="font-medium" :class="cardVariance === 0 ? 'text-success-600' : 'text-error-600'">
                                 {{ money(countedCardNum) }}<template v-if="cardVariance !== 0"> ({{ cardVariance > 0 ? '+' : '' }}{{ cardVariance.toFixed(2) }})</template>
                             </span>
@@ -1431,7 +1431,7 @@ onMounted(() => {
                     <TextInput type="number" step="0.01" min="0" v-model="closeShiftForm.counted_cash" placeholder="0.00" :error="closeShiftForm.errors.counted_cash" />
                 </FormGroup>
 
-                <FormGroup label="Totali nga POS-i fizik i kartës" :error="closeShiftForm.errors.counted_card" :required="cardCountRequired" class="print:hidden">
+                <FormGroup label="Totali nga Pagesat me Kartë" :error="closeShiftForm.errors.counted_card" :required="cardCountRequired" class="print:hidden">
                     <TextInput type="number" step="0.01" min="0" v-model="closeShiftForm.counted_card" placeholder="0.00" :error="closeShiftForm.errors.counted_card" />
                     <p class="mt-1 text-small text-neutral-400">Shkruaj totalin e printuar nga terminali i kartës — duhet të përputhet me shitjet me kartë të sistemit.</p>
                 </FormGroup>
