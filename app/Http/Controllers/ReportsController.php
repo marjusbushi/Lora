@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FinanceAccount;
 use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\Payment;
@@ -9,6 +10,7 @@ use App\Models\PosOrder;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Services\BaseCurrency;
+use App\Services\Reporting\BankPaymentsReportService;
 use App\Services\Reporting\BookingBehaviorService;
 use App\Services\Reporting\BudgetTargetService;
 use App\Services\Reporting\CancellationRiskService;
@@ -490,6 +492,40 @@ class ReportsController extends Controller
             ],
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'canViewPos' => (bool) $request->user()?->can('view_pos_orders'),
+            'currency' => $this->currency(),
+        ]);
+    }
+
+    /** Pagesat në bankë: every ledger row that touched a bank account, for statement reconciliation. */
+    public function bankPayments(Request $request, BankPaymentsReportService $report): Response
+    {
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+            'account_id' => ['nullable', 'integer'],
+        ]);
+
+        [$from, $to] = $this->range($request);
+        if (Carbon::parse($from)->diffInDays(Carbon::parse($to)) > 366) {
+            throw ValidationException::withMessages([
+                'to' => app()->getLocale() === 'sq'
+                    ? 'Periudha e raportit nuk mund të kalojë 367 ditë.'
+                    : 'The report period cannot exceed 367 days.',
+            ]);
+        }
+
+        $accountId = $request->integer('account_id') ?: null;
+        $data = $report->summary(new ReportingPeriod($from, $to), $accountId);
+
+        return Inertia::render('Reports/BankPayments', [
+            'filters' => ['from' => $from, 'to' => $to, 'account_id' => $accountId],
+            'accounts' => $data['accounts'],
+            'rows' => $data['rows'],
+            'totals' => $data['totals'],
+            'bankAccounts' => FinanceAccount::query()
+                ->where('type', 'bank')
+                ->orderBy('name')
+                ->get(['id', 'name', 'currency']),
             'currency' => $this->currency(),
         ]);
     }
