@@ -597,7 +597,7 @@ function doCheckOut(res) {
                                             :title="reservation.unread_messages > 0 ? `${reservation.unread_messages} mesazhe të palexuara — hap bisedën` : 'Hap bisedën e mysafirit'"
                                             :aria-label="`Mesazhet e ${reservation.guest?.first_name || ''} ${reservation.guest?.last_name || ''}`"
                                             @click.stop="openGuestChat(reservation)"
-                                        ><MessageSquare class="h-3.5 w-3.5" :class="reservation.unread_messages > 0 ? 'text-accent-700' : 'text-neutral-500'" /><span v-if="reservation.unread_messages > 0" class="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-error-500 ring-1 ring-white" /></span></span>
+                                        ><MessageSquare class="h-3.5 w-3.5" :class="reservation.unread_messages > 0 ? 'text-accent-700' : 'text-neutral-500'" /><span v-if="reservation.unread_messages > 0" class="absolute -right-1.5 -top-1.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-error-500 px-0.5 text-[8px] font-bold leading-none text-white ring-1 ring-white">{{ reservation.unread_messages > 9 ? '9+' : reservation.unread_messages }}</span></span></span>
                                         <span class="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-75"><span class="truncate">{{ channelMeta(reservation.channel).label }}</span><span class="shrink-0 font-bold" :class="Number(reservation.paid_amount) >= Number(reservation.total_amount) ? 'text-success-700' : 'text-warning-700'" aria-hidden="true">{{ currencyCode }}</span></span>
                                     </button>
                                 </div>
