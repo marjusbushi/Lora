@@ -140,6 +140,8 @@ class PosController extends Controller
                         'opening_float' => (float) $item->opening_float,
                         'expected_cash' => $live ? $item->liveExpectedCash($cash) : (float) $item->expected_cash,
                         'counted_cash' => $item->counted_cash === null ? null : (float) $item->counted_cash,
+                        'counted_card' => $item->counted_card === null ? null : (float) $item->counted_card,
+                        'card_over_short' => $item->card_over_short === null ? null : (float) $item->card_over_short,
                         'over_short' => $item->over_short === null ? null : (float) $item->over_short,
                         'cash_sales' => $cash,
                         'card_sales' => $card,

@@ -105,6 +105,7 @@ class PosShiftController extends Controller
         $data = $request->validate([
             'counted_cash' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
             'closing_note' => ['nullable', 'string', 'max:500'],
+            'counted_card' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'counted_currencies' => ['nullable', 'array', 'max:10'],
             'counted_currencies.*.currency' => ['required', 'string', 'size:3', 'distinct'],
             'counted_currencies.*.counted' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
@@ -148,6 +149,12 @@ class PosShiftController extends Controller
 
             $posShift->counted_cash = $data['counted_cash'];
             $posShift->over_short = round((float) $data['counted_cash'] - (float) $posShift->expected_cash, 2);
+            // The card terminal's printed total, checked against the system's
+            // card sales — recorded so the mismatch survives on the Z-report.
+            if (isset($data['counted_card'])) {
+                $posShift->counted_card = $data['counted_card'];
+                $posShift->card_over_short = round((float) $data['counted_card'] - (float) $posShift->card_sales, 2);
+            }
             $posShift->closing_note = $data['closing_note'] ?? null;
             $posShift->closed_at = now();
             $posShift->closed_by = auth()->id();
@@ -159,6 +166,8 @@ class PosShiftController extends Controller
             'expected_cash' => $posShift->expected_cash,
             'counted_cash' => $posShift->counted_cash,
             'over_short' => $posShift->over_short,
+            'counted_card' => $posShift->counted_card,
+            'card_over_short' => $posShift->card_over_short,
             'currencies' => $posShift->currencies->map(fn ($line) => [
                 'currency' => $line->currency,
                 'expected' => (float) $line->expected_amount,
