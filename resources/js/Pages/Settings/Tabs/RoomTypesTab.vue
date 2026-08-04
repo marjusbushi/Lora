@@ -54,17 +54,24 @@ async function prepareImage(file) {
 
     // imageOrientation honors EXIF so a portrait phone photo isn't uploaded sideways.
     const bitmap = await createImageBitmap(source, { imageOrientation: 'from-image' });
-    const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(bitmap.width, bitmap.height));
-    const width = Math.round(bitmap.width * scale);
-    const height = Math.round(bitmap.height * scale);
 
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+    // Retry ladder: a photo that encodes over the server's per-file budget is
+    // re-encoded smaller until it fits — hotel shots at 1600-2048px stay sharp.
+    const attempts = [[MAX_IMAGE_DIM, JPEG_QUALITY], [2048, 0.75], [1600, 0.6]];
+    let blob = null;
+    for (const [maxDim, quality] of attempts) {
+        const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+        const width = Math.round(bitmap.width * scale);
+        const height = Math.round(bitmap.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+        blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+        if (blob && blob.size <= SINGLE_FILE_TARGET_BYTES) break;
+    }
     bitmap.close?.();
 
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
     const baseName = (file.name || 'foto').replace(/\.[^.]+$/, '');
     return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
 }
@@ -140,7 +147,12 @@ function deleteType(type) {
 // small batches — partial success survives a network hiccup, and the counter
 // moves the whole way through.
 const CONVERT_CONCURRENCY = 3;
-const UPLOAD_BATCH_SIZE = 10;
+// Batches are packed by BYTES, not count: production nginx has no
+// client_max_body_size override (default 1MB!) and PHP caps 2M/file, 8M/request.
+// A 10-photo batch always blew the 1MB wall — nginx cut the body and the
+// progress froze mid-percent. Raise these only after the server limits rise.
+const MAX_BATCH_BYTES = 900 * 1024;
+const SINGLE_FILE_TARGET_BYTES = 850 * 1024;
 
 async function prepareAllImages(files) {
     const prepared = [];
@@ -165,6 +177,9 @@ async function prepareAllImages(files) {
 
 function uploadBatch(batch, batchNo, batchCount, uploadedSoFar, total) {
     return new Promise((resolve) => {
+        let settled = false;
+        const done = (ok) => { if (!settled) { settled = true; resolve(ok); } };
+
         const formData = new FormData();
         batch.forEach((f) => formData.append('images[]', f));
 
@@ -176,12 +191,24 @@ function uploadBatch(batch, batchNo, batchCount, uploadedSoFar, total) {
                 const pct = event?.percentage ? ` ${Math.round(event.percentage)}%` : '';
                 uploadStatus.value = `Po ngarkohen foto ${uploadedSoFar + 1}–${uploadedSoFar + batch.length} nga ${total}...${pct}`;
             },
-            onSuccess: () => resolve(true),
+            onSuccess: () => done(true),
             // Surface the real reason instead of failing silently (this was the whole bug).
             onError: (errors) => {
                 const first = Object.values(errors || {})[0];
                 props.toasts?.error(first || translate('admin.generated.k_5553defcbf3d'));
-                resolve(false);
+                done(false);
+            },
+            // A non-Inertia failure (413 from nginx, 502, dropped connection)
+            // fires NEITHER of the above — without this the promise never
+            // resolved and the spinner spun forever. setTimeout(0) lets
+            // onSuccess/onError run first when they did fire.
+            onFinish: () => {
+                window.setTimeout(() => {
+                    if (!settled) {
+                        props.toasts?.error('Serveri e ndërpreu ngarkimin — provo përsëri ose ngarko më pak foto njëherësh.');
+                        done(false);
+                    }
+                }, 0);
             },
         });
     });
@@ -196,10 +223,20 @@ async function uploadImages() {
         const prepared = await prepareAllImages(Array.from(files));
         if (!prepared.length) return;
 
+        // Pack by bytes so no single request crosses the server's body limit.
         const batches = [];
-        for (let i = 0; i < prepared.length; i += UPLOAD_BATCH_SIZE) {
-            batches.push(prepared.slice(i, i + UPLOAD_BATCH_SIZE));
+        let current = [];
+        let currentBytes = 0;
+        for (const file of prepared) {
+            if (current.length && currentBytes + file.size > MAX_BATCH_BYTES) {
+                batches.push(current);
+                current = [];
+                currentBytes = 0;
+            }
+            current.push(file);
+            currentBytes += file.size;
         }
+        if (current.length) batches.push(current);
 
         let uploaded = 0;
         for (let i = 0; i < batches.length; i++) {
