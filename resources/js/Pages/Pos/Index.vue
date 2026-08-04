@@ -141,10 +141,19 @@ function money(v) {
     }).format(Number(v ?? 0));
 }
 
+// A refused action still completes the Inertia visit (redirect-back with a
+// flash error) - read the flash before celebrating, or the server's reason
+// drowns under a false success toast (the "Turni u mbyll" that wasn't).
+function flashAware(page, onRefused, onDone) {
+    const flashError = page?.props?.flash?.error;
+    if (flashError) { toasts.value?.error(flashError); onRefused?.(); return; }
+    onDone();
+}
+
 function submitOpenShift() {
     openShiftForm.post(route('pos.shift.open'), {
         preserveScroll: true,
-        onSuccess: () => { showOpenShift.value = false; toasts.value?.success(translate('admin.generated.k_e69c80a44157')); },
+        onSuccess: (page) => flashAware(page, null, () => { showOpenShift.value = false; toasts.value?.success(translate('admin.generated.k_e69c80a44157')); }),
         onError: () => toasts.value?.error(translate('admin.generated.k_384ff02204f8')),
     });
 }
@@ -199,7 +208,9 @@ function submitCloseShift() {
     if (countedNum.value === null) { toasts.value?.error(translate('admin.generated.k_af8603fe2aff')); return; }
     closeShiftForm.post(route('pos.shift.close', closeShiftTarget.value.id), {
         preserveScroll: true,
-        onSuccess: () => { showCloseShift.value = false; toasts.value?.success(translate('admin.generated.k_f49b27350297')); },
+        // Keep the modal OPEN on refusal (open orders etc.) so the reason is
+        // read in context and the count is not lost.
+        onSuccess: (page) => flashAware(page, null, () => { showCloseShift.value = false; toasts.value?.success(translate('admin.generated.k_f49b27350297')); }),
         onError: () => toasts.value?.error(translate('admin.generated.k_59a4e2c1c1c1')),
     });
 }
@@ -608,7 +619,7 @@ function openCancel(order) {
 function submitCancel() {
     router.post(route('pos.cancel', actionOrder.value.id), { reason: actionReason.value }, {
         preserveScroll: true,
-        onSuccess: () => { showCancelModal.value = false; toasts.value?.success(translate('admin.generated.k_0d9b1bd67bed')); },
+        onSuccess: (page) => flashAware(page, () => { showCancelModal.value = false; }, () => { showCancelModal.value = false; toasts.value?.success(translate('admin.generated.k_0d9b1bd67bed')); }),
         onError: (errors) => toasts.value?.error(errors.reason || 'Anulimi nuk u regjistrua.'),
     });
 }
@@ -622,7 +633,7 @@ function openRefund(order) {
 function submitRefund() {
     router.post(route('pos.refund', actionOrder.value.id), { reason: actionReason.value }, {
         preserveScroll: true,
-        onSuccess: () => { showRefundModal.value = false; toasts.value?.success('Rimbursimi dhe kthimi i stokut u regjistruan.'); },
+        onSuccess: (page) => flashAware(page, () => { showRefundModal.value = false; }, () => { showRefundModal.value = false; toasts.value?.success('Rimbursimi dhe kthimi i stokut u regjistruan.'); }),
         onError: (errors) => toasts.value?.error(errors.reason || errors.refund || 'Rimbursimi nuk u regjistrua.'),
     });
 }
