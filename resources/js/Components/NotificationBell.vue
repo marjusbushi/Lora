@@ -203,9 +203,14 @@ onUnmounted(() => {
 
         <!-- Dropdown. The bell is not the topbar's rightmost item, so a 320px
              panel anchored to it overflows a phone screen — on <sm it becomes
-             a fixed sheet spanning the viewport just under the h-16 topbar. -->
-        <div v-if="open" class="fixed inset-0 z-40" @click="open = false" />
-        <div v-if="open" class="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 z-50 rounded-lg bg-white shadow-dropdown border border-neutral-200 overflow-hidden">
+             a fixed sheet spanning the viewport just under the h-16 topbar.
+             TELEPORTED to body: the sticky topbar is a z-30 stacking context,
+             so anything inside it paints UNDER the calendar's z-40 sticky day
+             row no matter its own z-index. Fixed right-6/top-16 lands on the
+             bell's visual spot; z stays below Modal (z-100). -->
+        <Teleport to="body">
+        <div v-if="open" class="fixed inset-0 z-[55]" @click="open = false" />
+        <div v-if="open" class="fixed inset-x-3 top-16 sm:inset-x-auto sm:right-6 sm:mt-2 sm:w-80 z-[60] rounded-lg bg-white shadow-dropdown border border-neutral-200 overflow-hidden">
             <div class="px-4 py-3 border-b border-neutral-100 flex items-center justify-between gap-3">
                 <div>
                     <span class="block text-body-sm font-medium text-primary-900">{{ $t('admin.generated.k_f3797fba7339') }}</span>
@@ -243,6 +248,7 @@ onUnmounted(() => {
             <a href="/pms/reservations" class="block px-4 py-2.5 text-center text-body-sm text-accent-700 hover:bg-neutral-50 border-t border-neutral-100 no-underline">
 {{ $t('admin.generated.k_35ee70cdf835') }} </a>
         </div>
+        </Teleport>
 
         <!-- Live toast on a brand-new reservation -->
         <Teleport to="body">
