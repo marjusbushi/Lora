@@ -21,14 +21,16 @@ class ChannexPullBookings extends Command
 
     protected $description = 'Pull + import unacknowledged Channex booking revisions (OTA -> PMS)';
 
-    public function handle(
-        ChannexClient $channex,
-        ChannexBookingImporter $importer,
-        OtaReservationReconciler $reconciler,
-    ): int {
+    public function handle(): int
+    {
         if (! $this->ensureTenantContext()) {
             return self::FAILURE;
         }
+
+        // After the tenant context — see ChannexPing for why.
+        $channex = app(ChannexClient::class);
+        $importer = app(ChannexBookingImporter::class);
+        $reconciler = app(OtaReservationReconciler::class);
 
         if (! $channex->configured()) {
             $this->error('CHANNEX_API_KEY is not set (.env).');

@@ -16,11 +16,15 @@ class ChannexReconcileBookings extends Command
 
     protected $description = 'Audit Channex bookings against PMS reservations without changing either side';
 
-    public function handle(ChannexClient $channex, OtaReservationReconciler $reconciler): int
+    public function handle(): int
     {
         if (! $this->ensureTenantContext()) {
             return self::FAILURE;
         }
+
+        // After the tenant context — see ChannexPing for why.
+        $channex = app(ChannexClient::class);
+        $reconciler = app(OtaReservationReconciler::class);
 
         if (! $channex->configured() || $channex->propertyId() === '') {
             $this->error('Integrimi Channex nuk është konfiguruar plotësisht për këtë hotel.');

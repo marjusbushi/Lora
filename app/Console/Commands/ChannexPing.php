@@ -19,11 +19,16 @@ class ChannexPing extends Command
 
     protected $description = 'Verify the Channex connection by listing the account properties';
 
-    public function handle(ChannexClient $channex): int
+    public function handle(): int
     {
         if (! $this->ensureTenantContext()) {
             return self::FAILURE;
         }
+
+        // Resolved AFTER the tenant context is set: constructor injection would
+        // build the client before handle() runs, making per-tenant credentials
+        // (tenant_integrations) invisible and falling back to the global .env.
+        $channex = app(ChannexClient::class);
 
         if (! $channex->configured()) {
             $this->error('CHANNEX_API_KEY is not set (.env) — cannot reach Channex.');
