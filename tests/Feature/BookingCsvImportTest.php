@@ -95,6 +95,33 @@ class BookingCsvImportTest extends TestCase
         $this->assertSame($balcony->id, $reservation->room->room_type_id);
     }
 
+    public function test_history_rows_land_as_completed_stays_not_open_confirmations(): void
+    {
+        $this->makeType('Deluxe Double Room With Balcony', 2, 201);
+
+        $this->importCsv([
+            [
+                'Book Number' => '4000000001', 'Guest Name(s)' => 'Old Guest',
+                'Status' => 'ok',
+                'Check-in' => now()->subMonths(6)->toDateString(),
+                'Check-out' => now()->subMonths(6)->addDays(3)->toDateString(),
+                'Price' => '300.00', 'Adults' => '2',
+                'Unit type' => 'Deluxe Double Room with Balcony',
+            ],
+            [
+                'Book Number' => '4000000002', 'Guest Name(s)' => 'Future Guest',
+                'Status' => 'ok',
+                'Check-in' => now()->addDays(10)->toDateString(),
+                'Check-out' => now()->addDays(13)->toDateString(),
+                'Price' => '300.00', 'Adults' => '2',
+                'Unit type' => 'Deluxe Double Room with Balcony',
+            ],
+        ]);
+
+        $this->assertSame('checked_out', Reservation::where('channel_ref', '4000000001')->sole()->status);
+        $this->assertSame('confirmed', Reservation::where('channel_ref', '4000000002')->sole()->status);
+    }
+
     public function test_two_rooms_of_the_same_unit_become_two_reservations_with_split_price(): void
     {
         // Booking.com's export lists a unit NAME once and carries the count in
