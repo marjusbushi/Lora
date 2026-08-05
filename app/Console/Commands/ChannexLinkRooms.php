@@ -30,11 +30,14 @@ class ChannexLinkRooms extends Command
 
     protected $description = 'Map each PMS room type to its Channex room type + rate plan (channel_mappings)';
 
-    public function handle(ChannexClient $channex): int
+    public function handle(): int
     {
         if (! $this->ensureTenantContext()) {
             return self::FAILURE;
         }
+
+        // After the tenant context — see ChannexPing for why.
+        $channex = app(ChannexClient::class);
 
         if (! $channex->configured()) {
             $this->error('CHANNEX_API_KEY is not set (.env).');
