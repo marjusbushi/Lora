@@ -284,8 +284,11 @@ function formatDateTime(value) {
         day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
     }).format(new Date(value));
 }
-function formatMoney(value) {
-    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currencyCode }).format(Number(value) || 0);
+function formatMoney(value, currency = null) {
+    // Amounts belong to the RESERVATION's currency (a Lek-base hotel selling
+    // in EUR stores €313, not L313) — the hotel base is only the fallback.
+    const code = currency || selectedReservation.value?.currency || currencyCode;
+    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: code }).format(Number(value) || 0);
 }
 const selectedPaidAmount = computed(() => Number(selectedReservation.value?.paid_amount) || 0);
 const selectedBalance = computed(() => Math.max(0, (Number(selectedReservation.value?.total_amount) || 0) - selectedPaidAmount.value));
@@ -598,7 +601,7 @@ function doCheckOut(res) {
                                             :aria-label="`Mesazhet e ${reservation.guest?.first_name || ''} ${reservation.guest?.last_name || ''}`"
                                             @click.stop="openGuestChat(reservation)"
                                         ><MessageSquare class="h-3.5 w-3.5" :class="reservation.unread_messages > 0 ? 'text-accent-700' : 'text-neutral-500'" /><span v-if="reservation.unread_messages > 0" class="absolute -right-1.5 -top-1.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-error-500 px-0.5 text-[8px] font-bold leading-none text-white ring-1 ring-white">{{ reservation.unread_messages > 9 ? '9+' : reservation.unread_messages }}</span></span></span>
-                                        <span class="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-75"><span class="truncate">{{ channelMeta(reservation.channel).label }}</span><span class="shrink-0 font-bold" :class="Number(reservation.paid_amount) >= Number(reservation.total_amount) ? 'text-success-700' : 'text-warning-700'" aria-hidden="true">{{ currencyCode }}</span></span>
+                                        <span class="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-75"><span class="truncate">{{ channelMeta(reservation.channel).label }}</span><span class="shrink-0 font-bold" :class="Number(reservation.paid_amount) >= Number(reservation.total_amount) ? 'text-success-700' : 'text-warning-700'" aria-hidden="true">{{ reservation.currency || currencyCode }}</span></span>
                                     </button>
                                 </div>
                             </div>
