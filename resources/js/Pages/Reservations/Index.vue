@@ -33,7 +33,7 @@ const props = defineProps({
 });
 
 const perms = usePage().props.auth.user?.permissions || [];
-const currencyCode = usePage().props.tenant?.currency || 'EUR';
+const currencyCode = usePage().props.settings?.pricing_currency || usePage().props.tenant?.currency || 'EUR';
 const canCreate = perms.includes('create_reservations');
 const canUpdate = perms.includes('update_reservations');
 const menuItemClass = 'flex w-full items-center gap-2.5 px-3 py-2 text-left text-body-sm text-neutral-700 transition-colors hover:bg-neutral-50 no-underline';

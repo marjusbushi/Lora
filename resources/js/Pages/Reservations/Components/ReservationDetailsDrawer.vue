@@ -40,7 +40,10 @@ const canDepartEarly = computed(() => {
 });
 
 function money(value) {
-    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: currencyCode }).format(Number(value || 0));
+    // The payload's amounts are in the RESERVATION's currency (a Lek-base
+    // hotel selling in EUR sends €63, not L63) — base is only the fallback.
+    const code = props.reservation?.currency || currencyCode;
+    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: code }).format(Number(value || 0));
 }
 function date(value) {
     if (!value) return '—';
