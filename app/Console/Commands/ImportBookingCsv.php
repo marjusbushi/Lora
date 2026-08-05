@@ -13,11 +13,16 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
 /**
- * One-off / repeatable import of a Booking.com reservations export (CSV) into the
- * PMS. Maps each "Unit type" to a real room (by room number OR room-type name),
- * creates/links a guest, and writes a reservation tagged channel=booking.com with
- * the Book Number as channel_ref so re-running never duplicates. --dry-run shows
- * exactly what it would do without writing anything.
+ * One-off / repeatable import of a reservations export (CSV) into the PMS.
+ * Two formats, auto-detected from the header:
+ *  - Booking.com extranet export ("Book Number", "Unit type", ...) — every
+ *    row is channel=booking.com;
+ *  - Beds24 bookings export ("Ref", "FirstNight", "ApiSource", ...) — one
+ *    file carries ALL channels; each row's channel derives from Referer and
+ *    the OTA reservation number from ApiRef (falling back to the Beds24 Ref).
+ * Maps each unit to a real room (by room number OR room-type name), creates/
+ * links a guest, and upserts on (channel, channel_ref, room) so re-running
+ * never duplicates. --dry-run shows the plan without writing anything.
  */
 class ImportBookingCsv extends Command
 {
@@ -25,7 +30,7 @@ class ImportBookingCsv extends Command
 
     protected $signature = 'booking:import {file : path to the CSV} {--dry-run : show the plan without writing} {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
 
-    protected $description = 'Import Booking.com reservations (CSV) into the PMS';
+    protected $description = 'Import OTA reservations (Booking.com or Beds24 CSV) into the PMS';
 
     public function handle(): int
     {
@@ -47,6 +52,15 @@ class ImportBookingCsv extends Command
 
             return self::FAILURE;
         }
+
+        // Beds24 exports are translated into the Booking-format row shape so
+        // the whole pipeline below (unit expansion, room resolution, guest
+        // linking, idempotent upsert) stays a single code path.
+        $beds24 = array_key_exists('ApiSource', $rows[0]) && array_key_exists('FirstNight', $rows[0]);
+        if ($beds24) {
+            $rows = array_map(fn (array $row) => $this->translateBeds24Row($row), $rows);
+        }
+        $this->info('Formati i detektuar: '.($beds24 ? 'Beds24 (multi-kanal)' : 'Booking.com extranet'));
 
         // withTrashed: resolve the system user even if soft-deleted (see submitBooking) so a
         // CSV import is attributed to it, not silently to the first admin.
@@ -114,8 +128,10 @@ class ImportBookingCsv extends Command
                 continue;
             }
 
-            $guest = $this->guest($row['Guest Name(s)'] ?? 'Mysafir', $phone, $country, $dry);
+            $guest = $this->guest($row['Guest Name(s)'] ?? 'Mysafir', $phone, $country, $dry, trim($row['_email'] ?? ''));
             $perRoomTotal = count($rooms) > 1 ? round($price / count($rooms), 2) : $price;
+            $channel = $row['_channel'] ?? 'booking.com';
+            $channelLabel = ['booking.com' => 'Booking.com', 'expedia' => 'Expedia', 'airbnb' => 'Airbnb', 'direct' => 'Beds24'][$channel] ?? $channel;
 
             foreach ($rooms as $idx => $room) {
                 $attrs = [
@@ -128,8 +144,8 @@ class ImportBookingCsv extends Command
                     'commission_amount' => $idx === 0 ? $commission : 0,
                     'adults' => $adults,
                     'children' => $children,
-                    'notes' => trim("Booking.com #{$book}".($remarks ? " — {$remarks}" : '')),
-                    'channel' => 'booking.com',
+                    'notes' => trim("{$channelLabel} #{$book}".($remarks ? " — {$remarks}" : '')),
+                    'channel' => $channel,
                 ];
                 $line = "  #{$book}  ".($row['Guest Name(s)'] ?? '')."  {$checkIn}→{$checkOut}  dhoma {$room->room_number} ({$room->roomType?->name})  {$status}  €{$attrs['total_amount']}";
                 if ($unmapped) {
@@ -143,12 +159,12 @@ class ImportBookingCsv extends Command
                     continue;
                 }
 
-                $existing = Reservation::where('channel', 'booking.com')->where('channel_ref', $book)->where('room_id', $room->id)->first();
+                $existing = Reservation::where('channel', $channel)->where('channel_ref', $book)->where('room_id', $room->id)->first();
                 if (! $existing) {
                     $attrs['created_via'] = Reservation::CREATED_VIA_IMPORT;
                 }
                 $res = Reservation::updateOrCreate(
-                    ['channel' => 'booking.com', 'channel_ref' => $book, 'room_id' => $room->id],
+                    ['channel' => $channel, 'channel_ref' => $book, 'room_id' => $room->id],
                     $attrs
                 );
                 $existing ? $updated++ : $created++;
@@ -158,7 +174,7 @@ class ImportBookingCsv extends Command
                 ChannelSyncLog::record([
                     'direction' => 'pull', 'action' => 'import.booking', 'reservation_id' => $res->id,
                     'room_type_id' => $room->room_type_id, 'status' => 'ok',
-                    'request' => ['book' => $book, 'unit' => $row['Unit type'] ?? null],
+                    'request' => ['book' => $book, 'unit' => $row['Unit type'] ?? null, 'channel' => $channel],
                 ]);
             }
         }
@@ -173,6 +189,58 @@ class ImportBookingCsv extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Reshape one Beds24 export row into the Booking-format columns the main
+     * loop reads, plus underscore-prefixed extras (channel, email) that only
+     * exist in the richer Beds24 export.
+     */
+    private function translateBeds24Row(array $row): array
+    {
+        // Beds24 keeps a 0.00 Price on some rows and the real money in
+        // "Charges" — prefer Price, fall back to Charges.
+        $price = $this->money($row['Price'] ?? '');
+        if ($price <= 0) {
+            $price = $this->money($row['Charges'] ?? '');
+        }
+
+        $name = trim(trim((string) ($row['First Name'] ?? '')).' '.trim((string) ($row['Name'] ?? '')));
+        $remarks = implode(' · ', array_filter([trim((string) ($row['Comments'] ?? '')), trim((string) ($row['Notes'] ?? ''))]));
+
+        return [
+            // The OTA's own number links future Channex updates; manual and
+            // direct rows have no ApiRef and keep the Beds24 Ref instead.
+            'Book Number' => trim((string) ($row['ApiRef'] ?? '')) !== '' ? trim((string) $row['ApiRef']) : trim((string) ($row['Ref'] ?? '')),
+            'Guest Name(s)' => $name !== '' ? $name : 'Mysafir',
+            'Status' => trim((string) ($row['Status'] ?? '')),
+            'Check-in' => trim((string) ($row['FirstNight'] ?? '')),
+            'Check-out' => trim((string) ($row['CheckOut'] ?? '')),
+            'Price' => (string) $price,
+            'Commission Amount' => trim((string) ($row['Commission'] ?? '')),
+            'Adults' => trim((string) ($row['Adult'] ?? '')),
+            'Children' => trim((string) ($row['Child'] ?? '')),
+            'Rooms' => trim((string) ($row['Quantity'] ?? '')),
+            'Unit type' => trim((string) ($row['Room'] ?? '')),
+            'Remarks' => $remarks,
+            'Booker country' => trim((string) ($row['Country'] ?? '')),
+            'Phone number' => trim((string) ($row['Phone'] ?? '')) !== '' ? trim((string) $row['Phone']) : trim((string) ($row['Mobile'] ?? '')),
+            '_channel' => $this->beds24Channel((string) ($row['Referer'] ?? '')),
+            '_email' => trim((string) ($row['Email'] ?? '')),
+        ];
+    }
+
+    /** Beds24's Referer is the OTA name — or the staff email/anything for manual entries. */
+    private function beds24Channel(string $referer): string
+    {
+        $referer = strtolower(trim($referer));
+
+        return match (true) {
+            str_contains($referer, 'booking') => 'booking.com',
+            str_contains($referer, 'expedia') || str_contains($referer, 'ebookers') => 'expedia',
+            str_contains($referer, 'airbnb') => 'airbnb',
+            default => 'direct',
+        };
     }
 
     private function resolveRoom(string $unit, $roomsByNumber, $roomsByType, array $taken, ?string $in, ?string $out, string $status): ?Room
@@ -224,7 +292,7 @@ class ImportBookingCsv extends Command
             ->exists();
     }
 
-    private function guest(string $fullName, string $phone, string $country, bool $dry): ?Guest
+    private function guest(string $fullName, string $phone, string $country, bool $dry, string $email = ''): ?Guest
     {
         $parts = preg_split('/\s+/', trim($fullName));
         $first = $parts[0] ?? 'Mysafir';
@@ -235,9 +303,11 @@ class ImportBookingCsv extends Command
                 ?? new Guest(['first_name' => $first, 'last_name' => $last]);
         }
 
+        // Identity stays name-based (Booking's per-reservation alias emails
+        // would split one repeat guest into many); the email is only STORED.
         return Guest::firstOrCreate(
             ['first_name' => $first, 'last_name' => $last],
-            ['phone' => $phone ?: null, 'notes' => $country ? "Booking.com · {$country}" : null]
+            ['phone' => $phone ?: null, 'email' => $email ?: null, 'notes' => $country ? "Import · {$country}" : null]
         );
     }
 
