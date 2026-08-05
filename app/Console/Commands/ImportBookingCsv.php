@@ -67,9 +67,16 @@ class ImportBookingCsv extends Command
                 continue;
             }
 
-            $status = str_starts_with(strtolower(trim($row['Status'] ?? '')), 'cancel') ? 'cancelled' : 'confirmed';
             $checkIn = $this->date($row['Check-in'] ?? null);
             $checkOut = $this->date($row['Check-out'] ?? null);
+            // History imports: a stay whose check-out already passed is a
+            // COMPLETED stay, not an open confirmation — otherwise old years
+            // flood the arrivals lists and status-based reports.
+            $status = match (true) {
+                str_starts_with(strtolower(trim($row['Status'] ?? '')), 'cancel') => 'cancelled',
+                $checkOut !== null && $checkOut < now()->toDateString() => 'checked_out',
+                default => 'confirmed',
+            };
             $price = $this->money($row['Price'] ?? '');
             $commission = $this->money($row['Commission Amount'] ?? '');
             $adults = (int) ($row['Adults'] ?? 0) ?: 1;
