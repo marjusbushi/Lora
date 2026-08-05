@@ -1058,9 +1058,11 @@ class ReservationController extends Controller
             abort(403);
         }
 
-        if ($reservation->status !== 'checked_in') {
+        // Before arrival the assignment is only paper — moving then is the
+        // safest case of all. Terminal states have nothing left to move.
+        if (! in_array($reservation->status, ['pending', 'confirmed', 'checked_in'], true)) {
             throw ValidationException::withMessages([
-                'room_id' => 'Zhvendosja e dhomes lejohet vetem per mysafiret brenda (checked-in). Perndryshe perdor Edito.',
+                'room_id' => 'Vetem rezervimet aktive (pa perfunduar e pa anuluar) mund te zhvendosen.',
             ]);
         }
 
@@ -1091,25 +1093,31 @@ class ReservationController extends Controller
                 }
 
                 $reservation->update(['room_id' => $newRoom->id]);
-                $newRoom->update(['status' => 'occupied']);
 
-                // The room the guest left needs cleaning — mirror check-out's housekeeping.
-                if ($oldRoom) {
-                    $oldRoom->update(['status' => 'cleaning']);
+                // Physical side effects belong only to an IN-HOUSE relocation:
+                // a pre-arrival move is administrative — no room changes state
+                // and nobody needs to clean an untouched room.
+                if ($reservation->status === 'checked_in') {
+                    $newRoom->update(['status' => 'occupied']);
 
-                    if (Setting::get('housekeeping.auto_create_on_checkout', true)) {
-                        $alreadyOpen = CleaningTask::where('room_id', $oldRoom->id)
-                            ->where('type', 'checkout_clean')
-                            ->whereIn('status', ['pending', 'in_progress'])
-                            ->exists();
+                    // The room the guest left needs cleaning — mirror check-out's housekeeping.
+                    if ($oldRoom) {
+                        $oldRoom->update(['status' => 'cleaning']);
 
-                        if (! $alreadyOpen) {
-                            CleaningTask::create([
-                                'room_id' => $oldRoom->id,
-                                'type' => 'checkout_clean',
-                                'status' => 'pending',
-                                'priority' => Setting::get('housekeeping.default_priority', 'normal'),
-                            ]);
+                        if (Setting::get('housekeeping.auto_create_on_checkout', true)) {
+                            $alreadyOpen = CleaningTask::where('room_id', $oldRoom->id)
+                                ->where('type', 'checkout_clean')
+                                ->whereIn('status', ['pending', 'in_progress'])
+                                ->exists();
+
+                            if (! $alreadyOpen) {
+                                CleaningTask::create([
+                                    'room_id' => $oldRoom->id,
+                                    'type' => 'checkout_clean',
+                                    'status' => 'pending',
+                                    'priority' => Setting::get('housekeeping.default_priority', 'normal'),
+                                ]);
+                            }
                         }
                     }
                 }
