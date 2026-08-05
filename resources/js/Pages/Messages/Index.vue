@@ -177,7 +177,7 @@ function statusLabel(s) {
 
     <!-- The chat brings its own header; the empty state keeps the normal chrome
          (without it a phone with zero threads would have no navigation at all). -->
-    <AppLayout ref="layoutRef" :hide-header="threads.length > 0">
+    <AppLayout ref="layoutRef">
         <div v-if="!threads.length" class="rounded-2xl border border-neutral-200 bg-white px-6 py-20 text-center">
             <p class="text-base font-semibold text-neutral-800">{{ $t('admin.generated.k_c1a352b0ed55') }}</p>
             <p class="mt-1 text-sm text-neutral-500">{{ $t('admin.generated.k_8b0d77615032') }}</p>
@@ -187,7 +187,11 @@ function statusLabel(s) {
              the page itself can no longer scroll, so no gesture ever drags the
              header away. z-30 stays under the nav drawer (z-40/50). -->
         <div v-else class="fixed inset-0 z-30 overflow-hidden bg-white sm:static sm:z-auto sm:rounded-2xl sm:border sm:border-neutral-200 sm:shadow-sm">
-            <div class="grid h-full grid-cols-1 sm:h-[calc(100dvh-3.1rem)]"
+            <!-- Desktop height = viewport − app header (4rem) − main padding
+                 (sm:p-6 → 3rem) − borders; the old 3.1rem assumed a hidden
+                 header via a hide-header prop AppLayout never implemented,
+                 which pushed the composer below the fold. -->
+            <div class="grid h-full grid-cols-1 sm:h-[calc(100dvh-7.2rem)]"
                 :class="selected && panelOpen ? 'lg:grid-cols-[300px_1fr_300px]' : 'lg:grid-cols-[300px_1fr]'">
                 <!-- Thread list (on mobile: hidden while a chat is open, like WhatsApp) -->
                 <div class="min-h-0 flex-col border-r border-neutral-200" :class="mobileChatOpen ? 'hidden lg:flex' : 'flex'">
