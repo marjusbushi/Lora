@@ -21,7 +21,7 @@ const props = defineProps({
 });
 
 const toasts = ref(null);
-const currencyCode = usePage().props.tenant?.currency || 'EUR';
+const currencyCode = usePage().props.settings?.pricing_currency || usePage().props.tenant?.currency || 'EUR';
 const channelManagerEnabled = computed(() => usePage().props.modules?.channel_manager === true);
 
 function formatDate(value) {
