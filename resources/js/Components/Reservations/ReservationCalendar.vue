@@ -743,7 +743,7 @@ function doCheckOut(res) {
                     <footer class="grid shrink-0 grid-cols-3 gap-2 border-t border-neutral-200 bg-white p-4">
                         <Button v-if="canUpdate && !['checked_in','checked_out','cancelled'].includes(selectedReservation.status)" variant="outline" class="justify-center" @click="openEdit"><Pencil class="h-4 w-4" />{{ $t('admin.calendarPreview.edit') }}</Button>
                         <Button v-else variant="outline" class="justify-center" disabled><Pencil class="h-4 w-4" />{{ $t('admin.calendarPreview.edit') }}</Button>
-                        <Button v-if="canUpdate && selectedReservation.status === 'checked_in'" variant="outline" class="justify-center" @click="openMove"><ArrowLeftRight class="h-4 w-4" />{{ $t('admin.calendarPreview.move') }}</Button>
+                        <Button v-if="canUpdate && ['pending', 'confirmed', 'checked_in'].includes(selectedReservation.status)" variant="outline" class="justify-center" @click="openMove"><ArrowLeftRight class="h-4 w-4" />{{ $t('admin.calendarPreview.move') }}</Button>
                         <Button v-else variant="outline" class="justify-center" disabled><ArrowLeftRight class="h-4 w-4" />{{ $t('admin.calendarPreview.move') }}</Button>
                         <Link v-if="!demo" :href="route('reservations.show', selectedReservation.id)" class="no-underline"><Button class="w-full justify-center"><ExternalLink class="h-4 w-4" />{{ $t('admin.calendarPreview.manage') }}</Button></Link>
                         <Button v-else class="w-full justify-center" @click="toasts?.success($t('admin.calendarPreview.mockData'))"><ExternalLink class="h-4 w-4" />{{ $t('admin.calendarPreview.manage') }}</Button>
