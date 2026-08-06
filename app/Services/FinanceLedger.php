@@ -46,6 +46,26 @@ class FinanceLedger
     {
         FinanceAccount::ensureDefaults();
 
+        // 'import' = synthetic settlements from a system migration (e.g. the
+        // Beds24 era): money that was collected before this PMS existed. It
+        // must land on a CLEARING account — never Arka or a real bank — so
+        // cash reconciliation and the bank report stay truthful. Any clearing
+        // account the hotel created (renamed to taste) is honored first.
+        if ($method === 'import') {
+            $account = FinanceAccount::where('type', 'clearing')
+                ->orderByDesc('is_active')
+                ->orderBy('id')
+                ->first();
+
+            return $account ?? FinanceAccount::create([
+                'name' => 'Import',
+                'type' => 'clearing',
+                'currency' => BaseCurrency::code(),
+                'scope' => 'general',
+                'is_active' => true,
+            ]);
+        }
+
         $type = $method === 'cash' ? 'cash' : 'bank';
         $currency = strtoupper($currency ?: BaseCurrency::code());
 
@@ -118,7 +138,7 @@ class FinanceLedger
 
         $baseCurrency = BaseCurrency::code();
         $currency = strtoupper((string) ($payment->currency ?: $baseCurrency));
-        $method = in_array($payment->method, ['cash', 'card', 'bank', 'pok', 'ota'], true) ? $payment->method : 'card';
+        $method = in_array($payment->method, ['cash', 'card', 'bank', 'pok', 'ota', 'import'], true) ? $payment->method : 'card';
 
         $ledger = FinancePayment::firstOrNew([
             'sourceable_type' => Payment::class,
@@ -137,11 +157,13 @@ class FinanceLedger
                 : round(1 / (float) ($payment->exchange_rate ?: 1 / $this->fxRate($currency)), 6),
             'method' => $method,
             'source' => 'auto',
-            'description' => match ($type) {
-                'deposit' => 'Depozitë folio — rezervimi #'.$payment->reservation_id,
-                'refund' => 'Rimbursim folio — rezervimi #'.$payment->reservation_id,
-                default => 'Pagesë folio — rezervimi #'.$payment->reservation_id,
-            },
+            'description' => $method === 'import'
+                ? 'Shlyerje importi — rezervimi #'.$payment->reservation_id
+                : match ($type) {
+                    'deposit' => 'Depozitë folio — rezervimi #'.$payment->reservation_id,
+                    'refund' => 'Rimbursim folio — rezervimi #'.$payment->reservation_id,
+                    default => 'Pagesë folio — rezervimi #'.$payment->reservation_id,
+                },
             'paid_at' => $payment->created_at ?? now(),
             'created_by' => $payment->created_by,
         ]);
