@@ -30,6 +30,7 @@ const props = defineProps({
     channelFees: { type: Object, default: () => ({}) },
     reconciliation: { type: Object, default: () => ({ open: 0, critical: 0, manual_candidates: 0 }) },
     hotelToday: { type: String, default: '' },
+    baseToPricingRate: { type: Number, default: null },
 });
 
 const perms = usePage().props.auth.user?.permissions || [];
@@ -73,7 +74,24 @@ const dateTo = ref(props.filters?.date_to || '');
 const perPage = ref(Number(props.filters?.per_page || props.reservations?.per_page || 25));
 const sortBy = ref(props.filters?.sort || 'latest');
 
-const totalOutstanding = computed(() => props.reservations.data.reduce((sum, row) => sum + Math.max(0, Number(row.outstanding_amount_base || 0)), 0));
+// The card displays in the selling currency (Monedha e çmimeve). Rows already
+// in that currency are summed exactly; rows in another currency are converted
+// from their base-currency amount via the current cross-rate. Without a rate,
+// a same-currency row's own implied rate (base ÷ own) is the fallback.
+const totalOutstanding = computed(() => {
+    const impliedRow = props.reservations.data.find((row) => (row.currency || currencyCode) === currencyCode
+        && Number(row.outstanding_amount) > 0 && Number(row.outstanding_amount_base) > 0);
+    const baseRate = Number(props.baseToPricingRate)
+        || (impliedRow ? Number(impliedRow.outstanding_amount) / Number(impliedRow.outstanding_amount_base) : 0);
+
+    return props.reservations.data.reduce((sum, row) => {
+        if ((row.currency || currencyCode) === currencyCode) {
+            return sum + Math.max(0, Number(row.outstanding_amount || 0));
+        }
+
+        return sum + Math.max(0, Number(row.outstanding_amount_base || 0)) * baseRate;
+    }, 0);
+});
 const statCards = computed(() => [
     { label: 'Rezervime totale', value: props.stats.total, tone: 'text-primary-900' },
     { label: 'Mbërritje sot', value: props.stats.arrivals_today || 0, tone: 'text-info-700' },
