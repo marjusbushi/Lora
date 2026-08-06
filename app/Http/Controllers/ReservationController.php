@@ -24,9 +24,11 @@ use App\Models\Setting;
 use App\Models\Warehouse;
 use App\Services\AuditTimeline;
 use App\Services\BaseCurrency;
+use App\Services\CurrencyRates;
 use App\Services\EarlyDepartureService;
 use App\Services\FatureAlConfiguration;
 use App\Services\InventoryLedger;
+use App\Services\PricingCurrency;
 use App\Services\ReservationConflictService;
 use App\Services\ReservationMoney;
 use App\Services\RoomPricing;
@@ -186,6 +188,9 @@ class ReservationController extends Controller
                 ->get(),
             'filters' => $filters,
             'hotelToday' => $today,
+            // Pricing-currency units per 1 base-currency unit, so the list can
+            // aggregate base amounts yet display in the hotel's selling currency.
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
             'channelFees' => Setting::get('financial.channel_fees', []),
             'reconciliation' => [
                 'open' => OtaReconciliationIssue::where('status', 'open')->count(),
