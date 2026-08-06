@@ -61,7 +61,7 @@ class ChannexBootstrapRoomsTest extends TestCase
             ->count();
     }
 
-    public function test_creates_one_room_type_and_three_rate_plans_per_pms_type_when_empty(): void
+    public function test_creates_one_room_type_and_four_rate_plans_per_pms_type_when_empty(): void
     {
         $this->type('Twin', 3, 2);
         $this->type('Double', 2, 2);
@@ -70,7 +70,7 @@ class ChannexBootstrapRoomsTest extends TestCase
         $this->artisan('channex:bootstrap-rooms')->assertSuccessful();
 
         $this->assertSame(2, $this->postCount('/room_types'), 'one room type created per PMS type');
-        $this->assertSame(6, $this->postCount('/rate_plans'), 'base + booking + expedia plan per PMS type');
+        $this->assertSame(8, $this->postCount('/rate_plans'), 'base + booking + expedia + airbnb plan per PMS type');
         // room type carries the PMS name + physical room count + occupancy
         Http::assertSent(fn ($r) => $r->method() === 'POST' && str_contains($r->url(), '/room_types')
             && ($r->data()['room_type']['title'] ?? null) === 'Twin'
@@ -78,14 +78,14 @@ class ChannexBootstrapRoomsTest extends TestCase
         Http::assertSent(fn ($r) => $r->method() === 'POST' && str_contains($r->url(), '/room_types')
             && ($r->data()['room_type']['title'] ?? null) === 'Double'
             && (int) ($r->data()['room_type']['count_of_rooms'] ?? 0) === 2);
-        // the three plan roles carry their distinguishing titles
-        foreach (['Standard Rate', 'Standard Rate - Booking.com', 'Standard Rate - Expedia'] as $planTitle) {
+        // the four plan roles carry their distinguishing titles
+        foreach (['Standard Rate', 'Standard Rate - Booking.com', 'Standard Rate - Expedia', 'Standard Rate - Airbnb'] as $planTitle) {
             Http::assertSent(fn ($r) => $r->method() === 'POST' && str_contains($r->url(), '/rate_plans')
                 && ($r->data()['rate_plan']['title'] ?? null) === $planTitle);
         }
     }
 
-    public function test_is_idempotent_when_all_three_rate_plans_already_exist(): void
+    public function test_is_idempotent_when_all_four_rate_plans_already_exist(): void
     {
         $this->type('Twin', 3, 2);
         $rel = ['room_type' => ['data' => ['id' => 'RT-1']]];
@@ -95,6 +95,7 @@ class ChannexBootstrapRoomsTest extends TestCase
                 ['id' => 'RP-1', 'attributes' => ['title' => 'Standard Rate'], 'relationships' => $rel],
                 ['id' => 'RP-B', 'attributes' => ['title' => 'Standard Rate - Booking.com'], 'relationships' => $rel],
                 ['id' => 'RP-E', 'attributes' => ['title' => 'Standard Rate - Expedia'], 'relationships' => $rel],
+                ['id' => 'RP-A', 'attributes' => ['title' => 'Standard Rate - Airbnb'], 'relationships' => $rel],
             ],
         );
 
@@ -117,12 +118,15 @@ class ChannexBootstrapRoomsTest extends TestCase
         $this->artisan('channex:bootstrap-rooms')->assertSuccessful();
 
         $this->assertSame(0, $this->postCount('/room_types'));
-        $this->assertSame(2, $this->postCount('/rate_plans'), 'only booking + expedia plans created');
+        $this->assertSame(3, $this->postCount('/rate_plans'), 'only booking + expedia + airbnb plans created');
         Http::assertSent(fn ($r) => $r->method() === 'POST' && str_contains($r->url(), '/rate_plans')
             && ($r->data()['rate_plan']['title'] ?? null) === 'Standard Rate - Booking.com'
             && ($r->data()['rate_plan']['room_type_id'] ?? null) === 'RT-1');
         Http::assertSent(fn ($r) => $r->method() === 'POST' && str_contains($r->url(), '/rate_plans')
             && ($r->data()['rate_plan']['title'] ?? null) === 'Standard Rate - Expedia'
+            && ($r->data()['rate_plan']['room_type_id'] ?? null) === 'RT-1');
+        Http::assertSent(fn ($r) => $r->method() === 'POST' && str_contains($r->url(), '/rate_plans')
+            && ($r->data()['rate_plan']['title'] ?? null) === 'Standard Rate - Airbnb'
             && ($r->data()['rate_plan']['room_type_id'] ?? null) === 'RT-1');
     }
 
