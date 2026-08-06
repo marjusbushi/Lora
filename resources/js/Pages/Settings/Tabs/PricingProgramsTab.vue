@@ -21,6 +21,8 @@ const form = useForm({
     expedia_member_pct: props.settings.expedia_member_pct ?? 10,
     expedia_mobile_enabled: Boolean(props.settings.expedia_mobile_enabled),
     expedia_mobile_pct: props.settings.expedia_mobile_pct ?? 10,
+    airbnb_host_fee_enabled: Boolean(props.settings.airbnb_host_fee_enabled),
+    airbnb_host_fee_pct: props.settings.airbnb_host_fee_pct ?? 15,
 });
 
 function factor(discounts) {
@@ -42,6 +44,9 @@ const booking = computed(() => summary([
 const expedia = computed(() => summary([
     [form.expedia_member_enabled, form.expedia_member_pct],
     [form.expedia_mobile_enabled, form.expedia_mobile_pct],
+]));
+const airbnb = computed(() => summary([
+    [form.airbnb_host_fee_enabled, form.airbnb_host_fee_pct],
 ]));
 const bookingCommission = computed(() => Number(props.financial.channel_fees?.['booking.com'] || 0));
 
@@ -149,6 +154,27 @@ function submit() {
                     </div>
                 </div>
                 <p class="text-body-sm text-primary-900 bg-accent-50 rounded-lg p-3">{{ $t('admin.generated.k_330136e374de') }}{{ expedia.example }}{{ $t('admin.generated.k_ded025603eff') }} {{ expedia.combined }}%.</p>
+            </div>
+
+            <div class="rounded-xl border border-neutral-200 p-4 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h4 class="text-body font-bold text-primary-900">{{ $t('admin.pricingPrograms.airbnbTitle') }}</h4>
+                        <p class="text-tiny text-neutral-500">{{ $t('admin.pricingPrograms.airbnbDescription') }}</p>
+                    </div>
+                    <span class="text-tiny font-bold rounded-full bg-info-50 text-info-700 px-2.5 py-1">{{ $t('admin.generated.k_9eab3b7aef0b') }}{{ airbnb.modifier }}%</span>
+                </div>
+
+                <div class="grid sm:grid-cols-2 gap-4">
+                    <div class="rounded-lg bg-neutral-50 p-3 space-y-2">
+                        <Checkbox v-model="form.airbnb_host_fee_enabled" :label="$t('admin.pricingPrograms.airbnbFeeLabel')" />
+                        <div class="flex items-center gap-2">
+                            <TextInput v-model="form.airbnb_host_fee_pct" type="number" min="0" max="50" step="0.5" :disabled="!form.airbnb_host_fee_enabled" />
+                            <span class="text-body-sm text-neutral-500">%</span>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-body-sm text-primary-900 bg-accent-50 rounded-lg p-3">{{ $t('admin.pricingPrograms.airbnbExample', { price: airbnb.example }) }}</p>
             </div>
 
             <div class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-body-sm text-warning-800">

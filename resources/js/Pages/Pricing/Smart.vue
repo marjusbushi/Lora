@@ -658,7 +658,7 @@ function syncLabel(ts) {
 
                             <div v-if="selected.ota_prices" class="grid sm:grid-cols-2 gap-3">
                                 <div v-for="(ota, key) in selected.ota_prices" :key="key" class="rounded-xl border border-info-100 bg-info-50/50 p-3">
-                                    <p class="text-tiny font-bold uppercase tracking-wide text-info-700">{{ key === 'booking' ? $t('admin.generated.k_16c93c3b7fc4') : $t('admin.generated.k_d47b7f97166a') }}</p>
+                                    <p class="text-tiny font-bold uppercase tracking-wide text-info-700">{{ key === 'booking' ? $t('admin.generated.k_16c93c3b7fc4') : key === 'airbnb' ? 'Airbnb' : $t('admin.generated.k_d47b7f97166a') }}</p>
                                     <div class="mt-2 space-y-1 text-body-sm">
                                         <div class="flex justify-between gap-3"><span class="text-neutral-500">{{ $t('admin.generated.k_72c51795efd1') }}</span><b class="tabular-nums">{{ currency }}{{ fmtPrice(ota.target_price) }}</b></div>
                                         <div class="flex justify-between gap-3"><span class="text-neutral-500">{{ $t('admin.generated.k_4b37e487f890') }}</span><b class="tabular-nums text-info-700">{{ currency }}{{ fmtPrice(ota.published_price) }}</b></div>
