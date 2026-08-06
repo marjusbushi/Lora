@@ -14,7 +14,7 @@ use App\Models\Setting;
  */
 class OtaPricingPrograms
 {
-    private const CHANNELS = ['booking.com', 'expedia'];
+    private const CHANNELS = ['booking.com', 'expedia', 'airbnb'];
 
     public static function settings(): array
     {
@@ -26,6 +26,11 @@ class OtaPricingPrograms
             self::discount('Member Price', 'expedia_member'),
             self::discount('Mobile Price', 'expedia_mobile'),
         ]));
+        // Airbnb's "program" is its host fee: deducted from the payout rather
+        // than shown to the guest, but the compensation math is identical.
+        $airbnbDiscounts = array_values(array_filter([
+            self::discount('Host fee', 'airbnb_host_fee', 15),
+        ]));
 
         return [
             'booking' => self::channelSummary(
@@ -34,6 +39,7 @@ class OtaPricingPrograms
                 (bool) Setting::get('pricing_programs.booking_preferred_enabled', false),
             ),
             'expedia' => self::channelSummary('expedia', $expediaDiscounts, false),
+            'airbnb' => self::channelSummary('airbnb', $airbnbDiscounts, false),
         ];
     }
 
@@ -63,13 +69,13 @@ class OtaPricingPrograms
         return $row;
     }
 
-    private static function discount(string $label, string $key): ?array
+    private static function discount(string $label, string $key, float $defaultPct = 10): ?array
     {
         if (! (bool) Setting::get("pricing_programs.{$key}_enabled", false)) {
             return null;
         }
 
-        $pct = min(50.0, max(0.0, (float) Setting::get("pricing_programs.{$key}_pct", 10)));
+        $pct = min(50.0, max(0.0, (float) Setting::get("pricing_programs.{$key}_pct", $defaultPct)));
 
         return ['key' => $key, 'label' => $label, 'pct' => round($pct, 2)];
     }
