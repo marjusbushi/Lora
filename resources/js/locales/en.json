@@ -336,7 +336,11 @@
       "recommended": "Recommended",
       "directEnabled": "Enable direct discount",
       "discountPercent": "Website discount",
-      "directExample": "Example: €100 smart price → €{price} direct price."
+      "directExample": "Example: €100 smart price → €{price} direct price.",
+      "airbnbTitle": "Airbnb — host fee compensation",
+      "airbnbDescription": "Airbnb deducts its fee from your payout instead of invoicing commission. Enable this so the published Airbnb price is raised and your net stays at the base price.",
+      "airbnbFeeLabel": "Host fee (including taxes on the fee)",
+      "airbnbExample": "Example: base price €85 → €{price} published on Airbnb; after the fee, net ≈ €85."
     },
     "common": {
       "save": "Save",
