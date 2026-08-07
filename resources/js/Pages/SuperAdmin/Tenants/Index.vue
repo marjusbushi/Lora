@@ -868,7 +868,7 @@ function statusLabel(status) {
                             <div class="flex items-center gap-3">
                                 <Button type="button" variant="outline" @click="closeBilling">{{ $t('superAdmin.auto.copy008') }}</Button>
                                 <Button type="submit" :disabled="billingForm.processing">
-                                    {{ billingForm.processing ? 'Duke ruajtur…' : 'Ruaj abonimin' }}
+                                    {{ billingForm.processing ? $t('superAdmin.tenantShow.saving') : $t('superAdmin.dynamic.saveSubscription') }}
                                 </Button>
                             </div>
                         </div>
@@ -944,7 +944,7 @@ function statusLabel(status) {
                                     {{ t('superAdmin.dynamic.newDomain') }}
                                     <div class="mt-1.5 flex flex-col gap-2 sm:flex-row">
                                         <input v-model="domainForm.domain" required class="w-full rounded-xl border-neutral-300 text-sm" placeholder="riviera.lorapms.com" />
-                                        <Button type="submit" class="shrink-0" :disabled="domainForm.processing">{{ domainForm.processing ? 'Duke shtuar…' : 'Shto domain' }}</Button>
+                                        <Button type="submit" class="shrink-0" :disabled="domainForm.processing">{{ domainForm.processing ? $t('superAdmin.dynamic.adding') : $t('superAdmin.dynamic.addDomain') }}</Button>
                                     </div>
                                 </label>
                                 <span v-if="domainForm.errors.domain" class="mt-1 block text-xs text-danger-600">{{ domainForm.errors.domain }}</span>
@@ -958,7 +958,7 @@ function statusLabel(status) {
                                     <div class="flex flex-wrap items-center gap-2">
                                         <h3 class="font-semibold text-neutral-900">Channex Channel Manager</h3>
                                         <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="configTenant.integrations.channex.has_api_key ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-200/70 text-neutral-500'">
-                                            <Check v-if="configTenant.integrations.channex.has_api_key" class="h-3 w-3" />{{ configTenant.integrations.channex.has_api_key ? 'Kredencialet e ruajtura' : 'Pa kredenciale' }}
+                                            <Check v-if="configTenant.integrations.channex.has_api_key" class="h-3 w-3" />{{ configTenant.integrations.channex.has_api_key ? $t('integrationCenter.credentialsSaved') : $t('integrationCenter.noCredentials') }}
                                         </span>
                                     </div>
                                     <p class="mt-1 text-xs text-neutral-500">{{ $t('superAdmin.auto.copy058') }}</p>
@@ -989,7 +989,7 @@ function statusLabel(status) {
 
                             <div class="rounded-xl bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">{{ $t('superAdmin.auto.copy015') }}</div>
                             <div class="flex justify-end border-t border-neutral-200 pt-4">
-                                <Button type="submit" :disabled="channexForm.processing">{{ channexForm.processing ? 'Duke ruajtur…' : 'Ruaj Channex' }}</Button>
+                                <Button type="submit" :disabled="channexForm.processing">{{ channexForm.processing ? $t('superAdmin.tenantShow.saving') : $t('integrationCenter.saveChannex') }}</Button>
                             </div>
                         </form>
 
@@ -1000,7 +1000,7 @@ function statusLabel(status) {
                                     <div class="flex flex-wrap items-center gap-2">
                                         <h3 class="font-semibold text-neutral-900">POK Payments</h3>
                                         <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="configTenant.integrations.pok.has_key_id ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-200/70 text-neutral-500'">
-                                            <Check v-if="configTenant.integrations.pok.has_key_id" class="h-3 w-3" />{{ configTenant.integrations.pok.has_key_id ? 'Kredencialet e ruajtura' : 'Pa kredenciale' }}
+                                            <Check v-if="configTenant.integrations.pok.has_key_id" class="h-3 w-3" />{{ configTenant.integrations.pok.has_key_id ? $t('integrationCenter.credentialsSaved') : $t('integrationCenter.noCredentials') }}
                                         </span>
                                     </div>
                                     <p class="mt-1 text-xs text-neutral-500">{{ $t('superAdmin.auto.copy047') }}</p>
@@ -1031,7 +1031,7 @@ function statusLabel(status) {
 
                             <div class="rounded-xl bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">{{ $t('superAdmin.auto.copy015') }}</div>
                             <div class="flex justify-end border-t border-neutral-200 pt-4">
-                                <Button type="submit" :disabled="pokForm.processing">{{ pokForm.processing ? 'Duke ruajtur…' : 'Ruaj POK' }}</Button>
+                                <Button type="submit" :disabled="pokForm.processing">{{ pokForm.processing ? $t('superAdmin.tenantShow.saving') : $t('integrationCenter.savePok') }}</Button>
                             </div>
                         </form>
 
@@ -1042,7 +1042,7 @@ function statusLabel(status) {
                                     <div class="flex flex-wrap items-center gap-2">
                                         <h3 class="font-semibold text-neutral-900">{{ fatureName }} · {{ $t('integrationCenter.fiscalization') }}</h3>
                                         <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" :class="configTenant.integrations.fature_al.has_api_token ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-200/70 text-neutral-500'">
-                                            <Check v-if="configTenant.integrations.fature_al.has_api_token" class="h-3 w-3" />{{ configTenant.integrations.fature_al.has_api_token ? 'Token-i është ruajtur' : 'Pa token API' }}
+                                            <Check v-if="configTenant.integrations.fature_al.has_api_token" class="h-3 w-3" />{{ configTenant.integrations.fature_al.has_api_token ? $t('integrationCenter.tokenSaved') : $t('integrationCenter.noApiToken') }}
                                         </span>
                                     </div>
                                     <p class="mt-1 text-xs text-neutral-500">{{ $t('integrationCenter.tenantSecureConfig') }}</p>
@@ -1061,7 +1061,7 @@ function statusLabel(status) {
                                         type="password"
                                         autocomplete="new-password"
                                         class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"
-                                        :placeholder="configTenant.integrations.fature_al.has_api_token ? 'Lëre bosh për të mbajtur token-in aktual' : 'Vendos token-in nga fature.al'"
+                                        :placeholder="configTenant.integrations.fature_al.has_api_token ? $t('integrationCenter.keepTokenPlaceholder') : $t('integrationCenter.enterFatureToken')"
                                     />
                                     <span v-if="fatureForm.errors.api_token" class="mt-1 block text-xs text-danger-600">{{ fatureForm.errors.api_token }}</span>
                                 </label>
@@ -1090,7 +1090,7 @@ function statusLabel(status) {
                                 >
                                     {{ $t('integrationCenter.testConnection') }}
                                 </Button>
-                                <Button type="submit" :disabled="fatureForm.processing">{{ fatureForm.processing ? 'Duke ruajtur…' : 'Ruaj fature.al' }}</Button>
+                                <Button type="submit" :disabled="fatureForm.processing">{{ fatureForm.processing ? $t('superAdmin.tenantShow.saving') : $t('integrationCenter.saveFatureAl') }}</Button>
                             </div>
                         </form>
                     </div>

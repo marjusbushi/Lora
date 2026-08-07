@@ -38,8 +38,9 @@ const rangeFilter = ref(props.filter?.range || '7');
 const selectedLog = ref(null);
 let searchTimer;
 
-const SQ_MONTHS_LONG = ['janar', 'shkurt', 'mars', 'prill', 'maj', 'qershor', 'korrik', 'gusht', 'shtator', 'tetor', 'nëntor', 'dhjetor'];
-const SQ_MONTHS_SHORT = ['jan', 'shk', 'mar', 'pri', 'maj', 'qer', 'korr', 'gush', 'sht', 'tet', 'nën', 'dhj'];
+// CLDR month names for sq-AL (janar…dhjetor / jan…dhj), derived instead of hardcoded.
+const SQ_MONTHS_LONG = Array.from({ length: 12 }, (_, month) => new Intl.DateTimeFormat('sq-AL', { month: 'long' }).format(new Date(2000, month, 15)));
+const SQ_MONTHS_SHORT = Array.from({ length: 12 }, (_, month) => new Intl.DateTimeFormat('sq-AL', { month: 'short' }).format(new Date(2000, month, 15)));
 
 const rows = computed(() => props.logs?.data || []);
 const hasFilters = computed(() => Boolean(
