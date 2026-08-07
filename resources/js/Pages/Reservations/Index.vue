@@ -17,7 +17,7 @@ import EarlyDepartureModal from '@/Components/Reservations/EarlyDepartureModal.v
 import StayExtensionModal from '@/Components/Reservations/StayExtensionModal.vue';
 import ReservationDetailsDrawer from './Components/ReservationDetailsDrawer.vue';
 import { channelOptions } from '@/channels';
-import { getIntlLocale } from '@/i18n';
+import { getIntlLocale, translate } from '@/i18n';
 
 const props = defineProps({
     reservations: Object,
@@ -40,17 +40,17 @@ const canUpdate = perms.includes('update_reservations');
 const menuItemClass = 'flex w-full items-center gap-2.5 px-3 py-2 text-left text-body-sm text-neutral-700 transition-colors hover:bg-neutral-50 no-underline';
 
 const statusMeta = {
-    pending: { label: 'Në pritje', variant: 'warning' },
-    confirmed: { label: 'Konfirmuar', variant: 'info' },
-    checked_in: { label: 'Në hotel', variant: 'success' },
-    checked_out: { label: 'Përfunduar', variant: 'neutral' },
-    cancelled: { label: 'Anuluar', variant: 'error' },
+    pending: { label: translate('reservationsIndex.statusPending'), variant: 'warning' },
+    confirmed: { label: translate('reservationsIndex.statusConfirmed'), variant: 'info' },
+    checked_in: { label: translate('reservationsIndex.statusInHouse'), variant: 'success' },
+    checked_out: { label: translate('reservationsIndex.statusCompleted'), variant: 'neutral' },
+    cancelled: { label: translate('reservationsIndex.statusCancelled'), variant: 'error' },
 };
 const statusOptions = Object.entries(statusMeta).map(([value, meta]) => ({ value, label: meta.label }));
 const sortOptions = [
-    { value: 'latest', label: 'Më të fundit' },
-    { value: 'checkin', label: 'Sipas check-in' },
-    { value: 'checkout', label: 'Sipas check-out' },
+    { value: 'latest', label: translate('reservationsIndex.sortLatest') },
+    { value: 'checkin', label: translate('reservationsIndex.sortByCheckIn') },
+    { value: 'checkout', label: translate('reservationsIndex.sortByCheckOut') },
 ];
 const perPageOptions = [25, 50, 100].map((value) => ({ value, label: String(value) }));
 const channelLabels = Object.fromEntries(channelOptions.map((option) => [option.value, option.label]));
@@ -93,10 +93,10 @@ const totalOutstanding = computed(() => {
     }, 0);
 });
 const statCards = computed(() => [
-    { label: 'Rezervime totale', value: props.stats.total, tone: 'text-primary-900' },
-    { label: 'Mbërritje sot', value: props.stats.arrivals_today || 0, tone: 'text-info-700' },
-    { label: 'Në hotel', value: props.stats.checked_in, tone: 'text-success-700' },
-    { label: 'Për t’u arkëtuar në listë', value: money(totalOutstanding.value), tone: 'text-warning-700' },
+    { label: translate('reservationsIndex.cardTotalReservations'), value: props.stats.total, tone: 'text-primary-900' },
+    { label: translate('reservationsIndex.cardArrivalsToday'), value: props.stats.arrivals_today || 0, tone: 'text-info-700' },
+    { label: translate('reservationsIndex.cardInHouse'), value: props.stats.checked_in, tone: 'text-success-700' },
+    { label: translate('reservationsIndex.cardOutstandingInList'), value: money(totalOutstanding.value), tone: 'text-warning-700' },
 ]);
 
 function listParams() {
@@ -199,8 +199,8 @@ function canDepartEarly(reservation) {
 function doCheckIn(reservation) {
     router.post(route('reservations.check-in', reservation.id), {}, {
         preserveScroll: true,
-        onSuccess: () => { closeDetails(false); toasts.value?.success(`Check-in: ${reservation.guest?.name || ''}`); },
-        onError: (errors) => toasts.value?.error(errors.check_in || 'Check-in dështoi.'),
+        onSuccess: () => { closeDetails(false); toasts.value?.success(translate('reservationsIndex.toastCheckIn', { name: reservation.guest?.name || '' })); },
+        onError: (errors) => toasts.value?.error(errors.check_in || translate('reservationsIndex.toastCheckInFailed')),
     });
 }
 function doCheckOut(reservation) {
@@ -211,13 +211,13 @@ function doCheckOut(reservation) {
 
     router.post(route('reservations.check-out', reservation.id), {}, {
         preserveScroll: true,
-        onSuccess: () => { closeDetails(false); toasts.value?.success(`Check-out: ${reservation.guest?.name || ''}`); },
-        onError: (errors) => toasts.value?.error(errors.settle_method || 'Regjistro pagesën para check-out.'),
+        onSuccess: () => { closeDetails(false); toasts.value?.success(translate('reservationsIndex.toastCheckOut', { name: reservation.guest?.name || '' })); },
+        onError: (errors) => toasts.value?.error(errors.settle_method || translate('reservationsIndex.toastSettleBeforeCheckOut')),
     });
 }
 function doCancel(reservation) {
-    if (!confirm('Je i sigurt që dëshiron ta anulosh këtë rezervim?')) return;
-    router.post(route('reservations.cancel', reservation.id), {}, { preserveScroll: true, onSuccess: () => toasts.value?.success('Rezervimi u anulua.') });
+    if (!confirm(translate('reservationsIndex.confirmCancel'))) return;
+    router.post(route('reservations.cancel', reservation.id), {}, { preserveScroll: true, onSuccess: () => toasts.value?.success(translate('reservationsIndex.toastCancelled')) });
 }
 function formatDate(value) {
     if (!value) return '—';
@@ -245,13 +245,13 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
 
 <template>
     <AppLayout>
-        <PageHeader title="Rezervimet" :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Rezervimet' }]">
+        <PageHeader :title="$t('reservationsIndex.pageTitle')" :breadcrumbs="[{ label: 'Dashboard', href: '/dashboard' }, { label: $t('reservationsIndex.pageTitle') }]">
             <template #actions>
-                <Link :href="route('reservations.calendar')" class="no-underline"><Button variant="outline"><CalendarDays class="mr-2 h-4 w-4" />Kalendari</Button></Link>
-                <Button v-if="canCreate" variant="primary" @click="showCreateModal = true"><Plus class="mr-2 h-4 w-4" />Rezervim i ri</Button>
+                <Link :href="route('reservations.calendar')" class="no-underline"><Button variant="outline"><CalendarDays class="mr-2 h-4 w-4" />{{ $t('reservationsIndex.calendar') }}</Button></Link>
+                <Button v-if="canCreate" variant="primary" @click="showCreateModal = true"><Plus class="mr-2 h-4 w-4" />{{ $t('reservationsIndex.newReservation') }}</Button>
             </template>
         </PageHeader>
-        <p class="mt-1 text-body-sm text-neutral-500">Menaxho qëndrimet, pagesat dhe veprimet operative nga një vend.</p>
+        <p class="mt-1 text-body-sm text-neutral-500">{{ $t('reservationsIndex.subtitle') }}</p>
 
         <div
             v-if="reconciliation.open"
@@ -262,20 +262,20 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                 <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0" :class="reconciliation.critical ? 'text-error-600' : 'text-warning-600'" />
                 <div>
                     <p class="text-body-sm font-semibold" :class="reconciliation.critical ? 'text-error-900' : 'text-warning-900'">
-                        {{ reconciliation.open }} diferenca OTA–PMS kërkojnë kontroll
+                        {{ $t('reservationsIndex.reconciliationOpen', { count: reconciliation.open }) }}
                     </p>
                     <p class="mt-0.5 text-small" :class="reconciliation.critical ? 'text-error-700' : 'text-warning-700'">
-                        <span v-if="reconciliation.manual_candidates">{{ reconciliation.manual_candidates }} kanë rezervime manuale të mundshme. </span>
-                        Asnjë rezervim nuk është ndryshuar automatikisht.
+                        <span v-if="reconciliation.manual_candidates">{{ $t('reservationsIndex.reconciliationManual', { count: reconciliation.manual_candidates }) }} </span>
+                        {{ $t('reservationsIndex.reconciliationNoAutoChanges') }}
                     </p>
                 </div>
             </div>
             <Link :href="route('reservations.reconciliation')" class="shrink-0 no-underline">
-                <Button size="sm" variant="outline">Kontrollo diferencat</Button>
+                <Button size="sm" variant="outline">{{ $t('reservationsIndex.reviewDifferences') }}</Button>
             </Link>
         </div>
         <div v-else-if="reconciliation.last_checked_at" class="mt-5 flex items-center gap-2 text-small text-success-700">
-            <ShieldCheck class="h-4 w-4" /> Kontrolli OTA–PMS është në rregull.
+            <ShieldCheck class="h-4 w-4" /> {{ $t('reservationsIndex.reconciliationOk') }}
         </div>
 
         <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -290,10 +290,10 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                 <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
                     <div class="relative min-w-0 flex-1 lg:max-w-xl">
                         <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                        <input v-model="searchQuery" type="search" class="w-full rounded-lg border-neutral-200 py-2 pl-9 pr-3 text-body-sm placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500" placeholder="Kërko emër, telefon, email, dhomë ose #rezervimi" @keyup.enter="applyFilters" />
+                        <input v-model="searchQuery" type="search" class="w-full rounded-lg border-neutral-200 py-2 pl-9 pr-3 text-body-sm placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('reservationsIndex.searchPlaceholder')" @keyup.enter="applyFilters" />
                     </div>
                     <div class="flex flex-wrap items-center gap-2 lg:ml-auto">
-                        <div class="w-40"><Select v-model="filterStatus" :options="statusOptions" placeholder="Të gjitha statuset" @change="applyFilters" /></div>
+                        <div class="w-40"><Select v-model="filterStatus" :options="statusOptions" :placeholder="$t('reservationsIndex.allStatuses')" @change="applyFilters" /></div>
                         <div class="w-44"><Select v-model="sortBy" :options="sortOptions" placeholder="" @change="applyFilters" /></div>
                     </div>
                 </div>
@@ -304,23 +304,23 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                             <CalendarRange class="h-4 w-4" />
                         </span>
                         <div>
-                            <p class="text-body-sm font-semibold text-primary-900">Periudha e qëndrimit</p>
-                            <p class="text-small text-neutral-500">Shfaq rezervimet që prekin intervalin.</p>
+                            <p class="text-body-sm font-semibold text-primary-900">{{ $t('reservationsIndex.stayPeriod') }}</p>
+                            <p class="text-small text-neutral-500">{{ $t('reservationsIndex.stayPeriodHint') }}</p>
                         </div>
                     </div>
                     <div class="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-md">
                         <label class="block">
-                            <span class="mb-1 block text-small font-medium text-neutral-600">Nga data</span>
+                            <span class="mb-1 block text-small font-medium text-neutral-600">{{ $t('reservationsIndex.dateFrom') }}</span>
                             <input v-model="dateFrom" type="date" :max="dateTo || undefined" class="w-full rounded-lg border-neutral-200 bg-white py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="applyFilters" />
                         </label>
                         <label class="block">
-                            <span class="mb-1 block text-small font-medium text-neutral-600">Deri më</span>
+                            <span class="mb-1 block text-small font-medium text-neutral-600">{{ $t('reservationsIndex.dateTo') }}</span>
                             <input v-model="dateTo" type="date" :min="dateFrom || undefined" class="w-full rounded-lg border-neutral-200 bg-white py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="applyFilters" />
                         </label>
                     </div>
                     <div class="flex items-center gap-3 lg:ml-auto">
-                        <Button variant="outline" @click="applyFilters"><SlidersHorizontal class="mr-2 h-4 w-4" />Filtro</Button>
-                        <button v-if="filterStatus || searchQuery || dateFrom || dateTo" type="button" class="text-small font-semibold text-accent-700 hover:text-accent-800" @click="clearFilters">Pastro</button>
+                        <Button variant="outline" @click="applyFilters"><SlidersHorizontal class="mr-2 h-4 w-4" />{{ $t('reservationsIndex.filter') }}</Button>
+                        <button v-if="filterStatus || searchQuery || dateFrom || dateTo" type="button" class="text-small font-semibold text-accent-700 hover:text-accent-800" @click="clearFilters">{{ $t('reservationsIndex.clear') }}</button>
                     </div>
                 </div>
             </div>
@@ -329,41 +329,41 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">
                         <tr>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Mysafiri / rezervimi</th>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Dhoma</th>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Qëndrimi</th>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Burimi</th>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th>
-                            <th class="px-5 py-3 text-right text-label text-neutral-600">Financa</th>
-                            <th class="px-5 py-3 text-right text-label text-neutral-600">Veprime</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('reservationsIndex.colGuest') }}</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('reservationsIndex.colRoom') }}</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('reservationsIndex.colStay') }}</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('reservationsIndex.colSource') }}</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('reservationsIndex.colStatus') }}</th>
+                            <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('reservationsIndex.colFinance') }}</th>
+                            <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('reservationsIndex.colActions') }}</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
                         <tr v-for="res in reservations.data" :key="res.id" tabindex="0" class="cursor-pointer transition hover:bg-accent-50/40 focus:bg-accent-50/50 focus:outline-none" :class="isLatest(res) && 'bg-accent-50/30'" @click="openDetails(res)" @keydown.enter="openDetails(res)" @keydown.space.prevent="openDetails(res)">
                             <td class="px-5 py-3.5">
-                                <div class="flex items-center gap-2"><p class="font-semibold text-primary-900">{{ res.guest?.name || '—' }}</p><Badge v-if="isLatest(res)" variant="accent" size="sm">I ri</Badge></div>
+                                <div class="flex items-center gap-2"><p class="font-semibold text-primary-900">{{ res.guest?.name || '—' }}</p><Badge v-if="isLatest(res)" variant="accent" size="sm">{{ $t('reservationsIndex.badgeNew') }}</Badge></div>
                                 <p class="mt-0.5 text-small text-neutral-400">#{{ res.id }}<span v-if="res.guest?.phone"> · {{ res.guest.phone }}</span></p>
                             </td>
                             <td class="px-5 py-3.5"><p class="font-medium text-primary-900">{{ res.room?.room_number || '—' }}</p><p class="text-small text-neutral-400">{{ res.room?.room_type?.name || '—' }}</p></td>
                             <td class="px-5 py-3.5">
                                 <p class="text-body-sm text-neutral-700">{{ formatDate(res.check_in_date) }} → {{ formatDate(res.check_out_date) }}</p>
-                                <p class="text-small text-neutral-400">{{ res.nights }} net · {{ res.adults }} të rritur<span v-if="res.children"> · {{ res.children }} fëmijë</span></p>
-                                <p v-if="isEarlyDeparturePlanned(res)" class="mt-1 text-small font-semibold text-info-700">Largim i planifikuar · fillimisht {{ formatDate(res.original_check_out_date) }}</p>
+                                <p class="text-small text-neutral-400">{{ $t('reservationsIndex.nightsAdults', { nights: res.nights, adults: res.adults }) }}<span v-if="res.children"> · {{ $t('reservationsIndex.childrenCount', { count: res.children }) }}</span></p>
+                                <p v-if="isEarlyDeparturePlanned(res)" class="mt-1 text-small font-semibold text-info-700">{{ $t('reservationsIndex.earlyDeparturePlanned', { date: formatDate(res.original_check_out_date) }) }}</p>
                             </td>
                             <td class="px-5 py-3.5"><p class="text-body-sm font-medium capitalize text-neutral-700">{{ channelLabels[res.channel] || res.channel || 'Direct' }}</p><p v-if="res.channel_ref" class="text-small text-neutral-400">{{ res.channel_ref }}</p></td>
                             <td class="px-5 py-3.5"><Badge :variant="statusMeta[res.status]?.variant" dot>{{ statusMeta[res.status]?.label }}</Badge></td>
-                            <td class="px-5 py-3.5 text-right"><p class="font-semibold text-primary-900">{{ money(res.gross_amount, res.currency) }}</p><p class="text-small" :class="res.outstanding_amount > 0 ? 'text-warning-700' : 'text-success-700'">{{ res.outstanding_amount > 0 ? `${money(res.outstanding_amount, res.currency)} mbetur` : 'Paguar' }}</p></td>
+                            <td class="px-5 py-3.5 text-right"><p class="font-semibold text-primary-900">{{ money(res.gross_amount, res.currency) }}</p><p class="text-small" :class="res.outstanding_amount > 0 ? 'text-warning-700' : 'text-success-700'">{{ res.outstanding_amount > 0 ? $t('reservationsIndex.outstandingRemaining', { amount: money(res.outstanding_amount, res.currency) }) : $t('reservationsIndex.paid') }}</p></td>
                             <td class="px-5 py-3.5 text-right" @click.stop>
                                 <div class="flex items-center justify-end gap-1.5">
-                                    <Button v-if="canUpdate && res.status === 'confirmed'" size="sm" variant="primary" @click="doCheckIn(res)">Check-in</Button>
-                                    <Button v-else size="sm" variant="outline" @click="openDetails(res)"><Eye class="mr-1.5 h-4 w-4" />Detaje</Button>
+                                    <Button v-if="canUpdate && res.status === 'confirmed'" size="sm" variant="primary" @click="doCheckIn(res)">{{ $t('reservationsIndex.actionCheckIn') }}</Button>
+                                    <Button v-else size="sm" variant="outline" @click="openDetails(res)"><Eye class="mr-1.5 h-4 w-4" />{{ $t('reservationsIndex.details') }}</Button>
                                     <ActionMenu>
-                                        <Link :href="res.links.show" :class="menuItemClass"><Eye class="h-4 w-4 text-neutral-400" />Hap faqen</Link>
-                                        <button v-if="canUpdate && !['checked_in','checked_out','cancelled'].includes(res.status)" type="button" :class="menuItemClass" @click="openEdit(res)"><Pencil class="h-4 w-4 text-neutral-400" />Ndrysho</button>
-                                        <button v-if="canUpdate && ['pending', 'confirmed', 'checked_in'].includes(res.status)" type="button" :class="menuItemClass" @click="openMove(res)"><ArrowRightLeft class="h-4 w-4 text-neutral-400" />Ndrysho dhomën</button>
-                                        <button v-if="canUpdate && res.status === 'checked_in' && !isEarlyDeparturePlanned(res)" type="button" :class="menuItemClass" @click="openStayExtension(res)"><CalendarPlus class="h-4 w-4 text-neutral-400" />Zgjat qëndrimin</button>
-                                        <button v-if="canUpdate && canDepartEarly(res)" type="button" :class="menuItemClass" @click="openEarlyDeparture(res)"><CalendarMinus class="h-4 w-4 text-neutral-400" />{{ isEarlyDeparturePlanned(res) ? 'Menaxho largimin' : 'Largim i parakohshëm' }}</button>
-                                        <button v-if="canUpdate && ['pending','confirmed'].includes(res.status)" type="button" :class="[menuItemClass, 'text-error-600']" @click="doCancel(res)"><Ban class="h-4 w-4 text-error-500" />Anulo</button>
+                                        <Link :href="res.links.show" :class="menuItemClass"><Eye class="h-4 w-4 text-neutral-400" />{{ $t('reservationsIndex.openPage') }}</Link>
+                                        <button v-if="canUpdate && !['checked_in','checked_out','cancelled'].includes(res.status)" type="button" :class="menuItemClass" @click="openEdit(res)"><Pencil class="h-4 w-4 text-neutral-400" />{{ $t('reservationsIndex.edit') }}</button>
+                                        <button v-if="canUpdate && ['pending', 'confirmed', 'checked_in'].includes(res.status)" type="button" :class="menuItemClass" @click="openMove(res)"><ArrowRightLeft class="h-4 w-4 text-neutral-400" />{{ $t('reservationsIndex.moveRoom') }}</button>
+                                        <button v-if="canUpdate && res.status === 'checked_in' && !isEarlyDeparturePlanned(res)" type="button" :class="menuItemClass" @click="openStayExtension(res)"><CalendarPlus class="h-4 w-4 text-neutral-400" />{{ $t('reservationsIndex.extendStay') }}</button>
+                                        <button v-if="canUpdate && canDepartEarly(res)" type="button" :class="menuItemClass" @click="openEarlyDeparture(res)"><CalendarMinus class="h-4 w-4 text-neutral-400" />{{ isEarlyDeparturePlanned(res) ? $t('reservationsIndex.manageDeparture') : $t('reservationsIndex.earlyDeparture') }}</button>
+                                        <button v-if="canUpdate && ['pending','confirmed'].includes(res.status)" type="button" :class="[menuItemClass, 'text-error-600']" @click="doCancel(res)"><Ban class="h-4 w-4 text-error-500" />{{ $t('reservationsIndex.cancelAction') }}</button>
                                     </ActionMenu>
                                 </div>
                             </td>
@@ -371,30 +371,30 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                     </tbody>
                 </table>
             </div>
-            <div v-if="!reservations.data?.length" class="px-6 py-16 text-center"><p class="font-medium text-primary-900">Nuk u gjet asnjë rezervim</p><p class="mt-1 text-body-sm text-neutral-500">Ndrysho kërkimin ose filtrat.</p></div>
+            <div v-if="!reservations.data?.length" class="px-6 py-16 text-center"><p class="font-medium text-primary-900">{{ $t('reservationsIndex.emptyTitle') }}</p><p class="mt-1 text-body-sm text-neutral-500">{{ $t('reservationsIndex.emptyHint') }}</p></div>
             <div v-if="reservations.total" class="flex flex-col gap-3 border-t border-neutral-200 bg-neutral-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div class="flex items-center gap-3 text-small text-neutral-500"><div class="w-20"><Select v-model="perPage" :options="perPageOptions" placeholder="" @change="applyFilters" /></div><span>{{ reservations.from }}–{{ reservations.to }} nga {{ reservations.total }}</span></div>
-                <div class="flex items-center gap-2"><Button size="sm" variant="outline" :disabled="!reservations.prev_page_url" @click="goToPage(reservations.prev_page_url)"><ChevronLeft class="h-4 w-4" />Para</Button><span class="min-w-16 text-center text-small text-neutral-500">{{ reservations.current_page }} / {{ reservations.last_page }}</span><Button size="sm" variant="outline" :disabled="!reservations.next_page_url" @click="goToPage(reservations.next_page_url)">Pas<ChevronRight class="h-4 w-4" /></Button></div>
+                <div class="flex items-center gap-3 text-small text-neutral-500"><div class="w-20"><Select v-model="perPage" :options="perPageOptions" placeholder="" @change="applyFilters" /></div><span>{{ $t('reservationsIndex.paginationRange', { from: reservations.from, to: reservations.to, total: reservations.total }) }}</span></div>
+                <div class="flex items-center gap-2"><Button size="sm" variant="outline" :disabled="!reservations.prev_page_url" @click="goToPage(reservations.prev_page_url)"><ChevronLeft class="h-4 w-4" />{{ $t('reservationsIndex.previous') }}</Button><span class="min-w-16 text-center text-small text-neutral-500">{{ reservations.current_page }} / {{ reservations.last_page }}</span><Button size="sm" variant="outline" :disabled="!reservations.next_page_url" @click="goToPage(reservations.next_page_url)">{{ $t('reservationsIndex.next') }}<ChevronRight class="h-4 w-4" /></Button></div>
             </div>
         </Card>
 
         <ReservationDetailsDrawer :reservation="details" :can-update="canUpdate" :hotel-today="hotelToday" @close="closeDetails" @edit="openEdit" @check-in="doCheckIn" @check-out="doCheckOut" @early-departure="openEarlyDeparture" @stay-extension="openStayExtension" />
-        <ReservationCreateModal :show="showCreateModal" :rooms="rooms" :guests="guests" :channel-fees="channelFees" @close="closeCreateModal" @created="toasts?.success('Rezervimi u krijua me sukses.')" />
-        <ReservationEditModal :show="showEditModal" :reservation="selectedRes" :rooms="rooms" :guests="guests" :channel-fees="channelFees" @close="showEditModal = false" @updated="toasts?.success('Rezervimi u përditësua.')" />
-        <MoveRoomModal :show="showMoveModal" :reservation="moveRes" :rooms="rooms" @close="showMoveModal = false" @moved="toasts?.success('Dhoma u ndryshua.')" />
+        <ReservationCreateModal :show="showCreateModal" :rooms="rooms" :guests="guests" :channel-fees="channelFees" @close="closeCreateModal" @created="toasts?.success($t('reservationsIndex.toastCreated'))" />
+        <ReservationEditModal :show="showEditModal" :reservation="selectedRes" :rooms="rooms" :guests="guests" :channel-fees="channelFees" @close="showEditModal = false" @updated="toasts?.success($t('reservationsIndex.toastUpdated'))" />
+        <MoveRoomModal :show="showMoveModal" :reservation="moveRes" :rooms="rooms" @close="showMoveModal = false" @moved="toasts?.success($t('reservationsIndex.toastRoomMoved'))" />
         <EarlyDepartureModal
             :show="showEarlyDepartureModal"
             :reservation="earlyDepartureRes"
             :hotel-today="hotelToday"
             @close="showEarlyDepartureModal = false"
-            @completed="() => { closeDetails(false); toasts?.success('Plani i largimit u përditësua.') }"
+            @completed="() => { closeDetails(false); toasts?.success($t('reservationsIndex.toastDeparturePlanUpdated')) }"
         />
         <StayExtensionModal
             :show="showStayExtensionModal"
             :reservation="stayExtensionRes"
             :hotel-today="hotelToday"
             @close="showStayExtensionModal = false"
-            @extended="() => { closeDetails(false); toasts?.success('Qëndrimi u zgjat; përditësimi i inventarit u dërgua te Channex.') }"
+            @extended="() => { closeDetails(false); toasts?.success($t('reservationsIndex.toastStayExtended')) }"
         />
         <ToastContainer ref="toasts" />
     </AppLayout>
