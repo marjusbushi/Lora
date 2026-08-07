@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { translate } from '@/i18n';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import Button from '@/Components/UI/Button.vue';
 import {
@@ -102,18 +103,18 @@ const drawerProcessing = computed(() => [
 ].some((form) => form.processing));
 
 const ACTION_LABELS = {
-    'tenant.create': 'Hoteli u krijua',
-    'tenant.update': 'Të dhënat e hotelit u përditësuan',
-    'tenant.switch': 'Hyrje në hotel',
-    'tenant.subscription.update': 'Abonimi u përditësua',
-    'tenant.integration.update': 'Integrimi u përditësua',
-    'tenant.integration.test': 'Lidhja e integrimit u testua',
-    'tenant.domain.create': 'Domain-i u shtua',
-    'tenant.domain.delete': 'Domain-i u hoq',
-    'tenant.domain.primary': 'Domain-i primar u ndryshua',
-    'tenant.member.create': 'Përdoruesi u shtua',
-    'tenant.member.update': 'Përdoruesi u përditësua',
-    'tenant.status': 'Statusi i hotelit u ndryshua',
+    'tenant.create': translate('superAdmin.tenantShow.actionCreated'),
+    'tenant.update': translate('superAdmin.tenantShow.actionUpdated'),
+    'tenant.switch': translate('superAdmin.dynamic.actionHotelLogin'),
+    'tenant.subscription.update': translate('superAdmin.dynamic.actionSubscriptionUpdated'),
+    'tenant.integration.update': translate('superAdmin.tenantShow.actionIntegrationUpdated'),
+    'tenant.integration.test': translate('superAdmin.tenantShow.actionIntegrationTested'),
+    'tenant.domain.create': translate('superAdmin.tenantShow.actionDomainAdded'),
+    'tenant.domain.delete': translate('superAdmin.tenantShow.actionDomainRemoved'),
+    'tenant.domain.primary': translate('superAdmin.tenantShow.actionDomainPrimary'),
+    'tenant.member.create': translate('superAdmin.activity.actionMemberCreated'),
+    'tenant.member.update': translate('superAdmin.activity.actionMemberUpdated'),
+    'tenant.status': translate('superAdmin.dynamic.actionHotelStatusUpdated'),
 };
 
 function initials(name = '') {
@@ -142,8 +143,12 @@ function when(value) {
 
 function statusLabel(status) {
     return {
-        trialing: 'Provë', active: 'Aktiv', past_due: 'Me vonesë',
-        suspended: 'Pezulluar', canceled: 'Anuluar', inactive: 'Joaktiv',
+        trialing: translate('superAdmin.auto.copy049'),
+        active: translate('superAdmin.auto.copy005'),
+        past_due: translate('superAdmin.tenantShow.statusPastDue'),
+        suspended: translate('superAdmin.auto.copy044'),
+        canceled: translate('superAdmin.auto.copy009'),
+        inactive: translate('superAdmin.dynamic.inactive'),
     }[status] || status;
 }
 
@@ -157,8 +162,12 @@ function currencyLabel(code) {
 
 function roleLabel(role) {
     return {
-        admin: 'Administrator', manager: 'Menaxher', receptionist: 'Recepsionist',
-        housekeeping: 'Housekeeping', maintenance: 'Mirëmbajtje', pos_staff: 'Staf POS',
+        admin: translate('superAdmin.tenantShow.roleAdmin'),
+        manager: translate('superAdmin.tenantShow.roleManager'),
+        receptionist: translate('superAdmin.tenantShow.roleReceptionist'),
+        housekeeping: translate('superAdmin.tenantShow.roleHousekeeping'),
+        maintenance: translate('superAdmin.tenantShow.roleMaintenance'),
+        pos_staff: translate('superAdmin.tenantShow.rolePosStaff'),
     }[role] || role;
 }
 
@@ -277,10 +286,10 @@ function domainAction(domain, routeName) {
 }
 
 const domainStatusMeta = {
-    pending_dns: { label: 'Pret DNS', class: 'bg-amber-50 text-amber-700' },
-    provisioning: { label: 'Duke u provizionuar', class: 'bg-sky-50 text-sky-700' },
-    active: { label: 'Aktiv', class: 'bg-emerald-50 text-emerald-700' },
-    failed: { label: 'Dështoi', class: 'bg-red-50 text-red-700' },
+    pending_dns: { label: translate('superAdmin.tenantShow.statusPendingDns'), class: 'bg-amber-50 text-amber-700' },
+    provisioning: { label: translate('superAdmin.tenantShow.statusProvisioning'), class: 'bg-sky-50 text-sky-700' },
+    active: { label: translate('superAdmin.auto.copy005'), class: 'bg-emerald-50 text-emerald-700' },
+    failed: { label: translate('superAdmin.activity.failed'), class: 'bg-red-50 text-red-700' },
 };
 
 function isPlatformSubdomain(domain) {
@@ -300,16 +309,16 @@ function copyText(key, text) {
 function copyDnsInstructions() {
     const ip = props.tenant.domainServerIp;
     copyText('instructions', [
-        'Udhëzime për lidhjen e domain-it me Lora PMS',
+        translate('superAdmin.tenantShow.dnsCopyTitle'),
         '',
-        'Te paneli DNS i domain-it tuaj (aty ku e keni blerë) shtoni këto dy records:',
+        translate('superAdmin.tenantShow.dnsCopyIntro'),
         '',
-        'Lloji  Host  Vlera',
+        translate('superAdmin.tenantShow.dnsCopyTableHead'),
         `A      @     ${ip}`,
         `A      www   ${ip}`,
         '',
-        'KUJDES: Nuk ndërrohen nameservers — vetëm këto dy A records shtohen.',
-        'Propagimi zgjat nga disa minuta deri në 1 orë.',
+        translate('superAdmin.tenantShow.dnsCopyWarning'),
+        translate('superAdmin.tenantShow.dnsCopyPropagation'),
     ].join('\n'));
 }
 
@@ -342,7 +351,9 @@ function openHotel() {
 
 function toggleStatus() {
     const suspend = isActive.value;
-    if (!confirm(suspend ? `Ta pezullojmë ${props.tenant.name}?` : `Ta aktivizojmë ${props.tenant.name}?`)) return;
+    if (!confirm(suspend
+        ? translate('superAdmin.tenantShow.confirmSuspend', { name: props.tenant.name })
+        : translate('superAdmin.tenantShow.confirmActivate', { name: props.tenant.name }))) return;
     router.patch(route('super-admin.tenants.status', props.tenant.id), {
         status: suspend ? 'suspended' : 'active',
     }, { preserveScroll: true });
@@ -357,7 +368,7 @@ function toggleStatus() {
             <nav class="sa-breadcrumb">
                 <Link href="/super-admin" class="no-underline hover:text-neutral-700">Control Panel</Link>
                 <span class="mx-2">/</span>
-                <Link href="/super-admin/tenants" class="no-underline hover:text-neutral-700">Hotelet</Link>
+                <Link href="/super-admin/tenants" class="no-underline hover:text-neutral-700">{{ $t('superAdmin.auto.copy087') }}</Link>
                 <span class="mx-2">/</span>
                 <span class="font-medium text-neutral-600">{{ tenant.name }}</span>
             </nav>
@@ -369,7 +380,7 @@ function toggleStatus() {
                         <div class="flex flex-wrap items-center gap-2">
                             <h1 class="sa-page-title !mt-0 truncate">{{ tenant.name }}</h1>
                             <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-bold" :class="isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'">
-                                <span class="h-1.5 w-1.5 rounded-full bg-current" />{{ isActive ? 'Aktiv' : 'Pezulluar' }}
+                                <span class="h-1.5 w-1.5 rounded-full bg-current" />{{ isActive ? $t('superAdmin.auto.copy005') : $t('superAdmin.auto.copy044') }}
                             </span>
                         </div>
                         <p class="sa-page-subtitle truncate">{{ tenant.slug }} · {{ tenant.timezone }} · {{ tenant.currency }}</p>
@@ -377,11 +388,11 @@ function toggleStatus() {
                 </div>
                 <div class="sa-actions flex flex-wrap gap-2 sm:flex-nowrap">
                     <Button variant="outline" :class="isActive ? '!text-red-600' : '!text-emerald-700'" @click="toggleStatus">
-                        {{ isActive ? 'Pezullo' : 'Aktivizo' }}
+                        {{ isActive ? $t('superAdmin.dynamic.suspend') : $t('superAdmin.dynamic.activate') }}
                     </Button>
-                    <Button variant="outline" @click="openTenantForm"><Pencil class="h-4 w-4" /> Ndrysho</Button>
+                    <Button variant="outline" @click="openTenantForm"><Pencil class="h-4 w-4" /> {{ $t('superAdmin.auto.copy089') }}</Button>
                     <Button variant="primary" :disabled="!isActive || isCurrent" @click="openHotel">
-                        {{ isCurrent ? 'Në përdorim' : 'Hap hotelin' }} <ArrowRight class="h-4 w-4" />
+                        {{ isCurrent ? $t('superAdmin.dynamic.inUse') : $t('superAdmin.dynamic.openHotel') }} <ArrowRight class="h-4 w-4" />
                     </Button>
                 </div>
             </header>
@@ -393,74 +404,74 @@ function toggleStatus() {
                             <span class="absolute inset-[5px] rounded-full bg-white" />
                             <strong class="relative text-[10px]">{{ readinessScore }}%</strong>
                         </span>
-                        <div><strong class="text-sm text-neutral-900">{{ attentionCount ? 'Konfigurimi kërkon vëmendje' : 'Hoteli është gati' }}</strong><p class="mt-0.5 text-[11px] text-neutral-500">{{ attentionCount ? `${attentionCount} pika duhen plotësuar.` : 'Të gjitha kontrollet janë në rregull.' }}</p></div>
+                        <div><strong class="text-sm text-neutral-900">{{ attentionCount ? $t('superAdmin.tenantShow.configNeedsAttention') : $t('superAdmin.tenantShow.hotelReady') }}</strong><p class="mt-0.5 text-[11px] text-neutral-500">{{ attentionCount ? $t('superAdmin.tenantShow.itemsRemaining', { count: attentionCount }) : $t('superAdmin.tenantShow.allChecksOk') }}</p></div>
                     </div>
-                    <div class="border-b border-l border-neutral-100 p-4 sm:border-b-0"><span class="text-[10px] text-neutral-400">Domain primar</span><strong class="mt-1.5 block truncate text-xs text-neutral-900">{{ tenant.primary_domain || 'Mungon' }}</strong></div>
-                    <div class="border-b border-l border-neutral-100 p-4 sm:border-b-0"><span class="text-[10px] text-neutral-400">Abonimi</span><strong class="mt-1.5 block text-xs text-neutral-900">{{ statusLabel(tenant.billing.status) }} · {{ tenant.billing.billing_cycle === 'annual' ? 'vjetor' : 'mujor' }}</strong></div>
-                    <div class="border-l border-neutral-100 p-4"><span class="text-[10px] text-neutral-400">Përdorues</span><strong class="mt-1.5 block text-xs text-neutral-900">{{ activeMembers.length }} aktivë</strong></div>
-                    <div class="border-l border-neutral-100 p-4"><span class="text-[10px] text-neutral-400">MRR</span><strong class="mt-1.5 block text-xs text-neutral-900">{{ money(tenant.mrr_cents) }} / muaj</strong></div>
+                    <div class="border-b border-l border-neutral-100 p-4 sm:border-b-0"><span class="text-[10px] text-neutral-400">{{ $t('superAdmin.auto.copy012') }}</span><strong class="mt-1.5 block truncate text-xs text-neutral-900">{{ tenant.primary_domain || $t('superAdmin.dynamic.missing') }}</strong></div>
+                    <div class="border-b border-l border-neutral-100 p-4 sm:border-b-0"><span class="text-[10px] text-neutral-400">{{ $t('superAdmin.auto.copy003') }}</span><strong class="mt-1.5 block text-xs text-neutral-900">{{ statusLabel(tenant.billing.status) }} · {{ tenant.billing.billing_cycle === 'annual' ? $t('superAdmin.dynamic.annualLower') : $t('superAdmin.dynamic.monthlyLower') }}</strong></div>
+                    <div class="border-l border-neutral-100 p-4"><span class="text-[10px] text-neutral-400">{{ $t('superAdmin.auto.copy051') }}</span><strong class="mt-1.5 block text-xs text-neutral-900">{{ $t('superAdmin.dynamic.activeCount', { count: activeMembers.length }) }}</strong></div>
+                    <div class="border-l border-neutral-100 p-4"><span class="text-[10px] text-neutral-400">MRR</span><strong class="mt-1.5 block text-xs text-neutral-900">{{ $t('superAdmin.dynamic.amountPerMonth', { amount: money(tenant.mrr_cents) }) }}</strong></div>
                 </div>
             </section>
 
             <div class="flex h-11 items-end gap-1 overflow-x-auto border-b border-neutral-200">
-                <button type="button" class="h-11 shrink-0 border-b-2 border-[#1d765f] px-3 text-xs font-semibold text-[#104c3d]">Përmbledhje</button>
-                <a href="#members" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">Përdoruesit</a>
-                <button type="button" class="h-11 shrink-0 border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 hover:text-neutral-800" @click="openBilling">Abonimi</button>
-                <button type="button" class="h-11 shrink-0 border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 hover:text-neutral-800" @click="openConfig('domains')">Konfigurimi</button>
+                <button type="button" class="h-11 shrink-0 border-b-2 border-[#1d765f] px-3 text-xs font-semibold text-[#104c3d]">{{ $t('superAdmin.auto.copy120') }}</button>
+                <a href="#members" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">{{ $t('superAdmin.auto.copy093') }}</a>
+                <button type="button" class="h-11 shrink-0 border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 hover:text-neutral-800" @click="openBilling">{{ $t('superAdmin.auto.copy003') }}</button>
+                <button type="button" class="h-11 shrink-0 border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 hover:text-neutral-800" @click="openConfig('domains')">{{ $t('superAdmin.auto.copy019') }}</button>
                 <Link :href="route('super-admin.onboarding.show', tenant.id)" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">Onboarding</Link>
-                <Link :href="route('super-admin.activity', { tenant: tenant.id, range: 30 })" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">Aktiviteti</Link>
+                <Link :href="route('super-admin.activity', { tenant: tenant.id, range: 30 })" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">{{ $t('superAdmin.auto.copy107') }}</Link>
             </div>
 
             <div class="grid items-start gap-3 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,.72fr)]">
                 <div class="space-y-3">
                     <section class="sa-card">
                         <div class="sa-card-header">
-                            <div><h2 class="sa-card-title">Gjendja e konfigurimit</h2><p class="sa-card-subtitle">Kontrollet që ndikojnë përdorimin real të hotelit.</p></div>
-                            <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">{{ attentionCount }} kërkojnë veprim</span>
+                            <div><h2 class="sa-card-title">{{ $t('superAdmin.tenantShow.configState') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.tenantShow.configStateSubtitle') }}</p></div>
+                            <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">{{ $t('superAdmin.tenantShow.needActionCount', { count: attentionCount }) }}</span>
                         </div>
                         <div class="divide-y divide-neutral-100">
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
                                 <span class="sa-icon-box bg-emerald-50 text-emerald-700"><Globe2 class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">Domain primar</strong><p class="sa-table-meta">{{ tenant.primary_domain || 'Nuk është konfiguruar' }}</p></div>
-                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="tenant.primary_domain ? 'text-emerald-700' : 'text-amber-700'">{{ tenant.primary_domain ? 'Në rregull' : 'Mungon' }}</span><Button size="sm" variant="outline" @click="openConfig('domains')">Menaxho</Button></div>
+                                <div><strong class="sa-table-primary">{{ $t('superAdmin.auto.copy012') }}</strong><p class="sa-table-meta">{{ tenant.primary_domain || $t('superAdmin.tenantShow.notConfigured') }}</p></div>
+                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="tenant.primary_domain ? 'text-emerald-700' : 'text-amber-700'">{{ tenant.primary_domain ? $t('superAdmin.auto.copy063') : $t('superAdmin.dynamic.missing') }}</span><Button size="sm" variant="outline" @click="openConfig('domains')">{{ $t('superAdmin.tenantShow.manage') }}</Button></div>
                             </div>
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
                                 <span class="sa-icon-box bg-emerald-50 text-emerald-700"><CreditCard class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">Abonimi dhe modulet</strong><p class="sa-table-meta">{{ enabledModules.length }} module aktive · faturimi i ardhshëm {{ date(tenant.billing.next_billing_at) }}</p></div>
-                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="billingIsHealthy ? 'text-emerald-700' : 'text-amber-700'">{{ statusLabel(tenant.billing.status) }}</span><Button size="sm" variant="outline" @click="openBilling">Ndrysho</Button></div>
+                                <div><strong class="sa-table-primary">{{ $t('superAdmin.tenantShow.subscriptionAndModules') }}</strong><p class="sa-table-meta">{{ $t('superAdmin.tenantShow.modulesAndNextBilling', { count: enabledModules.length, date: date(tenant.billing.next_billing_at) }) }}</p></div>
+                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="billingIsHealthy ? 'text-emerald-700' : 'text-amber-700'">{{ statusLabel(tenant.billing.status) }}</span><Button size="sm" variant="outline" @click="openBilling">{{ $t('superAdmin.auto.copy089') }}</Button></div>
                             </div>
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
                                 <span class="sa-icon-box" :class="channexConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><Plug class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">Channex Channel Manager</strong><p class="sa-table-meta">{{ channexConfigured ? 'Kredencialet dhe Property ID janë ruajtur' : 'Property ID ose API key mungon' }}</p></div>
-                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="channexConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ channexConfigured ? 'Aktiv' : 'Mungon' }}</span><Button size="sm" variant="outline" @click="openConfig('channex')">Konfiguro</Button></div>
+                                <div><strong class="sa-table-primary">Channex Channel Manager</strong><p class="sa-table-meta">{{ channexConfigured ? $t('superAdmin.tenantShow.channexOk') : $t('superAdmin.tenantShow.channexMissing') }}</p></div>
+                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="channexConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ channexConfigured ? $t('superAdmin.auto.copy005') : $t('superAdmin.dynamic.missing') }}</span><Button size="sm" variant="outline" @click="openConfig('channex')">{{ $t('superAdmin.tenantShow.configure') }}</Button></div>
                             </div>
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
                                 <span class="sa-icon-box" :class="pokConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><CreditCard class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">POK Payments</strong><p class="sa-table-meta">{{ pokConfigured ? 'Pagesat online janë konfiguruar' : 'Pagesat online nuk janë aktivizuar' }}</p></div>
-                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="pokConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ pokConfigured ? 'Aktiv' : 'Mungon' }}</span><Button size="sm" variant="outline" @click="openConfig('pok')">Konfiguro</Button></div>
+                                <div><strong class="sa-table-primary">POK Payments</strong><p class="sa-table-meta">{{ pokConfigured ? $t('superAdmin.tenantShow.pokOk') : $t('superAdmin.tenantShow.pokMissing') }}</p></div>
+                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="pokConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ pokConfigured ? $t('superAdmin.auto.copy005') : $t('superAdmin.dynamic.missing') }}</span><Button size="sm" variant="outline" @click="openConfig('pok')">{{ $t('superAdmin.tenantShow.configure') }}</Button></div>
                             </div>
                             <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
                                 <span class="sa-icon-box" :class="fatureConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><FileCheck2 class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">fature.al</strong><p class="sa-table-meta">{{ fatureConfigured ? `${tenant.integrations.fature_al.environment} · token i ruajtur` : 'Fiskalizimi nuk është konfiguruar' }}</p></div>
-                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="fatureConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ fatureConfigured ? tenant.integrations.fature_al.environment : 'Mungon' }}</span><Button size="sm" variant="outline" @click="openConfig('fature')">Menaxho</Button></div>
+                                <div><strong class="sa-table-primary">fature.al</strong><p class="sa-table-meta">{{ fatureConfigured ? $t('superAdmin.tenantShow.envTokenSaved', { environment: tenant.integrations.fature_al.environment }) : $t('superAdmin.tenantShow.fiscalNotConfigured') }}</p></div>
+                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="fatureConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ fatureConfigured ? tenant.integrations.fature_al.environment : $t('superAdmin.dynamic.missing') }}</span><Button size="sm" variant="outline" @click="openConfig('fature')">{{ $t('superAdmin.tenantShow.manage') }}</Button></div>
                             </div>
                         </div>
                     </section>
 
                     <section id="members" class="sa-card">
                         <div class="sa-card-header">
-                            <div><h2 class="sa-card-title">Përdoruesit</h2><p class="sa-card-subtitle">Pronari dhe ekipi me akses në këtë hotel.</p></div>
-                            <Button size="sm" variant="outline" @click="openMember()"><Plus class="h-4 w-4" /> Shto përdorues</Button>
+                            <div><h2 class="sa-card-title">{{ $t('superAdmin.auto.copy093') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.tenantShow.membersSubtitle') }}</p></div>
+                            <Button size="sm" variant="outline" @click="openMember()"><Plus class="h-4 w-4" /> {{ $t('superAdmin.tenantShow.addMember') }}</Button>
                         </div>
                         <div class="overflow-x-auto">
                             <table class="w-full min-w-[620px] text-left">
-                                <thead><tr class="sa-table-head"><th class="px-4 py-2.5 font-bold">Përdoruesi</th><th class="px-4 py-2.5 font-bold">Roli</th><th class="px-4 py-2.5 font-bold">Statusi</th><th class="px-4 py-2.5" /></tr></thead>
+                                <thead><tr class="sa-table-head"><th class="px-4 py-2.5 font-bold">{{ $t('superAdmin.tenantShow.user') }}</th><th class="px-4 py-2.5 font-bold">{{ $t('superAdmin.tenantShow.role') }}</th><th class="px-4 py-2.5 font-bold">{{ $t('superAdmin.auto.copy059') }}</th><th class="px-4 py-2.5" /></tr></thead>
                                 <tbody class="divide-y divide-neutral-100">
                                     <tr v-for="member in members" :key="member.id">
-                                        <td class="px-4 py-3"><div class="flex items-center gap-2.5"><span class="grid h-8 w-8 place-items-center rounded-full bg-blue-50 text-[10px] font-bold text-blue-700">{{ initials(member.name) }}</span><div><strong class="block text-xs text-neutral-900">{{ member.name }}</strong><span class="mt-0.5 block text-[10px] text-neutral-500">{{ member.email }}{{ member.is_owner ? ' · pronar' : '' }}</span></div></div></td>
+                                        <td class="px-4 py-3"><div class="flex items-center gap-2.5"><span class="grid h-8 w-8 place-items-center rounded-full bg-blue-50 text-[10px] font-bold text-blue-700">{{ initials(member.name) }}</span><div><strong class="block text-xs text-neutral-900">{{ member.name }}</strong><span class="mt-0.5 block text-[10px] text-neutral-500">{{ member.email }}{{ member.is_owner ? $t('superAdmin.tenantShow.ownerSuffix') : '' }}</span></div></div></td>
                                         <td class="px-4 py-3"><span class="rounded-lg bg-neutral-100 px-2 py-1 text-[10px] font-semibold text-neutral-600">{{ roleLabel(member.role) }}</span></td>
-                                        <td class="px-4 py-3"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-bold" :class="member.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'"><span class="h-1.5 w-1.5 rounded-full bg-current" />{{ member.is_active ? 'Aktiv' : 'Joaktiv' }}</span></td>
-                                        <td class="px-4 py-3 text-right"><Button size="sm" variant="outline" @click="openMember(member)">Ndrysho</Button></td>
+                                        <td class="px-4 py-3"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-bold" :class="member.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'"><span class="h-1.5 w-1.5 rounded-full bg-current" />{{ member.is_active ? $t('superAdmin.auto.copy005') : $t('superAdmin.dynamic.inactive') }}</span></td>
+                                        <td class="px-4 py-3 text-right"><Button size="sm" variant="outline" @click="openMember(member)">{{ $t('superAdmin.auto.copy089') }}</Button></td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -468,25 +479,25 @@ function toggleStatus() {
                     </section>
 
                     <section class="sa-card">
-                        <div class="sa-card-header"><div><h2 class="sa-card-title">Modulet aktive</h2><p class="sa-card-subtitle">Funksionalitetet e përfshira në abonim.</p></div><Button size="sm" variant="outline" @click="openBilling">Menaxho</Button></div>
+                        <div class="sa-card-header"><div><h2 class="sa-card-title">{{ $t('superAdmin.auto.copy035') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.tenantShow.modulesSubtitle') }}</p></div><Button size="sm" variant="outline" @click="openBilling">{{ $t('superAdmin.tenantShow.manage') }}</Button></div>
                         <div class="flex flex-wrap gap-2 p-4"><span v-for="module in enabledModules" :key="module.code" class="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[10px] font-semibold text-neutral-600">{{ module.name }}</span></div>
                     </section>
                 </div>
 
                 <aside class="space-y-3">
                     <section class="sa-card">
-                        <div class="bg-gradient-to-br from-emerald-50 to-white p-4"><p class="text-[9px] font-bold uppercase tracking-[.12em] text-neutral-500">Abonimi mujor</p><p class="mt-1 text-3xl font-bold tracking-tight text-neutral-950">{{ money(tenant.mrr_cents) }} <small class="text-[11px] font-medium text-neutral-500">/ muaj</small></p></div>
-                        <div class="divide-y divide-neutral-100 px-4 text-[11px]"><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Statusi</span><strong class="text-emerald-700">{{ statusLabel(tenant.billing.status) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Faturimi i ardhshëm</span><strong>{{ date(tenant.billing.next_billing_at) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Modulet</span><strong>{{ enabledModules.length }} aktive</strong></div></div>
-                        <div class="space-y-2 border-t border-neutral-100 p-3"><Button variant="outline" class="w-full" @click="openBilling"><CreditCard class="h-4 w-4" /> Menaxho abonimin</Button><div class="grid grid-cols-3 gap-1.5"><Link :href="`/super-admin/billing/invoices?tenant_id=${tenant.id}`" class="rounded-lg bg-neutral-50 px-2 py-2 text-center text-[9px] font-bold text-neutral-600 no-underline hover:bg-emerald-50 hover:text-emerald-800">Faturat</Link><Link :href="`/super-admin/billing/payments?tenant_id=${tenant.id}`" class="rounded-lg bg-neutral-50 px-2 py-2 text-center text-[9px] font-bold text-neutral-600 no-underline hover:bg-emerald-50 hover:text-emerald-800">Pagesat</Link><Link :href="`/super-admin/billing/payment-attempts?tenant_id=${tenant.id}`" class="rounded-lg bg-neutral-50 px-2 py-2 text-center text-[9px] font-bold text-neutral-600 no-underline hover:bg-emerald-50 hover:text-emerald-800">Tentativat</Link></div></div>
+                        <div class="bg-gradient-to-br from-emerald-50 to-white p-4"><p class="text-[9px] font-bold uppercase tracking-[.12em] text-neutral-500">{{ $t('superAdmin.tenantShow.monthlySubscription') }}</p><p class="mt-1 text-3xl font-bold tracking-tight text-neutral-950">{{ money(tenant.mrr_cents) }} <small class="text-[11px] font-medium text-neutral-500">{{ $t('superAdmin.tenantShow.perMonthSuffix') }}</small></p></div>
+                        <div class="divide-y divide-neutral-100 px-4 text-[11px]"><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">{{ $t('superAdmin.auto.copy059') }}</span><strong class="text-emerald-700">{{ statusLabel(tenant.billing.status) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">{{ $t('superAdmin.tenantShow.nextBilling') }}</span><strong>{{ date(tenant.billing.next_billing_at) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">{{ $t('superAdmin.tenantShow.modules') }}</span><strong>{{ $t('superAdmin.tenantShow.activeCountShort', { count: enabledModules.length }) }}</strong></div></div>
+                        <div class="space-y-2 border-t border-neutral-100 p-3"><Button variant="outline" class="w-full" @click="openBilling"><CreditCard class="h-4 w-4" /> {{ $t('superAdmin.auto.copy029') }}</Button><div class="grid grid-cols-3 gap-1.5"><Link :href="`/super-admin/billing/invoices?tenant_id=${tenant.id}`" class="rounded-lg bg-neutral-50 px-2 py-2 text-center text-[9px] font-bold text-neutral-600 no-underline hover:bg-emerald-50 hover:text-emerald-800">{{ $t('superAdmin.compact.invoices') }}</Link><Link :href="`/super-admin/billing/payments?tenant_id=${tenant.id}`" class="rounded-lg bg-neutral-50 px-2 py-2 text-center text-[9px] font-bold text-neutral-600 no-underline hover:bg-emerald-50 hover:text-emerald-800">{{ $t('superAdmin.compact.payments') }}</Link><Link :href="`/super-admin/billing/payment-attempts?tenant_id=${tenant.id}`" class="rounded-lg bg-neutral-50 px-2 py-2 text-center text-[9px] font-bold text-neutral-600 no-underline hover:bg-emerald-50 hover:text-emerald-800">{{ $t('superAdmin.compact.paymentAttempts') }}</Link></div></div>
                     </section>
 
                     <section class="sa-card">
-                        <div class="sa-card-header"><div><h2 class="sa-card-title">Detaje teknike</h2><p class="sa-card-subtitle">Konfigurimi bazë i tenantit.</p></div><Button size="sm" variant="outline" @click="openTenantForm">Ndrysho</Button></div>
-                        <div class="divide-y divide-neutral-100 px-4 text-[11px]"><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Tenant ID</span><strong>#{{ tenant.id }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Slug</span><strong class="max-w-[180px] truncate">{{ tenant.slug }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Timezone</span><strong>{{ tenant.timezone }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Monedha</span><strong>{{ tenant.currency }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Krijuar</span><strong>{{ date(tenant.created_at) }}</strong></div></div>
+                        <div class="sa-card-header"><div><h2 class="sa-card-title">{{ $t('superAdmin.tenantShow.technicalDetails') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.tenantShow.technicalSubtitle') }}</p></div><Button size="sm" variant="outline" @click="openTenantForm">{{ $t('superAdmin.auto.copy089') }}</Button></div>
+                        <div class="divide-y divide-neutral-100 px-4 text-[11px]"><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Tenant ID</span><strong>#{{ tenant.id }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Slug</span><strong class="max-w-[180px] truncate">{{ tenant.slug }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Timezone</span><strong>{{ tenant.timezone }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">{{ $t('superAdmin.tenantShow.currency') }}</span><strong>{{ tenant.currency }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">{{ $t('superAdmin.tenantShow.createdAt') }}</span><strong>{{ date(tenant.created_at) }}</strong></div></div>
                     </section>
 
                     <section class="sa-card">
-                        <div class="sa-card-header"><div><h2 class="sa-card-title">Aktiviteti i fundit</h2><p class="sa-card-subtitle">Veprimet e rëndësishme.</p></div><Link :href="route('super-admin.activity', { tenant: tenant.id, range: 30 })" class="text-[11px] font-bold text-emerald-700 no-underline">Të gjitha →</Link></div>
+                        <div class="sa-card-header"><div><h2 class="sa-card-title">{{ $t('superAdmin.auto.copy079') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.tenantShow.recentActivitySubtitle') }}</p></div><Link :href="route('super-admin.activity', { tenant: tenant.id, range: 30 })" class="text-[11px] font-bold text-emerald-700 no-underline">{{ $t('superAdmin.tenantShow.viewAllArrow') }}</Link></div>
                         <ul class="divide-y divide-neutral-100 px-4"><li v-for="log in activity.slice(0, 4)" :key="log.id" class="grid grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2.5 py-3"><span class="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 text-emerald-700"><LogIn v-if="log.action === 'tenant.switch'" class="h-4 w-4" /><CreditCard v-else-if="log.action === 'tenant.subscription.update'" class="h-4 w-4" /><Check v-else class="h-4 w-4" /></span><div class="min-w-0"><strong class="block truncate text-[11px] text-neutral-800">{{ ACTION_LABELS[log.action] || log.action }}</strong><span class="mt-0.5 block truncate text-[9px] text-neutral-500">{{ log.actor }}</span></div><time class="text-[9px] text-neutral-400">{{ when(log.created_at) }}</time></li></ul>
                     </section>
                 </aside>
@@ -504,53 +515,53 @@ function toggleStatus() {
                                 <CreditCard v-else-if="activeDrawer === 'billing'" class="h-5 w-5" />
                                 <Settings2 v-else class="h-5 w-5" />
                             </span>
-                            <div><h2 class="text-sm font-bold text-neutral-900">{{ activeDrawer === 'tenant' ? 'Të dhënat e hotelit' : activeDrawer === 'member' ? (editingMember ? 'Ndrysho përdoruesin' : 'Shto përdorues') : activeDrawer === 'billing' ? 'Abonimi dhe modulet' : 'Konfigurimi i hotelit' }}</h2><p class="mt-0.5 text-[10px] text-neutral-500">{{ tenant.name }}</p></div>
+                            <div><h2 class="text-sm font-bold text-neutral-900">{{ activeDrawer === 'tenant' ? $t('superAdmin.dynamic.hotelDetails') : activeDrawer === 'member' ? (editingMember ? $t('superAdmin.tenantShow.editMember') : $t('superAdmin.tenantShow.addMember')) : activeDrawer === 'billing' ? $t('superAdmin.tenantShow.subscriptionAndModules') : $t('superAdmin.auto.copy020') }}</h2><p class="mt-0.5 text-[10px] text-neutral-500">{{ tenant.name }}</p></div>
                         </div>
-                        <button type="button" class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" aria-label="Mbyll" @click="closeDrawer"><X class="h-5 w-5" /></button>
+                        <button type="button" class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" :aria-label="$t('superAdmin.auto.copy028')" @click="closeDrawer"><X class="h-5 w-5" /></button>
                     </header>
 
                     <div v-if="activeDrawer === 'config'" class="flex shrink-0 gap-1 overflow-x-auto border-b border-neutral-200 bg-neutral-50 px-5 pt-2">
-                        <button v-for="tab in [{ id: 'domains', label: 'Domain-et' }, { id: 'channex', label: 'Channex' }, { id: 'pok', label: 'POK' }, { id: 'fature', label: 'fature.al' }]" :key="tab.id" type="button" class="h-10 shrink-0 border-b-2 px-3 text-[11px] font-bold" :class="configTab === tab.id ? 'border-emerald-700 text-emerald-800' : 'border-transparent text-neutral-500'" @click="configTab = tab.id">{{ tab.label }}</button>
+                        <button v-for="tab in [{ id: 'domains', label: $t('superAdmin.dynamic.domains') }, { id: 'channex', label: 'Channex' }, { id: 'pok', label: 'POK' }, { id: 'fature', label: 'fature.al' }]" :key="tab.id" type="button" class="h-10 shrink-0 border-b-2 px-3 text-[11px] font-bold" :class="configTab === tab.id ? 'border-emerald-700 text-emerald-800' : 'border-transparent text-neutral-500'" @click="configTab = tab.id">{{ tab.label }}</button>
                     </div>
 
                     <div class="min-h-0 flex-1 overflow-y-auto p-5">
                         <form v-if="activeDrawer === 'tenant'" id="tenant-form" class="space-y-4" @submit.prevent="saveTenant">
-                            <section class="rounded-xl border border-neutral-200 p-4"><div class="mb-4 flex items-start gap-2.5"><Building2 class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">Identiteti i hotelit</strong><p class="mt-0.5 text-[10px] text-neutral-500">Emri dhe identifikuesi teknik.</p></div></div><div class="grid gap-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">Emri i hotelit<input v-model="tenantForm.name" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" required /></label><label class="text-[11px] font-semibold text-neutral-600">Slug<input v-model="tenantForm.slug" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" required /></label></div><p v-if="tenantForm.errors.name || tenantForm.errors.slug" class="mt-2 text-xs text-red-600">{{ tenantForm.errors.name || tenantForm.errors.slug }}</p></section>
-                            <section class="rounded-xl border border-neutral-200 p-4"><div class="mb-4 flex items-start gap-2.5"><Globe2 class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">Lokalizimi</strong><p class="mt-0.5 text-[10px] text-neutral-500">Timezone dhe monedha bazë e hotelit.</p></div></div><div class="grid gap-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">Timezone<select v-model="tenantForm.timezone" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><optgroup v-for="(zones, region) in timezoneGroups" :key="region" :label="region"><option v-for="zone in zones" :key="zone.value" :value="zone.value">{{ zone.label }}</option></optgroup></select></label><label class="text-[11px] font-semibold text-neutral-600">Monedha<select v-model="tenantForm.currency" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option v-for="code in currencyOptions" :key="code" :value="code">{{ currencyLabel(code) }}</option></select></label></div><p v-if="tenantForm.errors.timezone || tenantForm.errors.currency" class="mt-2 text-xs text-red-600">{{ tenantForm.errors.timezone || tenantForm.errors.currency }}</p></section>
+                            <section class="rounded-xl border border-neutral-200 p-4"><div class="mb-4 flex items-start gap-2.5"><Building2 class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">{{ $t('superAdmin.tenantShow.hotelIdentity') }}</strong><p class="mt-0.5 text-[10px] text-neutral-500">{{ $t('superAdmin.tenantShow.hotelIdentitySubtitle') }}</p></div></div><div class="grid gap-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.dynamic.hotelName') }}<input v-model="tenantForm.name" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" required /></label><label class="text-[11px] font-semibold text-neutral-600">Slug<input v-model="tenantForm.slug" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" required /></label></div><p v-if="tenantForm.errors.name || tenantForm.errors.slug" class="mt-2 text-xs text-red-600">{{ tenantForm.errors.name || tenantForm.errors.slug }}</p></section>
+                            <section class="rounded-xl border border-neutral-200 p-4"><div class="mb-4 flex items-start gap-2.5"><Globe2 class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">{{ $t('superAdmin.dynamic.localization') }}</strong><p class="mt-0.5 text-[10px] text-neutral-500">{{ $t('superAdmin.tenantShow.localizationSubtitle') }}</p></div></div><div class="grid gap-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">Timezone<select v-model="tenantForm.timezone" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><optgroup v-for="(zones, region) in timezoneGroups" :key="region" :label="region"><option v-for="zone in zones" :key="zone.value" :value="zone.value">{{ zone.label }}</option></optgroup></select></label><label class="text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.tenantShow.currency') }}<select v-model="tenantForm.currency" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option v-for="code in currencyOptions" :key="code" :value="code">{{ currencyLabel(code) }}</option></select></label></div><p v-if="tenantForm.errors.timezone || tenantForm.errors.currency" class="mt-2 text-xs text-red-600">{{ tenantForm.errors.timezone || tenantForm.errors.currency }}</p></section>
                         </form>
 
                         <form v-else-if="activeDrawer === 'member'" id="member-form" class="space-y-4" @submit.prevent="saveMember">
-                            <section class="rounded-xl border border-neutral-200 p-4"><div class="mb-4 flex items-start gap-2.5"><UserRound class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">Të dhënat e përdoruesit</strong><p class="mt-0.5 text-[10px] text-neutral-500">Llogaritë ekzistuese lidhen pa ndryshuar fjalëkalimin.</p></div></div><div class="grid gap-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">Emri i plotë<input v-model="memberForm.name" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" required /></label><label class="text-[11px] font-semibold text-neutral-600">Email<input v-model="memberForm.email" type="email" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" required /></label><label class="text-[11px] font-semibold text-neutral-600">Roli<select v-model="memberForm.role" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option v-for="role in roleOptions" :key="role" :value="role">{{ roleLabel(role) }}</option></select></label><label class="text-[11px] font-semibold text-neutral-600">Statusi<select v-model="memberForm.is_active" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option :value="true">Aktiv</option><option :value="false">Joaktiv</option></select></label></div><p v-if="Object.keys(memberForm.errors).length" class="mt-2 text-xs text-red-600">{{ Object.values(memberForm.errors)[0] }}</p></section>
-                            <div class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-900">Përdoruesi i ri vendos fjalëkalimin nga lidhja “Harrove fjalëkalimin?”.</div>
+                            <section class="rounded-xl border border-neutral-200 p-4"><div class="mb-4 flex items-start gap-2.5"><UserRound class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">{{ $t('superAdmin.tenantShow.memberDetails') }}</strong><p class="mt-0.5 text-[10px] text-neutral-500">{{ $t('superAdmin.tenantShow.memberDetailsSubtitle') }}</p></div></div><div class="grid gap-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.tenantShow.fullName') }}<input v-model="memberForm.name" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" required /></label><label class="text-[11px] font-semibold text-neutral-600">Email<input v-model="memberForm.email" type="email" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" required /></label><label class="text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.tenantShow.role') }}<select v-model="memberForm.role" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option v-for="role in roleOptions" :key="role" :value="role">{{ roleLabel(role) }}</option></select></label><label class="text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.auto.copy059') }}<select v-model="memberForm.is_active" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option :value="true">{{ $t('superAdmin.auto.copy005') }}</option><option :value="false">{{ $t('superAdmin.dynamic.inactive') }}</option></select></label></div><p v-if="Object.keys(memberForm.errors).length" class="mt-2 text-xs text-red-600">{{ Object.values(memberForm.errors)[0] }}</p></section>
+                            <div class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-900">{{ $t('superAdmin.tenantShow.newMemberPasswordNote') }}</div>
                         </form>
 
                         <form v-else-if="activeDrawer === 'billing'" id="billing-form" class="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]" @submit.prevent="saveBilling">
-                            <aside class="h-fit rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p class="text-[9px] font-bold uppercase tracking-[.12em] text-neutral-500">Totali aktual</p><p class="mt-1 text-2xl font-bold">{{ money(tenant.mrr_cents) }} <small class="text-[10px] font-medium text-neutral-500">/ muaj</small></p><label class="mt-4 block text-[11px] font-semibold text-neutral-600">Statusi<select v-model="billingForm.status" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option value="trialing">Provë</option><option value="active">Aktiv</option><option value="past_due">Me vonesë</option><option value="suspended">Pezulluar</option><option value="canceled">Anuluar</option></select></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">Cikli i faturimit<select v-model="billingForm.billing_cycle" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option value="monthly">Mujor</option><option value="annual">Vjetor</option></select></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">Data e rinovimit<input v-model="billingForm.current_period_ends_at" type="date" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">Shënime<textarea v-model="billingForm.notes" rows="3" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label></aside>
-                            <section><h3 class="text-sm font-bold text-neutral-900">Modulet e abonimit</h3><p class="mt-1 text-[10px] text-neutral-500">Aktivizo vetëm funksionalitetet që hoteli përdor.</p><div class="mt-3 grid gap-2 sm:grid-cols-2"><label v-for="module in tenant.billing.modules" :key="module.code" class="rounded-xl border p-3" :class="billingForm.modules[module.code]?.enabled ? 'border-emerald-200 bg-emerald-50/70' : 'border-neutral-200 bg-white'"><div class="flex items-start gap-2"><input v-model="billingForm.modules[module.code].enabled" type="checkbox" class="mt-0.5 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600" :disabled="module.locked" /><div><strong class="text-[11px] text-neutral-900">{{ module.name }}</strong><p class="mt-0.5 text-[9px] leading-4 text-neutral-500">{{ module.description }}</p></div></div><div v-if="['tiered_per_room', 'per_user', 'per_pos'].includes(module.billing_model)" class="mt-3 flex items-center justify-between border-t border-emerald-100 pt-2"><span class="text-[9px] text-neutral-500">{{ module.unit_label }}</span><input v-model.number="billingForm.modules[module.code].quantity" type="number" min="1" max="10000" class="w-20 rounded-lg border-neutral-300 py-1 text-right text-xs" /></div></label></div><p v-if="Object.keys(billingForm.errors).length" class="mt-3 text-xs text-red-600">{{ Object.values(billingForm.errors)[0] }}</p></section>
+                            <aside class="h-fit rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p class="text-[9px] font-bold uppercase tracking-[.12em] text-neutral-500">{{ $t('superAdmin.tenantShow.currentTotal') }}</p><p class="mt-1 text-2xl font-bold">{{ money(tenant.mrr_cents) }} <small class="text-[10px] font-medium text-neutral-500">{{ $t('superAdmin.tenantShow.perMonthSuffix') }}</small></p><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.auto.copy059') }}<select v-model="billingForm.status" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option value="trialing">{{ $t('superAdmin.auto.copy049') }}</option><option value="active">{{ $t('superAdmin.auto.copy005') }}</option><option value="past_due">{{ $t('superAdmin.tenantShow.statusPastDue') }}</option><option value="suspended">{{ $t('superAdmin.auto.copy044') }}</option><option value="canceled">{{ $t('superAdmin.auto.copy009') }}</option></select></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.dynamic.billingCycleLabel') }}<select v-model="billingForm.billing_cycle" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option value="monthly">{{ $t('superAdmin.dynamic.monthly') }}</option><option value="annual">{{ $t('superAdmin.dynamic.annual') }}</option></select></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.dynamic.renewalDate') }}<input v-model="billingForm.current_period_ends_at" type="date" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.tenantShow.notes') }}<textarea v-model="billingForm.notes" rows="3" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label></aside>
+                            <section><h3 class="text-sm font-bold text-neutral-900">{{ $t('superAdmin.tenantShow.subscriptionModules') }}</h3><p class="mt-1 text-[10px] text-neutral-500">{{ $t('superAdmin.tenantShow.subscriptionModulesSubtitle') }}</p><div class="mt-3 grid gap-2 sm:grid-cols-2"><label v-for="module in tenant.billing.modules" :key="module.code" class="rounded-xl border p-3" :class="billingForm.modules[module.code]?.enabled ? 'border-emerald-200 bg-emerald-50/70' : 'border-neutral-200 bg-white'"><div class="flex items-start gap-2"><input v-model="billingForm.modules[module.code].enabled" type="checkbox" class="mt-0.5 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600" :disabled="module.locked" /><div><strong class="text-[11px] text-neutral-900">{{ module.name }}</strong><p class="mt-0.5 text-[9px] leading-4 text-neutral-500">{{ module.description }}</p></div></div><div v-if="['tiered_per_room', 'per_user', 'per_pos'].includes(module.billing_model)" class="mt-3 flex items-center justify-between border-t border-emerald-100 pt-2"><span class="text-[9px] text-neutral-500">{{ module.unit_label }}</span><input v-model.number="billingForm.modules[module.code].quantity" type="number" min="1" max="10000" class="w-20 rounded-lg border-neutral-300 py-1 text-right text-xs" /></div></label></div><p v-if="Object.keys(billingForm.errors).length" class="mt-3 text-xs text-red-600">{{ Object.values(billingForm.errors)[0] }}</p></section>
                         </form>
 
                         <div v-else-if="activeDrawer === 'config'">
                             <section v-if="configTab === 'domains'" class="space-y-4">
-                                <div class="flex items-start gap-2.5"><Globe2 class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">Domain-et e hotelit</strong><p class="mt-0.5 text-[10px] text-neutral-500">Cikli: klienti drejton DNS-in → verifikohet → provizionohet siti + SSL → aktiv.</p></div></div>
+                                <div class="flex items-start gap-2.5"><Globe2 class="mt-0.5 h-4 w-4 text-emerald-700" /><div><strong class="text-xs text-neutral-900">{{ $t('superAdmin.tenantShow.hotelDomains') }}</strong><p class="mt-0.5 text-[10px] text-neutral-500">{{ $t('superAdmin.tenantShow.domainLifecycle') }}</p></div></div>
 
                                 <div class="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
                                     <div class="flex flex-wrap items-start justify-between gap-2">
                                         <div>
-                                            <p class="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Udhëzimet DNS për klientin</p>
-                                            <p class="mt-0.5 text-[10px] text-emerald-900/70">Klienti i shton këto te paneli DNS i domain-it të vet — pa ndërruar nameservers.</p>
+                                            <p class="text-[10px] font-bold uppercase tracking-wide text-emerald-800">{{ $t('superAdmin.tenantShow.dnsInstructionsTitle') }}</p>
+                                            <p class="mt-0.5 text-[10px] text-emerald-900/70">{{ $t('superAdmin.tenantShow.dnsInstructionsSubtitle') }}</p>
                                         </div>
-                                        <Button size="sm" variant="outline" :disabled="!tenant.domainServerIp" @click="copyDnsInstructions">{{ copied === 'instructions' ? 'U kopjua ✓' : 'Kopjo udhëzimet' }}</Button>
+                                        <Button size="sm" variant="outline" :disabled="!tenant.domainServerIp" @click="copyDnsInstructions">{{ copied === 'instructions' ? $t('superAdmin.tenantShow.copiedCheck') : $t('superAdmin.tenantShow.copyInstructions') }}</Button>
                                     </div>
                                     <div v-if="tenant.domainServerIp" class="mt-3 overflow-x-auto rounded-lg bg-white p-3 ring-1 ring-emerald-100">
                                         <table class="w-full text-[11px] text-neutral-800">
-                                            <thead><tr class="text-left text-[9px] font-bold uppercase tracking-wide text-neutral-400"><th class="pb-1.5 pr-4">Lloji</th><th class="pb-1.5 pr-4">Host</th><th class="pb-1.5 pr-4">Vlera</th><th class="pb-1.5"></th></tr></thead>
+                                            <thead><tr class="text-left text-[9px] font-bold uppercase tracking-wide text-neutral-400"><th class="pb-1.5 pr-4">{{ $t('superAdmin.tenantShow.typeCol') }}</th><th class="pb-1.5 pr-4">Host</th><th class="pb-1.5 pr-4">{{ $t('superAdmin.tenantShow.valueCol') }}</th><th class="pb-1.5"></th></tr></thead>
                                             <tbody>
-                                                <tr><td class="pr-4 font-bold">A</td><td class="pr-4 font-mono">@</td><td class="pr-4 font-mono">{{ tenant.domainServerIp }}</td><td class="py-0.5 text-right"><button type="button" class="rounded-md px-2 py-1 text-[9px] font-bold text-emerald-700 hover:bg-emerald-50" @click="copyText('ip-apex', tenant.domainServerIp)">{{ copied === 'ip-apex' ? 'U kopjua ✓' : 'Kopjo' }}</button></td></tr>
-                                                <tr><td class="pr-4 font-bold">A</td><td class="pr-4 font-mono">www</td><td class="pr-4 font-mono">{{ tenant.domainServerIp }}</td><td class="py-0.5 text-right"><button type="button" class="rounded-md px-2 py-1 text-[9px] font-bold text-emerald-700 hover:bg-emerald-50" @click="copyText('ip-www', tenant.domainServerIp)">{{ copied === 'ip-www' ? 'U kopjua ✓' : 'Kopjo' }}</button></td></tr>
+                                                <tr><td class="pr-4 font-bold">A</td><td class="pr-4 font-mono">@</td><td class="pr-4 font-mono">{{ tenant.domainServerIp }}</td><td class="py-0.5 text-right"><button type="button" class="rounded-md px-2 py-1 text-[9px] font-bold text-emerald-700 hover:bg-emerald-50" @click="copyText('ip-apex', tenant.domainServerIp)">{{ copied === 'ip-apex' ? $t('superAdmin.tenantShow.copiedCheck') : $t('superAdmin.tenantShow.copy') }}</button></td></tr>
+                                                <tr><td class="pr-4 font-bold">A</td><td class="pr-4 font-mono">www</td><td class="pr-4 font-mono">{{ tenant.domainServerIp }}</td><td class="py-0.5 text-right"><button type="button" class="rounded-md px-2 py-1 text-[9px] font-bold text-emerald-700 hover:bg-emerald-50" @click="copyText('ip-www', tenant.domainServerIp)">{{ copied === 'ip-www' ? $t('superAdmin.tenantShow.copiedCheck') : $t('superAdmin.tenantShow.copy') }}</button></td></tr>
                                             </tbody>
                                         </table>
                                     </div>
-                                    <p v-else class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200">FORGE_SERVER_IP nuk është konfiguruar në këtë mjedis — vendose te Environment në Forge që të shfaqen udhëzimet.</p>
+                                    <p v-else class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200">{{ $t('superAdmin.tenantShow.forgeIpMissing') }}</p>
                                 </div>
                                 <div class="overflow-hidden rounded-xl border border-neutral-200">
                                     <div v-for="domain in tenant.domains" :key="domain.id" class="border-b border-neutral-100 px-3 py-3 last:border-b-0">
@@ -560,21 +571,21 @@ function toggleStatus() {
                                                 <div class="flex flex-wrap items-center gap-1.5">
                                                     <strong class="text-xs text-neutral-900">{{ domain.domain }}</strong>
                                                     <span class="rounded-lg px-2 py-0.5 text-[9px] font-bold" :class="domainStatusMeta[domain.status]?.class || 'bg-neutral-100 text-neutral-600'">{{ domainStatusMeta[domain.status]?.label || domain.status }}</span>
-                                                    <span v-if="domain.is_primary" class="rounded-lg bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">Primar</span>
+                                                    <span v-if="domain.is_primary" class="rounded-lg bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">{{ $t('superAdmin.auto.copy046') }}</span>
                                                 </div>
                                                 <span v-if="domain.status_message" class="mt-0.5 block text-[9px]" :class="domain.status === 'failed' ? 'text-red-600' : 'text-neutral-500'">{{ domain.status_message }}</span>
-                                                <span v-else-if="isPlatformSubdomain(domain)" class="mt-0.5 block text-[9px] text-neutral-500">Nën-domain i platformës — DNS-i ynë, klienti s'vendos asgjë.</span>
+                                                <span v-else-if="isPlatformSubdomain(domain)" class="mt-0.5 block text-[9px] text-neutral-500">{{ $t('superAdmin.tenantShow.platformSubdomainNote') }}</span>
                                             </div>
                                             <div class="flex flex-wrap justify-end gap-1.5">
-                                                <Button v-if="domain.status !== 'active'" size="sm" variant="outline" :disabled="domainBusy === domain.id" @click="domainAction(domain, 'super-admin.tenants.domains.verify')">Verifiko DNS</Button>
-                                                <Button v-if="domain.verified_at && ['pending_dns', 'failed'].includes(domain.status)" size="sm" variant="primary" :disabled="domainBusy === domain.id" @click="domainAction(domain, 'super-admin.tenants.domains.provision')">Provizio</Button>
-                                                <Button v-if="domain.status === 'provisioning'" size="sm" variant="outline" :disabled="domainBusy === domain.id" @click="domainAction(domain, 'super-admin.tenants.domains.refresh')">Rifresko</Button>
-                                                <Button v-if="!domain.is_primary" size="sm" variant="outline" @click="makePrimary(domain)">Bëj primar</Button>
-                                                <Button v-if="!domain.is_primary" size="sm" variant="outline" class="!text-red-600" @click="removeDomain(domain)">Hiq</Button>
+                                                <Button v-if="domain.status !== 'active'" size="sm" variant="outline" :disabled="domainBusy === domain.id" @click="domainAction(domain, 'super-admin.tenants.domains.verify')">{{ $t('superAdmin.tenantShow.verifyDns') }}</Button>
+                                                <Button v-if="domain.verified_at && ['pending_dns', 'failed'].includes(domain.status)" size="sm" variant="primary" :disabled="domainBusy === domain.id" @click="domainAction(domain, 'super-admin.tenants.domains.provision')">{{ $t('superAdmin.tenantShow.provision') }}</Button>
+                                                <Button v-if="domain.status === 'provisioning'" size="sm" variant="outline" :disabled="domainBusy === domain.id" @click="domainAction(domain, 'super-admin.tenants.domains.refresh')">{{ $t('superAdmin.compact.refresh') }}</Button>
+                                                <Button v-if="!domain.is_primary" size="sm" variant="outline" @click="makePrimary(domain)">{{ $t('superAdmin.tenantShow.makePrimary') }}</Button>
+                                                <Button v-if="!domain.is_primary" size="sm" variant="outline" class="!text-red-600" @click="removeDomain(domain)">{{ $t('superAdmin.auto.copy016') }}</Button>
                                             </div>
                                         </div>
                                         <div v-if="domain.status === 'pending_dns' && !isPlatformSubdomain(domain)" class="mt-2 rounded-lg bg-neutral-50 p-3">
-                                            <p class="text-[9px] font-bold uppercase tracking-wide text-neutral-500">Udhëzimet për klientin — te paneli DNS i domain-it të vet</p>
+                                            <p class="text-[9px] font-bold uppercase tracking-wide text-neutral-500">{{ $t('superAdmin.tenantShow.clientDnsHeading') }}</p>
                                             <div class="mt-1.5 overflow-x-auto">
                                                 <table class="text-[10px] text-neutral-700">
                                                     <tbody>
@@ -583,24 +594,24 @@ function toggleStatus() {
                                                     </tbody>
                                                 </table>
                                             </div>
-                                            <p class="mt-1.5 text-[9px] text-neutral-500">Asnjë ndryshim nameserver-ash — vetëm këto dy records. Pas vendosjes (deri 1 orë propagim), kliko "Verifiko DNS".</p>
+                                            <p class="mt-1.5 text-[9px] text-neutral-500">{{ $t('superAdmin.tenantShow.clientDnsFootnote') }}</p>
                                         </div>
                                     </div>
                                 </div>
-                                <form class="rounded-xl border border-neutral-200 p-4" @submit.prevent="addDomain"><label class="text-[11px] font-semibold text-neutral-600">Shto domain të ri<div class="mt-1.5 flex gap-2"><input v-model="domainForm.domain" placeholder="booking.hoteli.al" class="min-w-0 flex-1 rounded-xl border-neutral-300 text-sm" /><Button type="submit" variant="primary" :disabled="domainForm.processing">Shto</Button></div></label><p v-if="domainForm.errors.domain" class="mt-2 text-xs text-red-600">{{ domainForm.errors.domain }}</p><p class="mt-2 text-[9px] text-neutral-500">Domain-i i ri nis te "Pret DNS" me udhëzimet për klientin.</p></form>
+                                <form class="rounded-xl border border-neutral-200 p-4" @submit.prevent="addDomain"><label class="text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.tenantShow.addNewDomain') }}<div class="mt-1.5 flex gap-2"><input v-model="domainForm.domain" placeholder="booking.hoteli.al" class="min-w-0 flex-1 rounded-xl border-neutral-300 text-sm" /><Button type="submit" variant="primary" :disabled="domainForm.processing">{{ $t('superAdmin.tenantShow.add') }}</Button></div></label><p v-if="domainForm.errors.domain" class="mt-2 text-xs text-red-600">{{ domainForm.errors.domain }}</p><p class="mt-2 text-[9px] text-neutral-500">{{ $t('superAdmin.tenantShow.newDomainNote') }}</p></form>
                             </section>
 
-                            <section v-else-if="configTab === 'channex'" class="space-y-4"><div class="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4"><div><strong class="text-xs text-neutral-900">Channex Channel Manager</strong><p class="mt-1 text-[10px] text-neutral-500">Sinkronizon OTA-t, rezervimet dhe disponibilitetin.</p></div><button type="button" class="relative h-6 w-11 rounded-full transition" :class="channexForm.enabled ? 'bg-emerald-700' : 'bg-neutral-300'" @click="channexForm.enabled = !channexForm.enabled"><span class="absolute top-1 h-4 w-4 rounded-full bg-white shadow transition" :class="channexForm.enabled ? 'left-6' : 'left-1'" /></button></div><div class="grid gap-4 rounded-xl border border-neutral-200 p-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">API key<input v-model="channexForm.api_key" type="password" :placeholder="tenant.integrations.channex.has_api_key ? '•••••••• (lëre bosh për ta mbajtur)' : 'Ngjit API key'" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Webhook secret<input v-model="channexForm.webhook_secret" type="password" :placeholder="tenant.integrations.channex.has_webhook_secret ? '•••••••• (lëre bosh për ta mbajtur)' : 'Ngjit webhook secret'" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Property ID<input v-model="channexForm.property_id" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Base URL<input v-model="channexForm.base_url" placeholder="https://app.channex.io/api/v1" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><p v-if="Object.keys(channexForm.errors).length" class="text-xs text-red-600 sm:col-span-2">{{ Object.values(channexForm.errors)[0] }}</p></div></section>
+                            <section v-else-if="configTab === 'channex'" class="space-y-4"><div class="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4"><div><strong class="text-xs text-neutral-900">Channex Channel Manager</strong><p class="mt-1 text-[10px] text-neutral-500">{{ $t('superAdmin.tenantShow.channexSubtitle') }}</p></div><button type="button" class="relative h-6 w-11 rounded-full transition" :class="channexForm.enabled ? 'bg-emerald-700' : 'bg-neutral-300'" @click="channexForm.enabled = !channexForm.enabled"><span class="absolute top-1 h-4 w-4 rounded-full bg-white shadow transition" :class="channexForm.enabled ? 'left-6' : 'left-1'" /></button></div><div class="grid gap-4 rounded-xl border border-neutral-200 p-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">API key<input v-model="channexForm.api_key" type="password" :placeholder="tenant.integrations.channex.has_api_key ? $t('superAdmin.tenantShow.secretKeepPlaceholder') : $t('superAdmin.tenantShow.pasteApiKey')" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Webhook secret<input v-model="channexForm.webhook_secret" type="password" :placeholder="tenant.integrations.channex.has_webhook_secret ? $t('superAdmin.tenantShow.secretKeepPlaceholder') : $t('superAdmin.dynamic.pasteWebhookSecret')" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Property ID<input v-model="channexForm.property_id" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Base URL<input v-model="channexForm.base_url" placeholder="https://app.channex.io/api/v1" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><p v-if="Object.keys(channexForm.errors).length" class="text-xs text-red-600 sm:col-span-2">{{ Object.values(channexForm.errors)[0] }}</p></div></section>
 
-                            <section v-else-if="configTab === 'pok'" class="space-y-4"><div class="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4"><div><strong class="text-xs text-neutral-900">POK Payments</strong><p class="mt-1 text-[10px] text-neutral-500">Pagesa online për rezervime dhe link pagese.</p></div><button type="button" class="relative h-6 w-11 rounded-full transition" :class="pokForm.enabled ? 'bg-emerald-700' : 'bg-neutral-300'" @click="pokForm.enabled = !pokForm.enabled"><span class="absolute top-1 h-4 w-4 rounded-full bg-white shadow transition" :class="pokForm.enabled ? 'left-6' : 'left-1'" /></button></div><div class="grid gap-4 rounded-xl border border-neutral-200 p-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">Key ID<input v-model="pokForm.key_id" type="password" :placeholder="tenant.integrations.pok.has_key_id ? '•••••••• (lëre bosh për ta mbajtur)' : 'Ngjit Key ID'" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Key secret<input v-model="pokForm.key_secret" type="password" :placeholder="tenant.integrations.pok.has_key_secret ? '•••••••• (lëre bosh për ta mbajtur)' : 'Ngjit Key secret'" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600 sm:col-span-2">Merchant ID<input v-model="pokForm.merchant_id" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="flex items-center gap-2 text-[11px] font-semibold text-neutral-600 sm:col-span-2"><input v-model="pokForm.production" type="checkbox" class="rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600" /> Mjedisi production</label><p v-if="Object.keys(pokForm.errors).length" class="text-xs text-red-600 sm:col-span-2">{{ Object.values(pokForm.errors)[0] }}</p></div></section>
+                            <section v-else-if="configTab === 'pok'" class="space-y-4"><div class="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4"><div><strong class="text-xs text-neutral-900">POK Payments</strong><p class="mt-1 text-[10px] text-neutral-500">{{ $t('superAdmin.tenantShow.pokSubtitle') }}</p></div><button type="button" class="relative h-6 w-11 rounded-full transition" :class="pokForm.enabled ? 'bg-emerald-700' : 'bg-neutral-300'" @click="pokForm.enabled = !pokForm.enabled"><span class="absolute top-1 h-4 w-4 rounded-full bg-white shadow transition" :class="pokForm.enabled ? 'left-6' : 'left-1'" /></button></div><div class="grid gap-4 rounded-xl border border-neutral-200 p-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">Key ID<input v-model="pokForm.key_id" type="password" :placeholder="tenant.integrations.pok.has_key_id ? $t('superAdmin.tenantShow.secretKeepPlaceholder') : $t('superAdmin.dynamic.pasteKeyId')" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600">Key secret<input v-model="pokForm.key_secret" type="password" :placeholder="tenant.integrations.pok.has_key_secret ? $t('superAdmin.tenantShow.secretKeepPlaceholder') : $t('superAdmin.dynamic.pasteKeySecret')" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="text-[11px] font-semibold text-neutral-600 sm:col-span-2">Merchant ID<input v-model="pokForm.merchant_id" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="flex items-center gap-2 text-[11px] font-semibold text-neutral-600 sm:col-span-2"><input v-model="pokForm.production" type="checkbox" class="rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600" /> {{ $t('superAdmin.tenantShow.productionEnvironment') }}</label><p v-if="Object.keys(pokForm.errors).length" class="text-xs text-red-600 sm:col-span-2">{{ Object.values(pokForm.errors)[0] }}</p></div></section>
 
-                            <section v-else class="space-y-4"><div class="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4"><div><strong class="text-xs text-neutral-900">fature.al</strong><p class="mt-1 text-[10px] text-neutral-500">Fiskalizimi i faturave dhe pagesave të hotelit.</p></div><button type="button" class="relative h-6 w-11 rounded-full transition" :class="fatureForm.enabled ? 'bg-emerald-700' : 'bg-neutral-300'" @click="fatureForm.enabled = !fatureForm.enabled"><span class="absolute top-1 h-4 w-4 rounded-full bg-white shadow transition" :class="fatureForm.enabled ? 'left-6' : 'left-1'" /></button></div><div class="grid gap-4 rounded-xl border border-neutral-200 p-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">Mjedisi<select v-model="fatureForm.environment" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option value="sandbox">Sandbox</option><option value="production">Production</option></select></label><label class="text-[11px] font-semibold text-neutral-600">API token<input v-model="fatureForm.api_token" type="password" :placeholder="tenant.integrations.fature_al.has_api_token ? '•••••••• (lëre bosh për ta mbajtur)' : 'Ngjit API token'" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><p v-if="Object.keys(fatureForm.errors).length" class="text-xs text-red-600 sm:col-span-2">{{ Object.values(fatureForm.errors)[0] }}</p></div><div class="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 p-4"><div><strong class="text-xs text-neutral-900">Testi i lidhjes</strong><p class="mt-1 text-[10px] text-neutral-500">{{ tenant.integrations.fature_al.last_tested_at ? `${tenant.integrations.fature_al.last_test_status} · ${when(tenant.integrations.fature_al.last_tested_at)}` : 'Lidhja nuk është testuar ende.' }}</p></div><Button variant="outline" @click="testFature"><ExternalLink class="h-4 w-4" /> Testo lidhjen</Button></div></section>
+                            <section v-else class="space-y-4"><div class="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4"><div><strong class="text-xs text-neutral-900">fature.al</strong><p class="mt-1 text-[10px] text-neutral-500">{{ $t('superAdmin.tenantShow.fatureSubtitle') }}</p></div><button type="button" class="relative h-6 w-11 rounded-full transition" :class="fatureForm.enabled ? 'bg-emerald-700' : 'bg-neutral-300'" @click="fatureForm.enabled = !fatureForm.enabled"><span class="absolute top-1 h-4 w-4 rounded-full bg-white shadow transition" :class="fatureForm.enabled ? 'left-6' : 'left-1'" /></button></div><div class="grid gap-4 rounded-xl border border-neutral-200 p-4 sm:grid-cols-2"><label class="text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.tenantShow.environment') }}<select v-model="fatureForm.environment" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option value="sandbox">Sandbox</option><option value="production">Production</option></select></label><label class="text-[11px] font-semibold text-neutral-600">API token<input v-model="fatureForm.api_token" type="password" :placeholder="tenant.integrations.fature_al.has_api_token ? $t('superAdmin.tenantShow.secretKeepPlaceholder') : $t('superAdmin.tenantShow.pasteApiToken')" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><p v-if="Object.keys(fatureForm.errors).length" class="text-xs text-red-600 sm:col-span-2">{{ Object.values(fatureForm.errors)[0] }}</p></div><div class="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 p-4"><div><strong class="text-xs text-neutral-900">{{ $t('superAdmin.tenantShow.connectionTest') }}</strong><p class="mt-1 text-[10px] text-neutral-500">{{ tenant.integrations.fature_al.last_tested_at ? `${tenant.integrations.fature_al.last_test_status} · ${when(tenant.integrations.fature_al.last_tested_at)}` : $t('superAdmin.tenantShow.notTestedYet') }}</p></div><Button variant="outline" @click="testFature"><ExternalLink class="h-4 w-4" /> {{ $t('superAdmin.tenantShow.testConnection') }}</Button></div></section>
                         </div>
                     </div>
 
                     <footer class="flex shrink-0 items-center justify-between gap-3 border-t border-neutral-200 bg-white px-5 py-3.5">
-                        <p class="hidden text-[10px] text-neutral-500 sm:block">Ndryshimet regjistrohen në audit log.</p>
-                        <div class="ml-auto flex gap-2"><Button variant="outline" :disabled="drawerProcessing" @click="closeDrawer">Anulo</Button><Button v-if="activeDrawer !== 'config' || configTab !== 'domains'" variant="primary" :disabled="drawerProcessing" @click="activeDrawer === 'tenant' ? saveTenant() : activeDrawer === 'member' ? saveMember() : activeDrawer === 'billing' ? saveBilling() : saveConfig()">{{ drawerProcessing ? 'Duke ruajtur…' : 'Ruaj ndryshimet' }}</Button></div>
+                        <p class="hidden text-[10px] text-neutral-500 sm:block">{{ $t('superAdmin.tenantShow.auditNote') }}</p>
+                        <div class="ml-auto flex gap-2"><Button variant="outline" :disabled="drawerProcessing" @click="closeDrawer">{{ $t('superAdmin.auto.copy008') }}</Button><Button v-if="activeDrawer !== 'config' || configTab !== 'domains'" variant="primary" :disabled="drawerProcessing" @click="activeDrawer === 'tenant' ? saveTenant() : activeDrawer === 'member' ? saveMember() : activeDrawer === 'billing' ? saveBilling() : saveConfig()">{{ drawerProcessing ? $t('superAdmin.tenantShow.saving') : $t('superAdmin.tenantShow.saveChanges') }}</Button></div>
                     </footer>
                 </aside>
             </div>
