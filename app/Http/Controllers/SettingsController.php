@@ -586,12 +586,14 @@ class SettingsController extends Controller
         return back()->with('success', "Kamarieri {$user->name} u krijua dhe u aktivizua në POS.");
     }
 
-    // --- OTA pricing programs (Booking.com / Expedia) ---
+    // --- OTA pricing programs (Booking.com / Expedia / Airbnb) ---
     public function updatePricingPrograms(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'direct_discount_enabled' => ['sometimes', 'boolean'],
             'direct_discount_pct' => ['sometimes', 'numeric', 'min:0', 'max:50'],
+            'airbnb_host_fee_enabled' => ['sometimes', 'boolean'],
+            'airbnb_host_fee_pct' => ['sometimes', 'numeric', 'min:0', 'max:50'],
             'booking_genius_enabled' => ['required', 'boolean'],
             'booking_genius_pct' => ['required', 'numeric', 'min:0', 'max:50'],
             'booking_mobile_enabled' => ['required', 'boolean'],

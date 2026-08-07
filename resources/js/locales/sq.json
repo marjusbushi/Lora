@@ -336,7 +336,11 @@
       "recommended": "E rekomanduar",
       "directEnabled": "Aktivizo uljen direkte",
       "discountPercent": "Ulja në web",
-      "directExample": "Shembull: çmimi inteligjent €100 → çmimi direkt €{price}."
+      "directExample": "Shembull: çmimi inteligjent €100 → çmimi direkt €{price}.",
+      "airbnbTitle": "Airbnb — kompensimi i tarifës së hostit",
+      "airbnbDescription": "Airbnb e zbret tarifën e vet nga pagesa jote në vend që të faturojë komision. Aktivizoje që çmimi i publikuar në Airbnb të rritet dhe neto të mbetet çmimi yt bazë.",
+      "airbnbFeeLabel": "Tarifa e hostit (përfshirë taksat mbi tarifën)",
+      "airbnbExample": "Shembull: çmimi bazë €85 → publikohet €{price} në Airbnb; pas tarifës, neto ≈ €85."
     },
     "common": {
       "save": "Ruaj",

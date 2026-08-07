@@ -34,6 +34,8 @@ class ChannelSync
 
     public const RATE_PLAN_TITLE_EXPEDIA = 'Standard Rate - Expedia';
 
+    public const RATE_PLAN_TITLE_AIRBNB = 'Standard Rate - Airbnb';
+
     public function __construct(
         protected ChannexClient $channex,
         protected OtaSellWindow $sellWindow,
@@ -225,11 +227,12 @@ class ChannelSync
     /**
      * Push nightly rates over [from, to] to every mapped rate plan of this room
      * type: the BASE plan gets the canonical PMS price; the per-channel plans
-     * (Booking.com / Expedia) get the price divided by that channel's discount
-     * factor from OtaPricingPrograms — so after the OTA applies its member/
-     * mobile promotions, the guest sees the PMS price again. A factor of 1
-     * (no programs enabled) pushes the base price unchanged; an unmapped
-     * channel plan is skipped (single-plan behaviour is preserved).
+     * (Booking.com / Expedia / Airbnb) get the price divided by that channel's
+     * discount factor from OtaPricingPrograms — so after the OTA applies its
+     * member/mobile promotions (or, for Airbnb, deducts its host fee from the
+     * payout), the hotel lands back on the PMS price. A factor of 1 (no
+     * programs enabled) pushes the base price unchanged; an unmapped channel
+     * plan is skipped (single-plan behaviour is preserved).
      */
     protected function pushRatesForMapping(ChannelMapping $mapping, RoomType $roomType, CarbonInterface $from, CarbonInterface $to): bool
     {
@@ -240,6 +243,7 @@ class ChannelSync
             [$mapping->channex_rate_plan_id, 1.0],
             [$mapping->channex_booking_rate_plan_id, (float) $programs['booking']['discount_factor']],
             [$mapping->channex_expedia_rate_plan_id, (float) $programs['expedia']['discount_factor']],
+            [$mapping->channex_airbnb_rate_plan_id, (float) $programs['airbnb']['discount_factor']],
         ];
 
         $ok = true;
