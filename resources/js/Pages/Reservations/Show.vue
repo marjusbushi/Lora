@@ -96,17 +96,21 @@ const typeLabel = {
     room: translate('admin.generated.k_654e9cd3a2c4'), restaurant: 'Restorant', bar: 'Bar',
     minibar: 'Minibar', extra: translate('admin.generated.k_d65a8958aa77'), tax: 'Taksa', discount: 'Zbritje',
 };
-const methodLabel = { cash: 'Kesh', card: 'Karte' };
+const methodLabel = { cash: 'Kesh', card: 'Karte', ota: 'Online (OTA)' };
 
 const lineTypeOptions = computed(() => [
     ...(!props.inventoryEnabled ? [{ value: 'minibar', label: translate('admin.generated.k_c88066bb10cd') }] : []),
     { value: 'extra', label: translate('admin.generated.k_74f0c49d9770') },
     { value: 'discount', label: translate('admin.generated.k_0f4209c81496') },
 ]);
-const methodOptions = [
+// The 'ota' method appears only for OTA-channel reservations: the money went
+// to the OTA online, so it must land on the channel's account, not Arka/Banka.
+const isOtaChannel = computed(() => ['booking.com', 'expedia', 'airbnb'].includes(props.reservation.channel));
+const methodOptions = computed(() => [
     { value: 'cash', label: translate('admin.generated.k_da508864861c') },
     { value: 'card', label: translate('admin.generated.k_6d64b27daef1') },
-];
+    ...(isOtaChannel.value ? [{ value: 'ota', label: 'Paguar online (OTA)' }] : []),
+]);
 
 const hasOpenOrders = computed(() => (props.openPosOrders?.length || 0) > 0);
 const unsettled = computed(() => Number(props.folio.outstanding) > 0.005);
@@ -400,7 +404,8 @@ function openPaymentModal() {
     payForm.reset();
     payForm.clearErrors();
     payForm.amount = Number(props.folio.outstanding).toFixed(2);
-    payForm.method = 'cash';
+    // The OTA already collected online → confirming that is the default.
+    payForm.method = props.reservation.payment_collect === 'ota' ? 'ota' : 'cash';
     showPayModal.value = true;
 }
 
@@ -926,6 +931,10 @@ function settleAndCheckout(method) {
                     </div>
                 </FormGroup>
 
+                <div v-if="payForm.method === 'ota'" class="rounded-lg bg-info-50 p-3 text-tiny text-info-800">
+                    Shuma shkon në llogarinë e kanalit ({{ reservation.channel }}) — jo në arkë apo bankë.
+                    Kur pagesa reale nga OTA të mbërrijë në bankë, regjistrohet si transfertë nga ajo llogari.
+                </div>
                 <div class="flex items-start gap-2 text-tiny text-neutral-500">
                     <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-success-600" />
                     <span>Pagesa ruhet vetëm një herë dhe zbritet menjëherë nga balanca e rezervimit.</span>
@@ -1012,7 +1021,8 @@ function settleAndCheckout(method) {
                     <template v-if="!hasOpenOrders">
                         <template v-if="unsettled">
                             <Button variant="outline" :loading="checkingOut" @click="settleAndCheckout('cash')">{{ $t('admin.generated.k_87a50ba2dbca') }}</Button>
-                            <Button variant="primary" :loading="checkingOut" @click="settleAndCheckout('card')">{{ $t('admin.generated.k_1ca92da022d3') }}</Button>
+                            <Button :variant="reservation.payment_collect === 'ota' ? 'outline' : 'primary'" :loading="checkingOut" @click="settleAndCheckout('card')">{{ $t('admin.generated.k_1ca92da022d3') }}</Button>
+                            <Button v-if="reservation.payment_collect === 'ota'" variant="primary" :loading="checkingOut" @click="settleAndCheckout('ota')">Paguar online — Check-out</Button>
                         </template>
                         <Button v-else variant="primary" :loading="checkingOut" @click="settleAndCheckout(null)">{{ $t('admin.generated.k_3c2400f3c583') }}</Button>
                     </template>
