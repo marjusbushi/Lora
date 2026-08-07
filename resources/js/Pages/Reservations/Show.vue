@@ -78,7 +78,7 @@ function requestCleaning() {
         onSuccess: (page) => {
             const flash = page.props?.flash || {};
             if (flash.error) toasts.value?.error(flash.error);
-            else toasts.value?.success(flash.success || 'Pastrimi ditor u kerkua.');
+            else toasts.value?.success(flash.success || translate('reservationShow.cleaningRequested'));
         },
         onFinish: () => (requestingCleaning.value = false),
     });
@@ -93,10 +93,10 @@ const statusBadge = {
 };
 
 const typeLabel = {
-    room: translate('admin.generated.k_654e9cd3a2c4'), restaurant: 'Restorant', bar: 'Bar',
-    minibar: 'Minibar', extra: translate('admin.generated.k_d65a8958aa77'), tax: 'Taksa', discount: 'Zbritje',
+    room: translate('admin.generated.k_654e9cd3a2c4'), restaurant: translate('reservationShow.typeRestaurant'), bar: translate('reservationShow.typeBar'),
+    minibar: translate('reservationShow.typeMinibar'), extra: translate('admin.generated.k_d65a8958aa77'), tax: translate('reservationShow.typeTax'), discount: translate('reservationShow.typeDiscount'),
 };
-const methodLabel = { cash: 'Kesh', card: 'Karte', ota: 'Online (OTA)' };
+const methodLabel = { cash: translate('reservationShow.methodCash'), card: translate('reservationShow.methodCard'), ota: translate('reservationShow.methodOta') };
 
 const lineTypeOptions = computed(() => [
     ...(!props.inventoryEnabled ? [{ value: 'minibar', label: translate('admin.generated.k_c88066bb10cd') }] : []),
@@ -109,7 +109,7 @@ const isOtaChannel = computed(() => ['booking.com', 'expedia', 'airbnb'].include
 const methodOptions = computed(() => [
     { value: 'cash', label: translate('admin.generated.k_da508864861c') },
     { value: 'card', label: translate('admin.generated.k_6d64b27daef1') },
-    ...(isOtaChannel.value ? [{ value: 'ota', label: 'Paguar online (OTA)' }] : []),
+    ...(isOtaChannel.value ? [{ value: 'ota', label: translate('reservationShow.methodPaidOnlineOta') }] : []),
 ]);
 
 const hasOpenOrders = computed(() => (props.openPosOrders?.length || 0) > 0);
@@ -394,9 +394,9 @@ function submitMinibar() {
         onSuccess: () => {
             showMinibarModal.value = false;
             minibarForm.inventory_reference = newInventoryReference();
-            toasts.value?.success('Minibari u regjistrua dhe stoku u përditësua.');
+            toasts.value?.success(translate('reservationShow.minibarSuccess'));
         },
-        onError: (errors) => toasts.value?.error(Object.values(errors)[0] || 'Minibari nuk u regjistrua.'),
+        onError: (errors) => toasts.value?.error(Object.values(errors)[0] || translate('reservationShow.minibarNotPosted')),
     });
 }
 
@@ -441,7 +441,7 @@ async function submitPay() {
     payForm.clearErrors();
 
     if (!paymentIsValid.value) {
-        payForm.setError('amount', `Shuma duhet të jetë nga 0.01 deri në ${money(props.folio.outstanding)}.`);
+        payForm.setError('amount', translate('reservationShow.amountRange', { max: money(props.folio.outstanding) }));
         return;
     }
 
@@ -457,18 +457,18 @@ async function submitPay() {
         paymentSubmitting.value = false;
         closePaymentModal();
         router.reload({ only: ['folio', 'payments'] });
-        toasts.value?.success(`Pagesa ${money(recordedAmount)} u regjistrua me sukses.`);
+        toasts.value?.success(translate('reservationShow.paymentSuccess', { amount: money(recordedAmount) }));
     } catch (error) {
         const status = error.response?.status;
         const errors = error.response?.data?.errors;
 
         if (status === 422 && errors) {
             Object.entries(errors).forEach(([field, messages]) => payForm.setError(field, messages[0]));
-            toasts.value?.error(Object.values(errors)[0]?.[0] || 'Kontrollo të dhënat e pagesës.');
+            toasts.value?.error(Object.values(errors)[0]?.[0] || translate('reservationShow.paymentCheckDetails'));
         } else if (status === 503) {
-            toasts.value?.warning('Sistemi po përditësohet. Pagesa nuk u regjistrua; provo përsëri pas pak sekondash.');
+            toasts.value?.warning(translate('reservationShow.paymentSystemUpdating'));
         } else {
-            toasts.value?.error('Pagesa nuk u regjistrua. Provo përsëri.');
+            toasts.value?.error(translate('reservationShow.paymentFailed'));
         }
     } finally {
         paymentSubmitting.value = false;
@@ -503,11 +503,11 @@ function settleAndCheckout(method) {
                 checkoutMode.value = false;
                 toasts.value?.success(
                     method
-                        ? `Pagesa u regjistrua (${methodLabel[method]}) dhe check-out u krye.`
-                        : 'Check-out u krye.'
+                        ? translate('reservationShow.settledCheckoutSuccess', { method: methodLabel[method] })
+                        : translate('reservationShow.checkoutSuccess')
                 );
             },
-            onError: (errors) => toasts.value?.error(errors.settle_method || 'Check-out deshtoi.'),
+            onError: (errors) => toasts.value?.error(errors.settle_method || translate('reservationShow.checkoutFailed')),
             onFinish: () => { checkingOut.value = false; },
         }
     );
@@ -559,17 +559,17 @@ function settleAndCheckout(method) {
                             :style="moreMenuStyle"
                             role="menu"
                         >
-                            <button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openMinibarModal)"><PackageOpen class="h-4 w-4" />Shto minibar</button>
+                            <button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openMinibarModal)"><PackageOpen class="h-4 w-4" />{{ $t('reservationShow.addMinibar') }}</button>
                             <button v-if="canAddCharge" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openLineModal)"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</button>
                             <button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openPaymentModal)"><CreditCard class="h-4 w-4" />{{ $t('reservationShow.recordPayment') }}</button>
                             <button v-if="canUpdate && isCheckedIn" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="requestingCleaning" @click="runMoreMenuAction(requestCleaning)"><RefreshCcw class="h-4 w-4" />{{ $t('reservationShow.requestCleaning') }}</button>
-                            <button v-if="canUpdate && isCheckedIn && !earlyDeparturePlanned" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openStayExtensionModal)"><CalendarPlus class="h-4 w-4" />Zgjat qëndrimin</button>
-                            <button v-if="canUpdate && canDepartEarly" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openEarlyDepartureModal)"><CalendarMinus class="h-4 w-4" />{{ earlyDeparturePlanned ? 'Menaxho largimin' : 'Largim i parakohshëm' }}</button>
+                            <button v-if="canUpdate && isCheckedIn && !earlyDeparturePlanned" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openStayExtensionModal)"><CalendarPlus class="h-4 w-4" />{{ $t('reservationShow.extendStay') }}</button>
+                            <button v-if="canUpdate && canDepartEarly" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openEarlyDepartureModal)"><CalendarMinus class="h-4 w-4" />{{ earlyDeparturePlanned ? $t('reservationShow.manageDeparture') : $t('reservationShow.earlyDeparture') }}</button>
                         </div>
                     </template>
                 </Teleport>
                 <Button v-if="canUpdate && isCheckedIn" variant="primary" :disabled="hasOpenOrders" @click="openCheckout">
-                    {{ earlyDeparturePlanned ? (plannedDepartureDue ? 'Përfundo largimin' : 'Menaxho largimin') : $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" />
+                    {{ earlyDeparturePlanned ? (plannedDepartureDue ? $t('reservationShow.finalizeDeparture') : $t('reservationShow.manageDeparture')) : $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" />
                 </Button>
             </div>
         </div>
@@ -594,11 +594,11 @@ function settleAndCheckout(method) {
             <div class="flex items-start gap-3">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-info-700 ring-1 ring-info-200"><CalendarClock class="h-5 w-5" /></span>
                 <div>
-                    <p class="font-semibold text-info-900">Largim i planifikuar më {{ formatDate(reservation.check_out_date) }}</p>
-                    <p class="mt-0.5 text-sm text-info-700">Check-out fillestar: {{ formatDate(reservation.original_check_out_date) }}. Netët e mbetura janë liruar në inventar; mysafiri vazhdon të jetë në hotel.</p>
+                    <p class="font-semibold text-info-900">{{ $t('reservationShow.plannedDepartureOn', { date: formatDate(reservation.check_out_date) }) }}</p>
+                    <p class="mt-0.5 text-sm text-info-700">{{ $t('reservationShow.plannedDepartureInfo', { date: formatDate(reservation.original_check_out_date) }) }}</p>
                 </div>
             </div>
-            <Button variant="outline" @click="openEarlyDepartureModal">{{ plannedDepartureDue ? 'Përfundo largimin' : 'Menaxho planin' }}</Button>
+            <Button variant="outline" @click="openEarlyDepartureModal">{{ plannedDepartureDue ? $t('reservationShow.finalizeDeparture') : $t('reservationShow.managePlan') }}</Button>
         </section>
 
         <section
@@ -613,7 +613,7 @@ function settleAndCheckout(method) {
                 </span>
                 <div><p class="font-semibold" :class="checkoutState.tone === 'success' ? 'text-success-800' : 'text-warning-800'">{{ checkoutState.title }}</p><p class="mt-0.5 text-sm" :class="checkoutState.tone === 'success' ? 'text-success-700' : 'text-warning-700'">{{ checkoutState.description }}</p></div>
             </div>
-            <Button variant="primary" :disabled="hasOpenOrders" @click="openCheckout">{{ earlyDeparturePlanned ? (plannedDepartureDue ? 'Përfundo largimin' : 'Menaxho largimin') : $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" /></Button>
+            <Button variant="primary" :disabled="hasOpenOrders" @click="openCheckout">{{ earlyDeparturePlanned ? (plannedDepartureDue ? $t('reservationShow.finalizeDeparture') : $t('reservationShow.manageDeparture')) : $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" /></Button>
         </section>
 
         <div class="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
@@ -689,7 +689,7 @@ function settleAndCheckout(method) {
                 <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
                     <div><h3 class="text-lg font-semibold text-neutral-900">{{ $t('reservationShow.folioTitle') }}</h3><p class="mt-1 text-xs text-neutral-500">{{ $t('reservationShow.folioSubtitle') }}</p></div>
                     <div class="flex items-center gap-2">
-                        <Button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" size="sm" variant="primary" @click="openMinibarModal"><PackageOpen class="h-4 w-4" />Shto minibar</Button>
+                        <Button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" size="sm" variant="primary" @click="openMinibarModal"><PackageOpen class="h-4 w-4" />{{ $t('reservationShow.addMinibar') }}</Button>
                         <Button v-if="canAddCharge" size="sm" variant="outline" @click="openLineModal"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</Button>
                     </div>
                 </div>
@@ -847,7 +847,7 @@ function settleAndCheckout(method) {
                     <FormGroup :label="$t('admin.generated.k_db85f6c8ba94')" :error="lineForm.errors.type" required>
                         <Select v-model="lineForm.type" :options="lineTypeOptions" :error="lineForm.errors.type" />
                     </FormGroup>
-                    <FormGroup :label="lineForm.type === 'discount' ? 'Shuma e zbritjes' : 'Shuma'" :error="lineForm.errors.amount" required>
+                    <FormGroup :label="lineForm.type === 'discount' ? $t('reservationShow.discountAmount') : $t('reservationShow.amount')" :error="lineForm.errors.amount" required>
                         <TextInput type="number" step="0.01" min="0.01" v-model="lineForm.amount" placeholder="0.00" :error="lineForm.errors.amount" />
                     </FormGroup>
                 </div>
@@ -872,16 +872,16 @@ function settleAndCheckout(method) {
                 <div class="rounded-lg border border-accent-100 bg-accent-50/60 p-4">
                     <div class="grid grid-cols-2 gap-4 text-body-sm">
                         <div>
-                            <p class="text-neutral-500">Totali i rezervimit</p>
+                            <p class="text-neutral-500">{{ $t('reservationShow.reservationTotal') }}</p>
                             <p class="mt-1 font-semibold text-neutral-900">{{ money(folio.gross) }}</p>
                         </div>
                         <div class="text-right">
-                            <p class="text-neutral-500">Paguar deri tani</p>
+                            <p class="text-neutral-500">{{ $t('reservationShow.paidSoFar') }}</p>
                             <p class="mt-1 font-semibold text-success-700">{{ money(folio.paid) }}</p>
                         </div>
                     </div>
                     <div class="mt-3 flex items-center justify-between border-t border-accent-100 pt-3">
-                        <span class="font-medium text-neutral-700">Mbetur për t'u paguar</span>
+                        <span class="font-medium text-neutral-700">{{ $t('reservationShow.outstanding') }}</span>
                         <span class="text-h4 text-error-600">{{ money(folio.outstanding) }}</span>
                     </div>
                 </div>
@@ -906,7 +906,7 @@ function settleAndCheckout(method) {
                         class="mt-2 text-body-sm font-medium text-accent-700 hover:text-accent-800"
                         @click="payForm.amount = Number(folio.outstanding).toFixed(2)"
                     >
-                        Paguaj të gjithë shumën
+                        {{ $t('reservationShow.payFullAmount') }}
                     </button>
                 </FormGroup>
 
@@ -932,18 +932,17 @@ function settleAndCheckout(method) {
                 </FormGroup>
 
                 <div v-if="payForm.method === 'ota'" class="rounded-lg bg-info-50 p-3 text-tiny text-info-800">
-                    Shuma shkon në llogarinë e kanalit ({{ reservation.channel }}) — jo në arkë apo bankë.
-                    Kur pagesa reale nga OTA të mbërrijë në bankë, regjistrohet si transfertë nga ajo llogari.
+                    {{ $t('reservationShow.otaAccountHint', { channel: reservation.channel }) }}
                 </div>
                 <div class="flex items-start gap-2 text-tiny text-neutral-500">
                     <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-success-600" />
-                    <span>Pagesa ruhet vetëm një herë dhe zbritet menjëherë nga balanca e rezervimit.</span>
+                    <span>{{ $t('reservationShow.paymentStoredOnce') }}</span>
                 </div>
             </form>
             <template #footer>
                 <Button variant="outline" :disabled="paymentSubmitting" @click="closePaymentModal">{{ $t('admin.generated.k_1ae76507a0e9') }}</Button>
                 <Button variant="success" :loading="paymentSubmitting" :disabled="!paymentIsValid" @click="submitPay">
-                    Regjistro {{ paymentIsValid ? money(paymentAmount) : 'pagesën' }}
+                    {{ paymentIsValid ? $t('reservationShow.recordAmount', { amount: money(paymentAmount) }) : $t('reservationShow.recordThePayment') }}
                 </Button>
             </template>
         </Modal>
@@ -1022,7 +1021,7 @@ function settleAndCheckout(method) {
                         <template v-if="unsettled">
                             <Button variant="outline" :loading="checkingOut" @click="settleAndCheckout('cash')">{{ $t('admin.generated.k_87a50ba2dbca') }}</Button>
                             <Button :variant="reservation.payment_collect === 'ota' ? 'outline' : 'primary'" :loading="checkingOut" @click="settleAndCheckout('card')">{{ $t('admin.generated.k_1ca92da022d3') }}</Button>
-                            <Button v-if="reservation.payment_collect === 'ota'" variant="primary" :loading="checkingOut" @click="settleAndCheckout('ota')">Paguar online — Check-out</Button>
+                            <Button v-if="reservation.payment_collect === 'ota'" variant="primary" :loading="checkingOut" @click="settleAndCheckout('ota')">{{ $t('reservationShow.paidOnlineCheckout') }}</Button>
                         </template>
                         <Button v-else variant="primary" :loading="checkingOut" @click="settleAndCheckout(null)">{{ $t('admin.generated.k_3c2400f3c583') }}</Button>
                     </template>
@@ -1048,14 +1047,14 @@ function settleAndCheckout(method) {
             :reservation="reservation"
             :hotel-today="hotelToday"
             @close="showEarlyDeparture = false"
-            @completed="toasts?.success('Plani i largimit u përditësua.')"
+            @completed="toasts?.success($t('reservationShow.departurePlanUpdated'))"
         />
         <StayExtensionModal
             :show="showStayExtension"
             :reservation="reservation"
             :hotel-today="hotelToday"
             @close="showStayExtension = false"
-            @extended="toasts?.success('Qëndrimi u zgjat; përditësimi i inventarit u dërgua te Channex.')"
+            @extended="toasts?.success($t('reservationShow.stayExtended'))"
         />
         <ToastContainer ref="toasts" />
     </AppLayout>

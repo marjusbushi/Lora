@@ -597,8 +597,8 @@ function doCheckOut(res) {
                                             v-if="canOpenGuestChat && reservation.message_thread_id"
                                             role="button"
                                             class="relative ml-auto inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-white/70"
-                                            :title="reservation.unread_messages > 0 ? `${reservation.unread_messages} mesazhe të palexuara — hap bisedën` : 'Hap bisedën e mysafirit'"
-                                            :aria-label="`Mesazhet e ${reservation.guest?.first_name || ''} ${reservation.guest?.last_name || ''}`"
+                                            :title="reservation.unread_messages > 0 ? $t('reservationModals.calendar.unreadMessages', { count: reservation.unread_messages }) : $t('reservationModals.calendar.openGuestChat')"
+                                            :aria-label="$t('reservationModals.calendar.guestMessages', { guest: `${reservation.guest?.first_name || ''} ${reservation.guest?.last_name || ''}`.trim() })"
                                             @click.stop="openGuestChat(reservation)"
                                         ><MessageSquare class="h-3.5 w-3.5" :class="reservation.unread_messages > 0 ? 'text-accent-700' : 'text-neutral-500'" /><span v-if="reservation.unread_messages > 0" class="absolute -right-1.5 -top-1.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-error-500 px-0.5 text-[8px] font-bold leading-none text-white ring-1 ring-white">{{ reservation.unread_messages > 9 ? '9+' : reservation.unread_messages }}</span></span></span>
                                         <span class="mt-0.5 flex items-center justify-between gap-1 text-[10px] opacity-75"><span class="truncate">{{ channelMeta(reservation.channel).label }}</span><span class="shrink-0 font-bold" :class="Number(reservation.paid_amount) >= Number(reservation.total_amount) ? 'text-success-700' : 'text-warning-700'" aria-hidden="true">{{ reservation.currency || currencyCode }}</span></span>
