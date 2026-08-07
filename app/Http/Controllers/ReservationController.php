@@ -725,7 +725,7 @@ class ReservationController extends Controller
     {
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
-            'method' => ['required', 'in:cash,card'],
+            'method' => ['required', 'in:cash,card,ota'],
         ]);
 
         $payment = DB::transaction(function () use ($reservation, $data) {
@@ -1204,7 +1204,7 @@ class ReservationController extends Controller
 
         // Checkout settles the bill: the invoice is marked paid (cash/card) and only THEN does the guest leave.
         $data = $request->validate([
-            'settle_method' => ['nullable', 'in:cash,card'],
+            'settle_method' => ['nullable', 'in:cash,card,ota'],
         ]);
 
         // Live outstanding balance — same formula as the folio view: room charge + extra folio

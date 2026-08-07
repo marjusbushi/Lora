@@ -18,12 +18,25 @@ use Illuminate\Database\Eloquent\Model;
  * sourceable index + updateOrCreate), so observers, webhooks and the
  * finance:backfill command can all run repeatedly without double-counting.
  *
- * Cash goes to the cash account (Arka); card/POK/OTA/bank money to the first
- * bank account. OTA commissions are deliberately NOT ledger rows (they are
- * never cash movements) — the dashboard reads them straight from reservations.
+ * Cash goes to the cash account (Arka); card/POK/bank money to the first
+ * bank account; OTA-collected folio money to a per-channel clearing account
+ * (see channelAccountFor). OTA commissions are deliberately NOT ledger rows
+ * (they are never cash movements) — the dashboard reads them straight from
+ * reservations.
  */
 class FinanceLedger
 {
+    /**
+     * Display names for the per-channel money accounts. Online-collected
+     * folio payments (method 'ota') accumulate on these until the OTA's real
+     * payout lands in the bank, which the desk records as a transfer.
+     */
+    public const CHANNEL_ACCOUNT_LABELS = [
+        'booking.com' => 'Booking.com',
+        'expedia' => 'Expedia',
+        'airbnb' => 'Airbnb',
+    ];
+
     /** Where POS money lands, per hotel: the shared hotel accounts (default), a separate POS cash drawer, a separate POS bank, or separate POS cash AND bank accounts. */
     public const POS_MODE_SHARED = 'shared';
 
@@ -52,7 +65,10 @@ class FinanceLedger
         // cash reconciliation and the bank report stay truthful. Any clearing
         // account the hotel created (renamed to taste) is honored first.
         if ($method === 'import') {
+            // scope 'general' only: per-channel OTA accounts are also
+            // clearing-typed but must never absorb migration settlements.
             $account = FinanceAccount::where('type', 'clearing')
+                ->where('scope', 'general')
                 ->orderByDesc('is_active')
                 ->orderBy('id')
                 ->first();
@@ -120,6 +136,40 @@ class FinanceLedger
         ]);
     }
 
+    /**
+     * The account for online-collected money of one channel, auto-created on
+     * first use in the hotel's selling currency. Its balance reads "what this
+     * OTA is holding for us"; the desk empties it with a transfer when the
+     * payout really arrives in the bank.
+     */
+    public static function channelAccountFor(?string $channel): FinanceAccount
+    {
+        $label = self::CHANNEL_ACCOUNT_LABELS[strtolower(trim((string) $channel))] ?? 'OTA';
+
+        $account = FinanceAccount::where('type', 'clearing')
+            ->where('scope', 'channel')
+            ->where('name', $label)
+            ->orderByDesc('is_active')
+            ->orderBy('id')
+            ->first();
+
+        if ($account) {
+            if (! $account->is_active) {
+                $account->update(['is_active' => true]);
+            }
+
+            return $account;
+        }
+
+        return FinanceAccount::create([
+            'name' => $label,
+            'type' => 'clearing',
+            'scope' => 'channel',
+            'currency' => PricingCurrency::code(),
+            'is_active' => true,
+        ]);
+    }
+
     /** Mirror one folio payment into the ledger (or remove it when voided). */
     public function recordFolioPayment(Payment $payment): ?FinancePayment
     {
@@ -144,9 +194,12 @@ class FinanceLedger
             'sourceable_type' => Payment::class,
             'sourceable_id' => $payment->id,
         ]);
+        $channel = $payment->reservation?->channel;
         $ledger->fill([
             'direction' => $type === 'refund' ? 'out' : 'in',
-            'account_id' => self::accountFor($method)->id,
+            'account_id' => ($method === 'ota'
+                ? self::channelAccountFor($channel)
+                : self::accountFor($method))->id,
             'amount' => $payment->amount,
             'currency' => $currency,
             // FinancePayment uses source units per 1 base unit; Payment stores
@@ -157,13 +210,17 @@ class FinanceLedger
                 : round(1 / (float) ($payment->exchange_rate ?: 1 / $this->fxRate($currency)), 6),
             'method' => $method,
             'source' => 'auto',
-            'description' => $method === 'import'
-                ? 'Shlyerje importi — rezervimi #'.$payment->reservation_id
-                : match ($type) {
+            'description' => match (true) {
+                $method === 'import' => 'Shlyerje importi — rezervimi #'.$payment->reservation_id,
+                $method === 'ota' => 'Paguar online nga '
+                    .(self::CHANNEL_ACCOUNT_LABELS[strtolower(trim((string) $channel))] ?? 'OTA')
+                    .' — rezervimi #'.$payment->reservation_id,
+                default => match ($type) {
                     'deposit' => 'Depozitë folio — rezervimi #'.$payment->reservation_id,
                     'refund' => 'Rimbursim folio — rezervimi #'.$payment->reservation_id,
                     default => 'Pagesë folio — rezervimi #'.$payment->reservation_id,
                 },
+            },
             'paid_at' => $payment->created_at ?? now(),
             'created_by' => $payment->created_by,
         ]);
