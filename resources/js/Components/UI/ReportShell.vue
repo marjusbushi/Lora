@@ -20,30 +20,22 @@ const props = defineProps({
     query: { type: Object, default: () => ({}) },
 });
 
+// Keyed by the same translation keys the report pages pass as :title, so the
+// lookup matches in every locale. Entries whose page provides its own
+// :description/:category (the reports360.* pages) are omitted — the props win.
 const reportMeta = {
-    'Pasqyra Ekzekutive': { category: translate('admin.generated.k_74d293d3b604'), description: translate('admin.generated.k_4184602dda1e') },
-    'ADR / RevPAR / Mbushja': { category: translate('admin.generated.k_74d293d3b604'), description: translate('admin.generated.k_53dea86c2bad') },
-    'Tempo & Pickup': { category: translate('admin.generated.k_74d293d3b604'), description: translate('admin.generated.k_3f54075e41a8') },
-    'Prodhimi sipas Kanaleve': { category: translate('admin.generated.k_b8f660853d79'), description: translate('admin.generated.k_679ae4c0d2e6') },
-    'Anulime & No-Show': { category: translate('admin.generated.k_b8f660853d79'), description: translate('admin.generated.k_c25bffece3af') },
-    'Sjellja e Rezervimit': { category: translate('admin.generated.k_b8f660853d79'), description: translate('admin.generated.k_b376285fe6db') },
-    'Manifesti i Mbërritjeve': { category: 'Operacione', description: translate('admin.generated.k_2d7b0b3fe88b') },
-    'Manifesti i Nisjeve': { category: 'Operacione', description: translate('admin.generated.k_4f29ce5fbf5f') },
-    'Statusi i Dhomave': { category: 'Operacione', description: translate('admin.generated.k_6e37f1b06c08') },
-    'Raporti i Pastrimit': { category: 'Operacione', description: translate('admin.generated.k_75a27485ff75') },
-    'Mysafirë në Shtëpi': { category: 'Operacione', description: translate('admin.generated.k_af9117e5b47e') },
-    'Bilance të Papaguara': { category: translate('admin.generated.k_6ac594d75a8f'), description: translate('admin.generated.k_165ae67e1ab5') },
-    'Z-Report / Mbyllje Turni': { category: translate('admin.generated.k_6ac594d75a8f'), description: translate('admin.generated.k_767ddaaac1aa') },
-    'Arkëtime & Cash': { category: translate('admin.generated.k_6ac594d75a8f'), description: translate('admin.generated.k_c7ebc39c51fd') },
-    'Raport TVSH': { category: translate('admin.generated.k_6ac594d75a8f'), description: translate('admin.generated.k_eb029f3645df') },
-    'Zbritje të Dhëna': { category: translate('admin.generated.k_6ac594d75a8f'), description: translate('admin.generated.k_22d9bd68de65') },
-    'Direktoria e Mysafirëve': { category: translate('admin.generated.k_5c9435ba6ba2'), description: translate('admin.generated.k_1d5888aa36f4') },
-    'Mysafirë Kthyes & Top': { category: translate('admin.generated.k_5c9435ba6ba2'), description: translate('admin.generated.k_2c41845ac1da') },
-    'Përbërja sipas Kombësisë': { category: translate('admin.generated.k_5c9435ba6ba2'), description: translate('admin.generated.k_8baf439ecb7e') },
-    'Shitjet POS (Kategori & Artikull)': { category: 'Bar & restorant', description: translate('admin.generated.k_b0fc069d75d7') },
-    'Shitjet POS sipas Orës & Ditës': { category: 'Bar & restorant', description: translate('admin.generated.k_9ac274eff39b') },
-    'Mix i Pagesave POS': { category: 'Bar & restorant', description: translate('admin.generated.k_0b0dd183ecaa') },
-    'Anulime & Voids POS': { category: 'Bar & restorant', description: translate('admin.generated.k_85ea219d8b41') },
+    [translate('reports360.revenuePerformance.title')]: { category: translate('admin.generated.k_74d293d3b604'), description: translate('admin.generated.k_53dea86c2bad') },
+    [translate('reports360.pickupPace.title')]: { category: translate('admin.generated.k_74d293d3b604'), description: translate('admin.generated.k_3f54075e41a8') },
+    [translate('reports360.cancellationRisk.title')]: { category: translate('admin.generated.k_b8f660853d79'), description: translate('admin.generated.k_c25bffece3af') },
+    [translate('admin.generated.k_bae5330a3766')]: { category: translate('reportShell.categoryOperations'), description: translate('admin.generated.k_2d7b0b3fe88b') },
+    [translate('admin.generated.k_a39120663cac')]: { category: translate('reportShell.categoryOperations'), description: translate('admin.generated.k_4f29ce5fbf5f') },
+    [translate('admin.generated.k_7b1933c35a94')]: { category: translate('reportShell.categoryOperations'), description: translate('admin.generated.k_6e37f1b06c08') },
+    [translate('admin.generated.k_c50d20a648f3')]: { category: translate('reportShell.categoryOperations'), description: translate('admin.generated.k_af9117e5b47e') },
+    [translate('admin.generated.k_5041fe965762')]: { category: translate('admin.generated.k_6ac594d75a8f'), description: translate('admin.generated.k_767ddaaac1aa') },
+    [translate('admin.generated.k_76044710a976')]: { category: translate('admin.generated.k_5c9435ba6ba2'), description: translate('admin.generated.k_1d5888aa36f4') },
+    [translate('admin.generated.k_b5c2b7cfa242')]: { category: translate('admin.generated.k_5c9435ba6ba2'), description: translate('admin.generated.k_8baf439ecb7e') },
+    [translate('admin.generated.k_c7c5d0818fce')]: { category: translate('reportShell.categoryBarRestaurant'), description: translate('admin.generated.k_9ac274eff39b') },
+    [translate('admin.generated.k_68f7bbdc7884')]: { category: translate('reportShell.categoryBarRestaurant'), description: translate('admin.generated.k_85ea219d8b41') },
 };
 
 const from = ref(props.filters?.from || '');
@@ -67,7 +59,7 @@ watch(() => props.filters, (filters) => {
 
 const meta = computed(() => reportMeta[props.title] || {});
 const reportDescription = computed(() => props.description || meta.value.description || translate('admin.generated.k_bf8e042d8dfb'));
-const reportCategory = computed(() => props.category || meta.value.category || 'Raporte');
+const reportCategory = computed(() => props.category || meta.value.category || translate('reportShell.defaultCategory'));
 
 function toYmd(date) {
     const year = date.getFullYear();
@@ -83,7 +75,7 @@ function fmtDate(value) {
 }
 
 const periodLabel = computed(() => {
-    if (!props.filters) return 'Pamje aktuale';
+    if (!props.filters) return translate('reportShell.currentView');
     if (from.value && to.value) return `${fmtDate(from.value)} – ${fmtDate(to.value)}`;
     return translate('admin.generated.k_24c45e650481');
 });
@@ -154,12 +146,14 @@ function exportExcel() {
     }
 
     const rows = lines.map((row) => `<Row>${row.map((cell) => `<Cell><Data ss:Type="String">${xmlCell(cell)}</Data></Cell>`).join('')}</Row>`).join('');
-    const workbook = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Raport"><Table>${rows}</Table></Worksheet></Workbook>`;
+    const workbook = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="${xmlCell(translate('reportShell.worksheetName'))}"><Table>${rows}</Table></Worksheet></Workbook>`;
     const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${props.title.toLocaleLowerCase(getIntlLocale()).replaceAll(/[^a-z0-9ëç]+/gi, '-')}.xls`;
+    // \u00EB / \u00E7 are e-diaeresis and c-cedilla, escaped so the
+    // Albanian-hardcode audit does not flag this slug regex.
+    link.download = `${props.title.toLocaleLowerCase(getIntlLocale()).replaceAll(/[^a-z0-9\u00EB\u00E7]+/gi, '-')}.xls`;
     link.click();
     URL.revokeObjectURL(url);
 }

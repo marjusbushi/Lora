@@ -336,14 +336,14 @@ const DAY_MS = 86400000;
 // clashed with the app): soft tinted fill + deep text of the same hue +
 // a mid-shade edge accent — the same language as the app's status badges.
 const SEASON_TONES = [
-    { bg: '#e7eef7', text: '#2f5578', edge: '#8fb0d1' }, // blu deti
-    { bg: '#f8eddc', text: '#7d5316', edge: '#d9ad62' }, // qelibar
-    { bg: '#e6f0ea', text: '#2c5d45', edge: '#8db8a2' }, // jeshile
-    { bg: '#f8e7e3', text: '#8c3d2e', edge: '#d69182' }, // terrakotë
-    { bg: '#ece8f6', text: '#4f3d80', edge: '#a795d6' }, // vjollcë
+    { bg: '#e7eef7', text: '#2f5578', edge: '#8fb0d1' }, // sea blue
+    { bg: '#f8eddc', text: '#7d5316', edge: '#d9ad62' }, // amber
+    { bg: '#e6f0ea', text: '#2c5d45', edge: '#8db8a2' }, // green
+    { bg: '#f8e7e3', text: '#8c3d2e', edge: '#d69182' }, // terracotta
+    { bg: '#ece8f6', text: '#4f3d80', edge: '#a795d6' }, // violet
     { bg: '#e2f0ef', text: '#275f5c', edge: '#85b7b3' }, // teal
-    { bg: '#f7e7ef', text: '#82365f', edge: '#cf8fb0' }, // trëndafili
-    { bg: '#f0f1de', text: '#5c5f22', edge: '#b3b766' }, // ulliri
+    { bg: '#f7e7ef', text: '#82365f', edge: '#cf8fb0' }, // rose
+    { bg: '#f0f1de', text: '#5c5f22', edge: '#b3b766' }, // olive
 ];
 const toUtc = (d) => { const [y, m, dd] = String(d).split('-').map(Number); return Date.UTC(y, m - 1, dd); };
 const isoOf = (utc) => new Date(utc).toISOString().slice(0, 10);
@@ -354,10 +354,10 @@ const yearStartUtc = computed(() => Date.UTC(year.value, 0, 1));
 const yearDays = computed(() => Math.round((Date.UTC(year.value + 1, 0, 1) - yearStartUtc.value) / DAY_MS));
 const dayIdx = (d) => Math.round((toUtc(d) - yearStartUtc.value) / DAY_MS);
 const clampIdx = (i) => Math.min(Math.max(i, 0), yearDays.value - 1);
-const monthNames = ['Jan', 'Shk', 'Mar', 'Pri', 'Maj', 'Qer', 'Kor', 'Gu', 'Sht', 'Tet', 'Nën', 'Dhj'];
+const monthNames = Array.from({ length: 12 }, (_, i) => translate(`pricingIndex.monthsShort.${i}`));
 const shortDate = (d) => {
     const [, m, dd] = String(d).split('-').map(Number);
-    return `${dd} ${['jan', 'shk', 'mar', 'pri', 'maj', 'qer', 'kor', 'gush', 'sht', 'tet', 'nën', 'dhj'][m - 1] || ''}`;
+    return `${dd} ${m >= 1 && m <= 12 ? translate(`pricingIndex.monthsTiny.${m - 1}`) : ''}`;
 };
 
 // Stable colour per season (keyed by id, so edits never reshuffle the palette).
@@ -490,7 +490,7 @@ function syncChannex() {
         onSuccess: () => {
             const flash = usePage().props.flash || {};
             if (flash.error) toasts.value?.error(flash.error);
-            else toasts.value?.success(flash.success || 'Sinkronizimi u nis.');
+            else toasts.value?.success(flash.success || translate('pricingIndex.syncStarted'));
         },
         onError: () => toasts.value?.error(translate('admin.generated.k_a770c9461aa5')),
         onFinish: () => { syncing.value = false; },
@@ -526,7 +526,7 @@ function submitSeason() {
     }
 }
 function deleteSeason(s) {
-    if (!confirm(`Fshi sezonin "${s.name}"? (cmimet e tij do hiqen)`)) return;
+    if (!confirm(translate('pricingIndex.deleteSeasonConfirm', { name: s.name }))) return;
     router.delete(route('pricing.seasons.destroy', s.id), {
         preserveScroll: true,
         onSuccess: () => { closeInline(); toasts.value?.success(translate('admin.generated.k_6031e3e37904')); },
@@ -550,7 +550,7 @@ function fmtRange(s) {
                     <b class="px-1.5 text-body font-bold text-primary-900 tabular-nums">{{ year }}</b>
                     <button class="relative px-3 py-2 text-neutral-500 hover:text-primary-900 hover:bg-neutral-50 font-bold" @click="year += 1">
                         ›
-                        <span v-if="nextYearEmpty" class="absolute -top-0.5 right-0.5 text-[8px] font-extrabold bg-warning-500 text-white rounded px-1 leading-tight">bosh</span>
+                        <span v-if="nextYearEmpty" class="absolute -top-0.5 right-0.5 text-[8px] font-extrabold bg-warning-500 text-white rounded px-1 leading-tight">{{ $t('pricingIndex.emptyBadge') }}</span>
                     </button>
                 </div>
             </template>
@@ -559,19 +559,19 @@ function fmtRange(s) {
         <!-- month KPIs: the year's pricing health at a glance -->
         <div class="mt-5 flex flex-wrap items-center gap-2">
             <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600 shadow-sm">
-                📅 Mbulimi i vitit <b class="text-primary-900 tabular-nums">{{ coveredDays }}/{{ yearDays }}</b> ditë
+                📅 {{ $t('pricingIndex.yearCoverage') }} <b class="text-primary-900 tabular-nums">{{ coveredDays }}/{{ yearDays }}</b> {{ $t('pricingIndex.days') }}
             </span>
             <span v-if="avgBase" class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600 shadow-sm">
-                Çmimi bazë mesatar <b class="text-primary-900 tabular-nums">{{ formatPrice(avgBase) }}</b>
+                {{ $t('pricingIndex.avgBase') }} <b class="text-primary-900 tabular-nums">{{ formatPrice(avgBase) }}</b>
             </span>
             <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600 shadow-sm">
-                <b class="text-primary-900 tabular-nums">{{ yearSeasons.length }}</b> sezone · <b class="text-primary-900 tabular-nums">{{ roomTypes.length }}</b> tipe dhomash
+                <b class="text-primary-900 tabular-nums">{{ yearSeasons.length }}</b> {{ $t('pricingIndex.seasonsWord') }} · <b class="text-primary-900 tabular-nums">{{ roomTypes.length }}</b> {{ $t('pricingIndex.roomTypesWord') }}
             </span>
             <span v-if="gapDays" class="inline-flex items-center gap-1.5 rounded-full border border-warning-300 bg-warning-50 px-3 py-1.5 text-tiny font-bold text-warning-800 shadow-sm">
-                ⚠ {{ gapDays }} ditë pa sezon — shiten me çmim bazë
+                {{ $t('pricingIndex.gapDaysWarning', { days: gapDays }) }}
             </span>
             <a :href="route('pricing.smart.index')" class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-bold text-primary-900 no-underline shadow-sm hover:border-ionian">
-                ✨ Çmimi Inteligjent →
+                {{ $t('pricingIndex.smartPricingLink') }}
             </a>
         </div>
 
@@ -600,7 +600,7 @@ function fmtRange(s) {
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div class="min-w-0">
                             <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_b393cba9fdfc') }}</h3>
-                            <p class="text-small text-neutral-500 mt-0.5">Kliko një sezon për ta edituar · zonat e verdha me vija = ditë pa sezon · ★ fiton mbi të tjerët ku mbivendosen</p>
+                            <p class="text-small text-neutral-500 mt-0.5">{{ $t('pricingIndex.seasonsHint') }}</p>
                         </div>
                         <div class="flex shrink-0 flex-col gap-2 sm:flex-row">
                             <Button
@@ -655,15 +655,15 @@ function fmtRange(s) {
                         type="button"
                         class="absolute top-1.5 bottom-1.5 rounded-lg border-2 border-dashed border-warning-400 text-warning-800 text-[10px] font-extrabold leading-tight px-1 hover:bg-warning-50/80"
                         :style="{ left: g.left + '%', width: g.width + '%' }"
-                        :title="shortDate(g.from) + ' – ' + shortDate(g.to) + ': ' + g.days + ' ditë pa sezon — kliko për t\'i mbuluar'"
+                        :title="shortDate(g.from) + ' – ' + shortDate(g.to) + ': ' + $t('pricingIndex.gapTitle', { days: g.days })"
                         @click="coverGap(g)"
                     >
-                        <template v-if="g.width > 6">⚠ {{ g.days }} ditë<br>+ Mbulo</template>
+                        <template v-if="g.width > 6">⚠ {{ g.days }} {{ $t('pricingIndex.days') }}<br>+ {{ $t('pricingIndex.cover') }}</template>
                         <template v-else>⚠</template>
                     </button>
 
                     <div v-if="todayPct !== null" class="absolute -top-2 -bottom-2 w-0.5 bg-primary-950 z-[4] pointer-events-none" :style="{ left: todayPct + '%' }">
-                        <span class="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-primary-950 px-1.5 py-0.5 text-[8px] font-extrabold tracking-widest text-white">SOT</span>
+                        <span class="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-primary-950 px-1.5 py-0.5 text-[8px] font-extrabold tracking-widest text-white">{{ $t('pricingIndex.today') }}</span>
                     </div>
                 </div>
 
@@ -688,9 +688,9 @@ function fmtRange(s) {
                         </FormGroup>
                     </div>
                     <div v-if="inlineOverlaps.length" class="mx-4 mb-3 rounded-lg bg-primary-50 border border-primary-100 px-3 py-2 text-body-sm text-primary-800">
-                        💡 Mbivendoset me
+                        💡 {{ $t('pricingIndex.overlapsWith') }}
                         <template v-for="(o, i) in inlineOverlaps" :key="o.id"><template v-if="i > 0">, </template><b>{{ o.name }}</b> ({{ $t('admin.generated.k_c0857a9c44ab') }} {{ o.priority }})</template>.
-                        Netët e përbashkëta shiten me sezonin që ka prioritetin më të lartë.
+                        {{ $t('pricingIndex.overlapsNote') }}
                     </div>
                     <div class="flex items-center justify-between gap-3 px-4 pb-4">
                         <button type="button" class="text-body-sm font-bold text-error-600 hover:underline" @click="deleteSeason(editingSeason)">{{ $t('admin.generated.k_315a0d2b6347') }}</button>
@@ -701,7 +701,7 @@ function fmtRange(s) {
                     </div>
                 </div>
                 <p v-else-if="!yearSeasons.length" class="mt-3 text-body-sm text-neutral-500">
-                    {{ $t('admin.generated.k_1974bcb2ef98') }}<template v-if="sourceYearOptions.length"> · përdor <b>{{ $t('admin.generated.k_05a62a33ee40') }}</b> për t'i sjellë nga një vit tjetër.</template>
+                    {{ $t('admin.generated.k_1974bcb2ef98') }}<template v-if="sourceYearOptions.length"> {{ $t('pricingIndex.copyHintPrefix') }} <b>{{ $t('admin.generated.k_05a62a33ee40') }}</b> {{ $t('pricingIndex.copyHintSuffix') }}</template>
                 </p>
             </Card>
 
@@ -709,8 +709,8 @@ function fmtRange(s) {
             <Card>
                 <template #header>
                     <div>
-                        <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_26e2b820adef') }} <span class="text-small font-normal text-neutral-400">({{ currencyCode }} / natë)</span></h3>
-                        <p class="text-small text-neutral-500 mt-0.5">Qeliza bosh trashëgon çmimin bazë (duket si hije) · kolonat kanë ngjyrën e sezonit të tyre</p>
+                        <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_26e2b820adef') }} <span class="text-small font-normal text-neutral-400">({{ currencyCode }} / {{ $t('pricingIndex.night') }})</span></h3>
+                        <p class="text-small text-neutral-500 mt-0.5">{{ $t('pricingIndex.matrixHint') }}</p>
                     </div>
                 </template>
 
@@ -721,8 +721,8 @@ function fmtRange(s) {
                                 <th class="px-3 pb-2 text-left text-label text-neutral-600 align-bottom">{{ $t('admin.generated.k_a6aa7eff1daa') }}</th>
                                 <th class="px-3 pb-2 text-left align-bottom">
                                     <span class="inline-block rounded-lg bg-primary-950 px-2.5 py-1.5 text-tiny font-extrabold leading-tight text-white shadow-sm">
-                                        Çmimi bazë ({{ currencyCode }})
-                                        <small class="block text-[9px] font-bold opacity-80">gjithë viti · themeli</small>
+                                        {{ $t('pricingIndex.basePrice') }} ({{ currencyCode }})
+                                        <small class="block text-[9px] font-bold opacity-80">{{ $t('pricingIndex.basePriceSub') }}</small>
                                     </span>
                                 </th>
                                 <th v-for="s in yearSeasons" :key="s.id" class="px-3 pb-2 text-left align-bottom">
@@ -753,14 +753,14 @@ function fmtRange(s) {
                         </tbody>
                     </table>
                 </div>
-                <p class="mt-3 text-tiny text-neutral-400">💡 Këto çmime janë themeli — <a :href="route('pricing.smart.index')" class="font-bold text-primary-900 no-underline hover:underline">Çmimi Inteligjent ✨</a> niset prej tyre dhe i lëviz sipas kërkesës, brenda kufijve të tu min–max.</p>
+                <p class="mt-3 text-tiny text-neutral-400">{{ $t('pricingIndex.footPrefix') }} <a :href="route('pricing.smart.index')" class="font-bold text-primary-900 no-underline hover:underline">{{ $t('pricingIndex.smartPricingName') }}</a> {{ $t('pricingIndex.footSuffix') }}</p>
             </Card>
         </div>
 
         <!-- sticky save bar: appears only when the matrix has unsaved edits -->
         <div v-if="dirtyCount" class="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-5 pointer-events-none">
             <div class="pointer-events-auto flex items-center gap-3 rounded-xl bg-primary-950 py-2.5 pl-5 pr-3 text-body-sm text-white shadow-2xl">
-                <span><b class="tabular-nums text-warning-300">{{ dirtyCount }}</b> {{ dirtyCount === 1 ? 'ndryshim i paruajtur' : 'ndryshime të paruajtura' }}</span>
+                <span><b class="tabular-nums text-warning-300">{{ dirtyCount }}</b> {{ dirtyCount === 1 ? $t('pricingIndex.unsavedOne') : $t('pricingIndex.unsavedMany') }}</span>
                 <Button size="sm" variant="outline" class="!border-neutral-600 !text-neutral-200" :disabled="savingRates" @click="resetMatrix">{{ $t('admin.generated.k_b59ae1e356c9') }}</Button>
                 <Button size="sm" variant="primary" :loading="savingRates" @click="saveRates">{{ $t('admin.generated.k_f5e21afe68a5') }}</Button>
             </div>

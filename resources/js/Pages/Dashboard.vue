@@ -454,7 +454,7 @@ function topChannelLabel(channel) {
                         :aria-expanded="showAllRooms"
                         @click="showAllRooms = !showAllRooms"
                     >
-                        {{ showAllRooms ? $t('admin.generated.k_e0c24d45d7cc') : `Të gjitha (${roomRows.length})` }}
+                        {{ showAllRooms ? $t('admin.generated.k_e0c24d45d7cc') : $t('shared.dashboard.allRooms', { count: roomRows.length }) }}
                         <template #icon-right>
                             <ChevronUp v-if="showAllRooms" class="h-4 w-4" aria-hidden="true" />
                             <ChevronDown v-else class="h-4 w-4" aria-hidden="true" />
