@@ -48,12 +48,12 @@ const roleFilter = ref(props.filters.role || '');
 const statusFilter = ref(props.filters.status || '');
 
 const roleLabels = {
-    admin: 'Admin',
-    manager: 'Menaxher',
-    receptionist: 'Recepsion',
-    housekeeping: 'Housekeeping',
-    maintenance: 'Mirëmbajtje',
-    pos_staff: 'POS',
+    admin: translate('shared.usersIndex.roles.admin'),
+    manager: translate('shared.usersIndex.roles.manager'),
+    receptionist: translate('shared.usersIndex.roles.receptionist'),
+    housekeeping: translate('shared.usersIndex.roles.housekeeping'),
+    maintenance: translate('shared.usersIndex.roles.maintenance'),
+    pos_staff: translate('shared.usersIndex.roles.posStaff'),
 };
 const roleBadge = {
     admin: 'dark',

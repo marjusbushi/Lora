@@ -28,7 +28,7 @@ const typeLabel = {
     checkout_clean: 'Check-out',
     stayover_clean: 'Ditor',
     deep_clean: translate('admin.generated.k_a0d531b7e261'),
-    inspection: 'Inspektim',
+    inspection: translate('shared.housekeepingClean.inspection'),
 };
 
 // Optimistic local copy: a tap responds instantly, then saves after a short pause.
@@ -43,7 +43,7 @@ const groupDefinitions = [
         key: 'linen',
         label: translate('admin.generated.k_212eda01297e'),
         icon: BedDouble,
-        matches: /çarçaf|krevat|dyshek|peshqir|tekst/i,
+        matches: /\u00E7ar\u00E7af|krevat|dyshek|peshqir|tekst/i,
     },
     {
         key: 'bathroom',
@@ -55,7 +55,7 @@ const groupDefinitions = [
         key: 'final',
         label: translate('admin.generated.k_45dc76b2bd0a'),
         icon: ShieldCheck,
-        matches: /kontroll|dëmt|demt|pajis|televiz|\btv\b|\bac\b|drit|minibar|harruar/i,
+        matches: /kontroll|d\u00EBmt|demt|pajis|televiz|\btv\b|\bac\b|drit|minibar|harruar/i,
     },
 ];
 

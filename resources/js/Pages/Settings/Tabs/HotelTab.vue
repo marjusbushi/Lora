@@ -76,9 +76,9 @@ function submit() {
                     <Select v-model="form.currency" :options="currencyOptions" :error="form.errors.currency" :disabled="settings.base_currency_locked" />
                     <p v-if="settings.base_currency_locked" class="mt-1 text-tiny text-neutral-400">{{ $t('currencySettings.baseCurrencyLocked') }}</p>
                 </FormGroup>
-                <FormGroup label="Monedha e çmimeve" :error="form.errors.pricing_currency" required>
+                <FormGroup :label="$t('settingsTabs.hotel.pricingCurrencyLabel')" :error="form.errors.pricing_currency" required>
                     <Select v-model="form.pricing_currency" :options="currencyOptions" :error="form.errors.pricing_currency" />
-                    <p class="mt-1 text-tiny text-neutral-400">Smart Pricing, web, OTA dhe rezervimet.</p>
+                    <p class="mt-1 text-tiny text-neutral-400">{{ $t('settingsTabs.hotel.pricingCurrencyHint') }}</p>
                 </FormGroup>
             </div>
 

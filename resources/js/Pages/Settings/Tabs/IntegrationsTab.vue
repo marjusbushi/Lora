@@ -17,7 +17,7 @@ import {
     Waves,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { getIntlLocale, translate } from '@/i18n';
 
 const props = defineProps({
     integrations: { type: Array, default: () => [] },
@@ -25,56 +25,25 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['select-tab']);
-const { locale } = useI18n();
 const testing = ref(null);
 
 const copy = {
-    channex: {
-        name: 'Channex',
-        sq: 'Rezervime dhe disponibilitet nga kanalet OTA.',
-        en: 'OTA reservations and availability synchronization.',
-        icon: Cable,
-    },
-    pok: {
-        name: 'POK Payments',
-        sq: 'Pagesa online për rezervimet direkte.',
-        en: 'Online payments for direct bookings.',
-        icon: CircleDollarSign,
-    },
-    fature_al: {
-        name: 'fature.al',
-        sq: 'Fiskalizimi i faturave të hotelit dhe POS-it.',
-        en: 'Fiscalization for hotel and POS invoices.',
-        icon: FileCheck2,
-    },
-    gemini: {
-        name: 'Google Gemini',
-        sq: 'Asistenti AI dhe analizat inteligjente.',
-        en: 'AI assistant and intelligent analysis.',
-        icon: Bot,
-    },
-    exchange_rates: {
-        name: 'ExchangeRate API',
-        sq: 'Kurset ditore të këmbimit për financën.',
-        en: 'Daily exchange rates for finance.',
-        icon: Waves,
-    },
-    serp_api: {
-        name: 'SerpAPI',
-        sq: 'Krahasimi i çmimeve të hotelit me tregun.',
-        en: 'Market-rate comparison for the hotel.',
-        icon: SearchCheck,
-    },
+    channex: { name: 'Channex', descKey: 'settingsTabs.integrations.services.channex', icon: Cable },
+    pok: { name: 'POK Payments', descKey: 'settingsTabs.integrations.services.pok', icon: CircleDollarSign },
+    fature_al: { name: 'fature.al', descKey: 'settingsTabs.integrations.services.fatureAl', icon: FileCheck2 },
+    gemini: { name: 'Google Gemini', descKey: 'settingsTabs.integrations.services.gemini', icon: Bot },
+    exchange_rates: { name: 'ExchangeRate API', descKey: 'settingsTabs.integrations.services.exchangeRates', icon: Waves },
+    serp_api: { name: 'SerpAPI', descKey: 'settingsTabs.integrations.services.serpApi', icon: SearchCheck },
 };
 
 const categories = computed(() => [
-    { id: 'fiscalization', sq: 'Fiskalizimi', en: 'Fiscalization' },
-    { id: 'channels', sq: 'Kanalet e shitjes', en: 'Sales channels' },
-    { id: 'payments', sq: 'Pagesat', en: 'Payments' },
-    { id: 'ai_data', sq: 'AI & të dhënat', en: 'AI & data' },
+    { id: 'fiscalization', labelKey: 'settingsTabs.integrations.categories.fiscalization' },
+    { id: 'channels', labelKey: 'settingsTabs.integrations.categories.channels' },
+    { id: 'payments', labelKey: 'settingsTabs.integrations.categories.payments' },
+    { id: 'ai_data', labelKey: 'settingsTabs.integrations.categories.aiData' },
 ].map((category) => ({
     ...category,
-    label: locale.value === 'sq' ? category.sq : category.en,
+    label: translate(category.labelKey),
     items: props.integrations.filter((item) => item.category === category.id),
 })).filter((category) => category.items.length));
 
@@ -84,15 +53,14 @@ const inactiveCount = computed(() => props.integrations.filter((item) => item.st
 
 const integrationCopy = (item) => copy[item.id] || {
     name: item.id,
-    sq: 'Shërbim i jashtëm i lidhur me hotelin.',
-    en: 'External service connected to the hotel.',
+    descKey: 'settingsTabs.integrations.services.fallback',
     icon: Cable,
 };
 
 const statusLabel = (item) => {
-    if (item.configured) return locale.value === 'sq' ? 'Konfiguruar' : 'Configured';
-    if (item.status === 'needs_attention') return locale.value === 'sq' ? 'Kërkon konfigurim' : 'Needs setup';
-    return locale.value === 'sq' ? 'Jo aktiv' : 'Inactive';
+    if (item.configured) return translate('settingsTabs.integrations.statusConfigured');
+    if (item.status === 'needs_attention') return translate('settingsTabs.integrations.statusNeedsSetup');
+    return translate('settingsTabs.integrations.statusInactive');
 };
 
 const statusClass = (item) => item.configured
@@ -104,8 +72,8 @@ const statusClass = (item) => item.configured
 const settingsTab = (item) => item.settings_tab || (item.id === 'channex' ? 'channel-manager' : null);
 
 const ownerLabel = (item) => item.managed_by === 'lora'
-    ? (locale.value === 'sq' ? 'Menaxhohet nga stafi Lora' : 'Managed by Lora staff')
-    : (locale.value === 'sq' ? 'Menaxhohet nga hoteli' : 'Managed by the hotel');
+    ? translate('settingsTabs.integrations.managedByLora')
+    : translate('settingsTabs.integrations.managedByHotel');
 
 function formatLastTest(value) {
     if (!value) return null;
@@ -113,7 +81,7 @@ function formatLastTest(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
 
-    return new Intl.DateTimeFormat(locale.value === 'sq' ? 'sq-AL' : 'en-GB', {
+    return new Intl.DateTimeFormat(getIntlLocale(), {
         dateStyle: 'medium',
         timeStyle: 'short',
     }).format(date);
@@ -126,9 +94,9 @@ function testConnection(item) {
         onSuccess: (page) => {
             const error = page.props.flash?.error;
             if (error) props.toasts?.error(error);
-            else props.toasts?.success(locale.value === 'sq' ? 'Lidhja funksionon.' : 'Connection successful.');
+            else props.toasts?.success(translate('settingsTabs.integrations.connectionOk'));
         },
-        onError: () => props.toasts?.error(locale.value === 'sq' ? 'Testi i lidhjes dështoi.' : 'Connection test failed.'),
+        onError: () => props.toasts?.error(translate('settingsTabs.integrations.connectionFailed')),
         onFinish: () => { testing.value = null; },
     });
 }
@@ -139,25 +107,23 @@ function testConnection(item) {
         <template #header>
             <div class="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h3>{{ locale === 'sq' ? 'Qendra e integrimeve' : 'Integration center' }}</h3>
+                    <h3>{{ $t('settingsTabs.integrations.title') }}</h3>
                     <p class="max-w-2xl">
-                        {{ locale === 'sq'
-                            ? 'Statusi, testimi dhe hyrja drejt konfigurimit për çdo shërbim të jashtëm.'
-                            : 'Status, testing and configuration access for every external service.' }}
+                        {{ $t('settingsTabs.integrations.subtitle') }}
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
                         <CheckCircle2 class="h-3.5 w-3.5" />
-                        {{ configuredCount }} {{ locale === 'sq' ? 'aktive' : 'active' }}
+                        {{ configuredCount }} {{ $t('settingsTabs.integrations.active') }}
                     </span>
                     <span v-if="attentionCount" class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">
                         <AlertTriangle class="h-3.5 w-3.5" />
-                        {{ attentionCount }} {{ locale === 'sq' ? 'kërkojnë vëmendje' : 'need attention' }}
+                        {{ attentionCount }} {{ $t('settingsTabs.integrations.needAttention') }}
                     </span>
                     <span v-if="inactiveCount" class="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] font-semibold text-neutral-600 ring-1 ring-inset ring-neutral-200">
                         <CircleOff class="h-3.5 w-3.5" />
-                        {{ inactiveCount }} {{ locale === 'sq' ? 'jo aktive' : 'inactive' }}
+                        {{ inactiveCount }} {{ $t('settingsTabs.integrations.inactive') }}
                     </span>
                 </div>
             </div>
@@ -183,7 +149,7 @@ function testConnection(item) {
                                     {{ statusLabel(item) }}
                                 </span>
                             </div>
-                            <p class="mt-1 text-xs leading-5 text-neutral-500">{{ locale === 'sq' ? integrationCopy(item).sq : integrationCopy(item).en }}</p>
+                            <p class="mt-1 text-xs leading-5 text-neutral-500">{{ $t(integrationCopy(item).descKey) }}</p>
                         </div>
                     </div>
 
@@ -194,8 +160,8 @@ function testConnection(item) {
                         </p>
                         <p v-if="item.last_test_status" class="text-[11px]" :class="item.last_test_status === 'success' ? 'text-emerald-700' : 'text-red-600'">
                             {{ item.last_test_status === 'success'
-                                ? (locale === 'sq' ? 'Testi i fundit: në rregull' : 'Last test: successful')
-                                : (locale === 'sq' ? 'Testi i fundit: dështoi' : 'Last test: failed') }}
+                                ? $t('settingsTabs.integrations.lastTestOk')
+                                : $t('settingsTabs.integrations.lastTestFailed') }}
                             <span v-if="formatLastTest(item.last_tested_at)" class="text-neutral-400"> · {{ formatLastTest(item.last_tested_at) }}</span>
                         </p>
                     </div>
@@ -210,7 +176,7 @@ function testConnection(item) {
                             @click="testConnection(item)"
                         >
                             <RefreshCw class="h-3.5 w-3.5" :class="testing === item.id && 'animate-spin'" />
-                            {{ locale === 'sq' ? 'Testo' : 'Test' }}
+                            {{ $t('settingsTabs.integrations.test') }}
                         </Button>
                         <Button
                             v-if="settingsTab(item)"
@@ -220,8 +186,8 @@ function testConnection(item) {
                             @click="emit('select-tab', settingsTab(item))"
                         >
                             {{ item.managed_by === 'lora'
-                                ? (locale === 'sq' ? 'Shiko' : 'View')
-                                : (locale === 'sq' ? 'Konfiguro' : 'Configure') }}
+                                ? $t('settingsTabs.integrations.view')
+                                : $t('settingsTabs.integrations.configure') }}
                             <ArrowRight class="h-3.5 w-3.5" />
                         </Button>
                     </div>
@@ -233,9 +199,7 @@ function testConnection(item) {
         <template #footer>
             <p class="flex items-start gap-2 text-[11px] leading-5 text-neutral-500">
                 <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-accent-600" />
-                {{ locale === 'sq'
-                    ? 'Token-et dhe çelësat privatë ruhen të enkriptuar. Kjo faqe shfaq vetëm statusin dhe nuk dublikon konfigurimet.'
-                    : 'Tokens and private keys are encrypted. This page only shows status and does not duplicate configuration.' }}
+                {{ $t('settingsTabs.integrations.footer') }}
             </p>
         </template>
     </Card>

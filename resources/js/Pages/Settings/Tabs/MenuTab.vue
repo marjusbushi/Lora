@@ -51,7 +51,7 @@ function flashToast(page, successMessage) {
 }
 
 function deleteCat(cat) {
-    if (!confirm(`Fshi kategorine "${cat.name}"?`)) return;
+    if (!confirm(translate('settingsTabs.menu.deleteCategoryConfirm', { name: cat.name }))) return;
     router.delete(route('settings.menu-categories.destroy', cat.id), {
         preserveScroll: true,
         onSuccess: (page) => flashToast(page, translate('admin.generated.k_4d43fb45068e')),
@@ -143,12 +143,12 @@ function submitItem() {
 function toggleItem(item) {
     router.patch(route('settings.menu-items.toggle', item.id), {}, {
         preserveScroll: true,
-        onSuccess: () => props.toasts?.info(`${item.name}: ${item.is_available ? 'jo disponueshem' : 'disponueshem'}`),
+        onSuccess: () => props.toasts?.info(`${item.name}: ${item.is_available ? translate('settingsTabs.menu.unavailable') : translate('settingsTabs.menu.available')}`),
     });
 }
 
 function deleteItem(item) {
-    if (!confirm(`Fshi "${item.name}"?`)) return;
+    if (!confirm(translate('settingsTabs.menu.deleteItemConfirm', { name: item.name }))) return;
     router.delete(route('settings.menu-items.destroy', item.id), {
         preserveScroll: true,
         onSuccess: (page) => flashToast(page, translate('admin.generated.k_8ee8e0129285')),
@@ -160,10 +160,10 @@ function deleteItem(item) {
     <div class="space-y-4">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_78be5e1611cb') }}</h3>
-            <Button size="sm" variant="primary" @click="openCreateItem(null)"><Plus class="h-4 w-4" /> Artikull i ri menuje</Button>
+            <Button size="sm" variant="primary" @click="openCreateItem(null)"><Plus class="h-4 w-4" /> {{ $t('settingsTabs.menu.newItem') }}</Button>
         </div>
         <p class="rounded-lg border border-blue-100 bg-blue-50 px-3.5 py-2.5 text-small text-blue-800">
-            Grupet vijnë automatikisht nga kategoritë e inventarit (Inventari → Artikujt → Menaxho kategoritë). Këtu ndryshohen vetëm cilësimet e POS-it për grup — outlet-i dhe magazina e burimit.
+            {{ $t('settingsTabs.menu.groupsInfo') }}
         </p>
 
         <Card v-for="cat in categories" :key="cat.id">
@@ -176,7 +176,7 @@ function deleteItem(item) {
                     </div>
                     <div class="flex gap-1.5">
                         <Button size="sm" variant="ghost" @click="openCreateItem(cat)">{{ $t('admin.generated.k_3acd3ffafdb5') }}</Button>
-                        <Button size="sm" variant="ghost" @click="openEditCat(cat)">Cilësimet</Button>
+                        <Button size="sm" variant="ghost" @click="openEditCat(cat)">{{ $t('settingsTabs.menu.settings') }}</Button>
                         <Button v-if="!cat.inventory_category_id" size="sm" variant="ghost" class="text-error-600" @click="deleteCat(cat)">{{ $t('admin.generated.k_94078f0402e2') }}</Button>
                     </div>
                 </div>
@@ -193,7 +193,7 @@ function deleteItem(item) {
                         <div>
                             <span class="text-body-sm text-primary-900 font-medium">{{ item.name }}</span>
                             <span class="text-body-sm text-accent-600 font-medium ml-2">{{ currencySymbol }}{{ item.price }}</span>
-                            <span v-if="item.inventory_item_id" class="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Nga inventari</span>
+                            <span v-if="item.inventory_item_id" class="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{{ $t('settingsTabs.menu.fromInventory') }}</span>
                             <span v-if="item.inventory_components?.length" class="mt-0.5 block text-tiny text-neutral-400">{{ item.inventory_components.length }} {{ $t('inventory.pos.components') }}</span>
                         </div>
                         <Badge v-if="!item.is_available" variant="error" size="sm">{{ $t('admin.generated.k_0389a69f50e1') }}</Badge>
@@ -214,10 +214,10 @@ function deleteItem(item) {
     </div>
 
     <!-- Category Modal -->
-    <Modal :show="showCatModal" :title="`Cilësimet e grupit · ${editingCat?.name || ''}`" max-width="sm" @close="showCatModal = false">
+    <Modal :show="showCatModal" :title="`${$t('settingsTabs.menu.groupSettingsTitle')} · ${editingCat?.name || ''}`" max-width="sm" @close="showCatModal = false">
         <div class="space-y-4">
             <p v-if="editingCat?.inventory_category_id" class="rounded-lg bg-neutral-50 px-3 py-2 text-small text-neutral-600">
-                Emri "{{ editingCat?.name }}" vjen nga kategoria e inventarit dhe riemërtohet atje.
+                {{ $t('settingsTabs.menu.nameFromInventory', { name: editingCat?.name || '' }) }}
             </p>
             <FormGroup v-else :label="$t('admin.generated.k_588dd1daa42d')" :error="catForm.errors.name" required>
                 <TextInput v-model="catForm.name" :placeholder="$t('admin.generated.k_2454362e8872')" :error="catForm.errors.name" />
@@ -270,14 +270,14 @@ function deleteItem(item) {
                 <FormGroup :label="$t('admin.generated.k_588dd1daa42d')" :error="itemForm.errors?.name" required>
                     <TextInput v-model="itemForm.name" :placeholder="$t('admin.generated.k_f52281cd0a63')" :error="itemForm.errors?.name" />
                 </FormGroup>
-                <FormGroup :label="`Çmimi (${currencySymbol})`" :error="itemForm.errors?.price" required>
+                <FormGroup :label="`${$t('settingsTabs.menu.price')} (${currencySymbol})`" :error="itemForm.errors?.price" required>
                     <TextInput type="number" v-model="itemForm.price" min="0.01" step="0.01" :error="itemForm.errors?.price" />
                 </FormGroup>
             </div>
 
-            <FormGroup label="Kategoria (nga inventari)" :error="itemForm.errors?.inventory_category_id" required>
+            <FormGroup :label="$t('settingsTabs.menu.categoryFromInventory')" :error="itemForm.errors?.inventory_category_id" required>
                 <select v-model="itemForm.inventory_category_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
-                    <option :value="null" disabled>Zgjidh kategorinë...</option>
+                    <option :value="null" disabled>{{ $t('settingsTabs.menu.chooseCategory') }}</option>
                     <option v-for="node in tree" :key="node.id" :value="node.id">{{ treeLabel(node) }}</option>
                 </select>
             </FormGroup>
