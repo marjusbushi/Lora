@@ -1,3 +1,10 @@
+<script>
+// MODULE scope — survives Inertia page swaps. AppLayout remounts on every
+// navigation, so per-instance state resets each click: keeping the last-known
+// unread count here is what stops the ding from replaying on every page.
+let lastKnownUnread = 0;
+</script>
+
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import Sidebar from '@/Components/UI/Sidebar.vue';
@@ -46,7 +53,9 @@ const messagingEnabled = computed(() => can('view_reservations') && hasModule('c
 const unreadMessages = ref(0);
 let pollTimer = null;
 let audioCtx = null;
-const baseTitle = typeof document !== 'undefined' ? document.title : '';
+// Strip any "(n) " unread prefix a previous layout instance left behind —
+// capturing it verbatim is what made titles accumulate "(1) (1) (1) …".
+const baseTitle = typeof document !== 'undefined' ? document.title.replace(/^(\(\d+\)\s*)+/, '') : '';
 
 function soundMuted() {
     return typeof window !== 'undefined' && localStorage.getItem('msgSoundMuted') === '1';
@@ -98,7 +107,10 @@ async function pollUnread() {
         });
         if (!response.ok) return;
         const { count } = await response.json();
-        if (count > unreadMessages.value) playDing();
+        // Ding only for genuinely NEW messages — compare against the
+        // module-scope count, not this instance's (which resets per page).
+        if (count > lastKnownUnread) playDing();
+        lastKnownUnread = count;
         unreadMessages.value = count;
         refreshTitle();
     } catch (error) {
