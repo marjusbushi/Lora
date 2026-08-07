@@ -5,7 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import { Head, usePage } from '@inertiajs/vue3';
 import { Building2, CheckCircle2, Clock3, Mail, ShieldCheck, SlidersHorizontal } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { translate } from '@/i18n';
 import DeleteUserForm from './Partials/DeleteUserForm.vue';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm.vue';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm.vue';
@@ -16,7 +16,6 @@ defineProps({
 });
 
 const page = usePage();
-const { locale } = useI18n();
 const user = page.props.auth.user;
 const tenant = page.props.tenant;
 const profileInformation = ref(null);
@@ -31,9 +30,14 @@ const initials = computed(() => user.name
     .toUpperCase());
 
 const roleLabel = computed(() => {
-    const labels = locale.value === 'sq'
-        ? { admin: 'Administrator', manager: 'Menaxher', receptionist: 'Recepsionist', housekeeping: 'Housekeeping', maintenance: 'Mirëmbajtje', pos_staff: 'Staf POS' }
-        : { admin: 'Administrator', manager: 'Manager', receptionist: 'Receptionist', housekeeping: 'Housekeeping', maintenance: 'Maintenance', pos_staff: 'POS staff' };
+    const labels = {
+        admin: translate('shared.profileEdit.roles.admin'),
+        manager: translate('shared.profileEdit.roles.manager'),
+        receptionist: translate('shared.profileEdit.roles.receptionist'),
+        housekeeping: translate('shared.profileEdit.roles.housekeeping'),
+        maintenance: translate('shared.profileEdit.roles.maintenance'),
+        pos_staff: translate('shared.profileEdit.roles.posStaff'),
+    };
 
     return labels[user.role] || user.role || '—';
 });

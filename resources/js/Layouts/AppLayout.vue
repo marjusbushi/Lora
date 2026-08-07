@@ -161,10 +161,10 @@ const allNavItems = computed(() => [
         permission: 'view_pos_orders',
         module: 'pos',
         children: [
-            { label: 'Shitje', href: '/pms/pos/tables' },
-            { label: 'Porositë', href: '/pms/pos/orders' },
-            { label: 'Shitjet & kuponët', href: '/pms/pos/receipts' },
-            { label: 'Turnet', href: '/pms/pos/shifts' },
+            { label: t('shared.appLayout.posSales'), href: '/pms/pos/tables' },
+            { label: t('shared.appLayout.posOrders'), href: '/pms/pos/orders' },
+            { label: t('shared.appLayout.posReceipts'), href: '/pms/pos/receipts' },
+            { label: t('shared.appLayout.posShifts'), href: '/pms/pos/shifts' },
         ],
     },
     {

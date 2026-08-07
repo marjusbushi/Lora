@@ -205,7 +205,7 @@ function uploadBatch(batch, batchNo, batchCount, uploadedSoFar, total) {
             onFinish: () => {
                 window.setTimeout(() => {
                     if (!settled) {
-                        props.toasts?.error('Serveri e ndërpreu ngarkimin — provo përsëri ose ngarko më pak foto njëherësh.');
+                        props.toasts?.error(translate('settingsTabs.roomTypes.uploadInterrupted'));
                         done(false);
                     }
                 }, 0);
@@ -243,7 +243,7 @@ async function uploadImages() {
             const ok = await uploadBatch(batches[i], i + 1, batches.length, uploaded, prepared.length);
             if (!ok) {
                 // Everything before this batch is already saved — say so honestly.
-                if (uploaded > 0) props.toasts?.error(`${uploaded} foto u ruajtën; ngarkimi u ndal te fotoja ${uploaded + 1}.`);
+                if (uploaded > 0) props.toasts?.error(translate('settingsTabs.roomTypes.uploadPartial', { saved: uploaded, next: uploaded + 1 }));
 
                 return;
             }

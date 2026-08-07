@@ -1,5 +1,5 @@
 <script setup>
-import { getIntlLocale } from '@/i18n';
+import { getIntlLocale, translate } from '@/i18n';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
@@ -33,29 +33,29 @@ function changeAccount(event) {
     }, { preserveState: true, preserveScroll: true, replace: true });
 }
 
-const directionLabel = { in: 'Hyrje', out: 'Dalje', transfer: 'Transfertë' };
-const sourceLabel = { auto: 'Automatike', manual: 'Manuale' };
-const methodLabel = { cash: 'Cash', card: 'Kartë', bank: 'Bankë', room_charge: 'Në dhomë' };
+const directionLabel = { in: translate('reportsBank.in'), out: translate('reportsBank.out'), transfer: translate('reportsBank.transfer') };
+const sourceLabel = { auto: translate('reportsBank.auto'), manual: translate('reportsBank.manual') };
+const methodLabel = { cash: translate('reportsBank.cash'), card: translate('reportsBank.card'), bank: translate('reportsBank.bank'), room_charge: translate('reportsBank.roomCharge') };
 
 const kpis = [
-    { label: 'Hyrje në bankë', value: () => money(props.totals?.in_base), tone: 'success', icon: ArrowDownToLine },
-    { label: 'Dalje nga banka', value: () => money(props.totals?.out_base), tone: 'error', icon: ArrowUpFromLine },
-    { label: 'Neto në periudhë', value: () => money(props.totals?.net_base), tone: () => Number(props.totals?.net_base ?? 0) >= 0 ? 'success' : 'error', icon: Scale },
-    { label: 'Lëvizje', value: () => props.rows.length, tone: 'neutral', icon: Landmark },
+    { label: translate('reportsBank.kpiIn'), value: () => money(props.totals?.in_base), tone: 'success', icon: ArrowDownToLine },
+    { label: translate('reportsBank.kpiOut'), value: () => money(props.totals?.out_base), tone: 'error', icon: ArrowUpFromLine },
+    { label: translate('reportsBank.kpiNet'), value: () => money(props.totals?.net_base), tone: () => Number(props.totals?.net_base ?? 0) >= 0 ? 'success' : 'error', icon: Scale },
+    { label: translate('reportsBank.kpiMovements'), value: () => props.rows.length, tone: 'neutral', icon: Landmark },
 ];
 </script>
 
 <template>
-    <ReportShell title="Pagesat në Bankë" route-name="reports.bankPayments" :filters="filters" :query="{ account_id: filters?.account_id || undefined }">
+    <ReportShell :title="$t('reportsBank.title')" :description="$t('reportsBank.short')" route-name="reports.bankPayments" :filters="filters" :query="{ account_id: filters?.account_id || undefined }">
         <template #filters>
             <div>
-                <label class="mb-1.5 block text-label text-neutral-600">Llogaria bankare</label>
+                <label class="mb-1.5 block text-label text-neutral-600">{{ $t('reportsBank.bankAccount') }}</label>
                 <select
                     class="h-11 rounded-lg border-neutral-300 px-3 text-body-sm focus:border-accent-500 focus:ring-accent-500"
                     :value="filters?.account_id || ''"
                     @change="changeAccount"
                 >
-                    <option value="">Të gjitha llogaritë</option>
+                    <option value="">{{ $t('reportsBank.allAccounts') }}</option>
                     <option v-for="account in bankAccounts" :key="account.id" :value="account.id">{{ account.name }} ({{ account.currency }})</option>
                 </select>
             </div>
@@ -70,9 +70,9 @@ const kpis = [
                     <p class="text-body-sm font-semibold text-primary-900">{{ account.name }}</p>
                     <Badge variant="neutral" size="sm">{{ account.currency }}</Badge>
                 </div>
-                <div class="flex justify-between text-body-sm text-neutral-600"><span>Hyrje</span><span class="text-success-700">{{ moneyIn(account.currency, account.in) }}</span></div>
-                <div class="flex justify-between text-body-sm text-neutral-600"><span>Dalje</span><span class="text-error-700">{{ moneyIn(account.currency, account.out) }}</span></div>
-                <div class="flex justify-between border-t border-neutral-100 pt-1.5 text-body-sm font-semibold text-primary-900"><span>Neto</span><span>{{ moneyIn(account.currency, account.net) }}</span></div>
+                <div class="flex justify-between text-body-sm text-neutral-600"><span>{{ $t('reportsBank.in') }}</span><span class="text-success-700">{{ moneyIn(account.currency, account.in) }}</span></div>
+                <div class="flex justify-between text-body-sm text-neutral-600"><span>{{ $t('reportsBank.out') }}</span><span class="text-error-700">{{ moneyIn(account.currency, account.out) }}</span></div>
+                <div class="flex justify-between border-t border-neutral-100 pt-1.5 text-body-sm font-semibold text-primary-900"><span>{{ $t('reportsBank.net') }}</span><span>{{ moneyIn(account.currency, account.net) }}</span></div>
             </Card>
         </div>
 
@@ -81,13 +81,13 @@ const kpis = [
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">
                         <tr>
-                            <th class="px-4 py-3 text-left text-label text-neutral-600">Data</th>
-                            <th class="px-4 py-3 text-left text-label text-neutral-600">Llogaria</th>
-                            <th class="px-4 py-3 text-left text-label text-neutral-600">Përshkrimi</th>
-                            <th class="px-4 py-3 text-left text-label text-neutral-600">Metoda</th>
-                            <th class="px-4 py-3 text-left text-label text-neutral-600">Lloji</th>
-                            <th class="px-4 py-3 text-right text-label text-neutral-600">Shuma</th>
-                            <th class="px-4 py-3 text-right text-label text-neutral-600">Në bazë</th>
+                            <th class="px-4 py-3 text-left text-label text-neutral-600">{{ $t('reportsBank.colDate') }}</th>
+                            <th class="px-4 py-3 text-left text-label text-neutral-600">{{ $t('reportsBank.colAccount') }}</th>
+                            <th class="px-4 py-3 text-left text-label text-neutral-600">{{ $t('reportsBank.colDescription') }}</th>
+                            <th class="px-4 py-3 text-left text-label text-neutral-600">{{ $t('reportsBank.colMethod') }}</th>
+                            <th class="px-4 py-3 text-left text-label text-neutral-600">{{ $t('reportsBank.colType') }}</th>
+                            <th class="px-4 py-3 text-right text-label text-neutral-600">{{ $t('reportsBank.colAmount') }}</th>
+                            <th class="px-4 py-3 text-right text-label text-neutral-600">{{ $t('reportsBank.colBase') }}</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
@@ -112,15 +112,15 @@ const kpis = [
                     </tbody>
                     <tfoot v-if="rows.length" class="border-t-2 border-neutral-200 bg-neutral-50">
                         <tr>
-                            <td class="px-4 py-3 text-body-sm font-semibold text-primary-900" colspan="5">Totali (në {{ currency }})</td>
+                            <td class="px-4 py-3 text-body-sm font-semibold text-primary-900" colspan="5">{{ $t('reportsBank.totalIn', { currency }) }}</td>
                             <td class="px-4 py-3 text-right text-body-sm font-semibold" colspan="2">
-                                +{{ money(totals?.in_base) }} / −{{ money(totals?.out_base) }} · Neto {{ money(totals?.net_base) }}
+                                +{{ money(totals?.in_base) }} / −{{ money(totals?.out_base) }} · {{ $t('reportsBank.net') }} {{ money(totals?.net_base) }}
                             </td>
                         </tr>
                     </tfoot>
                 </table>
             </div>
-            <div v-if="!rows.length" class="px-6 py-10 text-center text-body-sm text-neutral-500">Asnjë lëvizje bankare në këtë periudhë.</div>
+            <div v-if="!rows.length" class="px-6 py-10 text-center text-body-sm text-neutral-500">{{ $t('reportsBank.empty') }}</div>
         </Card>
     </ReportShell>
 </template>

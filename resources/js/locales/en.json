@@ -245,6 +245,11 @@
     }
   },
   "invoicePrint": {
+    "itemsSubtotal": "Items subtotal",
+    "discount": "Discount",
+    "grandTotal": "TOTAL",
+    "complimentary": "Complimentary",
+    "qrAlt": "Invoice verification QR",
     "invoice": "INVOICE",
     "proforma": "PROFORMA",
     "fiscalInvoice": "FISCAL INVOICE",
@@ -4333,6 +4338,13 @@
     "enableAccount": "Activate account"
   },
   "superAdmin": {
+    "layout": {
+      "currencyStale": "Currency exchange rates are stale",
+      "lastRefresh": " — last refresh: {date}",
+      "noSuccessfulRefresh": " — no successful refresh yet",
+      "tenantsReadLast": "Hotels are reading the last synchronized values.",
+      "openCurrencies": "Open Currencies"
+    },
     "dynamic": {
       "activePortfolio": "of the active portfolio",
       "projectedMrr": "Projected MRR",
@@ -5860,5 +5872,313 @@
     "pinLabel": "Unique POS PIN",
     "cancel": "Cancel",
     "createWaiter": "Create waiter"
+  },
+  "pricingIndex": {
+    "monthsShort": {
+      "0": "Jan",
+      "1": "Feb",
+      "2": "Mar",
+      "3": "Apr",
+      "4": "May",
+      "5": "Jun",
+      "6": "Jul",
+      "7": "Aug",
+      "8": "Sep",
+      "9": "Oct",
+      "10": "Nov",
+      "11": "Dec"
+    },
+    "monthsTiny": {
+      "0": "jan",
+      "1": "feb",
+      "2": "mar",
+      "3": "apr",
+      "4": "may",
+      "5": "jun",
+      "6": "jul",
+      "7": "aug",
+      "8": "sep",
+      "9": "oct",
+      "10": "nov",
+      "11": "dec"
+    },
+    "today": "TODAY",
+    "emptyBadge": "empty",
+    "syncStarted": "Synchronization started.",
+    "deleteSeasonConfirm": "Delete the season \"{name}\"? (its prices will be removed)",
+    "yearCoverage": "Year coverage",
+    "days": "days",
+    "avgBase": "Average base price",
+    "seasonsWord": "seasons",
+    "roomTypesWord": "room types",
+    "gapDaysWarning": "⚠ {days} days without a season — sold at the base price",
+    "smartPricingLink": "✨ Smart Pricing →",
+    "seasonsHint": "Click a season to edit it · striped yellow areas = days without a season · ★ wins over the others where they overlap",
+    "gapTitle": "{days} days without a season — click to cover them",
+    "cover": "Cover",
+    "overlapsWith": "Overlaps with",
+    "overlapsNote": "The shared nights are sold with the season that has the higher priority.",
+    "copyHintPrefix": "· use",
+    "copyHintSuffix": "to bring them over from another year.",
+    "night": "night",
+    "matrixHint": "An empty cell inherits the base price (shown as a shadow) · columns carry their season's colour",
+    "basePrice": "Base price",
+    "basePriceSub": "all year · the foundation",
+    "footPrefix": "💡 These prices are the foundation —",
+    "smartPricingName": "Smart Pricing ✨",
+    "footSuffix": "starts from them and moves them with demand, within your min–max limits.",
+    "unsavedOne": "unsaved change",
+    "unsavedMany": "unsaved changes"
+  },
+  "reportsBank": {
+    "title": "Bank Payments",
+    "short": "Every bank account movement — for reconciling against the bank statement",
+    "bankAccount": "Bank account",
+    "allAccounts": "All accounts",
+    "in": "In",
+    "out": "Out",
+    "transfer": "Transfer",
+    "auto": "Automatic",
+    "manual": "Manual",
+    "cash": "Cash",
+    "card": "Card",
+    "bank": "Bank",
+    "roomCharge": "Room charge",
+    "kpiIn": "Bank inflows",
+    "kpiOut": "Bank outflows",
+    "kpiNet": "Net for the period",
+    "kpiMovements": "Movements",
+    "net": "Net",
+    "colDate": "Date",
+    "colAccount": "Account",
+    "colDescription": "Description",
+    "colMethod": "Method",
+    "colType": "Type",
+    "colAmount": "Amount",
+    "colBase": "In base",
+    "totalIn": "Total (in {currency})",
+    "empty": "No bank movements in this period."
+  },
+  "reportShell": {
+    "defaultCategory": "Reports",
+    "currentView": "Current view",
+    "worksheetName": "Report",
+    "categoryOperations": "Operations",
+    "categoryBarRestaurant": "Bar & restaurant"
+  },
+  "inventoryItems": {
+    "reasons": {
+      "damaged": "Damaged",
+      "lost": "Lost",
+      "expired": "Expired",
+      "other": "Other"
+    },
+    "deleteCategoryConfirm": "Delete the category \"{name}\"?",
+    "newProduct": "New product",
+    "editProduct": "Edit product",
+    "productData": "Product details",
+    "photoHint": "The photo is used in the POS and rooms catalogue.",
+    "productImageAlt": "Product image",
+    "uploadPhoto": "Upload photo",
+    "photoFormats": "JPG, PNG or WEBP",
+    "removePhoto": "Remove photo",
+    "productName": "Product name",
+    "productNamePlaceholder": "e.g. Coca-Cola 330ml",
+    "category": "Category",
+    "type": "Type",
+    "unit": "Unit",
+    "minimumStock": "Minimum stock",
+    "activeProduct": "Active product",
+    "roomsBadge": "ROOMS",
+    "sellInPos": "Sold in POS",
+    "sellInPosHint": "Show it as a product in the bar/restaurant.",
+    "posWarehouse": "POS warehouse",
+    "posPrice": "POS price",
+    "posCategoryNote": "In POS the item appears under its own inventory category (\"Category\" above).",
+    "sellInRooms": "Sold in rooms",
+    "sellInRoomsHint": "Show it in the minibar and the folio.",
+    "roomsWarehouse": "Rooms warehouse",
+    "roomPrice": "In-room price",
+    "initialStock": "Opening stock",
+    "initialStockHint": "Optional. Future purchases are recorded from purchase bills.",
+    "quantity": "Quantity",
+    "costPerUnit": "Cost / unit",
+    "warehouse": "Warehouse"
+  },
+  "settingsTabs": {
+    "navigation": {
+      "tabs": {
+        "hotel": "Hotel information",
+        "roomTypes": "Room types",
+        "floors": "Floors",
+        "amenities": "Amenities",
+        "website": "Website",
+        "about": "About page",
+        "bookingPolicies": "Reservations & policies",
+        "pricingPrograms": "Pricing & OTA",
+        "marketRates": "Market rates",
+        "pos": "POS & service",
+        "menu": "POS menu",
+        "housekeeping": "Housekeeping",
+        "financial": "Finance",
+        "currencies": "Currencies",
+        "integrations": "Integrations",
+        "ai": "Lora AI configuration",
+        "channelManager": "Channel Manager",
+        "users": "Users & roles",
+        "notifications": "Notifications",
+        "security": "Security",
+        "history": "Audit"
+      },
+      "groups": {
+        "hotel": "Hotel",
+        "operations": "Operations",
+        "automation": "Automation",
+        "system": "System"
+      }
+    },
+    "index": {
+      "searchPlaceholder": "Search settings…",
+      "noResults": "No settings found.",
+      "categoriesAria": "Settings categories"
+    },
+    "hotel": {
+      "pricingCurrencyLabel": "Pricing currency",
+      "pricingCurrencyHint": "Smart Pricing, web, OTA and reservations."
+    },
+    "roomTypes": {
+      "uploadInterrupted": "The server interrupted the upload — try again or upload fewer photos at once.",
+      "uploadPartial": "{saved} photos were saved; the upload stopped at photo {next}."
+    },
+    "security": {
+      "title": "Security",
+      "subtitle": "Manage the password of the account you are signed in with."
+    },
+    "integrations": {
+      "title": "Integration center",
+      "subtitle": "Status, testing and configuration access for every external service.",
+      "active": "active",
+      "needAttention": "need attention",
+      "inactive": "inactive",
+      "statusConfigured": "Configured",
+      "statusNeedsSetup": "Needs setup",
+      "statusInactive": "Inactive",
+      "managedByLora": "Managed by Lora staff",
+      "managedByHotel": "Managed by the hotel",
+      "lastTestOk": "Last test: successful",
+      "lastTestFailed": "Last test: failed",
+      "test": "Test",
+      "view": "View",
+      "configure": "Configure",
+      "connectionOk": "Connection successful.",
+      "connectionFailed": "Connection test failed.",
+      "footer": "Tokens and private keys are encrypted. This page only shows status and does not duplicate configuration.",
+      "categories": {
+        "fiscalization": "Fiscalization",
+        "channels": "Sales channels",
+        "payments": "Payments",
+        "aiData": "AI & data"
+      },
+      "services": {
+        "channex": "OTA reservations and availability synchronization.",
+        "pok": "Online payments for direct bookings.",
+        "fatureAl": "Fiscalization for hotel and POS invoices.",
+        "gemini": "AI assistant and intelligent analysis.",
+        "exchangeRates": "Daily exchange rates for finance.",
+        "serpApi": "Market-rate comparison for the hotel.",
+        "fallback": "External service connected to the hotel."
+      }
+    },
+    "menu": {
+      "newItem": "New menu item",
+      "groupsInfo": "Groups come automatically from the inventory categories (Inventory → Items → Manage categories). Only the per-group POS settings — the outlet and the source warehouse — are edited here.",
+      "settings": "Settings",
+      "fromInventory": "From inventory",
+      "groupSettingsTitle": "Group settings",
+      "nameFromInventory": "The name \"{name}\" comes from the inventory category and is renamed there.",
+      "price": "Price",
+      "categoryFromInventory": "Category (from inventory)",
+      "chooseCategory": "Choose a category...",
+      "deleteCategoryConfirm": "Delete the category \"{name}\"?",
+      "deleteItemConfirm": "Delete \"{name}\"?",
+      "unavailable": "unavailable",
+      "available": "available"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "subtitle": "Choose which operational events send an email.",
+      "saved": "Notifications saved.",
+      "newReservation": "New reservation",
+      "sendEmailDesc": "Send an email to {email} when a reservation is created.",
+      "hotelEmailFallback": "the hotel email",
+      "missingEmailWarning": "Set the email under “Hotel information” so notifications can be sent.",
+      "save": "Save notifications"
+    },
+    "bookingPolicies": {
+      "title": "Reservations & policies",
+      "subtitle": "The basic operational rules for guest arrivals and departures.",
+      "saved": "Booking policies saved.",
+      "checkInLabel": "Standard check-in time",
+      "checkOutLabel": "Standard check-out time",
+      "futureNote": "Cancellation, prepayment and no-show policies will be added here once the policy engine is enabled.",
+      "save": "Save policies"
+    }
+  },
+  "shared": {
+    "posSalesperson": {
+      "change": "Change",
+      "select": "Select",
+      "transferTitle": "Transfer salesperson",
+      "switchTitle": "Switch salesperson",
+      "chooseStaff": "Choose the staff member and confirm with their PIN.",
+      "pinActive": "PIN active",
+      "setPinHint": "Set a PIN in the POS settings",
+      "active": "Active",
+      "pinFor": "PIN for",
+      "staff": "Staff",
+      "deleteDigit": "Delete",
+      "cancel": "Cancel",
+      "switchError": "The switch was not completed."
+    },
+    "languageSwitcher": {
+      "chooseLanguage": "Choose language",
+      "language": "Language"
+    },
+    "appLayout": {
+      "posSales": "Sales",
+      "posOrders": "Orders",
+      "posReceipts": "Sales & receipts",
+      "posShifts": "Shifts"
+    },
+    "housekeepingClean": {
+      "inspection": "Inspection"
+    },
+    "dashboard": {
+      "allRooms": "All ({count})"
+    },
+    "financePayments": {
+      "reservationOnly": "Showing only the movements linked to reservation",
+      "openReservation": "Open the reservation"
+    },
+    "profileEdit": {
+      "roles": {
+        "admin": "Administrator",
+        "manager": "Manager",
+        "receptionist": "Receptionist",
+        "housekeeping": "Housekeeping",
+        "maintenance": "Maintenance",
+        "posStaff": "POS staff"
+      }
+    },
+    "usersIndex": {
+      "roles": {
+        "admin": "Admin",
+        "manager": "Manager",
+        "receptionist": "Reception",
+        "housekeeping": "Housekeeping",
+        "maintenance": "Maintenance",
+        "posStaff": "POS"
+      }
+    }
   }
 }

@@ -58,7 +58,7 @@ export const COUNTRIES = [
     { code: "CI", name: "Côte d’Ivoire" },
     { code: "HR", name: "Croatia" },
     { code: "CU", name: "Cuba" },
-    { code: "CW", name: "Curaçao" },
+    { code: "CW", name: "Cura\u00E7ao" },
     { code: "CY", name: "Cyprus" },
     { code: "CZ", name: "Czechia" },
     { code: "DK", name: "Denmark" },
