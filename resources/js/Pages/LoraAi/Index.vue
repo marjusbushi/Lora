@@ -25,17 +25,17 @@ const promptCopied = ref('');
 const settingsSearch = ref('');
 const form = useForm({ ...props.aiSettings });
 const page = usePage();
-const { locale } = useI18n();
+const { locale, t } = useI18n();
 const modules = computed(() => page.props.modules || {});
 const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
 const groupIcons = { Hotel, BriefcaseBusiness, Bot, ShieldCheck };
 const navigationTabs = computed(() => visibleSettingsTabs(modules.value).map((tab) => ({
     ...tab,
-    label: locale.value === 'sq' ? tab.labelSq : tab.labelEn,
+    label: t(tab.labelKey),
 })));
 const navigationGroups = computed(() => settingsGroups.map((group) => ({
     ...group,
-    label: locale.value === 'sq' ? group.labelSq : group.labelEn,
+    label: t(group.labelKey),
     tabs: navigationTabs.value.filter((tab) => tab.group === group.id),
 })));
 const settingsSearchResults = computed(() => {

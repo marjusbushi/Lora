@@ -11,7 +11,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['select']);
-const { locale } = useI18n();
+const { t } = useI18n();
 const modules = computed(() => usePage().props.modules || {});
 
 const tabs = computed(() => visibleSettingsTabs(modules.value)
@@ -19,7 +19,7 @@ const tabs = computed(() => visibleSettingsTabs(modules.value)
         ...tab,
         id: tab.sidebarId || tab.id,
         sourceId: tab.id,
-        label: locale.value === 'sq' ? tab.labelSq : tab.labelEn,
+        label: t(tab.labelKey),
     })));
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === props.activeItem || tab.sourceId === props.activeItem));
@@ -28,7 +28,7 @@ const groups = computed(() => settingsGroups
     .filter((group) => !props.activeGroupOnly || group.id === activeTab.value?.group)
     .map((group) => ({
         ...group,
-        label: locale.value === 'sq' ? group.labelSq : group.labelEn,
+        label: t(group.labelKey),
         tabs: tabs.value.filter((tab) => tab.group === group.id),
     })));
 

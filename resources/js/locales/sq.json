@@ -245,6 +245,11 @@
     }
   },
   "invoicePrint": {
+    "itemsSubtotal": "Nëntotali i artikujve",
+    "discount": "Ulje",
+    "grandTotal": "TOTALI",
+    "complimentary": "Komplimentare",
+    "qrAlt": "QR verifikimi i faturës",
     "invoice": "FATURË",
     "proforma": "PROFORMË",
     "fiscalInvoice": "FATURË FISKALE",
@@ -4333,6 +4338,13 @@
     "enableAccount": "Aktivizo llogarinë"
   },
   "superAdmin": {
+    "layout": {
+      "currencyStale": "Kurset e monedhave janë të vjetruara",
+      "lastRefresh": " — rifreskimi i fundit: {date}",
+      "noSuccessfulRefresh": " — asnjë rifreskim i suksesshëm ende",
+      "tenantsReadLast": "Hotelet po lexojnë vlerat e fundit të sinkronizuara.",
+      "openCurrencies": "Hap Monedhat"
+    },
     "dynamic": {
       "activePortfolio": "e portofolit aktiv",
       "projectedMrr": "MRR i parashikuar",
@@ -5860,5 +5872,313 @@
     "pinLabel": "PIN-i unik i POS-it",
     "cancel": "Anulo",
     "createWaiter": "Krijo kamarierin"
+  },
+  "pricingIndex": {
+    "monthsShort": {
+      "0": "Jan",
+      "1": "Shk",
+      "2": "Mar",
+      "3": "Pri",
+      "4": "Maj",
+      "5": "Qer",
+      "6": "Kor",
+      "7": "Gu",
+      "8": "Sht",
+      "9": "Tet",
+      "10": "Nën",
+      "11": "Dhj"
+    },
+    "monthsTiny": {
+      "0": "jan",
+      "1": "shk",
+      "2": "mar",
+      "3": "pri",
+      "4": "maj",
+      "5": "qer",
+      "6": "kor",
+      "7": "gush",
+      "8": "sht",
+      "9": "tet",
+      "10": "nën",
+      "11": "dhj"
+    },
+    "today": "SOT",
+    "emptyBadge": "bosh",
+    "syncStarted": "Sinkronizimi u nis.",
+    "deleteSeasonConfirm": "Fshi sezonin \"{name}\"? (cmimet e tij do hiqen)",
+    "yearCoverage": "Mbulimi i vitit",
+    "days": "ditë",
+    "avgBase": "Çmimi bazë mesatar",
+    "seasonsWord": "sezone",
+    "roomTypesWord": "tipe dhomash",
+    "gapDaysWarning": "⚠ {days} ditë pa sezon — shiten me çmim bazë",
+    "smartPricingLink": "✨ Çmimi Inteligjent →",
+    "seasonsHint": "Kliko një sezon për ta edituar · zonat e verdha me vija = ditë pa sezon · ★ fiton mbi të tjerët ku mbivendosen",
+    "gapTitle": "{days} ditë pa sezon — kliko për t'i mbuluar",
+    "cover": "Mbulo",
+    "overlapsWith": "Mbivendoset me",
+    "overlapsNote": "Netët e përbashkëta shiten me sezonin që ka prioritetin më të lartë.",
+    "copyHintPrefix": "· përdor",
+    "copyHintSuffix": "për t'i sjellë nga një vit tjetër.",
+    "night": "natë",
+    "matrixHint": "Qeliza bosh trashëgon çmimin bazë (duket si hije) · kolonat kanë ngjyrën e sezonit të tyre",
+    "basePrice": "Çmimi bazë",
+    "basePriceSub": "gjithë viti · themeli",
+    "footPrefix": "💡 Këto çmime janë themeli —",
+    "smartPricingName": "Çmimi Inteligjent ✨",
+    "footSuffix": "niset prej tyre dhe i lëviz sipas kërkesës, brenda kufijve të tu min–max.",
+    "unsavedOne": "ndryshim i paruajtur",
+    "unsavedMany": "ndryshime të paruajtura"
+  },
+  "reportsBank": {
+    "title": "Pagesat në Bankë",
+    "short": "Çdo lëvizje e llogarive bankare — për rakordim me statement-in e bankës",
+    "bankAccount": "Llogaria bankare",
+    "allAccounts": "Të gjitha llogaritë",
+    "in": "Hyrje",
+    "out": "Dalje",
+    "transfer": "Transfertë",
+    "auto": "Automatike",
+    "manual": "Manuale",
+    "cash": "Cash",
+    "card": "Kartë",
+    "bank": "Bankë",
+    "roomCharge": "Në dhomë",
+    "kpiIn": "Hyrje në bankë",
+    "kpiOut": "Dalje nga banka",
+    "kpiNet": "Neto në periudhë",
+    "kpiMovements": "Lëvizje",
+    "net": "Neto",
+    "colDate": "Data",
+    "colAccount": "Llogaria",
+    "colDescription": "Përshkrimi",
+    "colMethod": "Metoda",
+    "colType": "Lloji",
+    "colAmount": "Shuma",
+    "colBase": "Në bazë",
+    "totalIn": "Totali (në {currency})",
+    "empty": "Asnjë lëvizje bankare në këtë periudhë."
+  },
+  "reportShell": {
+    "defaultCategory": "Raporte",
+    "currentView": "Pamje aktuale",
+    "worksheetName": "Raport",
+    "categoryOperations": "Operacione",
+    "categoryBarRestaurant": "Bar & restorant"
+  },
+  "inventoryItems": {
+    "reasons": {
+      "damaged": "Dëmtuar",
+      "lost": "Humbur",
+      "expired": "Skaduar",
+      "other": "Tjetër"
+    },
+    "deleteCategoryConfirm": "Fshi kategorinë \"{name}\"?",
+    "newProduct": "Produkt i ri",
+    "editProduct": "Ndrysho produktin",
+    "productData": "Të dhënat e produktit",
+    "photoHint": "Fotoja përdoret në katalogun e POS-it dhe të dhomave.",
+    "productImageAlt": "Pamja e produktit",
+    "uploadPhoto": "Ngarko foto",
+    "photoFormats": "JPG, PNG ose WEBP",
+    "removePhoto": "Hiq foton",
+    "productName": "Emri i produktit",
+    "productNamePlaceholder": "p.sh. Coca-Cola 330ml",
+    "category": "Kategoria",
+    "type": "Lloji",
+    "unit": "Njësia",
+    "minimumStock": "Stoku minimal",
+    "activeProduct": "Produkt aktiv",
+    "roomsBadge": "DHOMA",
+    "sellInPos": "Shitet në POS",
+    "sellInPosHint": "Shfaqe si produkt në bar/restorant.",
+    "posWarehouse": "Magazina POS",
+    "posPrice": "Çmimi në POS",
+    "posCategoryNote": "Në POS artikulli shfaqet nën kategorinë e vet të inventarit (\"Kategoria\" sipër).",
+    "sellInRooms": "Shitet në dhoma",
+    "sellInRoomsHint": "Shfaqe në minibar dhe folio.",
+    "roomsWarehouse": "Magazina e dhomave",
+    "roomPrice": "Çmimi në dhomë",
+    "initialStock": "Gjendja fillestare",
+    "initialStockHint": "Opsionale. Blerjet e ardhshme regjistrohen nga faturat e blerjes.",
+    "quantity": "Sasia",
+    "costPerUnit": "Kosto / njësi",
+    "warehouse": "Magazina"
+  },
+  "settingsTabs": {
+    "navigation": {
+      "tabs": {
+        "hotel": "Të dhënat e hotelit",
+        "roomTypes": "Tipet e dhomave",
+        "floors": "Katet",
+        "amenities": "Pajisjet",
+        "website": "Faqja Web",
+        "about": "Rreth Nesh",
+        "bookingPolicies": "Rezervimet & politikat",
+        "pricingPrograms": "Çmimet & OTA",
+        "marketRates": "Çmimet e tregut",
+        "pos": "POS & Shërbimi",
+        "menu": "Menuja POS",
+        "housekeeping": "Housekeeping",
+        "financial": "Financa",
+        "currencies": "Monedhat",
+        "integrations": "Integrimet",
+        "ai": "Konfigurimi i Lora AI",
+        "channelManager": "Channel Manager",
+        "users": "Përdoruesit & rolet",
+        "notifications": "Njoftimet",
+        "security": "Siguria",
+        "history": "Auditimi"
+      },
+      "groups": {
+        "hotel": "Hoteli",
+        "operations": "Operacionet",
+        "automation": "Automatizimi",
+        "system": "Sistemi"
+      }
+    },
+    "index": {
+      "searchPlaceholder": "Kërko konfigurim…",
+      "noResults": "Nuk u gjet konfigurim.",
+      "categoriesAria": "Kategoritë e konfigurimit"
+    },
+    "hotel": {
+      "pricingCurrencyLabel": "Monedha e çmimeve",
+      "pricingCurrencyHint": "Smart Pricing, web, OTA dhe rezervimet."
+    },
+    "roomTypes": {
+      "uploadInterrupted": "Serveri e ndërpreu ngarkimin — provo përsëri ose ngarko më pak foto njëherësh.",
+      "uploadPartial": "{saved} foto u ruajtën; ngarkimi u ndal te fotoja {next}."
+    },
+    "security": {
+      "title": "Siguria",
+      "subtitle": "Menaxho fjalëkalimin e llogarisë me të cilën je futur."
+    },
+    "integrations": {
+      "title": "Qendra e integrimeve",
+      "subtitle": "Statusi, testimi dhe hyrja drejt konfigurimit për çdo shërbim të jashtëm.",
+      "active": "aktive",
+      "needAttention": "kërkojnë vëmendje",
+      "inactive": "jo aktive",
+      "statusConfigured": "Konfiguruar",
+      "statusNeedsSetup": "Kërkon konfigurim",
+      "statusInactive": "Jo aktiv",
+      "managedByLora": "Menaxhohet nga stafi Lora",
+      "managedByHotel": "Menaxhohet nga hoteli",
+      "lastTestOk": "Testi i fundit: në rregull",
+      "lastTestFailed": "Testi i fundit: dështoi",
+      "test": "Testo",
+      "view": "Shiko",
+      "configure": "Konfiguro",
+      "connectionOk": "Lidhja funksionon.",
+      "connectionFailed": "Testi i lidhjes dështoi.",
+      "footer": "Token-et dhe çelësat privatë ruhen të enkriptuar. Kjo faqe shfaq vetëm statusin dhe nuk dublikon konfigurimet.",
+      "categories": {
+        "fiscalization": "Fiskalizimi",
+        "channels": "Kanalet e shitjes",
+        "payments": "Pagesat",
+        "aiData": "AI & të dhënat"
+      },
+      "services": {
+        "channex": "Rezervime dhe disponibilitet nga kanalet OTA.",
+        "pok": "Pagesa online për rezervimet direkte.",
+        "fatureAl": "Fiskalizimi i faturave të hotelit dhe POS-it.",
+        "gemini": "Asistenti AI dhe analizat inteligjente.",
+        "exchangeRates": "Kurset ditore të këmbimit për financën.",
+        "serpApi": "Krahasimi i çmimeve të hotelit me tregun.",
+        "fallback": "Shërbim i jashtëm i lidhur me hotelin."
+      }
+    },
+    "menu": {
+      "newItem": "Artikull i ri menuje",
+      "groupsInfo": "Grupet vijnë automatikisht nga kategoritë e inventarit (Inventari → Artikujt → Menaxho kategoritë). Këtu ndryshohen vetëm cilësimet e POS-it për grup — outlet-i dhe magazina e burimit.",
+      "settings": "Cilësimet",
+      "fromInventory": "Nga inventari",
+      "groupSettingsTitle": "Cilësimet e grupit",
+      "nameFromInventory": "Emri \"{name}\" vjen nga kategoria e inventarit dhe riemërtohet atje.",
+      "price": "Çmimi",
+      "categoryFromInventory": "Kategoria (nga inventari)",
+      "chooseCategory": "Zgjidh kategorinë...",
+      "deleteCategoryConfirm": "Fshi kategorine \"{name}\"?",
+      "deleteItemConfirm": "Fshi \"{name}\"?",
+      "unavailable": "jo disponueshem",
+      "available": "disponueshem"
+    },
+    "notifications": {
+      "title": "Njoftimet",
+      "subtitle": "Zgjidh cilat ngjarje operative dërgojnë email.",
+      "saved": "Njoftimet u ruajtën.",
+      "newReservation": "Rezervim i ri",
+      "sendEmailDesc": "Dërgo email te {email} kur krijohet një rezervim.",
+      "hotelEmailFallback": "email-i i hotelit",
+      "missingEmailWarning": "Vendos email-in te “Të dhënat e hotelit” që njoftimet të mund të dërgohen.",
+      "save": "Ruaj njoftimet"
+    },
+    "bookingPolicies": {
+      "title": "Rezervimet & politikat",
+      "subtitle": "Rregullat bazë operative për hyrjen dhe daljen e mysafirëve.",
+      "saved": "Politikat e rezervimeve u ruajtën.",
+      "checkInLabel": "Ora standarde e check-in",
+      "checkOutLabel": "Ora standarde e check-out",
+      "futureNote": "Politikat e anulimit, parapagimit dhe no-show do të shtohen këtu kur të aktivizohet motori i politikave.",
+      "save": "Ruaj politikat"
+    }
+  },
+  "shared": {
+    "posSalesperson": {
+      "change": "Ndrysho",
+      "select": "Zgjidh",
+      "transferTitle": "Transfero salesperson",
+      "switchTitle": "Ndërro salesperson",
+      "chooseStaff": "Zgjidh stafin dhe konfirmo me PIN-in e tij.",
+      "pinActive": "PIN aktiv",
+      "setPinHint": "Vendos PIN te Konfigurimi POS",
+      "active": "Aktiv",
+      "pinFor": "PIN për",
+      "staff": "Stafi",
+      "deleteDigit": "Fshi",
+      "cancel": "Anulo",
+      "switchError": "Nuk u krye ndërrimi."
+    },
+    "languageSwitcher": {
+      "chooseLanguage": "Zgjidh gjuhën",
+      "language": "Gjuha"
+    },
+    "appLayout": {
+      "posSales": "Shitje",
+      "posOrders": "Porositë",
+      "posReceipts": "Shitjet & kuponët",
+      "posShifts": "Turnet"
+    },
+    "housekeepingClean": {
+      "inspection": "Inspektim"
+    },
+    "dashboard": {
+      "allRooms": "Të gjitha ({count})"
+    },
+    "financePayments": {
+      "reservationOnly": "Po shfaqen vetëm lëvizjet e lidhura me rezervimin",
+      "openReservation": "Hap rezervimin"
+    },
+    "profileEdit": {
+      "roles": {
+        "admin": "Administrator",
+        "manager": "Menaxher",
+        "receptionist": "Recepsionist",
+        "housekeeping": "Housekeeping",
+        "maintenance": "Mirëmbajtje",
+        "posStaff": "Staf POS"
+      }
+    },
+    "usersIndex": {
+      "roles": {
+        "admin": "Admin",
+        "manager": "Menaxher",
+        "receptionist": "Recepsion",
+        "housekeeping": "Housekeeping",
+        "maintenance": "Mirëmbajtje",
+        "posStaff": "POS"
+      }
+    }
   }
 }

@@ -217,9 +217,9 @@ function submit() {
         <p class="mt-1 text-body-sm text-neutral-500">{{ $t('admin.generated.k_e4cb996b7e1a') }}</p>
 
         <div v-if="localFilters.reservation_id" class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-info-200 bg-info-50 px-4 py-3">
-            <p class="text-body-sm text-info-800">Po shfaqen vetëm lëvizjet e lidhura me rezervimin <strong>#{{ localFilters.reservation_id }}</strong>.</p>
+            <p class="text-body-sm text-info-800">{{ $t('shared.financePayments.reservationOnly') }} <strong>#{{ localFilters.reservation_id }}</strong>.</p>
             <div class="flex items-center gap-3">
-                <a :href="route('reservations.show', localFilters.reservation_id)" class="text-small font-semibold text-info-800 no-underline hover:text-info-900">Hap rezervimin</a>
+                <a :href="route('reservations.show', localFilters.reservation_id)" class="text-small font-semibold text-info-800 no-underline hover:text-info-900">{{ $t('shared.financePayments.openReservation') }}</a>
                 <button type="button" class="text-small font-semibold text-accent-700 hover:text-accent-800" @click="applyFilters({ reservation_id: '' })">Hiq filtrin</button>
             </div>
         </div>

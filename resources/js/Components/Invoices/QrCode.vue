@@ -33,5 +33,5 @@ watch(
 </script>
 
 <template>
-    <img v-if="source" :src="source" alt="QR verifikimi i faturës" :width="size" :height="size" />
+    <img v-if="source" :src="source" :alt="$t('invoicePrint.qrAlt')" :width="size" :height="size" />
 </template>

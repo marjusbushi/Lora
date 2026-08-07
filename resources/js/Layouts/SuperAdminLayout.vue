@@ -189,9 +189,9 @@ function isActive(item) {
             <div v-if="currencyAlert?.stale" class="border-b border-amber-200 bg-amber-50 px-4 py-2.5 sm:px-7">
                 <div class="flex flex-wrap items-center gap-2 text-xs font-semibold text-amber-900">
                     <TriangleAlert class="h-4 w-4 shrink-0 text-amber-600" />
-                    <span>Kurset e monedhave janë të vjetruara{{ currencyAlert.updated_at ? ` — rifreskimi i fundit: ${currencyAlert.updated_at}` : ' — asnjë rifreskim i suksesshëm ende' }}. Hotelet po lexojnë vlerat e fundit të sinkronizuara.</span>
+                    <span>{{ t('superAdmin.layout.currencyStale') }}{{ currencyAlert.updated_at ? t('superAdmin.layout.lastRefresh', { date: currencyAlert.updated_at }) : t('superAdmin.layout.noSuccessfulRefresh') }}. {{ t('superAdmin.layout.tenantsReadLast') }}</span>
                     <span v-if="currencyAlert.last_error" class="font-normal text-amber-800">({{ currencyAlert.last_error }})</span>
-                    <Link href="/super-admin/currencies" class="font-bold text-amber-900 underline">Hap Monedhat</Link>
+                    <Link href="/super-admin/currencies" class="font-bold text-amber-900 underline">{{ t('superAdmin.layout.openCurrencies') }}</Link>
                 </div>
             </div>
 
