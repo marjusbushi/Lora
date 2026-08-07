@@ -5,7 +5,7 @@ import { AlertTriangle, CalendarClock, CalendarMinus, CheckCircle2, CreditCard, 
 import Modal from '@/Components/UI/Modal.vue';
 import Button from '@/Components/UI/Button.vue';
 import Select from '@/Components/UI/Select.vue';
-import { getIntlLocale } from '@/i18n';
+import { getIntlLocale, translate } from '@/i18n';
 
 const props = defineProps({
     show: { type: Boolean, default: false },
@@ -17,13 +17,13 @@ const emit = defineEmits(['close', 'completed']);
 const page = usePage();
 const currency = computed(() => props.reservation?.currency || page.props.tenant?.currency || 'EUR');
 const methods = [
-    { value: 'cash', label: 'Kesh' },
-    { value: 'card', label: 'Kartë' },
+    { value: 'cash', label: translate('reservationModals.earlyDeparture.methodCash') },
+    { value: 'card', label: translate('reservationModals.earlyDeparture.methodCard') },
 ];
 const policies = [
-    { value: 'waive', title: 'Pa penalitet', description: 'Hiqen netët e papërdorura.' },
-    { value: 'partial', title: 'Penalitet i pjesshëm', description: 'Ngarkohet një pjesë e netëve të mbetura.' },
-    { value: 'full', title: 'Pagesë e plotë', description: 'Totali fillestar nuk ndryshon.' },
+    { value: 'waive', title: translate('reservationModals.earlyDeparture.policyWaiveTitle'), description: translate('reservationModals.earlyDeparture.policyWaiveDescription') },
+    { value: 'partial', title: translate('reservationModals.earlyDeparture.policyPartialTitle'), description: translate('reservationModals.earlyDeparture.policyPartialDescription') },
+    { value: 'full', title: translate('reservationModals.earlyDeparture.policyFullTitle'), description: translate('reservationModals.earlyDeparture.policyFullDescription') },
 ];
 
 const form = useForm({
@@ -164,7 +164,7 @@ function submit() {
 
 function cancelPlan() {
     if (!props.reservation || !planned.value || form.processing || cancellingPlan.value) return;
-    if (!confirm('Ta anulosh planin dhe t’i rikthesh netët në inventarin e rezervuar?')) return;
+    if (!confirm(translate('reservationModals.earlyDeparture.confirmCancelPlan'))) return;
 
     form.clearErrors();
     router.delete(route('reservations.early-departure-plan.cancel', props.reservation.id), {
@@ -180,34 +180,34 @@ function cancelPlan() {
 </script>
 
 <template>
-    <Modal :show="show" title="Largim i parakohshëm" max-width="2xl" @close="emit('close')">
+    <Modal :show="show" :title="$t('reservationModals.earlyDeparture.title')" max-width="2xl" @close="emit('close')">
         <div v-if="reservation" class="space-y-5">
             <div class="flex items-start gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-accent-700 shadow-sm ring-1 ring-neutral-200">
                     <CalendarMinus class="h-5 w-5" />
                 </span>
                 <div class="min-w-0 flex-1">
-                    <p class="font-semibold text-primary-900">{{ reservation.guest?.name || 'Mysafiri' }} · Dhoma {{ reservation.room?.room_number || '—' }}</p>
+                    <p class="font-semibold text-primary-900">{{ reservation.guest?.name || $t('reservationModals.earlyDeparture.guestFallback') }} · {{ $t('reservationModals.earlyDeparture.room') }} {{ reservation.room?.room_number || '—' }}</p>
                     <p class="mt-1 text-small text-neutral-500">
                         {{ formattedDate(reservation.check_in_date) }} → {{ formattedDate(reservation.check_out_date) }}
-                        · {{ originalNights }} net
+                        · {{ $t('reservationModals.earlyDeparture.nightsCount', { count: originalNights }) }}
                     </p>
                 </div>
             </div>
 
             <div v-if="isOta" class="flex gap-3 rounded-xl border border-warning-200 bg-warning-50 p-3 text-body-sm text-warning-800">
                 <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
-                <p>Ky rezervim vjen nga {{ reservation.channel }}. PMS do të lirojë inventarin, por ndryshimi kontraktual duhet kontrolluar edhe në kanalin OTA.</p>
+                <p>{{ $t('reservationModals.earlyDeparture.otaNotice', { channel: reservation.channel }) }}</p>
             </div>
 
             <div v-if="isFuturePlan" class="flex gap-3 rounded-xl border border-info-200 bg-info-50 p-3 text-body-sm text-info-800">
                 <CalendarClock class="mt-0.5 h-4 w-4 shrink-0" />
-                <p>Mysafiri mbetet në hotel. Netët pas {{ formattedDate(form.departure_date) }} lirohen tani në PMS dhe Channex; checkout-i dhe pastrimi kryhen vetëm ditën e largimit.</p>
+                <p>{{ $t('reservationModals.earlyDeparture.futurePlanNotice', { date: formattedDate(form.departure_date) }) }}</p>
             </div>
 
             <div class="grid gap-4 sm:grid-cols-2">
                 <label class="block">
-                    <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">Data reale e largimit</span>
+                    <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">{{ $t('reservationModals.earlyDeparture.departureDateLabel') }}</span>
                     <input
                         v-model="form.departure_date"
                         type="date"
@@ -218,14 +218,14 @@ function cancelPlan() {
                     <span v-if="form.errors.departure_date" class="mt-1 block text-small text-error-600">{{ form.errors.departure_date }}</span>
                 </label>
                 <div class="rounded-xl border border-neutral-200 p-3">
-                    <p class="text-small text-neutral-500">Qëndrimi i ri</p>
-                    <p class="mt-1 font-semibold text-primary-900">{{ usedNights }} net</p>
-                    <p class="text-small text-neutral-500">{{ originalNights - usedNights }} net të papërdorura</p>
+                    <p class="text-small text-neutral-500">{{ $t('reservationModals.earlyDeparture.newStay') }}</p>
+                    <p class="mt-1 font-semibold text-primary-900">{{ $t('reservationModals.earlyDeparture.nightsCount', { count: usedNights }) }}</p>
+                    <p class="text-small text-neutral-500">{{ $t('reservationModals.earlyDeparture.unusedNights', { count: originalNights - usedNights }) }}</p>
                 </div>
             </div>
 
             <fieldset>
-                <legend class="mb-2 text-body-sm font-semibold text-primary-900">Politika financiare</legend>
+                <legend class="mb-2 text-body-sm font-semibold text-primary-900">{{ $t('reservationModals.earlyDeparture.financialPolicy') }}</legend>
                 <div class="grid gap-2 sm:grid-cols-3">
                     <button
                         v-for="policy in policies"
@@ -247,7 +247,7 @@ function cancelPlan() {
             </fieldset>
 
             <label v-if="form.policy === 'partial'" class="block">
-                <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">Vlera e penalitetit</span>
+                <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">{{ $t('reservationModals.earlyDeparture.penaltyAmount') }}</span>
                 <div class="relative max-w-xs">
                     <input
                         v-model="form.penalty_amount"
@@ -259,14 +259,14 @@ function cancelPlan() {
                     />
                     <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-small font-medium text-neutral-500">{{ currency }}</span>
                 </div>
-                <span class="mt-1 block text-small text-neutral-500">Maksimumi: {{ money(unusedRoomValue) }}</span>
+                <span class="mt-1 block text-small text-neutral-500">{{ $t('reservationModals.earlyDeparture.maxAmount', { amount: money(unusedRoomValue) }) }}</span>
                 <span v-if="form.errors.penalty_amount" class="mt-1 block text-small text-error-600">{{ form.errors.penalty_amount }}</span>
             </label>
 
             <div class="grid gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-3">
-                <div><p class="text-small text-neutral-500">Totali fillestar</p><p class="mt-1 font-semibold text-primary-900">{{ money(originalRoomTotal) }}</p></div>
-                <div><p class="text-small text-neutral-500">Totali i ri i akomodimit</p><p class="mt-1 font-semibold text-accent-700">{{ money(adjustedRoomTotal) }}</p></div>
-                <div><p class="text-small text-neutral-500">Fatura totale me shtesat</p><p class="mt-1 font-semibold text-primary-900">{{ money(adjustedGross) }}</p></div>
+                <div><p class="text-small text-neutral-500">{{ $t('reservationModals.earlyDeparture.originalTotal') }}</p><p class="mt-1 font-semibold text-primary-900">{{ money(originalRoomTotal) }}</p></div>
+                <div><p class="text-small text-neutral-500">{{ $t('reservationModals.earlyDeparture.newRoomTotal') }}</p><p class="mt-1 font-semibold text-accent-700">{{ money(adjustedRoomTotal) }}</p></div>
+                <div><p class="text-small text-neutral-500">{{ $t('reservationModals.earlyDeparture.grossTotal') }}</p><p class="mt-1 font-semibold text-primary-900">{{ money(adjustedGross) }}</p></div>
             </div>
 
             <div v-if="!isFuturePlan && (paymentDue || refundDue)" class="rounded-xl border p-4" :class="refundDue ? 'border-info-200 bg-info-50' : 'border-warning-200 bg-warning-50'">
@@ -275,22 +275,22 @@ function cancelPlan() {
                     <CreditCard v-else class="mt-0.5 h-5 w-5 text-warning-700" />
                     <div class="flex-1">
                         <p class="font-semibold text-primary-900">
-                            {{ refundDue ? `Rimbursim ${money(refundDue)}` : `Pagesë e mbetur ${money(paymentDue)}` }}
+                            {{ refundDue ? $t('reservationModals.earlyDeparture.refundAmount', { amount: money(refundDue) }) : $t('reservationModals.earlyDeparture.paymentRemaining', { amount: money(paymentDue) }) }}
                         </p>
-                        <p class="mt-1 text-small text-neutral-600">Bilanci duhet të mbyllet përpara checkout-it.</p>
+                        <p class="mt-1 text-small text-neutral-600">{{ $t('reservationModals.earlyDeparture.balanceNotice') }}</p>
                         <div class="mt-3 max-w-xs">
                             <Select
                                 v-if="refundDue"
                                 v-model="form.refund_method"
                                 :options="methods"
-                                placeholder="Mënyra e rimbursimit"
+                                :placeholder="$t('reservationModals.earlyDeparture.refundMethod')"
                                 :error="form.errors.refund_method"
                             />
                             <Select
                                 v-else
                                 v-model="form.settle_method"
                                 :options="methods"
-                                placeholder="Mënyra e pagesës"
+                                :placeholder="$t('reservationModals.earlyDeparture.paymentMethod')"
                                 :error="form.errors.settle_method"
                             />
                         </div>
@@ -299,24 +299,24 @@ function cancelPlan() {
             </div>
 
             <label class="block">
-                <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">Arsyeja</span>
+                <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">{{ $t('reservationModals.earlyDeparture.reason') }}</span>
                 <textarea
                     v-model="form.reason"
                     rows="3"
                     maxlength="500"
                     class="w-full rounded-lg border-neutral-200 text-body-sm placeholder:text-neutral-400 focus:border-accent-500 focus:ring-accent-500"
-                    placeholder="p.sh. Ndryshim i planit të udhëtimit"
+                    :placeholder="$t('reservationModals.earlyDeparture.reasonPlaceholder')"
                 />
                 <span v-if="form.errors.reason" class="mt-1 block text-small text-error-600">{{ form.errors.reason }}</span>
             </label>
         </div>
 
         <template #footer>
-            <Button v-if="planned" variant="outline" :disabled="cancellingPlan" @click="cancelPlan">Anulo planin</Button>
+            <Button v-if="planned" variant="outline" :disabled="cancellingPlan" @click="cancelPlan">{{ $t('reservationModals.earlyDeparture.cancelPlan') }}</Button>
             <span class="flex-1" />
-            <Button variant="outline" :disabled="form.processing" @click="emit('close')">Mbyll</Button>
+            <Button variant="outline" :disabled="form.processing" @click="emit('close')">{{ $t('reservationModals.earlyDeparture.close') }}</Button>
             <Button variant="primary" :loading="form.processing" :disabled="!valid" @click="submit">
-                {{ isFuturePlan ? (planned ? 'Përditëso planin' : 'Planifiko largimin') : 'Përfundo largimin' }}
+                {{ isFuturePlan ? (planned ? $t('reservationModals.earlyDeparture.updatePlan') : $t('reservationModals.earlyDeparture.schedulePlan')) : $t('reservationModals.earlyDeparture.completeDeparture') }}
             </Button>
         </template>
     </Modal>

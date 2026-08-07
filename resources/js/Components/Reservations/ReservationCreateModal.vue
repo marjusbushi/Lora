@@ -12,6 +12,7 @@ import Button from '@/Components/UI/Button.vue';
 import { channelOptions } from '@/channels';
 import { countryOptions } from '@/countries';
 import { Plus, X } from 'lucide-vue-next';
+import { translate } from '@/i18n';
 
 // Shared "new reservation" popup — identical on the list AND the calendar.
 // One guest + dates + channel, then one or MORE rooms (a "+ Shto dhome"). Each
@@ -114,7 +115,9 @@ const net = computed(() => totalAmount.value - commission.value);
 const NUMERIC_REF_CHANNELS = ['booking.com', 'expedia', 'agoda', 'hotels.com', 'trip.com'];
 const isOta = computed(() => form.channel && form.channel !== 'direct');
 const refPlaceholder = computed(() =>
-    NUMERIC_REF_CHANNELS.includes(form.channel) ? 'p.sh. 5438361798' : 'p.sh. HMABC12345'
+    NUMERIC_REF_CHANNELS.includes(form.channel)
+        ? translate('reservationModals.create.refPlaceholderNumeric')
+        : translate('reservationModals.create.refPlaceholderGeneric')
 );
 // The field only exists for OTA sources — switching back to Direct discards
 // whatever was typed so a stale ref is never submitted with a direct booking.
@@ -257,18 +260,18 @@ function submit() {
 </script>
 
 <template>
-    <Modal :show="show" title="Rezervim i ri" max-width="2xl" @close="emit('close')">
+    <Modal :show="show" :title="$t('reservationModals.create.title')" max-width="2xl" @close="emit('close')">
         <form @submit.prevent="submit">
             <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
                 <div class="space-y-4">
                     <div>
-                        <p class="text-tiny font-semibold uppercase tracking-[0.14em] text-accent-700">Të dhënat e rezervimit</p>
-                        <p class="mt-1 text-body-sm text-neutral-500">Zgjidh mysafirin, burimin, datat dhe dhomën.</p>
+                        <p class="text-tiny font-semibold uppercase tracking-[0.14em] text-accent-700">{{ $t('reservationModals.create.sectionTitle') }}</p>
+                        <p class="mt-1 text-body-sm text-neutral-500">{{ $t('reservationModals.create.sectionSubtitle') }}</p>
                     </div>
             <!-- Shared: guest + dates + channel -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormGroup :label="$t('admin.generated.k_fd3481133d25')" :error="form.errors.guest_id" required>
-                    <SearchableSelect v-model="form.guest_id" :options="guestOptions" :placeholder="$t('admin.generated.k_738e39ddf7e3')" :search-placeholder="$t('admin.generated.k_d9965f809f66')" :error="form.errors.guest_id" :create-label="canCreateGuest ? 'Shto mysafirin' : null" @create="quickAddGuest" />
+                    <SearchableSelect v-model="form.guest_id" :options="guestOptions" :placeholder="$t('admin.generated.k_738e39ddf7e3')" :search-placeholder="$t('admin.generated.k_d9965f809f66')" :error="form.errors.guest_id" :create-label="canCreateGuest ? $t('reservationModals.create.addGuest') : null" @create="quickAddGuest" />
                     <button v-if="canCreateGuest" type="button" class="mt-1.5 text-tiny text-accent-700 hover:text-accent-800" @click="showNewGuest = !showNewGuest">
                         {{ showNewGuest ? $t('admin.generated.k_343301bf2715') : $t('admin.generated.k_857d0eeb0c90') }}
                     </button>
@@ -276,12 +279,12 @@ function submit() {
                 <FormGroup :label="$t('admin.generated.k_fdfb0b54ae04')" :error="form.errors.channel">
                     <Select v-model="form.channel" :options="channelOptions" :error="form.errors.channel" />
                 </FormGroup>
-                <FormGroup v-if="isOta" label="Numri i rezervimit OTA" :error="form.errors.channel_ref" required>
+                <FormGroup v-if="isOta" :label="$t('reservationModals.create.otaRefLabel')" :error="form.errors.channel_ref" required>
                     <TextInput v-model="form.channel_ref" :placeholder="refPlaceholder" :error="form.errors.channel_ref" />
-                    <p class="mt-1 text-tiny text-neutral-500">E gjen te extranet-i ose email-i i konfirmimit — pa të, anulimet nga OTA nuk e gjejnë dot rezervimin.</p>
+                    <p class="mt-1 text-tiny text-neutral-500">{{ $t('reservationModals.create.otaRefHint') }}</p>
                 </FormGroup>
-                <FormGroup label="Statusi" :error="form.errors.status">
-                    <Select v-model="form.status" :options="[{ value: 'confirmed', label: 'Konfirmuar' }, { value: 'pending', label: 'Në pritje' }]" :error="form.errors.status" />
+                <FormGroup :label="$t('reservationModals.create.statusLabel')" :error="form.errors.status">
+                    <Select v-model="form.status" :options="[{ value: 'confirmed', label: $t('reservationModals.create.statusConfirmed') }, { value: 'pending', label: $t('reservationModals.create.statusPending') }]" :error="form.errors.status" />
                 </FormGroup>
                 <FormGroup :label="$t('admin.generated.k_7eb4cdcb93e4')" :error="form.errors.check_in_date" required>
                     <DatePicker v-model="form.check_in_date" :error="form.errors.check_in_date" />
@@ -365,16 +368,16 @@ function submit() {
                 </div>
 
                 <aside class="h-fit rounded-xl border border-neutral-200 bg-neutral-50 p-4 lg:sticky lg:top-0">
-                    <p class="text-label font-semibold text-primary-900">Përmbledhja</p>
+                    <p class="text-label font-semibold text-primary-900">{{ $t('reservationModals.create.summary') }}</p>
                     <div class="mt-4 space-y-3 text-body-sm">
-                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Qëndrimi</span><span class="text-right font-medium text-primary-900">{{ nights() || 0 }} net</span></div>
-                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Dhoma</span><span class="text-right font-medium text-primary-900">{{ form.rooms.length }}</span></div>
-                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Totali</span><span class="text-right font-semibold text-primary-900">{{ money(totalAmount) }}</span></div>
-                        <div class="flex justify-between gap-3"><span class="text-neutral-500">Komisioni ({{ feePct(form.channel) }}%)</span><span class="text-right font-medium text-warning-700">− {{ money(commission) }}</span></div>
-                        <div class="flex justify-between gap-3 border-t border-neutral-200 pt-3"><span class="font-semibold text-primary-900">Neto</span><span class="text-h4 text-accent-700">{{ money(net) }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-neutral-500">{{ $t('reservationModals.create.stay') }}</span><span class="text-right font-medium text-primary-900">{{ $t('reservationModals.create.nightsCount', { count: nights() || 0 }) }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-neutral-500">{{ $t('reservationModals.create.rooms') }}</span><span class="text-right font-medium text-primary-900">{{ form.rooms.length }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-neutral-500">{{ $t('reservationModals.create.total') }}</span><span class="text-right font-semibold text-primary-900">{{ money(totalAmount) }}</span></div>
+                        <div class="flex justify-between gap-3"><span class="text-neutral-500">{{ $t('reservationModals.create.commissionPct', { pct: feePct(form.channel) }) }}</span><span class="text-right font-medium text-warning-700">− {{ money(commission) }}</span></div>
+                        <div class="flex justify-between gap-3 border-t border-neutral-200 pt-3"><span class="font-semibold text-primary-900">{{ $t('reservationModals.create.net') }}</span><span class="text-h4 text-accent-700">{{ money(net) }}</span></div>
                     </div>
                     <div class="mt-4 rounded-lg border border-info-200 bg-info-50 px-3 py-2.5 text-small leading-relaxed text-info-800">
-                        Disponueshmëria dhe çmimi sezonal kontrollohen përsëri gjatë ruajtjes.
+                        {{ $t('reservationModals.create.availabilityNotice') }}
                     </div>
                 </aside>
             </div>

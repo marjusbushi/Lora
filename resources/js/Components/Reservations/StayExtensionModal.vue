@@ -5,7 +5,7 @@ import axios from 'axios';
 import { AlertTriangle, CalendarCheck2, CalendarPlus, CheckCircle2, LoaderCircle } from 'lucide-vue-next';
 import Modal from '@/Components/UI/Modal.vue';
 import Button from '@/Components/UI/Button.vue';
-import { getIntlLocale } from '@/i18n';
+import { getIntlLocale, translate } from '@/i18n';
 
 const props = defineProps({
     show: { type: Boolean, default: false },
@@ -102,7 +102,7 @@ watch(
             if (requestId !== quoteRequest) return;
             quote.value = null;
             quoteError.value = error.response?.data?.errors?.new_check_out_date?.[0]
-                || 'Disponueshmëria nuk mund të kontrollohej.';
+                || translate('reservationModals.stayExtension.availabilityCheckFailed');
         } finally {
             if (requestId === quoteRequest) quoteLoading.value = false;
         }
@@ -127,29 +127,29 @@ function submit() {
 </script>
 
 <template>
-    <Modal :show="show" title="Zgjat qëndrimin" max-width="2xl" @close="emit('close')">
+    <Modal :show="show" :title="$t('reservationModals.stayExtension.title')" max-width="2xl" @close="emit('close')">
         <div v-if="reservation" class="space-y-5">
             <div class="flex items-start gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-accent-700 shadow-sm ring-1 ring-neutral-200">
                     <CalendarPlus class="h-5 w-5" />
                 </span>
                 <div class="min-w-0 flex-1">
-                    <p class="font-semibold text-primary-900">{{ reservation.guest?.name || 'Mysafiri' }} · Dhoma {{ reservation.room?.room_number || '—' }}</p>
+                    <p class="font-semibold text-primary-900">{{ reservation.guest?.name || $t('reservationModals.stayExtension.guestFallback') }} · {{ $t('reservationModals.stayExtension.room') }} {{ reservation.room?.room_number || '—' }}</p>
                     <p class="mt-1 text-small text-neutral-500">
-                        Check-out aktual: {{ formattedDate(reservation.check_out_date) }}
-                        · {{ reservation.nights }} net
+                        {{ $t('reservationModals.stayExtension.currentCheckOut') }}: {{ formattedDate(reservation.check_out_date) }}
+                        · {{ $t('reservationModals.stayExtension.nightsCount', { count: reservation.nights }) }}
                     </p>
                 </div>
             </div>
 
             <div v-if="isOta" class="flex gap-3 rounded-xl border border-warning-200 bg-warning-50 p-3 text-body-sm text-warning-800">
                 <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
-                <p>Netët shtesë bllokohen menjëherë në PMS dhe dërgohen për bllokim në OTA përmes Channex. Datat e rezervimit ekzistues në {{ reservation.channel }} nuk ndryshohen; shtesa regjistrohet si marrëveshje direkte në hotel.</p>
+                <p>{{ $t('reservationModals.stayExtension.otaNotice', { channel: reservation.channel }) }}</p>
             </div>
 
             <div class="grid gap-4 sm:grid-cols-2">
                 <label class="block">
-                    <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">Check-out i ri</span>
+                    <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">{{ $t('reservationModals.stayExtension.newCheckOut') }}</span>
                     <input
                         v-model="form.new_check_out_date"
                         type="date"
@@ -163,21 +163,21 @@ function submit() {
 
                 <div class="rounded-xl border p-3" :class="quote?.available ? 'border-success-200 bg-success-50' : 'border-neutral-200 bg-neutral-50'">
                     <div v-if="quoteLoading" class="flex h-full items-center gap-2 text-body-sm text-neutral-500">
-                        <LoaderCircle class="h-4 w-4 animate-spin" /> Po kontrollojmë dhomën…
+                        <LoaderCircle class="h-4 w-4 animate-spin" /> {{ $t('reservationModals.stayExtension.checkingRoom') }}
                     </div>
                     <div v-else-if="quote?.available" class="flex items-start gap-2">
                         <CheckCircle2 class="mt-0.5 h-4 w-4 text-success-700" />
                         <div>
-                            <p class="text-body-sm font-semibold text-success-800">Dhoma është e lirë</p>
-                            <p class="mt-1 text-small text-success-700">{{ quote.additional_nights }} net shtesë · sugjerim {{ money(quote.quoted_extension) }}</p>
+                            <p class="text-body-sm font-semibold text-success-800">{{ $t('reservationModals.stayExtension.roomAvailable') }}</p>
+                            <p class="mt-1 text-small text-success-700">{{ $t('reservationModals.stayExtension.quoteSummary', { count: quote.additional_nights, amount: money(quote.quoted_extension) }) }}</p>
                         </div>
                     </div>
-                    <p v-else class="text-body-sm text-neutral-500">Zgjidh datën për të kontrolluar disponueshmërinë.</p>
+                    <p v-else class="text-body-sm text-neutral-500">{{ $t('reservationModals.stayExtension.pickDateHint') }}</p>
                 </div>
             </div>
 
             <label class="block">
-                <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">Çmimi i rënë dakord për netët shtesë</span>
+                <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">{{ $t('reservationModals.stayExtension.agreedPrice') }}</span>
                 <div class="relative max-w-xs">
                     <input
                         v-model="form.extension_amount"
@@ -188,28 +188,28 @@ function submit() {
                     />
                     <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-small font-medium text-neutral-500">{{ currency }}</span>
                 </div>
-                <span class="mt-1 block text-small text-neutral-500">Mund ta ndryshosh sipas marrëveshjes me mysafirin; 0 lejohet për një natë falas.</span>
+                <span class="mt-1 block text-small text-neutral-500">{{ $t('reservationModals.stayExtension.priceHint') }}</span>
                 <span v-if="form.errors.extension_amount" class="mt-1 block text-small text-error-600">{{ form.errors.extension_amount }}</span>
             </label>
 
             <div class="grid gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-3">
-                <div><p class="text-small text-neutral-500">Akomodimi aktual</p><p class="mt-1 font-semibold text-primary-900">{{ money(reservation.total_amount) }}</p></div>
-                <div><p class="text-small text-neutral-500">Shtesa</p><p class="mt-1 font-semibold text-accent-700">+ {{ money(extensionAmount) }}</p></div>
-                <div><p class="text-small text-neutral-500">Fatura e re me shtesat</p><p class="mt-1 font-semibold text-primary-900">{{ money(newGross) }}</p></div>
+                <div><p class="text-small text-neutral-500">{{ $t('reservationModals.stayExtension.currentAccommodation') }}</p><p class="mt-1 font-semibold text-primary-900">{{ money(reservation.total_amount) }}</p></div>
+                <div><p class="text-small text-neutral-500">{{ $t('reservationModals.stayExtension.extension') }}</p><p class="mt-1 font-semibold text-accent-700">+ {{ money(extensionAmount) }}</p></div>
+                <div><p class="text-small text-neutral-500">{{ $t('reservationModals.stayExtension.newGross') }}</p><p class="mt-1 font-semibold text-primary-900">{{ money(newGross) }}</p></div>
             </div>
 
             <div v-if="quote?.available" class="flex gap-3 rounded-xl border border-info-200 bg-info-50 p-3 text-body-sm text-info-800">
                 <CalendarCheck2 class="mt-0.5 h-4 w-4 shrink-0" />
-                <p>Pas konfirmimit, check-out-i bëhet {{ formattedDate(form.new_check_out_date) }}, totali i akomodimit bëhet {{ money(newRoomTotal) }}, netët bllokohen në PMS dhe përditësimi dërgohet te Channex.</p>
+                <p>{{ $t('reservationModals.stayExtension.confirmationNotice', { date: formattedDate(form.new_check_out_date), amount: money(newRoomTotal) }) }}</p>
             </div>
 
             <label class="block">
-                <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">Arsyeja / marrëveshja</span>
+                <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">{{ $t('reservationModals.stayExtension.reason') }}</span>
                 <textarea
                     v-model="form.reason"
                     rows="3"
                     maxlength="500"
-                    placeholder="p.sh. Mysafiri kërkoi edhe 1 natë me çmim 79 €"
+                    :placeholder="$t('reservationModals.stayExtension.reasonPlaceholder')"
                     class="w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500"
                 />
                 <span v-if="form.errors.reason" class="mt-1 block text-small text-error-600">{{ form.errors.reason }}</span>
@@ -217,9 +217,9 @@ function submit() {
         </div>
 
         <template #footer>
-            <Button variant="outline" :disabled="form.processing" @click="emit('close')">Anulo</Button>
+            <Button variant="outline" :disabled="form.processing" @click="emit('close')">{{ $t('reservationModals.stayExtension.cancel') }}</Button>
             <Button variant="primary" :loading="form.processing" :disabled="!valid || quoteLoading" @click="submit">
-                <CalendarPlus class="h-4 w-4" /> Konfirmo zgjatjen
+                <CalendarPlus class="h-4 w-4" /> {{ $t('reservationModals.stayExtension.confirmExtension') }}
             </Button>
         </template>
     </Modal>
