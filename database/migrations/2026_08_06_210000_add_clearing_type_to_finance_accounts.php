@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -28,7 +29,23 @@ return new class extends Migration
 
     public function down(): void
     {
-        // Deliberate no-op: shrinking the enum with clearing rows present
-        // would truncate live data. The wider enum is harmless to old code.
+        // Shrinking an enum under data TRUNCATES rows silently — refuse
+        // loudly instead. A clean rollback (no clearing/import rows yet, as
+        // in CI's upgrade-then-rollback check) reverts to the exact baseline.
+        if (DB::table('finance_accounts')->where('type', 'clearing')->exists()
+            || DB::table('finance_payments')->where('method', 'import')->exists()) {
+            throw new RuntimeException(
+                'Rollback refused: clearing accounts / import payments exist. '
+                .'Reassign or remove those rows first — shrinking the enum would truncate them.',
+            );
+        }
+
+        Schema::table('finance_accounts', function (Blueprint $table) {
+            $table->enum('type', ['cash', 'bank'])->change();
+        });
+
+        Schema::table('finance_payments', function (Blueprint $table) {
+            $table->enum('method', ['cash', 'card', 'bank', 'pok', 'ota'])->default('cash')->change();
+        });
     }
 };
