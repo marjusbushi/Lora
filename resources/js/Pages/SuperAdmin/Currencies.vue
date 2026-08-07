@@ -1,7 +1,9 @@
 <script setup>
+import { computed } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import BillingPageHeader from '@/Components/SuperAdmin/BillingPageHeader.vue';
+import { translate } from '@/i18n';
 import { Coins, RotateCw } from 'lucide-vue-next';
 
 const props = defineProps({ currencies: Object });
@@ -12,11 +14,13 @@ const form = useForm({
     clear_key: false,
 });
 
-const currencyNames = {
-    USD: 'Dollar amerikan', GBP: 'Paund britanik', ALL: 'Lek shqiptar', CHF: 'Frangë zvicerane',
-    TRY: 'Lirë turke', JPY: 'Jen japonez', CAD: 'Dollar kanadez', AUD: 'Dollar australian',
-    SEK: 'Koronë suedeze', NOK: 'Koronë norvegjeze',
-};
+const currencyNames = computed(() => ({
+    USD: translate('superAdmin.currencies.nameUsd'), GBP: translate('superAdmin.currencies.nameGbp'),
+    ALL: translate('superAdmin.currencies.nameAll'), CHF: translate('superAdmin.currencies.nameChf'),
+    TRY: translate('superAdmin.currencies.nameTry'), JPY: translate('superAdmin.currencies.nameJpy'),
+    CAD: translate('superAdmin.currencies.nameCad'), AUD: translate('superAdmin.currencies.nameAud'),
+    SEK: translate('superAdmin.currencies.nameSek'), NOK: translate('superAdmin.currencies.nameNok'),
+}));
 
 function save() {
     form.put('/super-admin/currencies', { preserveScroll: true, onSuccess: () => form.reset('api_key', 'clear_key') });
@@ -32,15 +36,15 @@ function dateTime(value) {
 </script>
 
 <template>
-    <SuperAdminLayout title="Monedhat — Lora Control Panel">
+    <SuperAdminLayout :title="$t('superAdmin.currencies.pageTitle')">
         <main class="sa-page max-w-[1080px] space-y-4">
-            <BillingPageHeader title="Monedhat & kurset" subtitle="Një marrje në ditë nga ExchangeRate-API për GJITHË platformën — çdo hotel lexon të njëjtat kurse (baza EUR). Kursi ngrihet në momentin e dokumentit; dokumentet e vjetra s'ndryshojnë kurrë." />
+            <BillingPageHeader :title="$t('superAdmin.currencies.title')" :subtitle="$t('superAdmin.currencies.subtitle')" />
 
             <section class="sa-card">
                 <div class="sa-card-header">
                     <div>
-                        <h2 class="sa-card-title">Integrimi (exchangerate-api.com)</h2>
-                        <p class="sa-card-subtitle">Hotelet nuk konfigurojnë asgjë — zgjedhin vetëm Automatike ose Manuale te Settings → Monedhat.</p>
+                        <h2 class="sa-card-title">{{ $t('superAdmin.currencies.integrationTitle') }}</h2>
+                        <p class="sa-card-subtitle">{{ $t('superAdmin.currencies.integrationSubtitle') }}</p>
                     </div>
                     <span class="sa-icon-box bg-emerald-50 text-emerald-700"><Coins class="sa-icon" /></span>
                 </div>
@@ -48,16 +52,16 @@ function dateTime(value) {
                 <form class="space-y-4 px-4 pb-4" @submit.prevent="save">
                     <label class="flex items-center gap-2.5 text-xs font-semibold text-neutral-700">
                         <input v-model="form.enabled" type="checkbox" class="h-4 w-4 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600">
-                        Aktive
+                        {{ $t('superAdmin.currencies.active') }}
                     </label>
 
                     <div>
-                        <label class="mb-1 block text-xs font-semibold text-neutral-700">Çelësi API</label>
+                        <label class="mb-1 block text-xs font-semibold text-neutral-700">{{ $t('superAdmin.currencies.apiKey') }}</label>
                         <input
                             v-model="form.api_key"
                             type="password"
                             autocomplete="off"
-                            :placeholder="currencies.configured ? `I ruajtur: ${currencies.api_key_hint} — plotëso vetëm për ta ndërruar` : 'Vendos çelësin API'"
+                            :placeholder="currencies.configured ? $t('superAdmin.currencies.apiKeySavedPlaceholder', { hint: currencies.api_key_hint }) : $t('superAdmin.currencies.apiKeyPlaceholder')"
                             class="w-full max-w-md rounded-lg border-neutral-300 text-sm focus:border-emerald-600 focus:ring-emerald-600"
                         >
                         <p v-if="form.errors.api_key" class="mt-1 text-xs text-red-600">{{ form.errors.api_key }}</p>
@@ -65,15 +69,15 @@ function dateTime(value) {
 
                     <label v-if="currencies.configured" class="flex items-center gap-2.5 text-xs font-semibold text-neutral-700">
                         <input v-model="form.clear_key" type="checkbox" class="h-4 w-4 rounded border-neutral-300 text-red-600 focus:ring-red-500">
-                        Hiq çelësin e ruajtur
+                        {{ $t('superAdmin.currencies.removeSavedKey') }}
                     </label>
 
                     <div class="flex items-center gap-3">
-                        <button type="submit" class="sa-button" :disabled="form.processing">Ruaj</button>
+                        <button type="submit" class="sa-button" :disabled="form.processing">{{ $t('superAdmin.currencies.save') }}</button>
                         <button type="button" class="sa-button !bg-neutral-900" :disabled="!currencies.configured || !currencies.enabled" @click="refreshNow">
-                            <RotateCw class="sa-icon" /> Rifresko tani
+                            <RotateCw class="sa-icon" /> {{ $t('superAdmin.currencies.refreshNow') }}
                         </button>
-                        <span v-if="currencies.updated_at" class="text-[11px] text-neutral-500">rifreskuar: {{ dateTime(currencies.updated_at) }}</span>
+                        <span v-if="currencies.updated_at" class="text-[11px] text-neutral-500">{{ $t('superAdmin.currencies.refreshedAt', { date: dateTime(currencies.updated_at) }) }}</span>
                     </div>
                 </form>
             </section>
@@ -81,17 +85,17 @@ function dateTime(value) {
             <section class="sa-card">
                 <div class="sa-card-header">
                     <div>
-                        <h2 class="sa-card-title">Kurset aktuale (1 € =)</h2>
-                        <p class="sa-card-subtitle">Këto kurse shpërndahen te të gjitha pronat.</p>
+                        <h2 class="sa-card-title">{{ $t('superAdmin.currencies.currentRates') }}</h2>
+                        <p class="sa-card-subtitle">{{ $t('superAdmin.currencies.ratesDistributed') }}</p>
                     </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full text-left">
                         <thead>
                             <tr class="sa-table-head">
-                                <th class="px-4 py-2.5 font-bold">Kodi</th>
-                                <th class="px-4 py-2.5 font-bold">Monedha</th>
-                                <th class="px-4 py-2.5 text-right font-bold">Kursi</th>
+                                <th class="px-4 py-2.5 font-bold">{{ $t('superAdmin.currencies.code') }}</th>
+                                <th class="px-4 py-2.5 font-bold">{{ $t('superAdmin.currencies.currency') }}</th>
+                                <th class="px-4 py-2.5 text-right font-bold">{{ $t('superAdmin.currencies.rate') }}</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-neutral-100">
@@ -102,8 +106,8 @@ function dateTime(value) {
                             </tr>
                             <tr v-if="!Object.keys(currencies.rates || {}).length">
                                 <td colspan="3" class="px-4 py-10 text-center">
-                                    <p class="text-xs font-semibold text-neutral-700">Nuk ka ende kurse.</p>
-                                    <p class="sa-table-meta">Vendos çelësin, aktivizo dhe kliko Rifresko tani.</p>
+                                    <p class="text-xs font-semibold text-neutral-700">{{ $t('superAdmin.currencies.noRatesYet') }}</p>
+                                    <p class="sa-table-meta">{{ $t('superAdmin.currencies.noRatesHint') }}</p>
                                 </td>
                             </tr>
                         </tbody>
