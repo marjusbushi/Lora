@@ -2,6 +2,7 @@
 import { router, useForm } from '@inertiajs/vue3';
 import { Plus, UserRoundCheck } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
+import { translate } from '@/i18n';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import Modal from '@/Components/UI/Modal.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
@@ -25,10 +26,10 @@ function saveAccountMode(mode) {
     accountMode.value = mode;
     router.put(route('finance.accounts.pos-mode'), { mode }, {
         preserveScroll: true,
-        onSuccess: () => props.toasts?.success('Modaliteti i llogarive POS u ruajt.'),
+        onSuccess: () => props.toasts?.success(translate('settingsPos.accountModeSaved')),
         onError: () => {
             accountMode.value = props.accountMode;
-            props.toasts?.error('Modaliteti nuk u ruajt.');
+            props.toasts?.error(translate('settingsPos.accountModeNotSaved'));
         },
     });
 }
@@ -52,7 +53,7 @@ watch(() => props.staff, (staff) => {
 function submit() {
     form.put(route('settings.pos'), {
         preserveScroll: true,
-        onSuccess: () => props.toasts?.success('Konfigurimi POS u ruajt.'),
+        onSuccess: () => props.toasts?.success(translate('settingsPos.settingsSaved')),
     });
 }
 
@@ -67,7 +68,7 @@ function createSalesperson() {
         preserveScroll: true,
         onSuccess: () => {
             closeCreateModal();
-            props.toasts?.success('Kamarieri u krijua dhe u aktivizua në POS.');
+            props.toasts?.success(translate('settingsPos.waiterCreated'));
         },
     });
 }
@@ -82,23 +83,23 @@ function digitsOnly(event) {
         <template #header>
             <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h3 class="text-h4 text-primary-900">POS & Shërbimi</h3>
-                    <p class="mt-1 text-body-sm text-neutral-500">Mënyra e punës, ekrani fillestar dhe kamarierët.</p>
+                    <h3 class="text-h4 text-primary-900">{{ $t('settingsPos.title') }}</h3>
+                    <p class="mt-1 text-body-sm text-neutral-500">{{ $t('settingsPos.subtitle') }}</p>
                 </div>
                 <Button type="button" variant="outline" @click="showCreateModal = true">
                     <Plus class="h-4 w-4" />
-                    Shto kamarier
+                    {{ $t('settingsPos.addWaiter') }}
                 </Button>
             </div>
         </template>
 
         <form class="space-y-6" @submit.prevent="submit">
             <section>
-                <h4 class="text-label text-primary-900">Mënyra e shërbimit</h4>
-                <p class="mt-1 text-small text-neutral-500">Përcakton nëse POS punon me tavolina, shitje direkte ose të dyja.</p>
+                <h4 class="text-label text-primary-900">{{ $t('settingsPos.serviceModeTitle') }}</h4>
+                <p class="mt-1 text-small text-neutral-500">{{ $t('settingsPos.serviceModeHint') }}</p>
                 <div class="mt-3 grid gap-3 md:grid-cols-3">
                     <label
-                        v-for="option in [{value:'hybrid',title:'Hibrid',text:'Tavolina + shitje direkte'},{value:'tables',title:'Vetëm tavolina',text:'Restorant me llogari tavoline'},{value:'direct',title:'Shitje direkte',text:'Banak, pa tavolina'}]"
+                        v-for="option in [{value:'hybrid',title:$t('settingsPos.serviceHybrid'),text:$t('settingsPos.serviceHybridText')},{value:'tables',title:$t('settingsPos.serviceTables'),text:$t('settingsPos.serviceTablesText')},{value:'direct',title:$t('settingsPos.serviceDirect'),text:$t('settingsPos.serviceDirectText')}]"
                         :key="option.value"
                         class="cursor-pointer rounded-xl border p-4"
                         :class="form.service_mode === option.value ? 'border-accent-500 bg-accent-50 ring-2 ring-accent-500/10' : 'border-neutral-200'"
@@ -111,15 +112,15 @@ function digitsOnly(event) {
             </section>
 
             <section class="border-t border-neutral-100 pt-5">
-                <h4 class="text-label text-primary-900">Paratë e POS Bar/Restorant</h4>
-                <p class="mt-1 text-small text-neutral-500">Ku derdhen pagesat e POS në Financë. Llogaritë krijohen vetë në shitjen e parë; ndërrimi nuk prek historikun — vetëm pagesat e reja ndjekin routimin e ri. Ruhet menjëherë.</p>
+                <h4 class="text-label text-primary-900">{{ $t('settingsPos.moneyTitle') }}</h4>
+                <p class="mt-1 text-small text-neutral-500">{{ $t('settingsPos.moneyHint') }}</p>
                 <div class="mt-3 grid gap-3 md:grid-cols-3">
                     <label
                         v-for="option in [
-                            { value: 'shared', title: 'Në llogaritë e hotelit', text: 'Cash te Arka, kartat te Banka' },
-                            { value: 'split_cash', title: 'Arkë e veçantë për POS', text: 'Cash-i i barit në sirtarin e vet; kartat te Banka' },
-                            { value: 'split_bank', title: 'Bankë e veçantë për POS', text: 'Cash-i te Arka e hotelit; kartat në bankën e vet të POS-it' },
-                            { value: 'split_all', title: 'Arkë & bankë të veçanta', text: 'Gjithçka nga POS në llogaritë Bar/Restorant' },
+                            { value: 'shared', title: $t('settingsPos.accountShared'), text: $t('settingsPos.accountSharedText') },
+                            { value: 'split_cash', title: $t('settingsPos.accountSplitCash'), text: $t('settingsPos.accountSplitCashText') },
+                            { value: 'split_bank', title: $t('settingsPos.accountSplitBank'), text: $t('settingsPos.accountSplitBankText') },
+                            { value: 'split_all', title: $t('settingsPos.accountSplitAll'), text: $t('settingsPos.accountSplitAllText') },
                         ]"
                         :key="option.value"
                         class="cursor-pointer rounded-xl border p-4"
@@ -134,27 +135,27 @@ function digitsOnly(event) {
 
             <section class="grid gap-4 border-t border-neutral-100 pt-5 md:grid-cols-2">
                 <label>
-                    <span class="text-label text-neutral-700">Ekrani fillestar</span>
+                    <span class="text-label text-neutral-700">{{ $t('settingsPos.openingView') }}</span>
                     <select v-model="form.opening_view" class="mt-2 w-full rounded-lg border-neutral-200">
-                        <option value="tables">Tavolinat</option>
-                        <option value="products">Produktet POS</option>
+                        <option value="tables">{{ $t('settingsPos.openingTables') }}</option>
+                        <option value="products">{{ $t('settingsPos.openingProducts') }}</option>
                     </select>
                 </label>
                 <div class="space-y-3 rounded-xl bg-neutral-50 p-4">
-                    <Checkbox v-model="form.salesperson_enabled" label="Aktivizo salesperson në POS" />
-                    <Checkbox v-model="form.salesperson_required" :disabled="!form.salesperson_enabled" label="Salesperson i detyrueshëm për çdo porosi" />
+                    <Checkbox v-model="form.salesperson_enabled" :label="$t('settingsPos.enableSalesperson')" />
+                    <Checkbox v-model="form.salesperson_required" :disabled="!form.salesperson_enabled" :label="$t('settingsPos.requireSalesperson')" />
                 </div>
             </section>
 
             <section class="border-t border-neutral-100 pt-5">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h4 class="text-label text-primary-900">Kamarierët / salesperson-at</h4>
-                        <p class="mt-1 text-small text-neutral-500">{{ enabledCount }} aktivë. Çdo kamarier ka llogarinë dhe PIN-in unik të vet.</p>
+                        <h4 class="text-label text-primary-900">{{ $t('settingsPos.waitersTitle') }}</h4>
+                        <p class="mt-1 text-small text-neutral-500">{{ $t('settingsPos.waitersHint', { count: enabledCount }) }}</p>
                     </div>
                     <span class="inline-flex w-fit items-center gap-1.5 rounded-full bg-success-50 px-2.5 py-1 text-tiny font-semibold text-success-700">
                         <UserRoundCheck class="h-3.5 w-3.5" />
-                        PIN i enkriptuar
+                        {{ $t('settingsPos.pinEncrypted') }}
                     </span>
                 </div>
 
@@ -164,47 +165,47 @@ function digitsOnly(event) {
                             <input v-model="person.enabled" type="checkbox" class="h-4 w-4 rounded border-neutral-300 text-accent-600">
                             <span>
                                 <strong class="block text-body-sm text-primary-900">{{ person.name }}</strong>
-                                <span class="text-tiny text-neutral-500">{{ person.has_pin && !person.clear_pin ? 'PIN i konfiguruar' : 'Pa PIN' }}</span>
+                                <span class="text-tiny text-neutral-500">{{ person.has_pin && !person.clear_pin ? $t('settingsPos.pinConfigured') : $t('settingsPos.pinMissing') }}</span>
                             </span>
                         </label>
-                        <input v-model="person.pin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" class="w-full rounded-lg border-neutral-200 text-center tracking-[.3em]" placeholder="PIN i ri">
-                        <button v-if="person.has_pin && !person.clear_pin" type="button" class="text-small font-semibold text-error-600" @click="person.clear_pin = true; person.pin = ''">Hiq PIN</button>
-                        <button v-else-if="person.clear_pin" type="button" class="text-small font-semibold text-neutral-500" @click="person.clear_pin = false">Anulo heqjen</button>
+                        <input v-model="person.pin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" class="w-full rounded-lg border-neutral-200 text-center tracking-[.3em]" :placeholder="$t('settingsPos.pinNewPlaceholder')">
+                        <button v-if="person.has_pin && !person.clear_pin" type="button" class="text-small font-semibold text-error-600" @click="person.clear_pin = true; person.pin = ''">{{ $t('settingsPos.removePin') }}</button>
+                        <button v-else-if="person.clear_pin" type="button" class="text-small font-semibold text-neutral-500" @click="person.clear_pin = false">{{ $t('settingsPos.cancelRemoval') }}</button>
                     </div>
-                    <p v-if="!form.staff.length" class="px-4 py-8 text-center text-body-sm text-neutral-500">Nuk ka ende kamarierë. Kliko “Shto kamarier”.</p>
+                    <p v-if="!form.staff.length" class="px-4 py-8 text-center text-body-sm text-neutral-500">{{ $t('settingsPos.noWaiters') }}</p>
                 </div>
             </section>
 
             <div v-if="form.hasErrors" class="rounded-lg bg-error-50 px-3 py-2 text-small text-error-700">
-                Kontrollo fushat. Çdo PIN duhet të ketë 4 shifra dhe të jetë unik.
+                {{ $t('settingsPos.checkFields') }}
             </div>
             <div class="settings-actions">
-                <Button type="submit" variant="primary" :loading="form.processing">Ruaj konfigurimin POS</Button>
+                <Button type="submit" variant="primary" :loading="form.processing">{{ $t('settingsPos.saveSettings') }}</Button>
             </div>
         </form>
     </Card>
 
-    <Modal :show="showCreateModal" title="Shto kamarier" max-width="md" @close="closeCreateModal">
+    <Modal :show="showCreateModal" :title="$t('settingsPos.addWaiter')" max-width="md" @close="closeCreateModal">
         <form class="space-y-4" @submit.prevent="createSalesperson">
             <div class="rounded-lg border border-accent-100 bg-accent-50 px-3.5 py-3 text-small text-accent-800">
-                Krijohet një llogari me rolin <strong>Kamarier POS</strong> dhe një PIN unik për ndërrim të shpejtë në ekranin touch.
+                {{ $t('settingsPos.createInfoPrefix') }} <strong>{{ $t('settingsPos.roleName') }}</strong> {{ $t('settingsPos.createInfoSuffix') }}
             </div>
-            <FormGroup label="Emri dhe mbiemri" html-for="waiter-name" :error="createForm.errors.name" required>
-                <TextInput id="waiter-name" v-model="createForm.name" placeholder="p.sh. Arta Shehu" :error="createForm.errors.name" autofocus />
+            <FormGroup :label="$t('settingsPos.nameLabel')" html-for="waiter-name" :error="createForm.errors.name" required>
+                <TextInput id="waiter-name" v-model="createForm.name" :placeholder="$t('settingsPos.namePlaceholder')" :error="createForm.errors.name" autofocus />
             </FormGroup>
-            <FormGroup label="Emaili i hyrjes" html-for="waiter-email" :error="createForm.errors.email" required>
-                <TextInput id="waiter-email" v-model="createForm.email" type="email" placeholder="arta@hoteli.al" :error="createForm.errors.email" />
+            <FormGroup :label="$t('settingsPos.emailLabel')" html-for="waiter-email" :error="createForm.errors.email" required>
+                <TextInput id="waiter-email" v-model="createForm.email" type="email" :placeholder="$t('settingsPos.emailPlaceholder')" :error="createForm.errors.email" />
             </FormGroup>
-            <FormGroup label="Fjalëkalimi fillestar" html-for="waiter-password" :error="createForm.errors.password" required>
-                <TextInput id="waiter-password" v-model="createForm.password" type="password" placeholder="Minimumi 8 karaktere" :error="createForm.errors.password" />
+            <FormGroup :label="$t('settingsPos.passwordLabel')" html-for="waiter-password" :error="createForm.errors.password" required>
+                <TextInput id="waiter-password" v-model="createForm.password" type="password" :placeholder="$t('settingsPos.passwordPlaceholder')" :error="createForm.errors.password" />
             </FormGroup>
-            <FormGroup label="PIN-i unik i POS-it" html-for="waiter-pin" :error="createForm.errors.pin" required>
+            <FormGroup :label="$t('settingsPos.pinLabel')" html-for="waiter-pin" :error="createForm.errors.pin" required>
                 <TextInput id="waiter-pin" v-model="createForm.pin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="••••" :error="createForm.errors.pin" @input="digitsOnly" />
             </FormGroup>
         </form>
         <template #footer>
-            <Button variant="outline" @click="closeCreateModal">Anulo</Button>
-            <Button variant="primary" :loading="createForm.processing" @click="createSalesperson">Krijo kamarierin</Button>
+            <Button variant="outline" @click="closeCreateModal">{{ $t('settingsPos.cancel') }}</Button>
+            <Button variant="primary" :loading="createForm.processing" @click="createSalesperson">{{ $t('settingsPos.createWaiter') }}</Button>
         </template>
     </Modal>
 </template>

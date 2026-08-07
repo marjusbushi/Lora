@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
+import { getIntlLocale, translate } from '@/i18n';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import Button from '@/Components/UI/Button.vue';
@@ -79,12 +80,12 @@ const splitCashTendered = computed(() => (
 ));
 
 function money(value) {
-    return new Intl.NumberFormat('sq-AL', { style: 'currency', currency: props.currency }).format(Number(value || 0));
+    return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency: props.currency }).format(Number(value || 0));
 }
 
 function time(value) {
     if (!value) return '—';
-    return new Date(value).toLocaleTimeString('sq-AL', { hour: '2-digit', minute: '2-digit' });
+    return new Date(value).toLocaleTimeString(getIntlLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 function elapsed(value) {
@@ -95,10 +96,10 @@ function elapsed(value) {
 
 function tableStatus(table) {
     return table.status === 'free'
-        ? { label: 'E lirë', badge: 'success' }
+        ? { label: translate('posTables.statusFree'), badge: 'success' }
         : table.status === 'bill_requested'
-            ? { label: 'Pret faturën', badge: 'warning' }
-            : { label: 'E zënë', badge: 'info' };
+            ? { label: translate('posTables.statusBillRequested'), badge: 'warning' }
+            : { label: translate('posTables.statusOccupied'), badge: 'info' };
 }
 
 function tableShortName(table) {
@@ -112,7 +113,7 @@ function selectTable(table) {
 
 function openOrder() {
     if (!props.currentShift) {
-        toasts.value?.error('Hap një turn përpara se të regjistrosh porosi.');
+        toasts.value?.error(translate('posTables.openShiftBeforeOrder'));
         return;
     }
     router.visit(route('pos.index', { table: selectedTable.value.id }));
@@ -149,7 +150,7 @@ function payFromSummary() {
 }
 
 function fiscalizeFromSummary() {
-    toasts.value?.info('Fiskalizimi bëhet pas pagesës. Pas arkëtimit hapet kuponi me butonin Fiskalizo.');
+    toasts.value?.info(translate('posTables.fiscalizeAfterPaymentInfo'));
     payFromSummary();
 }
 
@@ -159,11 +160,11 @@ function sendDraft(round) {
     router.post(route('pos.rounds.send', round.id), {}, {
         preserveScroll: true,
         onSuccess: (page) => {
-            toasts.value?.success(page.props.flash?.success || 'Porosia u dërgua.');
+            toasts.value?.success(page.props.flash?.success || translate('posTables.roundSentToast'));
             const found = findRound(page.props.tables, page.props.printRoundId);
             if (found) printProductionTicket(found.table, found.round);
         },
-        onError: () => toasts.value?.error('Porosia nuk u dërgua.'),
+        onError: () => toasts.value?.error(translate('posTables.roundNotSentToast')),
         onFinish: () => { saving.value = false; },
     });
 }
@@ -183,19 +184,19 @@ function transferTable() {
             showTransferModal.value = false;
             destinationTableId.value = '';
             selectedTableId.value = page.props.selectedTableId || selectedTableId.value;
-            toasts.value?.success(page.props.flash?.success || 'Llogaria u transferua.');
+            toasts.value?.success(page.props.flash?.success || translate('posTables.accountTransferred'));
         },
-        onError: (errors) => toasts.value?.error(errors.destination_table_id || 'Transferimi nuk u krye.'),
+        onError: (errors) => toasts.value?.error(errors.destination_table_id || translate('posTables.transferFailed')),
     });
 }
 
 function openPayment() {
     if (!props.currentShift) {
-        toasts.value?.error('Hap një turn përpara pagesës.');
+        toasts.value?.error(translate('posTables.openShiftBeforePayment'));
         return;
     }
     if (selectedOrder.value?.rounds?.some((round) => round.status === 'draft')) {
-        toasts.value?.error('Dërgo dhe printo të gjitha porositë para pagesës.');
+        toasts.value?.error(translate('posTables.sendAllBeforePayment'));
         return;
     }
     paymentMethod.value = 'cash';
@@ -209,7 +210,7 @@ function openPayment() {
 function payTable() {
     if (!selectedOrder.value || !paymentMethod.value) return;
     if (paymentMethod.value === 'room_charge' && !paymentReservationId.value) {
-        toasts.value?.error('Zgjidh dhomën ose mysafirin.');
+        toasts.value?.error(translate('posTables.selectRoomOrGuest'));
         return;
     }
     const payments = [];
@@ -224,7 +225,7 @@ function payTable() {
         payments.push({ method: paymentMethod.value, amount: orderTotal.value, currency: payCurrency.value, tendered_amount: payTendered.value });
     }
     if (paymentMethod.value === 'split' && (!splitCash.value || !splitCard.value)) {
-        toasts.value?.error('Vendos një ndarje të vlefshme mes cash dhe kartës.');
+        toasts.value?.error(translate('posTables.invalidSplit'));
         return;
     }
     saving.value = true;
@@ -235,7 +236,7 @@ function payTable() {
     }, {
         preserveScroll: true,
         onSuccess: () => { showPaymentModal.value = false; },
-        onError: (errors) => toasts.value?.error(errors.order || errors.payments || errors.reservation_id || Object.values(errors)[0] || 'Pagesa nuk u regjistrua.'),
+        onError: (errors) => toasts.value?.error(errors.order || errors.payments || errors.reservation_id || Object.values(errors)[0] || translate('posTables.paymentNotRecorded')),
         onFinish: () => { saving.value = false; },
     });
 }
@@ -254,24 +255,24 @@ onMounted(() => {
         <div class="flex h-full min-h-0 flex-col gap-3 bg-neutral-100 p-3">
             <div class="grid shrink-0 gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-card xl:grid-cols-[minmax(220px,auto)_minmax(0,1fr)] xl:items-center">
                 <div class="shrink-0">
-                    <p class="text-small font-semibold text-accent-700">POS Bar/Restorant / Shitje</p>
+                    <p class="text-small font-semibold text-accent-700">{{ $t('posTables.breadcrumb') }}</p>
                     <div class="mt-0.5 flex flex-wrap items-center gap-3">
-                        <h1 class="text-h2 text-primary-900">Tavolinat</h1>
+                        <h1 class="text-h2 text-primary-900">{{ $t('posTables.title') }}</h1>
                         <Badge :variant="currentShift ? 'success' : 'warning'" dot size="sm">
-                            {{ currentShift ? `Turn aktiv · ${currentShift.user_name} · ${currentShift.opened_at}` : 'Pa turn aktiv' }}
+                            {{ currentShift ? $t('posTables.shiftActive', { user: currentShift.user_name, openedAt: currentShift.opened_at }) : $t('posTables.shiftNone') }}
                         </Badge>
                     </div>
                 </div>
                 <div class="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-1 xl:justify-end xl:pb-0">
                     <PosSalespersonSwitcher v-if="posSettings.salesperson_enabled" dense :current="currentSalesperson" :salespeople="salespeople" />
                     <div v-if="selectedTable" class="inline-flex h-12 shrink-0 items-center rounded-lg bg-neutral-100 px-3 text-body-sm font-bold whitespace-nowrap text-primary-900">
-                        {{ selectedTable.name }} · {{ selectedOrder ? money(selectedOrder.total_amount) : 'E lirë' }}
+                        {{ selectedTable.name }} · {{ selectedOrder ? money(selectedOrder.total_amount) : $t('posTables.statusFree') }}
                     </div>
-                    <Button class="h-12 shrink-0 whitespace-nowrap" variant="primary" :disabled="!selectedTable" @click="openOrder"><Plus class="h-5 w-5" /> Porosi</Button>
-                    <Button class="h-12 shrink-0 whitespace-nowrap" variant="outline" :disabled="!selectedOrder" @click="showSummaryModal = true"><FileText class="h-5 w-5" /> Përmbledhje</Button>
-                    <Button class="h-12 shrink-0 whitespace-nowrap" variant="success" :disabled="!selectedOrder" @click="openPayment"><Banknote class="h-5 w-5" /> Paguaj</Button>
+                    <Button class="h-12 shrink-0 whitespace-nowrap" variant="primary" :disabled="!selectedTable" @click="openOrder"><Plus class="h-5 w-5" /> {{ $t('posTables.orderButton') }}</Button>
+                    <Button class="h-12 shrink-0 whitespace-nowrap" variant="outline" :disabled="!selectedOrder" @click="showSummaryModal = true"><FileText class="h-5 w-5" /> {{ $t('posTables.summary') }}</Button>
+                    <Button class="h-12 shrink-0 whitespace-nowrap" variant="success" :disabled="!selectedOrder" @click="openPayment"><Banknote class="h-5 w-5" /> {{ $t('posTables.pay') }}</Button>
                     <span v-if="posSettings.service_mode !== 'tables'" class="mx-1 h-8 w-px shrink-0 bg-neutral-200" aria-hidden="true"></span>
-                    <Button v-if="posSettings.service_mode !== 'tables'" class="h-12 shrink-0 whitespace-nowrap" variant="ghost" :href="route('pos.index', { direct: 1 })">Shitje direkte</Button>
+                    <Button v-if="posSettings.service_mode !== 'tables'" class="h-12 shrink-0 whitespace-nowrap" variant="ghost" :href="route('pos.index', { direct: 1 })">{{ $t('posTables.directSale') }}</Button>
                 </div>
             </div>
 
@@ -284,10 +285,10 @@ onMounted(() => {
                             <button v-for="area in areas" :key="area" type="button" class="rounded-lg border px-3 py-2 text-small font-semibold whitespace-nowrap" :class="activeArea === area ? 'border-accent-600 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-500'" @click="activeArea = area">{{ area }}</button>
                         </div>
                         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-small text-neutral-500">
-                            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-success-500"></span>E lirë {{ freeCount }}</span>
-                            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-info-500"></span>E zënë {{ stats.occupied }}</span>
-                            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-warning-500"></span>Pret pagesën {{ stats.bill_requested }}</span>
-                            <span class="font-semibold text-accent-700">Hapur {{ money(stats.open_total) }}</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-success-500"></span>{{ $t('posTables.legendFree', { count: freeCount }) }}</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-info-500"></span>{{ $t('posTables.legendOccupied', { count: stats.occupied }) }}</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-warning-500"></span>{{ $t('posTables.legendBillRequested', { count: stats.bill_requested }) }}</span>
+                            <span class="font-semibold text-accent-700">{{ $t('posTables.legendOpenTotal', { amount: money(stats.open_total) }) }}</span>
                         </div>
                     </div>
                     <div class="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
@@ -300,12 +301,12 @@ onMounted(() => {
                                 Number(selectedTableId) === Number(table.id) ? 'border-accent-600 ring-2 ring-accent-100' : 'border-neutral-200',
                                 table.status === 'free' ? 'bg-success-50/50' : table.status === 'bill_requested' ? 'bg-warning-50/70' : 'bg-info-50/60',
                             ]"
-                            :aria-label="`${table.name}, ${table.seats} vende, ${tableStatus(table).label}${table.open_order ? `, ${money(table.open_order.total_amount)}` : ''}`"
+                            :aria-label="`${table.name}, ${$t('posTables.seatsCount', { count: table.seats })}, ${tableStatus(table).label}${table.open_order ? `, ${money(table.open_order.total_amount)}` : ''}`"
                             @click="selectTable(table)"
                         >
                             <span class="absolute right-3 top-3 h-2.5 w-2.5 rounded-full" :class="table.status === 'free' ? 'bg-success-500' : table.status === 'bill_requested' ? 'bg-warning-500' : 'bg-info-500'"></span>
                             <strong class="text-h3 text-primary-900">{{ tableShortName(table) }}</strong>
-                            <span class="text-small text-neutral-500">{{ table.open_order ? money(table.open_order.total_amount) : `${table.seats} vende` }}</span>
+                            <span class="text-small text-neutral-500">{{ table.open_order ? money(table.open_order.total_amount) : $t('posTables.seatsCount', { count: table.seats }) }}</span>
                         </button>
                     </div>
                 </Card>
@@ -314,7 +315,7 @@ onMounted(() => {
                     <template v-if="selectedTable">
                         <div class="border-b border-neutral-200 px-5 py-4">
                             <div class="flex items-start justify-between gap-3">
-                                <div><div class="flex items-center gap-2"><h2 class="text-h3 text-primary-900">{{ selectedTable.name }}</h2><Badge :variant="tableStatus(selectedTable).badge" dot size="sm">{{ tableStatus(selectedTable).label }}</Badge></div><p class="mt-1 text-small text-neutral-500">{{ selectedOrder ? `${selectedOrder.covers || '—'} persona · ${elapsed(selectedOrder.created_at)} · ${selectedOrder.created_by || 'Stafi'}` : `${selectedTable.seats} vende · pa llogari të hapur` }}</p></div>
+                                <div><div class="flex items-center gap-2"><h2 class="text-h3 text-primary-900">{{ selectedTable.name }}</h2><Badge :variant="tableStatus(selectedTable).badge" dot size="sm">{{ tableStatus(selectedTable).label }}</Badge></div><p class="mt-1 text-small text-neutral-500">{{ selectedOrder ? $t('posTables.coversLine', { covers: selectedOrder.covers || '—', elapsed: elapsed(selectedOrder.created_at), staff: selectedOrder.created_by || $t('posTables.staffFallback') }) : $t('posTables.seatsNoOrder', { count: selectedTable.seats }) }}</p></div>
                                 <strong class="text-h3 text-primary-900">{{ money(selectedOrder?.total_amount) }}</strong>
                             </div>
                         </div>
@@ -322,101 +323,101 @@ onMounted(() => {
                         <div v-if="selectedOrder" class="min-h-0 flex-1 divide-y divide-neutral-200 overflow-y-auto px-5">
                             <div v-for="round in selectedOrder.rounds" :key="round.id || `legacy-${round.sequence}`" class="py-4">
                                 <div class="flex items-start justify-between gap-3">
-                                    <div><div class="flex flex-wrap items-center gap-2"><p class="font-bold text-primary-900">Porosia #{{ round.sequence }}</p><Badge :variant="round.status === 'sent' ? 'success' : 'warning'" size="sm">{{ round.status === 'sent' ? 'Dërguar & printuar' : 'Pa dërguar' }}</Badge></div><p class="mt-1 text-tiny text-neutral-500">{{ round.created_by || 'Stafi' }} · {{ time(round.created_at) }} · {{ round.destination }}</p></div>
-                                    <div class="text-right"><p class="font-bold text-primary-900">{{ money(round.total) }}</p><Button v-if="round.status === 'draft'" variant="outline" size="sm" class="mt-2" :loading="saving" @click="sendDraft(round)"><Printer class="h-3.5 w-3.5" /> Dërgo & printo</Button></div>
+                                    <div><div class="flex flex-wrap items-center gap-2"><p class="font-bold text-primary-900">{{ $t('posTables.roundNumber', { sequence: round.sequence }) }}</p><Badge :variant="round.status === 'sent' ? 'success' : 'warning'" size="sm">{{ round.status === 'sent' ? $t('posTables.roundSentPrinted') : $t('posTables.roundNotSentBadge') }}</Badge></div><p class="mt-1 text-tiny text-neutral-500">{{ round.created_by || $t('posTables.staffFallback') }} · {{ time(round.created_at) }} · {{ round.destination }}</p></div>
+                                    <div class="text-right"><p class="font-bold text-primary-900">{{ money(round.total) }}</p><Button v-if="round.status === 'draft'" variant="outline" size="sm" class="mt-2" :loading="saving" @click="sendDraft(round)"><Printer class="h-3.5 w-3.5" /> {{ $t('posTables.sendPrint') }}</Button></div>
                                 </div>
                                 <div class="mt-3 divide-y divide-neutral-100 border-t border-neutral-100">
                                     <div v-for="item in round.items" :key="item.id" class="flex items-center justify-between gap-3 py-2 text-body-sm"><span><b>{{ item.quantity }}×</b> {{ item.name }}</span><span class="font-semibold text-neutral-700">{{ money(item.total_price) }}</span></div>
                                 </div>
                             </div>
                         </div>
-                        <div v-else class="grid flex-1 place-items-center px-6 py-16 text-center"><div><span class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-neutral-100 text-neutral-400"><ReceiptText class="h-6 w-6" /></span><p class="mt-4 font-semibold text-primary-900">Tavolina është e lirë</p><p class="mt-1 text-body-sm text-neutral-500">Përdor butonin “Porosi” sipër për të hapur POS-in.</p></div></div>
+                        <div v-else class="grid flex-1 place-items-center px-6 py-16 text-center"><div><span class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-neutral-100 text-neutral-400"><ReceiptText class="h-6 w-6" /></span><p class="mt-4 font-semibold text-primary-900">{{ $t('posTables.tableFreeTitle') }}</p><p class="mt-1 text-body-sm text-neutral-500">{{ $t('posTables.tableFreeHint') }}</p></div></div>
 
                         <div v-if="selectedOrder" class="border-t border-neutral-200 bg-neutral-50 p-4">
                             <div v-if="posSettings.salesperson_enabled" class="mb-3 flex items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white p-2.5">
-                                <div class="min-w-0"><p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">Salesperson i tavolinës</p><p class="truncate text-body-sm font-bold text-primary-900">{{ selectedOrder.salesperson?.name || selectedOrder.created_by || 'Stafi' }}</p></div>
+                                <div class="min-w-0"><p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">{{ $t('posTables.tableSalesperson') }}</p><p class="truncate text-body-sm font-bold text-primary-900">{{ selectedOrder.salesperson?.name || selectedOrder.created_by || $t('posTables.staffFallback') }}</p></div>
                                 <PosSalespersonSwitcher compact :current="selectedOrder.salesperson || currentSalesperson" :salespeople="salespeople" :order-id="selectedOrder.id" />
                             </div>
-                            <div class="mb-3 flex items-center justify-between"><span class="text-body-sm font-semibold text-neutral-600">Totali i tavolinës</span><strong class="text-h3 text-primary-900">{{ money(selectedOrder.total_amount) }}</strong></div>
+                            <div class="mb-3 flex items-center justify-between"><span class="text-body-sm font-semibold text-neutral-600">{{ $t('posTables.tableTotal') }}</span><strong class="text-h3 text-primary-900">{{ money(selectedOrder.total_amount) }}</strong></div>
                             <div class="grid grid-cols-2 gap-2">
-                                <Button variant="outline" size="sm" @click="showTransferModal = true"><ArrowRightLeft class="h-4 w-4" /> Transfero</Button>
-                                <Button :variant="selectedOrder.service_status === 'bill_requested' ? 'success' : 'outline'" size="sm" @click="toggleBillRequest"><ReceiptText class="h-4 w-4" /> {{ selectedOrder.service_status === 'bill_requested' ? 'Fatura u kërkua' : 'Kërko faturën' }}</Button>
+                                <Button variant="outline" size="sm" @click="showTransferModal = true"><ArrowRightLeft class="h-4 w-4" /> {{ $t('posTables.transfer') }}</Button>
+                                <Button :variant="selectedOrder.service_status === 'bill_requested' ? 'success' : 'outline'" size="sm" @click="toggleBillRequest"><ReceiptText class="h-4 w-4" /> {{ selectedOrder.service_status === 'bill_requested' ? $t('posTables.billRequestedBtn') : $t('posTables.requestBill') }}</Button>
                             </div>
                         </div>
                     </template>
                     <div v-else class="grid flex-1 place-items-center px-6 py-16 text-center">
-                        <div><span class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-neutral-100 text-neutral-400"><ReceiptText class="h-6 w-6" /></span><p class="mt-4 font-semibold text-primary-900">Zgjidh një tavolinë</p><p class="mt-1 text-body-sm text-neutral-500">Porositë dhe totali shfaqen këtu.</p></div>
+                        <div><span class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-neutral-100 text-neutral-400"><ReceiptText class="h-6 w-6" /></span><p class="mt-4 font-semibold text-primary-900">{{ $t('posTables.selectTableTitle') }}</p><p class="mt-1 text-body-sm text-neutral-500">{{ $t('posTables.selectTableHint') }}</p></div>
                     </div>
                 </Card>
             </div>
         </div>
 
-        <Modal :show="showSummaryModal" :title="`Përmbledhja · ${selectedTable?.name || ''}`" max-width="lg" @close="showSummaryModal = false">
+        <Modal :show="showSummaryModal" :title="$t('posTables.summaryTitle', { name: selectedTable?.name || '' })" max-width="lg" @close="showSummaryModal = false">
             <section v-if="selectedOrder" id="table-account-summary" class="space-y-4">
                 <div class="grid grid-cols-3 gap-3">
-                    <div class="rounded-lg bg-neutral-50 p-3"><p class="text-tiny text-neutral-500">Porosi</p><p class="mt-1 text-h4">{{ selectedOrder.rounds.length }}</p></div>
-                    <div class="rounded-lg bg-neutral-50 p-3"><p class="text-tiny text-neutral-500">Persona</p><p class="mt-1 text-h4">{{ selectedOrder.covers || '—' }}</p></div>
-                    <div class="rounded-lg bg-accent-50 p-3"><p class="text-tiny text-accent-700">Totali</p><p class="mt-1 text-h4 text-accent-800">{{ money(selectedOrder.total_amount) }}</p></div>
+                    <div class="rounded-lg bg-neutral-50 p-3"><p class="text-tiny text-neutral-500">{{ $t('posTables.statOrders') }}</p><p class="mt-1 text-h4">{{ selectedOrder.rounds.length }}</p></div>
+                    <div class="rounded-lg bg-neutral-50 p-3"><p class="text-tiny text-neutral-500">{{ $t('posTables.statCovers') }}</p><p class="mt-1 text-h4">{{ selectedOrder.covers || '—' }}</p></div>
+                    <div class="rounded-lg bg-accent-50 p-3"><p class="text-tiny text-accent-700">{{ $t('posTables.total') }}</p><p class="mt-1 text-h4 text-accent-800">{{ money(selectedOrder.total_amount) }}</p></div>
                 </div>
                 <div v-for="round in selectedOrder.rounds" :key="round.id || round.sequence" class="rounded-lg border border-neutral-200 p-3">
-                    <div class="flex justify-between"><strong>Porosia #{{ round.sequence }}</strong><strong>{{ money(round.total) }}</strong></div>
+                    <div class="flex justify-between"><strong>{{ $t('posTables.roundNumber', { sequence: round.sequence }) }}</strong><strong>{{ money(round.total) }}</strong></div>
                     <p class="mt-1 text-small text-neutral-500">{{ round.items.map(item => `${item.quantity}× ${item.name}`).join(', ') }}</p>
                 </div>
-                <div class="flex items-center justify-between border-t border-neutral-200 pt-4 text-h4"><span>Totali</span><strong>{{ money(selectedOrder.total_amount) }}</strong></div>
+                <div class="flex items-center justify-between border-t border-neutral-200 pt-4 text-h4"><span>{{ $t('posTables.total') }}</span><strong>{{ money(selectedOrder.total_amount) }}</strong></div>
             </section>
             <template #footer>
-                <Button variant="ghost" @click="showSummaryModal = false">Mbyll</Button>
-                <Button variant="outline" @click="printTableSummary"><Printer class="h-4 w-4" /> Printo</Button>
-                <Button variant="primary" @click="payFromSummary"><Banknote class="h-4 w-4" /> Paguaj</Button>
-                <Button variant="outline" @click="fiscalizeFromSummary"><ReceiptText class="h-4 w-4" /> Fiskalizo pas pagesës</Button>
+                <Button variant="ghost" @click="showSummaryModal = false">{{ $t('posTables.close') }}</Button>
+                <Button variant="outline" @click="printTableSummary"><Printer class="h-4 w-4" /> {{ $t('posTables.print') }}</Button>
+                <Button variant="primary" @click="payFromSummary"><Banknote class="h-4 w-4" /> {{ $t('posTables.pay') }}</Button>
+                <Button variant="outline" @click="fiscalizeFromSummary"><ReceiptText class="h-4 w-4" /> {{ $t('posTables.fiscalizeAfterPayment') }}</Button>
             </template>
         </Modal>
 
-        <Modal :show="showTransferModal" title="Transfero llogarinë" max-width="sm" @close="showTransferModal = false">
-            <p class="text-body-sm text-neutral-600">Zgjidh një tavolinë të lirë. Të gjitha raundet dhe totali kalojnë së bashku.</p><select v-model="destinationTableId" class="mt-4 w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500"><option value="">Zgjidh tavolinën...</option><option v-for="table in freeTables" :key="table.id" :value="table.id">{{ table.name }} · {{ table.area }}</option></select>
-            <template #footer><Button variant="ghost" @click="showTransferModal = false">Anulo</Button><Button variant="primary" :disabled="!destinationTableId" @click="transferTable">Transfero</Button></template>
+        <Modal :show="showTransferModal" :title="$t('posTables.transferTitle')" max-width="sm" @close="showTransferModal = false">
+            <p class="text-body-sm text-neutral-600">{{ $t('posTables.transferHint') }}</p><select v-model="destinationTableId" class="mt-4 w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500"><option value="">{{ $t('posTables.selectTablePlaceholder') }}</option><option v-for="table in freeTables" :key="table.id" :value="table.id">{{ table.name }} · {{ table.area }}</option></select>
+            <template #footer><Button variant="ghost" @click="showTransferModal = false">{{ $t('posTables.cancel') }}</Button><Button variant="primary" :disabled="!destinationTableId" @click="transferTable">{{ $t('posTables.transfer') }}</Button></template>
         </Modal>
 
-        <Modal :show="showPaymentModal" :title="`Paguaj · ${selectedTable?.name || ''}`" max-width="md" @close="showPaymentModal = false">
-            <div class="rounded-xl bg-primary-950 p-5 text-center text-white"><p class="text-small text-neutral-300">Totali për pagesë</p><p class="mt-1 text-3xl font-bold">{{ money(selectedOrder?.total_amount) }}</p></div>
-            <div class="mt-4 grid grid-cols-2 gap-2"><button v-for="method in [{ id: 'cash', label: 'Cash', icon: '💵' }, { id: 'card', label: 'Kartë', icon: '💳' }, { id: 'split', label: 'Cash + Kartë', icon: '💵＋💳' }, { id: 'room_charge', label: 'Dhomë', icon: '🏨' }]" :key="method.id" type="button" class="rounded-xl border-2 p-3 text-center" :class="paymentMethod === method.id ? 'border-accent-500 bg-accent-50 text-accent-800' : 'border-neutral-200 text-neutral-600'" @click="paymentMethod = method.id"><span class="block text-2xl">{{ method.icon }}</span><span class="mt-1 block text-small font-bold">{{ method.label }}</span></button></div>
+        <Modal :show="showPaymentModal" :title="$t('posTables.payTitle', { name: selectedTable?.name || '' })" max-width="md" @close="showPaymentModal = false">
+            <div class="rounded-xl bg-primary-950 p-5 text-center text-white"><p class="text-small text-neutral-300">{{ $t('posTables.totalDue') }}</p><p class="mt-1 text-3xl font-bold">{{ money(selectedOrder?.total_amount) }}</p></div>
+            <div class="mt-4 grid grid-cols-2 gap-2"><button v-for="method in [{ id: 'cash', label: $t('posTables.payCash'), icon: '💵' }, { id: 'card', label: $t('posTables.payCard'), icon: '💳' }, { id: 'split', label: $t('posTables.paySplit'), icon: '💵＋💳' }, { id: 'room_charge', label: $t('posTables.payRoom'), icon: '🏨' }]" :key="method.id" type="button" class="rounded-xl border-2 p-3 text-center" :class="paymentMethod === method.id ? 'border-accent-500 bg-accent-50 text-accent-800' : 'border-neutral-200 text-neutral-600'" @click="paymentMethod = method.id"><span class="block text-2xl">{{ method.icon }}</span><span class="mt-1 block text-small font-bold">{{ method.label }}</span></button></div>
             <div v-if="multiCurrency && (paymentMethod === 'cash' || paymentMethod === 'card')" class="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                 <div class="flex items-center justify-between gap-3">
-                    <span class="text-small font-semibold text-neutral-600">Monedha e pagesës</span>
+                    <span class="text-small font-semibold text-neutral-600">{{ $t('posTables.paymentCurrency') }}</span>
                     <select v-model="payCurrency" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
                         <option v-for="entry in payCurrencies" :key="entry.code" :value="entry.code">{{ entry.code }}</option>
                     </select>
                 </div>
                 <template v-if="payTendered !== null">
                     <div class="mt-3 flex items-center justify-between text-body-sm">
-                        <span class="text-neutral-500">Merr nga klienti</span>
+                        <span class="text-neutral-500">{{ $t('posTables.collectFromCustomer') }}</span>
                         <strong class="text-lg">{{ payTendered.toFixed(2) }} {{ payCurrency }}</strong>
                     </div>
-                    <p class="mt-1 text-tiny text-neutral-400">1 {{ payCurrency }} = {{ fxRateFor(payCurrency).toFixed(2) }} {{ posBaseCurrency }} · shkon në llogarinë {{ payCurrency }}</p>
+                    <p class="mt-1 text-tiny text-neutral-400">{{ $t('posTables.fxRateNote', { from: payCurrency, rate: fxRateFor(payCurrency).toFixed(2), to: posBaseCurrency, currency: payCurrency }) }}</p>
                 </template>
             </div>
             <div v-if="paymentMethod === 'split'" class="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                <label class="text-small font-semibold text-neutral-600">Shuma cash</label>
+                <label class="text-small font-semibold text-neutral-600">{{ $t('posTables.cashAmount') }}</label>
                 <input v-model="splitCashAmount" type="number" min="0" :max="selectedOrder?.total_amount" step="0.01" class="mt-1.5 w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500" placeholder="0.00" />
                 <div v-if="multiCurrency" class="mt-3 flex items-center justify-between gap-3">
-                    <span class="text-small font-semibold text-neutral-600">Monedha e cash-it</span>
+                    <span class="text-small font-semibold text-neutral-600">{{ $t('posTables.cashCurrency') }}</span>
                     <select v-model="splitCashCurrency" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
                         <option v-for="entry in payCurrencies" :key="entry.code" :value="entry.code">{{ entry.code }}</option>
                     </select>
                 </div>
                 <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between text-body-sm">
-                    <span class="text-neutral-500">Merr cash nga klienti</span>
+                    <span class="text-neutral-500">{{ $t('posTables.collectCashFromCustomer') }}</span>
                     <strong>{{ splitCashTendered.toFixed(2) }} {{ splitCashCurrency }}</strong>
                 </div>
-                <div class="mt-3 flex justify-between text-body-sm"><span class="text-neutral-500">Pjesa me kartë</span><strong>{{ money(splitCard) }}</strong></div>
+                <div class="mt-3 flex justify-between text-body-sm"><span class="text-neutral-500">{{ $t('posTables.cardPortion') }}</span><strong>{{ money(splitCard) }}</strong></div>
             </div>
-            <select v-if="paymentMethod === 'room_charge'" v-model="paymentReservationId" class="mt-4 w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500"><option value="">Zgjidh dhomën / mysafirin...</option><option v-for="reservation in activeReservations" :key="reservation.id" :value="reservation.id">{{ reservation.label }}</option></select>
-            <template #footer><Button variant="ghost" @click="showPaymentModal = false">Anulo</Button><Button variant="primary" :loading="saving" @click="payTable"><Check class="h-4 w-4" /> Konfirmo pagesën</Button></template>
+            <select v-if="paymentMethod === 'room_charge'" v-model="paymentReservationId" class="mt-4 w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500"><option value="">{{ $t('posTables.selectRoomGuestPlaceholder') }}</option><option v-for="reservation in activeReservations" :key="reservation.id" :value="reservation.id">{{ reservation.label }}</option></select>
+            <template #footer><Button variant="ghost" @click="showPaymentModal = false">{{ $t('posTables.cancel') }}</Button><Button variant="primary" :loading="saving" @click="payTable"><Check class="h-4 w-4" /> {{ $t('posTables.confirmPayment') }}</Button></template>
         </Modal>
 
         <Teleport to="body">
             <section v-if="printRound && printTable" id="production-ticket" class="production-ticket">
-                <h1>POROSI · {{ printTable.name }}</h1><p>Porosia #{{ printRound.sequence }} · {{ time(printRound.sent_at || printRound.created_at) }}</p><p>{{ printRound.created_by || 'Stafi' }} · {{ printRound.destination }}</p><hr /><div v-for="item in printRound.items" :key="item.id" class="ticket-line"><strong>{{ item.quantity }}×</strong><span>{{ item.name }}</span></div><hr /><p class="ticket-footer">Lora PMS · {{ new Date().toLocaleString('sq-AL') }}</p>
+                <h1>{{ $t('posTables.ticketTitle', { name: printTable.name }) }}</h1><p>{{ $t('posTables.roundNumber', { sequence: printRound.sequence }) }} · {{ time(printRound.sent_at || printRound.created_at) }}</p><p>{{ printRound.created_by || $t('posTables.staffFallback') }} · {{ printRound.destination }}</p><hr /><div v-for="item in printRound.items" :key="item.id" class="ticket-line"><strong>{{ item.quantity }}×</strong><span>{{ item.name }}</span></div><hr /><p class="ticket-footer">Lora PMS · {{ new Date().toLocaleString(getIntlLocale()) }}</p>
             </section>
         </Teleport>
         <ToastContainer ref="toasts" />

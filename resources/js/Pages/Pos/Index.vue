@@ -74,7 +74,7 @@ const selectedReservation = ref('');
 
 const reservationOptions = props.activeReservations.map((r) => ({
     value: r.id,
-    label: `Dhoma ${r.room?.room_number} — ${r.guest?.first_name} ${r.guest?.last_name}`,
+    label: translate('posIndex.roomOption', { room: r.room?.room_number, name: `${r.guest?.first_name} ${r.guest?.last_name}` }),
 }));
 
 const paymentOptions = [
@@ -272,11 +272,11 @@ const varianceClass = computed(() => {
 function submitCloseShift() {
     if (countedNum.value === null) { toasts.value?.error(translate('admin.generated.k_af8603fe2aff')); return; }
     if (!allCurrenciesCounted.value) {
-        toasts.value?.error('Numëro edhe monedhat e tjera të sirtarit para mbylljes.');
+        toasts.value?.error(translate('posIndex.countForeignBeforeClose'));
         return;
     }
     if (cardCountRequired.value && countedCardNum.value === null) {
-        toasts.value?.error('Shkruaj totalin nga POS-i fizik i kartës para mbylljes.');
+        toasts.value?.error(translate('posIndex.enterCardTotalBeforeClose'));
         return;
     }
     closeShiftForm
@@ -514,7 +514,7 @@ function submitOrder(payNow = false) {
             covers: tableCovers.value,
             send: true,
         }, {
-            onError: (errors) => toasts.value?.error(errors.inventory || errors.items || 'Porosia nuk u ruajt.'),
+            onError: (errors) => toasts.value?.error(errors.inventory || errors.items || translate('posIndex.orderNotSaved')),
             onFinish: () => { orderSaving.value = false; },
         });
         return;
@@ -539,12 +539,12 @@ function submitOrder(payNow = false) {
             clearCart();
             if (payNow && savedOrder) {
                 openPay(savedOrder);
-                toasts.value?.success(`Porosia #${savedOrder.id} u ruajt. Zgjidh pagesën.`);
+                toasts.value?.success(translate('posIndex.orderSavedChoosePayment', { id: savedOrder.id }));
             } else {
-                toasts.value?.success(`${isEditing ? 'Porosia u përditësua' : 'Porosia u ruajt e hapur'} — ${money(submittedTotal)}`);
+                toasts.value?.success(`${isEditing ? translate('posIndex.orderUpdated') : translate('posIndex.orderSavedOpen')} — ${money(submittedTotal)}`);
             }
         },
-        onError: (errors) => toasts.value?.error(errors.inventory || errors.order || 'Porosia nuk u ruajt.'),
+        onError: (errors) => toasts.value?.error(errors.inventory || errors.order || translate('posIndex.orderNotSaved')),
         onFinish: () => { orderSaving.value = false; },
     };
     if (editingOrderId.value) form.put(route('pos.update', editingOrderId.value), options);
@@ -565,7 +565,7 @@ function editOrder(order) {
         const menuItem = allMenuItems.find(item => Number(item.id) === Number(line.menu_item_id));
         return {
             id: line.menu_item_id,
-            name: line.menu_item?.name || menuItem?.name || 'Artikull',
+            name: line.menu_item?.name || menuItem?.name || translate('posIndex.fallbackItem'),
             price: Number(line.unit_price),
             qty: Number(line.quantity),
             emoji: getItemEmoji(menuItem || line.menu_item || {}),
@@ -653,7 +653,7 @@ function submitPay() {
             else toasts.value?.success(translate('admin.generated.k_4d1af80f8706'));
         },
         onError: (errors) => {
-            toasts.value?.error(errors.inventory || errors.payments || errors.discount_reason || errors.reservation_id || Object.values(errors)[0] || 'Pagesa nuk u regjistrua.');
+            toasts.value?.error(errors.inventory || errors.payments || errors.discount_reason || errors.reservation_id || Object.values(errors)[0] || translate('posIndex.paymentNotRecorded'));
         },
     });
 }
@@ -701,7 +701,7 @@ function submitCancel() {
     router.post(route('pos.cancel', actionOrder.value.id), { reason: actionReason.value }, {
         preserveScroll: true,
         onSuccess: (page) => flashAware(page, () => { showCancelModal.value = false; }, () => { showCancelModal.value = false; toasts.value?.success(translate('admin.generated.k_0d9b1bd67bed')); }),
-        onError: (errors) => toasts.value?.error(errors.reason || 'Anulimi nuk u regjistrua.'),
+        onError: (errors) => toasts.value?.error(errors.reason || translate('posIndex.cancellationNotRecorded')),
     });
 }
 
@@ -714,8 +714,8 @@ function openRefund(order) {
 function submitRefund() {
     router.post(route('pos.refund', actionOrder.value.id), { reason: actionReason.value }, {
         preserveScroll: true,
-        onSuccess: (page) => flashAware(page, () => { showRefundModal.value = false; }, () => { showRefundModal.value = false; toasts.value?.success('Rimbursimi dhe kthimi i stokut u regjistruan.'); }),
-        onError: (errors) => toasts.value?.error(errors.reason || errors.refund || 'Rimbursimi nuk u regjistrua.'),
+        onSuccess: (page) => flashAware(page, () => { showRefundModal.value = false; }, () => { showRefundModal.value = false; toasts.value?.success(translate('posIndex.refundRecorded')); }),
+        onError: (errors) => toasts.value?.error(errors.reason || errors.refund || translate('posIndex.refundNotRecorded')),
     });
 }
 
@@ -723,15 +723,15 @@ const statusBadge = {
     open: { variant: 'warning', label: translate('admin.generated.k_35a3565ef9b7') },
     completed: { variant: 'success', label: translate('admin.generated.k_5a7f6ed24307') },
     cancelled: { variant: 'error', label: translate('admin.generated.k_a870d7f3f846') },
-    refunded: { variant: 'neutral', label: 'Rimbursuar' },
+    refunded: { variant: 'neutral', label: translate('posIndex.statusRefunded') },
 };
 
-const payLabel = { cash: 'Cash', card: 'Kartë', room_charge: 'Në dhomë' };
+const payLabel = { cash: translate('posIndex.payCash'), card: translate('posIndex.payCard'), room_charge: translate('posIndex.payRoomCharge') };
 
 function orderPaymentLabel(order) {
     const methods = [...new Set((order.payments || []).filter(payment => payment.direction === 'in').map(payment => payment.method))];
-    if (methods.length > 1) return 'Cash + Kartë';
-    return payLabel[methods[0] || order.payment_method] || (order.is_complimentary ? 'Komplimentare' : '—');
+    if (methods.length > 1) return translate('posIndex.payCashCard');
+    return payLabel[methods[0] || order.payment_method] || (order.is_complimentary ? translate('posIndex.complimentary') : '—');
 }
 
 function formatTime(d) {
@@ -774,22 +774,22 @@ onMounted(() => {
         <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between" :class="touchMode && view === 'sale' && '!mb-0 shrink-0'">
             <div>
                 <div class="flex items-center gap-3">
-                    <h1 class="text-h2 text-primary-900">{{ view === 'sale' ? (tableContext ? `Shitje POS · ${tableContext.name}` : 'Shitje POS') : view === 'orders' ? 'Porositë' : view === 'receipts' ? 'Shitjet & kuponët' : 'Turnet POS' }}</h1>
+                    <h1 class="text-h2 text-primary-900">{{ view === 'sale' ? (tableContext ? $t('posIndex.titleSaleTable', { name: tableContext.name }) : $t('posIndex.titleSale')) : view === 'orders' ? $t('posIndex.titleOrders') : view === 'receipts' ? $t('posIndex.titleReceipts') : $t('posIndex.titleShifts') }}</h1>
                 </div>
-                <p v-if="!touchMode || view !== 'sale'" class="mt-1 text-body-sm text-neutral-500">{{ view === 'sale' ? 'Porosia dhe pagesa përfundojnë në një ekran.' : view === 'orders' ? 'Ndrysho, arkëto ose anulo porositë ende të hapura.' : view === 'receipts' ? 'Historiku i shitjeve, kuponëve dhe rimbursimeve.' : 'Hapja, mbyllja dhe kontrolli i arkës sipas turnit.' }}</p>
+                <p v-if="!touchMode || view !== 'sale'" class="mt-1 text-body-sm text-neutral-500">{{ view === 'sale' ? $t('posIndex.subtitleSale') : view === 'orders' ? $t('posIndex.subtitleOrders') : view === 'receipts' ? $t('posIndex.subtitleReceipts') : $t('posIndex.subtitleShifts') }}</p>
             </div>
             <div v-if="view === 'sale'" class="flex flex-wrap items-center gap-2">
                 <PosSalespersonSwitcher v-if="posSettings.salesperson_enabled" :current="currentSalesperson" :salespeople="salespeople" />
-                <Button v-if="tableContext" variant="outline" class="h-[58px]" :href="route('pos.tables', { table: tableContext.id })"><ArrowLeft class="h-4 w-4" /> Tavolinat</Button>
-                <Button v-else-if="posSettings.service_mode === 'hybrid'" variant="outline" class="h-[58px]" :href="route('pos.tables')">Tavolinat</Button>
+                <Button v-if="tableContext" variant="outline" class="h-[58px]" :href="route('pos.tables', { table: tableContext.id })"><ArrowLeft class="h-4 w-4" /> {{ $t('posIndex.tables') }}</Button>
+                <Button v-else-if="posSettings.service_mode === 'hybrid'" variant="outline" class="h-[58px]" :href="route('pos.tables')">{{ $t('posIndex.tables') }}</Button>
                 <button
                     v-if="!tableContext"
                     type="button"
                     class="group h-14 min-w-32 rounded-xl border border-neutral-200 bg-white px-4 py-2 text-left shadow-card transition hover:border-accent-300 hover:bg-accent-50 focus:outline-none focus:ring-2 focus:ring-accent-500/30"
-                    :aria-label="touchMode ? 'Kalo në modalitetin standard' : 'Kalo në modalitetin touch'"
+                    :aria-label="touchMode ? $t('posIndex.switchToStandard') : $t('posIndex.switchToTouch')"
                     @click="toggleTouchMode"
                 >
-                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">Modaliteti</p>
+                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">{{ $t('posIndex.mode') }}</p>
                     <p class="mt-0.5 flex items-center gap-2 text-h4 text-primary-900">
                         <Minimize2 v-if="touchMode" class="h-4 w-4" />
                         <Maximize2 v-else class="h-4 w-4" />
@@ -797,30 +797,30 @@ onMounted(() => {
                     </p>
                 </button>
                 <div v-else class="h-14 min-w-32 rounded-xl border border-accent-200 bg-accent-50 px-4 py-2 shadow-card">
-                    <p class="text-tiny font-semibold uppercase tracking-wide text-accent-600">Modaliteti</p>
+                    <p class="text-tiny font-semibold uppercase tracking-wide text-accent-600">{{ $t('posIndex.mode') }}</p>
                     <p class="mt-0.5 flex items-center gap-2 text-h4 text-accent-800">
                         <Maximize2 class="h-4 w-4" /> Touch
                     </p>
                 </div>
                 <div class="rounded-xl border border-neutral-200 bg-white px-4 py-2 shadow-card">
-                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">Hapur</p>
+                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">{{ $t('posIndex.statOpen') }}</p>
                     <p class="text-h4 text-warning-700">{{ stats.open }}</p>
                 </div>
                 <div class="rounded-xl border border-neutral-200 bg-white px-4 py-2 shadow-card">
-                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">Përfunduar sot</p>
+                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">{{ $t('posIndex.statCompletedToday') }}</p>
                     <p class="text-h4 text-success-700">{{ stats.today_completed }}</p>
                 </div>
                 <div class="rounded-xl border border-neutral-200 bg-white px-4 py-2 shadow-card">
-                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">Shitje sot</p>
+                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">{{ $t('posIndex.statSalesToday') }}</p>
                     <p class="text-h4 text-accent-700">{{ money(stats.today_revenue) }}</p>
                 </div>
                 <Button variant="outline" class="h-[58px]" @click="openOrdersPanel">
-                    <ReceiptText class="h-4 w-4" /> Porositë e hapura
+                    <ReceiptText class="h-4 w-4" /> {{ $t('posIndex.openOrders') }}
                     <span class="rounded-md bg-warning-50 px-1.5 py-0.5 text-tiny font-semibold text-warning-700">{{ stats.open }}</span>
                 </Button>
             </div>
             <div v-else class="flex items-center gap-2">
-                <Button variant="primary" :href="route('pos.index')"><ShoppingCart class="h-4 w-4" /> Hap shitjen</Button>
+                <Button variant="primary" :href="route('pos.index')"><ShoppingCart class="h-4 w-4" /> {{ $t('posIndex.openSale') }}</Button>
             </div>
         </div>
 
@@ -835,7 +835,7 @@ onMounted(() => {
                     <Transition enter-active-class="duration-200 ease-out" enter-from-class="translate-x-full" leave-active-class="duration-200 ease-in" leave-to-class="translate-x-full">
                     <aside v-if="showOrdersPanel" class="fixed inset-y-0 right-0 z-50 flex w-full max-w-4xl flex-col bg-white shadow-2xl">
                         <div class="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
-                            <div><h2 class="text-h3 text-primary-900">Porositë</h2><p class="mt-0.5 text-small text-neutral-500">Hap, arkëto ose anulo porositë pa humbur shportën aktuale.</p></div>
+                            <div><h2 class="text-h3 text-primary-900">{{ $t('posIndex.titleOrders') }}</h2><p class="mt-0.5 text-small text-neutral-500">{{ $t('posIndex.ordersPanelSubtitle') }}</p></div>
                             <button type="button" class="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" @click="showOrdersPanel = false"><X class="h-5 w-5" /></button>
                         </div>
                         <Card :padding="false" class="m-5 min-h-0 flex-1 overflow-auto">
@@ -848,7 +848,7 @@ onMounted(() => {
                                         <th class="px-4 py-2.5 text-left text-label text-neutral-600">{{ $t('admin.generated.k_2ade15d943c4') }}</th>
                                         <th class="px-4 py-2.5 text-left text-label text-neutral-600">{{ $t('admin.generated.k_d936f6a10e13') }}</th>
                                         <th class="px-4 py-2.5 text-right text-label text-neutral-600">{{ $t('admin.generated.k_85f1cb8f5091') }}</th>
-                                        <th class="min-w-[300px] px-4 py-2.5 text-right text-label text-neutral-600">Veprime</th>
+                                        <th class="min-w-[300px] px-4 py-2.5 text-right text-label text-neutral-600">{{ $t('posIndex.actions') }}</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-neutral-100">
@@ -866,7 +866,7 @@ onMounted(() => {
                                         <td class="px-4 py-2.5 text-right text-body-sm font-medium">{{ money(order.total_amount) }}</td>
                                         <td class="px-4 py-2.5 text-right">
                                             <div v-if="order.status === 'open'" class="flex flex-nowrap justify-end gap-1 whitespace-nowrap">
-                                                <Button size="sm" variant="outline" :disabled="!hasOpenShift" @click="editOrder(order)"><Pencil class="h-3.5 w-3.5" /> Ndrysho</Button>
+                                                <Button size="sm" variant="outline" :disabled="!hasOpenShift" @click="editOrder(order)"><Pencil class="h-3.5 w-3.5" /> {{ $t('posIndex.edit') }}</Button>
                                                 <Button size="sm" variant="primary" :disabled="!hasOpenShift" @click="openPay(order)">{{ $t('admin.generated.k_c0bc68ffb628') }}</Button>
                                                 <Button size="sm" variant="ghost" class="text-error-600" @click="openCancel(order)">{{ $t('admin.generated.k_28cc20e7fd5b') }}</Button>
                                             </div>
@@ -882,7 +882,7 @@ onMounted(() => {
                                                 <Button size="sm" variant="outline" @click="openReceipt(order)">
                                                     <ReceiptText class="h-3.5 w-3.5" /> {{ $t('reservationShow.invoice') }}
                                                 </Button>
-                                                <Button v-if="!order.refunded_at" size="sm" variant="ghost" class="text-error-600" :disabled="!hasOpenShift" @click="openRefund(order)"><RotateCcw class="h-3.5 w-3.5" /> Rimburso</Button>
+                                                <Button v-if="!order.refunded_at" size="sm" variant="ghost" class="text-error-600" :disabled="!hasOpenShift" @click="openRefund(order)"><RotateCcw class="h-3.5 w-3.5" /> {{ $t('posIndex.refund') }}</Button>
                                             </div>
                                         </td>
                                     </tr>
@@ -904,7 +904,7 @@ onMounted(() => {
                                 v-model="searchQuery"
                                 type="search"
                                 class="w-full rounded-lg border-neutral-200 bg-neutral-50 py-2.5 pl-9 pr-3 text-body-sm placeholder:text-neutral-400 focus:border-accent-500 focus:bg-white focus:ring-accent-500"
-                                placeholder="Kërko produktin..."
+                                :placeholder="$t('posIndex.searchPlaceholder')"
                             />
                         </div>
                         <button
@@ -913,17 +913,17 @@ onMounted(() => {
                             :class="showFrequent ? 'border-accent-700 bg-accent-700 text-white' : 'border-accent-200 bg-accent-50 text-accent-700 hover:bg-accent-100'"
                             @click="showFrequent = !showFrequent"
                         >
-                            <Star class="h-4 w-4" /> Të shpeshtat
+                            <Star class="h-4 w-4" /> {{ $t('posIndex.frequentItems') }}
                         </button>
                     </div>
                     <!-- Drill-down navigation: Niveli 1 → 2 → 3 → Artikujt -->
                     <div v-if="!showFrequent && !searchQuery.trim()" class="border-b border-neutral-200 px-4 py-3">
                         <div v-if="currentNodeId !== null" class="mb-2 flex items-center gap-2">
                             <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-small font-semibold text-neutral-700 hover:bg-neutral-50 touch-manipulation" @click="goUp">
-                                <ArrowLeft class="h-4 w-4" /> Prapa
+                                <ArrowLeft class="h-4 w-4" /> {{ $t('posIndex.back') }}
                             </button>
                             <nav class="flex min-w-0 items-center gap-1 overflow-x-auto text-body-sm text-neutral-500">
-                                <button type="button" class="shrink-0 font-semibold hover:text-primary-900" @click="enterTile(null)">Kategoritë</button>
+                                <button type="button" class="shrink-0 font-semibold hover:text-primary-900" @click="enterTile(null)">{{ $t('posIndex.categories') }}</button>
                                 <template v-for="node in breadcrumb" :key="node.id">
                                     <span class="shrink-0">/</span>
                                     <button type="button" class="shrink-0 font-semibold" :class="node.id === currentNodeId ? 'text-primary-900' : 'hover:text-primary-900'" @click="enterTile(node.id)">{{ node.name }}</button>
@@ -954,7 +954,7 @@ onMounted(() => {
                     </div>
 
                     <div v-if="showFrequent && !hasFrequentItems" class="mx-4 mt-4 rounded-lg border border-info-200 bg-info-50 px-4 py-3 text-center text-body-sm text-info-800">
-                        Të shpeshtat plotësohen automatikisht pasi të regjistrohen shitjet e para.
+                        {{ $t('posIndex.frequentEmptyHint') }}
                     </div>
 
                     <!-- Item grid -->
@@ -1003,8 +1003,8 @@ onMounted(() => {
                     </div>
                     <div v-if="!activeMenuItems.length && searchQuery" class="px-6 py-16 text-center">
                         <Search class="mx-auto h-8 w-8 text-neutral-300" />
-                        <p class="mt-3 font-medium text-primary-900">Nuk u gjet asnjë produkt</p>
-                        <p class="mt-1 text-body-sm text-neutral-500">Provo një emër tjetër ose ndrysho kategorinë.</p>
+                        <p class="mt-3 font-medium text-primary-900">{{ $t('posIndex.noProductFound') }}</p>
+                        <p class="mt-1 text-body-sm text-neutral-500">{{ $t('posIndex.noProductFoundHint') }}</p>
                     </div>
                 </div>
             </div>
@@ -1016,31 +1016,31 @@ onMounted(() => {
                         <div class="flex items-center justify-between border-b border-neutral-200 px-4 py-4">
                             <div class="flex items-center gap-3">
                                 <button type="button" class="grid h-11 w-11 place-items-center rounded-xl border border-neutral-200 text-neutral-600 hover:bg-neutral-50" @click="closePayment"><ArrowLeft class="h-5 w-5" /></button>
-                                <div><p class="text-tiny font-bold uppercase tracking-wide text-accent-700">Hapi 2 · Pagesa</p><h3 class="text-h4 text-primary-900">Porosia #{{ selectedOrder.id }}</h3></div>
+                                <div><p class="text-tiny font-bold uppercase tracking-wide text-accent-700">{{ $t('posIndex.step2Payment') }}</p><h3 class="text-h4 text-primary-900">{{ $t('posIndex.orderNumber', { id: selectedOrder.id }) }}</h3></div>
                             </div>
-                            <span class="rounded-lg bg-success-50 px-3 py-1.5 text-small font-bold text-success-700">Gati për arkëtim</span>
+                            <span class="rounded-lg bg-success-50 px-3 py-1.5 text-small font-bold text-success-700">{{ $t('posIndex.readyToCollect') }}</span>
                         </div>
 
                         <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
                             <div class="rounded-2xl bg-primary-950 px-5 py-6 text-center text-white">
-                                <p class="text-small font-semibold uppercase tracking-widest text-neutral-300">Për t'u paguar</p>
+                                <p class="text-small font-semibold uppercase tracking-widest text-neutral-300">{{ $t('posIndex.amountDue') }}</p>
                                 <p class="mt-1 text-4xl font-bold tracking-tight">{{ money(paymentTotal) }}</p>
-                                <p v-if="paymentDiscount > 0" class="mt-2 text-small text-success-300">Ulje {{ money(paymentDiscount) }} nga {{ money(paymentSubtotal) }}</p>
+                                <p v-if="paymentDiscount > 0" class="mt-2 text-small text-success-300">{{ $t('posIndex.discountOff', { discount: money(paymentDiscount), subtotal: money(paymentSubtotal) }) }}</p>
                             </div>
 
                             <div>
-                                <p class="mb-2 text-label text-neutral-600">Ulje / komplimentare</p>
+                                <p class="mb-2 text-label text-neutral-600">{{ $t('posIndex.discountSection') }}</p>
                                 <div class="grid grid-cols-2 gap-2">
-                                    <button v-for="option in [{ value: 'none', label: 'Pa ulje' }, { value: 'percent', label: 'Përqindje' }, { value: 'fixed', label: 'Shumë fikse' }, { value: 'complimentary', label: 'Komplimentare' }]" :key="option.value" type="button" class="min-h-12 rounded-xl border px-3 py-2 text-small font-semibold touch-manipulation" :class="discountType === option.value ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-600'" @click="discountType = option.value">{{ option.label }}</button>
+                                    <button v-for="option in [{ value: 'none', label: $t('posIndex.noDiscount') }, { value: 'percent', label: $t('posIndex.percent') }, { value: 'fixed', label: $t('posIndex.fixedAmount') }, { value: 'complimentary', label: $t('posIndex.complimentary') }]" :key="option.value" type="button" class="min-h-12 rounded-xl border px-3 py-2 text-small font-semibold touch-manipulation" :class="discountType === option.value ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-600'" @click="discountType = option.value">{{ option.label }}</button>
                                 </div>
-                                <TextInput v-if="discountType === 'percent' || discountType === 'fixed'" v-model="discountValue" class="mt-3" type="number" min="0" :max="discountType === 'percent' ? 100 : paymentSubtotal" step="0.01" :placeholder="discountType === 'percent' ? 'P.sh. 10%' : 'Shuma e uljes'" />
-                                <TextInput v-if="paymentDiscount > 0" v-model="discountReason" class="mt-3" placeholder="Arsyeja e uljes · e detyrueshme" />
+                                <TextInput v-if="discountType === 'percent' || discountType === 'fixed'" v-model="discountValue" class="mt-3" type="number" min="0" :max="discountType === 'percent' ? 100 : paymentSubtotal" step="0.01" :placeholder="discountType === 'percent' ? $t('posIndex.percentPlaceholder') : $t('posIndex.discountAmountPlaceholder')" />
+                                <TextInput v-if="paymentDiscount > 0" v-model="discountReason" class="mt-3" :placeholder="$t('posIndex.discountReasonPlaceholder')" />
                             </div>
 
                             <div v-if="paymentTotal > 0">
-                                <p class="mb-2 text-label text-neutral-600">Mënyra e pagesës</p>
+                                <p class="mb-2 text-label text-neutral-600">{{ $t('posIndex.paymentMethod') }}</p>
                                 <div class="grid grid-cols-2 gap-2">
-                                    <button v-for="opt in [...paymentOptions, { value: 'split', label: 'Cash + Kartë' }]" :key="opt.value" type="button" class="min-h-20 rounded-xl border-2 p-3 text-center transition touch-manipulation" :class="paymentMethod === opt.value ? 'border-accent-500 bg-accent-50 text-accent-800' : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'" @click="paymentMethod = opt.value">
+                                    <button v-for="opt in [...paymentOptions, { value: 'split', label: $t('posIndex.payCashCard') }]" :key="opt.value" type="button" class="min-h-20 rounded-xl border-2 p-3 text-center transition touch-manipulation" :class="paymentMethod === opt.value ? 'border-accent-500 bg-accent-50 text-accent-800' : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'" @click="paymentMethod = opt.value">
                                         <span class="block text-2xl">{{ opt.value === 'cash' ? '💵' : opt.value === 'card' ? '💳' : opt.value === 'split' ? '💵＋💳' : '🏨' }}</span>
                                         <span class="mt-1 block text-body-sm font-bold">{{ opt.label }}</span>
                                     </button>
@@ -1049,62 +1049,62 @@ onMounted(() => {
 
                             <div v-if="multiCurrency && (paymentMethod === 'cash' || paymentMethod === 'card')" class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                                 <div class="flex items-center justify-between gap-3">
-                                    <span class="text-label text-neutral-600">Monedha e pagesës</span>
+                                    <span class="text-label text-neutral-600">{{ $t('posIndex.paymentCurrency') }}</span>
                                     <select v-model="payCurrency" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
                                         <option v-for="entry in payCurrencies" :key="entry.code" :value="entry.code">{{ entry.code }}</option>
                                     </select>
                                 </div>
                                 <template v-if="payTendered !== null">
                                     <div class="mt-3 flex items-center justify-between gap-3 text-body-sm">
-                                        <span class="text-neutral-500">Kursi (1 {{ payCurrency }} në {{ posBaseCurrency }})</span>
+                                        <span class="text-neutral-500">{{ $t('posIndex.fxRate', { from: payCurrency, to: posBaseCurrency }) }}</span>
                                         <input v-if="payFxEditing" v-model="payFxRate" type="number" min="0.000001" step="any" autofocus class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
                                         <span v-else class="inline-flex items-center gap-1">
                                             <span class="font-medium text-primary-900">{{ payFxRate }}</span>
-                                            <button type="button" class="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-accent-700" aria-label="Ndrysho kursin" @click="payFxEditing = true"><Pencil class="h-4 w-4" /></button>
+                                            <button type="button" class="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-accent-700" :aria-label="$t('posIndex.editRate')" @click="payFxEditing = true"><Pencil class="h-4 w-4" /></button>
                                         </span>
                                     </div>
                                     <div class="mt-2 flex items-center justify-between text-body-sm">
-                                        <span class="text-neutral-500">Merr nga klienti</span>
+                                        <span class="text-neutral-500">{{ $t('posIndex.collectFromCustomer') }}</span>
                                         <strong class="text-lg">{{ payTendered.toFixed(2) }} {{ payCurrency }}</strong>
                                     </div>
-                                    <p class="mt-1 text-small text-neutral-400">Kursi vlen vetëm për këtë faturë · shkon në llogarinë {{ payCurrency }}</p>
+                                    <p class="mt-1 text-small text-neutral-400">{{ $t('posIndex.fxRateNote', { currency: payCurrency }) }}</p>
                                 </template>
                             </div>
 
                             <div v-if="paymentMethod === 'split'" class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                                <FormGroup label="Shuma cash"><TextInput v-model="splitCashAmount" type="number" min="0" :max="paymentTotal" step="0.01" placeholder="0.00" /></FormGroup>
+                                <FormGroup :label="$t('posIndex.cashAmount')"><TextInput v-model="splitCashAmount" type="number" min="0" :max="paymentTotal" step="0.01" placeholder="0.00" /></FormGroup>
                                 <div v-if="multiCurrency" class="mt-3 flex items-center justify-between gap-3">
-                                    <span class="text-label text-neutral-600">Monedha e cash-it</span>
+                                    <span class="text-label text-neutral-600">{{ $t('posIndex.cashCurrency') }}</span>
                                     <select v-model="splitCashCurrency" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
                                         <option v-for="entry in payCurrencies" :key="entry.code" :value="entry.code">{{ entry.code }}</option>
                                     </select>
                                 </div>
                                 <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between gap-3 text-body-sm">
-                                    <span class="text-neutral-500">Kursi (1 {{ splitCashCurrency }} në {{ posBaseCurrency }})</span>
+                                    <span class="text-neutral-500">{{ $t('posIndex.fxRate', { from: splitCashCurrency, to: posBaseCurrency }) }}</span>
                                     <input v-if="splitFxEditing" v-model="splitCashFxRate" type="number" min="0.000001" step="any" autofocus class="w-28 rounded-lg border-neutral-200 px-2 py-1.5 text-right text-body-sm" />
                                     <span v-else class="inline-flex items-center gap-1">
                                         <span class="font-medium text-primary-900">{{ splitCashFxRate }}</span>
-                                        <button type="button" class="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-accent-700" aria-label="Ndrysho kursin" @click="splitFxEditing = true"><Pencil class="h-4 w-4" /></button>
+                                        <button type="button" class="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-accent-700" :aria-label="$t('posIndex.editRate')" @click="splitFxEditing = true"><Pencil class="h-4 w-4" /></button>
                                     </span>
                                 </div>
                                 <div v-if="splitCashTendered !== null" class="mt-2 flex items-center justify-between text-body-sm">
-                                    <span class="text-neutral-500">Merr cash nga klienti</span>
+                                    <span class="text-neutral-500">{{ $t('posIndex.collectCashFromCustomer') }}</span>
                                     <strong>{{ splitCashTendered.toFixed(2) }} {{ splitCashCurrency }}</strong>
                                 </div>
-                                <div class="mt-3 flex items-center justify-between text-body-sm"><span class="text-neutral-500">Pjesa me kartë</span><strong>{{ money(splitCard) }}</strong></div>
+                                <div class="mt-3 flex items-center justify-between text-body-sm"><span class="text-neutral-500">{{ $t('posIndex.cardPortion') }}</span><strong>{{ money(splitCard) }}</strong></div>
                             </div>
 
                             <div v-if="paymentMethod === 'room_charge'">
-                                <label class="mb-1.5 block text-label text-neutral-600">Dhoma / mysafiri</label>
-                                <Select v-model="selectedPayReservation" :options="reservationOptions" placeholder="Zgjidh rezervimin aktiv" />
+                                <label class="mb-1.5 block text-label text-neutral-600">{{ $t('posIndex.roomGuest') }}</label>
+                                <Select v-model="selectedPayReservation" :options="reservationOptions" :placeholder="$t('posIndex.selectActiveReservation')" />
                             </div>
 
-                            <p class="rounded-xl border border-info-200 bg-info-50 px-3 py-2.5 text-small text-info-800">Cash → Arka, Kartë → Banka, Dhomë → Folio. Nuk kërkohet kalim në Financë.</p>
+                            <p class="rounded-xl border border-info-200 bg-info-50 px-3 py-2.5 text-small text-info-800">{{ $t('posIndex.paymentRoutingNote') }}</p>
                         </div>
 
                         <div class="space-y-2 border-t border-neutral-200 bg-neutral-50 p-4">
-                            <Button variant="primary" size="lg" class="min-h-14 w-full text-lg" :disabled="(paymentTotal > 0 && !paymentMethod) || (paymentMethod === 'room_charge' && !selectedPayReservation) || (paymentDiscount > 0 && !discountReason.trim()) || (paymentMethod === 'split' && (splitCash <= 0 || splitCard <= 0))" @click="submitPay">Konfirmo pagesën · {{ money(paymentTotal) }}</Button>
-                            <button type="button" class="min-h-11 w-full rounded-lg text-body-sm font-semibold text-neutral-500 hover:bg-white" @click="closePayment">Kthehu te porosia</button>
+                            <Button variant="primary" size="lg" class="min-h-14 w-full text-lg" :disabled="(paymentTotal > 0 && !paymentMethod) || (paymentMethod === 'room_charge' && !selectedPayReservation) || (paymentDiscount > 0 && !discountReason.trim()) || (paymentMethod === 'split' && (splitCash <= 0 || splitCard <= 0))" @click="submitPay">{{ $t('posIndex.confirmPayment') }} · {{ money(paymentTotal) }}</Button>
+                            <button type="button" class="min-h-11 w-full rounded-lg text-body-sm font-semibold text-neutral-500 hover:bg-white" @click="closePayment">{{ $t('posIndex.backToOrder') }}</button>
                         </div>
                     </template>
 
@@ -1114,14 +1114,14 @@ onMounted(() => {
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-2">
                                 <span class="grid h-9 w-9 place-items-center rounded-lg bg-accent-50 text-accent-700"><ShoppingCart class="h-5 w-5" /></span>
-                                <div><h3 class="font-semibold text-primary-900">{{ tableContext ? `Porosi · ${tableContext.name}` : editingOrderId ? `Ndrysho porosinë #${editingOrderId}` : 'Porosia e re' }}</h3><p class="text-tiny text-neutral-400">{{ cartCount }} artikuj</p></div>
+                                <div><h3 class="font-semibold text-primary-900">{{ tableContext ? $t('posIndex.orderForTable', { name: tableContext.name }) : editingOrderId ? $t('posIndex.editingOrderTitle', { id: editingOrderId }) : $t('posIndex.newOrder') }}</h3><p class="text-tiny text-neutral-400">{{ $t('posIndex.itemsCount', { count: cartCount }) }}</p></div>
                             </div>
-                            <button v-if="cart.length" type="button" class="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-small font-semibold text-error-600 hover:bg-error-50" @click="clearCart"><Trash2 class="h-4 w-4" /> Pastro</button>
+                            <button v-if="cart.length" type="button" class="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-small font-semibold text-error-600 hover:bg-error-50" @click="clearCart"><Trash2 class="h-4 w-4" /> {{ $t('posIndex.clear') }}</button>
                         </div>
 
                         <div v-if="!tableContext" class="mt-4 grid grid-cols-2 gap-1 rounded-lg bg-neutral-100 p-1">
-                            <button type="button" class="rounded-md px-3 py-2 text-small font-semibold transition" :class="serviceMode === 'table' ? 'bg-white text-primary-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'" @click="switchService('table')">Tavolinë / banak</button>
-                            <button type="button" class="rounded-md px-3 py-2 text-small font-semibold transition" :class="serviceMode === 'room' ? 'bg-white text-primary-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'" @click="switchService('room')">Dhomë</button>
+                            <button type="button" class="rounded-md px-3 py-2 text-small font-semibold transition" :class="serviceMode === 'table' ? 'bg-white text-primary-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'" @click="switchService('table')">{{ $t('posIndex.serviceTable') }}</button>
+                            <button type="button" class="rounded-md px-3 py-2 text-small font-semibold transition" :class="serviceMode === 'room' ? 'bg-white text-primary-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'" @click="switchService('room')">{{ $t('posIndex.serviceRoom') }}</button>
                         </div>
                     </div>
 
@@ -1131,16 +1131,16 @@ onMounted(() => {
                             <div class="flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-small font-bold text-accent-800">{{ tableContext.name }}</p>
-                                    <p class="text-tiny text-accent-700">{{ tableContext.area }} · {{ tableContext.seats }} vende</p>
+                                    <p class="text-tiny text-accent-700">{{ tableContext.area }} · {{ $t('posIndex.seatsCount', { count: tableContext.seats }) }}</p>
                                 </div>
                                 <label class="flex items-center gap-2 text-small font-semibold text-accent-800">
-                                    Persona
+                                    {{ $t('posIndex.covers') }}
                                     <input v-model.number="tableCovers" type="number" min="1" max="99" class="h-9 w-16 rounded-lg border-accent-200 bg-white px-2 text-center text-small focus:border-accent-500 focus:ring-accent-500" />
                                 </label>
                             </div>
                         </div>
-                        <TextInput v-else-if="serviceMode === 'table'" v-model="tableNumber" placeholder="Numri i tavolinës · opsional" />
-                        <Select v-else v-model="selectedReservation" :options="reservationOptions" placeholder="Zgjidh dhomën / mysafirin" />
+                        <TextInput v-else-if="serviceMode === 'table'" v-model="tableNumber" :placeholder="$t('posIndex.tableNumberPlaceholder')" />
+                        <Select v-else v-model="selectedReservation" :options="reservationOptions" :placeholder="$t('posIndex.selectRoomGuest')" />
                     </div>
 
                     <!-- Cart items -->
@@ -1150,7 +1150,7 @@ onMounted(() => {
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-neutral-50 text-xl">{{ item.emoji }}</span>
                                 <div class="flex-1 min-w-0">
                                     <p class="text-body-sm text-primary-900 font-medium truncate">{{ item.name }}</p>
-                                    <p class="text-small text-neutral-400">{{ money(item.price) }} / copë</p>
+                                    <p class="text-small text-neutral-400">{{ $t('posIndex.pricePerUnit', { price: money(item.price) }) }}</p>
                                     <div class="mt-1.5 flex items-center gap-1 shrink-0">
                                         <button class="grid h-10 w-10 place-items-center rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 touch-manipulation" @click="updateQty(i, -1)"><Minus class="h-4 w-4" /></button>
                                         <span class="w-7 text-center text-body-sm font-semibold text-primary-900">{{ item.qty }}</span>
@@ -1163,8 +1163,8 @@ onMounted(() => {
 
                         <div v-else class="py-12 text-center">
                             <span class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-neutral-100 text-neutral-400"><ShoppingCart class="h-6 w-6" /></span>
-                            <p class="mt-3 font-medium text-primary-900">Shporta është bosh</p>
-                            <p class="mt-1 text-body-sm text-neutral-400">Kliko produktet për t’i shtuar.</p>
+                            <p class="mt-3 font-medium text-primary-900">{{ $t('posIndex.cartEmpty') }}</p>
+                            <p class="mt-1 text-body-sm text-neutral-400">{{ $t('posIndex.cartEmptyHint') }}</p>
                         </div>
                     </div>
 
@@ -1175,16 +1175,16 @@ onMounted(() => {
                             <span class="text-h3 text-primary-900">{{ money(cartTotal) }}</span>
                         </div>
                         <div v-if="tableContext">
-                            <Button variant="primary" size="lg" class="min-h-14 w-full text-lg" :loading="orderSaving" :disabled="!hasOpenShift" @click="submitOrder(false)"><Printer class="h-4 w-4" /> Dërgo & printo · {{ money(cartTotal) }}</Button>
+                            <Button variant="primary" size="lg" class="min-h-14 w-full text-lg" :loading="orderSaving" :disabled="!hasOpenShift" @click="submitOrder(false)"><Printer class="h-4 w-4" /> {{ $t('posIndex.sendAndPrint') }} · {{ money(cartTotal) }}</Button>
                         </div>
                         <div v-else class="grid grid-cols-[0.85fr_1.4fr] gap-2">
-                            <Button variant="outline" size="lg" class="min-h-14" :loading="orderSaving" :disabled="!hasOpenShift || (serviceMode === 'room' && !selectedReservation)" @click="submitOrder(false)">Ruaj hapur</Button>
-                            <Button variant="primary" size="lg" class="min-h-14 text-lg" :loading="orderSaving" :disabled="!hasOpenShift || (serviceMode === 'room' && !selectedReservation)" @click="submitOrder(true)">Paguaj · {{ money(cartTotal) }}</Button>
+                            <Button variant="outline" size="lg" class="min-h-14" :loading="orderSaving" :disabled="!hasOpenShift || (serviceMode === 'room' && !selectedReservation)" @click="submitOrder(false)">{{ $t('posIndex.saveOpen') }}</Button>
+                            <Button variant="primary" size="lg" class="min-h-14 text-lg" :loading="orderSaving" :disabled="!hasOpenShift || (serviceMode === 'room' && !selectedReservation)" @click="submitOrder(true)">{{ $t('posIndex.pay') }} · {{ money(cartTotal) }}</Button>
                         </div>
-                        <p v-if="tableContext" class="text-center text-tiny text-neutral-400">Porosia ruhet te tavolina dhe printohet për banakun/kuzhinën.</p>
-                        <p v-else-if="editingOrderId" class="text-center text-tiny font-semibold text-accent-700">Po ndryshon porosinë #{{ editingOrderId }}</p>
+                        <p v-if="tableContext" class="text-center text-tiny text-neutral-400">{{ $t('posIndex.tableOrderNote') }}</p>
+                        <p v-else-if="editingOrderId" class="text-center text-tiny font-semibold text-accent-700">{{ $t('posIndex.editingOrderNote', { id: editingOrderId }) }}</p>
                         <p v-else class="text-center text-tiny text-neutral-400">
-                            “Ruaj hapur” e lë porosinë për më vonë; “Paguaj” vazhdon direkt te arkëtimi.
+                            {{ $t('posIndex.saveOrPayHint') }}
                         </p>
                     </div>
                     </template>
@@ -1195,49 +1195,49 @@ onMounted(() => {
         <Card v-else-if="view === 'orders' || view === 'receipts'" :padding="false" class="overflow-hidden">
             <div class="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 class="text-h4 text-primary-900">{{ view === 'orders' ? 'Porositë e hapura' : 'Regjistri i shitjeve POS' }}</h2>
-                    <p class="mt-1 text-small text-neutral-500">{{ view === 'orders' ? 'Këtu menaxhohen vetëm porositë që presin ndryshim ose pagesë.' : 'Kuponë, pagesa, anulime dhe rimbursime në një regjistër.' }}</p>
+                    <h2 class="text-h4 text-primary-900">{{ view === 'orders' ? $t('posIndex.openOrders') : $t('posIndex.receiptsRegister') }}</h2>
+                    <p class="mt-1 text-small text-neutral-500">{{ view === 'orders' ? $t('posIndex.ordersListHint') : $t('posIndex.receiptsListHint') }}</p>
                 </div>
                 <div v-if="view === 'receipts'" class="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" :href="route('pos.receipts')">Të gjitha</Button>
-                    <Button variant="outline" size="sm" :href="route('pos.receipts', { status: 'completed' })">Të paguara</Button>
-                    <Button variant="outline" size="sm" :href="route('pos.receipts', { status: 'refunded' })">Të rimbursuara</Button>
-                    <Button variant="outline" size="sm" :href="route('pos.receipts', { status: 'cancelled' })">Të anuluara</Button>
+                    <Button variant="outline" size="sm" :href="route('pos.receipts')">{{ $t('posIndex.filterAll') }}</Button>
+                    <Button variant="outline" size="sm" :href="route('pos.receipts', { status: 'completed' })">{{ $t('posIndex.filterPaid') }}</Button>
+                    <Button variant="outline" size="sm" :href="route('pos.receipts', { status: 'refunded' })">{{ $t('posIndex.filterRefunded') }}</Button>
+                    <Button variant="outline" size="sm" :href="route('pos.receipts', { status: 'cancelled' })">{{ $t('posIndex.filterCancelled') }}</Button>
                 </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50">
                         <tr>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Porosia</th>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Ora / data</th>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Tavolina / dhoma</th>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Artikujt</th>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th>
-                            <th class="px-5 py-3 text-left text-label text-neutral-600">Pagesa</th>
-                            <th class="px-5 py-3 text-right text-label text-neutral-600">Totali</th>
-                            <th class="px-5 py-3 text-right text-label text-neutral-600">Veprime</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colOrder') }}</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colTimeDate') }}</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colTableRoom') }}</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colItems') }}</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colStatus') }}</th>
+                            <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colPayment') }}</th>
+                            <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('posIndex.colTotal') }}</th>
+                            <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('posIndex.actions') }}</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100 bg-white">
                         <tr v-for="order in orders.data" :key="order.id" class="hover:bg-neutral-50">
                             <td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ order.id }}</td>
                             <td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(order.paid_at || order.created_at) }}</td>
-                            <td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ order.reservation_id ? `Dhoma · Rez. #${order.reservation_id}` : order.table_number ? `Tavolina ${order.table_number}` : 'Banak' }}</td>
+                            <td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ order.reservation_id ? $t('posIndex.roomReservationRef', { id: order.reservation_id }) : order.table_number ? $t('posIndex.tableRef', { number: order.table_number }) : $t('posIndex.counter') }}</td>
                             <td class="max-w-64 px-5 py-3.5 text-body-sm text-neutral-600"><span class="line-clamp-2">{{ order.items?.map(i => `${i.quantity}× ${i.menu_item?.name}`).join(', ') || '—' }}</span></td>
                             <td class="px-5 py-3.5"><Badge :variant="statusBadge[order.effective_status]?.variant" dot size="sm">{{ statusBadge[order.effective_status]?.label }}</Badge></td>
                             <td class="px-5 py-3.5"><Badge variant="neutral" size="sm">{{ orderPaymentLabel(order) }}</Badge></td>
                             <td class="whitespace-nowrap px-5 py-3.5 text-right text-body-sm font-bold text-primary-900">{{ money(order.total_amount) }}</td>
                             <td class="px-5 py-3.5 text-right">
                                 <div v-if="order.status === 'open'" class="flex justify-end gap-2">
-                                    <Button size="sm" variant="outline" @click="editOrder(order)"><Pencil class="h-3.5 w-3.5" /> Ndrysho</Button>
-                                    <Button size="sm" variant="primary" @click="openPay(order)">Paguaj</Button>
-                                    <Button size="sm" variant="ghost" class="text-error-600" @click="openCancel(order)">Anulo</Button>
+                                    <Button size="sm" variant="outline" @click="editOrder(order)"><Pencil class="h-3.5 w-3.5" /> {{ $t('posIndex.edit') }}</Button>
+                                    <Button size="sm" variant="primary" @click="openPay(order)">{{ $t('posIndex.pay') }}</Button>
+                                    <Button size="sm" variant="ghost" class="text-error-600" @click="openCancel(order)">{{ $t('posIndex.cancel') }}</Button>
                                 </div>
                                 <div v-else class="flex flex-wrap justify-end gap-2">
-                                    <Button v-if="canFiscalize(order)" size="sm" variant="outline" :loading="fiscalizingOrder === order.id" @click="fiscalizeReceipt(order)">Fiskalizo</Button>
-                                    <Button size="sm" variant="outline" @click="openReceipt(order)"><ReceiptText class="h-3.5 w-3.5" /> Kuponi</Button>
-                                    <Button v-if="order.status === 'completed' && !order.refunded_at" size="sm" variant="ghost" class="text-error-600" :disabled="!hasOpenShift" @click="openRefund(order)"><RotateCcw class="h-3.5 w-3.5" /> Rimburso</Button>
+                                    <Button v-if="canFiscalize(order)" size="sm" variant="outline" :loading="fiscalizingOrder === order.id" @click="fiscalizeReceipt(order)">{{ $t('posIndex.fiscalize') }}</Button>
+                                    <Button size="sm" variant="outline" @click="openReceipt(order)"><ReceiptText class="h-3.5 w-3.5" /> {{ $t('posIndex.receipt') }}</Button>
+                                    <Button v-if="order.status === 'completed' && !order.refunded_at" size="sm" variant="ghost" class="text-error-600" :disabled="!hasOpenShift" @click="openRefund(order)"><RotateCcw class="h-3.5 w-3.5" /> {{ $t('posIndex.refund') }}</Button>
                                 </div>
                             </td>
                         </tr>
@@ -1246,15 +1246,15 @@ onMounted(() => {
             </div>
             <div v-if="!orders.data?.length" class="px-6 py-16 text-center">
                 <ReceiptText class="mx-auto h-9 w-9 text-neutral-300" />
-                <p class="mt-3 font-semibold text-primary-900">{{ view === 'orders' ? 'Nuk ka porosi të hapura' : 'Nuk ka shitje për këtë filtër' }}</p>
-                <p class="mt-1 text-body-sm text-neutral-500">{{ view === 'orders' ? 'Porositë e ruajtura shfaqen automatikisht këtu.' : 'Ndrysho filtrin ose regjistro shitjen e parë.' }}</p>
+                <p class="mt-3 font-semibold text-primary-900">{{ view === 'orders' ? $t('posIndex.noOpenOrders') : $t('posIndex.noSalesForFilter') }}</p>
+                <p class="mt-1 text-body-sm text-neutral-500">{{ view === 'orders' ? $t('posIndex.noOpenOrdersHint') : $t('posIndex.noSalesHint') }}</p>
             </div>
             <div v-if="orders.last_page > 1" class="flex items-center justify-between border-t border-neutral-200 px-5 py-4">
-                <p class="text-small text-neutral-500">{{ orders.from }}–{{ orders.to }} nga {{ orders.total }}</p>
+                <p class="text-small text-neutral-500">{{ $t('posIndex.paginationRange', { from: orders.from, to: orders.to, total: orders.total }) }}</p>
                 <div class="flex items-center gap-2">
-                    <Button size="sm" variant="outline" :disabled="!orders.prev_page_url" @click="router.visit(orders.prev_page_url, { preserveScroll: true })">Para</Button>
+                    <Button size="sm" variant="outline" :disabled="!orders.prev_page_url" @click="router.visit(orders.prev_page_url, { preserveScroll: true })">{{ $t('posIndex.previous') }}</Button>
                     <span class="min-w-16 text-center text-small font-semibold text-neutral-600">{{ orders.current_page }} / {{ orders.last_page }}</span>
-                    <Button size="sm" variant="outline" :disabled="!orders.next_page_url" @click="router.visit(orders.next_page_url, { preserveScroll: true })">Pas</Button>
+                    <Button size="sm" variant="outline" :disabled="!orders.next_page_url" @click="router.visit(orders.next_page_url, { preserveScroll: true })">{{ $t('posIndex.next') }}</Button>
                 </div>
             </div>
         </Card>
@@ -1262,45 +1262,45 @@ onMounted(() => {
         <div v-else-if="view === 'shifts'" class="space-y-5">
             <div class="grid gap-4 md:grid-cols-3">
                 <Card>
-                    <div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-success-50 text-success-700"><Banknote class="h-5 w-5" /></span><div><p class="text-small text-neutral-500">Arka e pritshme</p><p class="text-h3 text-primary-900">{{ money(currentShift?.expected_cash || 0) }}</p></div></div>
+                    <div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-success-50 text-success-700"><Banknote class="h-5 w-5" /></span><div><p class="text-small text-neutral-500">{{ $t('posIndex.expectedCash') }}</p><p class="text-h3 text-primary-900">{{ money(currentShift?.expected_cash || 0) }}</p></div></div>
                 </Card>
                 <Card>
-                    <div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-info-50 text-info-700"><ReceiptText class="h-5 w-5" /></span><div><p class="text-small text-neutral-500">Porosi në turn</p><p class="text-h3 text-primary-900">{{ currentShift?.completed_orders || 0 }}</p></div></div>
+                    <div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-info-50 text-info-700"><ReceiptText class="h-5 w-5" /></span><div><p class="text-small text-neutral-500">{{ $t('posIndex.ordersInShift') }}</p><p class="text-h3 text-primary-900">{{ currentShift?.completed_orders || 0 }}</p></div></div>
                 </Card>
                 <Card>
-                    <div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-warning-50 text-warning-700"><Clock3 class="h-5 w-5" /></span><div><p class="text-small text-neutral-500">Statusi</p><p class="text-h4 text-primary-900">{{ currentShift ? 'Turn i hapur' : 'Pa turn aktiv' }}</p></div></div>
+                    <div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-warning-50 text-warning-700"><Clock3 class="h-5 w-5" /></span><div><p class="text-small text-neutral-500">{{ $t('posIndex.colStatus') }}</p><p class="text-h4 text-primary-900">{{ currentShift ? $t('posIndex.shiftOpenStatus') : $t('posIndex.noActiveShift') }}</p></div></div>
                 </Card>
             </div>
 
             <Card :padding="false" class="overflow-hidden">
-                <div class="border-b border-neutral-200 px-5 py-4"><h2 class="text-h4 text-primary-900">Historiku i turneve</h2><p class="mt-1 text-small text-neutral-500">30 turnet e fundit dhe diferencat e numërimit të arkës.</p></div>
+                <div class="border-b border-neutral-200 px-5 py-4"><h2 class="text-h4 text-primary-900">{{ $t('posIndex.shiftHistory') }}</h2><p class="mt-1 text-small text-neutral-500">{{ $t('posIndex.shiftHistoryHint') }}</p></div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-neutral-200">
-                        <thead class="bg-neutral-50"><tr><th class="px-5 py-3 text-left text-label text-neutral-600">Turni</th><th class="px-5 py-3 text-left text-label text-neutral-600">Punonjësi</th><th class="px-5 py-3 text-left text-label text-neutral-600">Hapur</th><th class="px-5 py-3 text-left text-label text-neutral-600">Mbyllur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Shitjet</th><th class="px-5 py-3 text-right text-label text-neutral-600">Cash i pritur</th><th class="px-5 py-3 text-right text-label text-neutral-600">Diferenca</th><th class="px-5 py-3 text-left text-label text-neutral-600">Statusi</th><th class="px-5 py-3 text-right text-label text-neutral-600">Veprime</th></tr></thead>
+                        <thead class="bg-neutral-50"><tr><th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colShift') }}</th><th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colEmployee') }}</th><th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colOpened') }}</th><th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colClosed') }}</th><th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('posIndex.colSales') }}</th><th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('posIndex.colExpectedCash') }}</th><th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('posIndex.colVariance') }}</th><th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('posIndex.colStatus') }}</th><th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('posIndex.actions') }}</th></tr></thead>
                         <tbody class="divide-y divide-neutral-100 bg-white">
-                            <tr v-for="shift in shiftHistory" :key="shift.id" class="hover:bg-neutral-50"><td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ shift.id }}</td><td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ shift.user_name || '—' }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.opened_at) }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.closed_at) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-semibold">{{ money(shift.total_sales) }}</td><td class="px-5 py-3.5 text-right text-body-sm">{{ money(shift.expected_cash) }}<div v-for="line in shift.currencies || []" :key="line.currency" class="text-tiny text-neutral-500">{{ moneyIn(line.currency, line.expected_amount) }}</div></td><td class="px-5 py-3.5 text-right text-body-sm font-bold" :class="Math.abs(Number(shift.over_short || 0)) < 0.01 ? 'text-success-700' : 'text-error-700'">{{ shift.over_short === null ? '—' : money(shift.over_short) }}<div v-for="line in shift.currencies || []" :key="'os-' + line.currency" class="text-tiny font-normal" :class="line.over_short === null ? 'text-neutral-400' : (Math.abs(Number(line.over_short)) < 0.01 ? 'text-success-600' : 'text-error-600')">{{ line.over_short === null ? '' : `${line.currency} ${Number(line.over_short) > 0 ? '+' : ''}${Number(line.over_short).toFixed(2)}` }}</div><div v-if="shift.card_over_short !== null && shift.card_over_short !== undefined" class="text-tiny font-normal" :class="Math.abs(Number(shift.card_over_short)) < 0.01 ? 'text-success-600' : 'text-error-600'">Kartë {{ Number(shift.card_over_short) > 0 ? '+' : '' }}{{ Number(shift.card_over_short).toFixed(2) }}</div></td><td class="px-5 py-3.5"><Badge :variant="shift.status === 'open' ? 'success' : 'neutral'" dot size="sm">{{ shift.status === 'open' ? 'Hapur' : 'Mbyllur' }}</Badge></td><td class="px-5 py-3.5 text-right"><Button v-if="canCloseRow(shift)" size="sm" variant="outline" @click="openCloseModal(shift)">Mbyll turnin</Button></td></tr>
+                            <tr v-for="shift in shiftHistory" :key="shift.id" class="hover:bg-neutral-50"><td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ shift.id }}</td><td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ shift.user_name || '—' }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.opened_at) }}</td><td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(shift.closed_at) }}</td><td class="px-5 py-3.5 text-right text-body-sm font-semibold">{{ money(shift.total_sales) }}</td><td class="px-5 py-3.5 text-right text-body-sm">{{ money(shift.expected_cash) }}<div v-for="line in shift.currencies || []" :key="line.currency" class="text-tiny text-neutral-500">{{ moneyIn(line.currency, line.expected_amount) }}</div></td><td class="px-5 py-3.5 text-right text-body-sm font-bold" :class="Math.abs(Number(shift.over_short || 0)) < 0.01 ? 'text-success-700' : 'text-error-700'">{{ shift.over_short === null ? '—' : money(shift.over_short) }}<div v-for="line in shift.currencies || []" :key="'os-' + line.currency" class="text-tiny font-normal" :class="line.over_short === null ? 'text-neutral-400' : (Math.abs(Number(line.over_short)) < 0.01 ? 'text-success-600' : 'text-error-600')">{{ line.over_short === null ? '' : `${line.currency} ${Number(line.over_short) > 0 ? '+' : ''}${Number(line.over_short).toFixed(2)}` }}</div><div v-if="shift.card_over_short !== null && shift.card_over_short !== undefined" class="text-tiny font-normal" :class="Math.abs(Number(shift.card_over_short)) < 0.01 ? 'text-success-600' : 'text-error-600'">{{ $t('posIndex.payCard') }} {{ Number(shift.card_over_short) > 0 ? '+' : '' }}{{ Number(shift.card_over_short).toFixed(2) }}</div></td><td class="px-5 py-3.5"><Badge :variant="shift.status === 'open' ? 'success' : 'neutral'" dot size="sm">{{ shift.status === 'open' ? $t('posIndex.badgeOpen') : $t('posIndex.badgeClosed') }}</Badge></td><td class="px-5 py-3.5 text-right"><Button v-if="canCloseRow(shift)" size="sm" variant="outline" @click="openCloseModal(shift)">{{ $t('posIndex.closeShift') }}</Button></td></tr>
                         </tbody>
                     </table>
                 </div>
-                <div v-if="!shiftHistory.length" class="px-6 py-14 text-center text-body-sm text-neutral-500">Nuk ka ende turne të regjistruara.</div>
+                <div v-if="!shiftHistory.length" class="px-6 py-14 text-center text-body-sm text-neutral-500">{{ $t('posIndex.noShiftsYet') }}</div>
             </Card>
         </div>
         </div>
 
-        <Modal :show="showCancelModal" title="Anulo porosinë" max-width="sm" @close="showCancelModal = false">
+        <Modal :show="showCancelModal" :title="$t('posIndex.cancelOrderTitle')" max-width="sm" @close="showCancelModal = false">
             <div class="space-y-3">
-                <p class="text-body-sm text-neutral-600">Porosia #{{ actionOrder?.id }} do të anulohet dhe stoku i rezervuar do të lirohet.</p>
-                <textarea v-model="actionReason" rows="3" class="w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500" placeholder="Arsyeja e anulimit · e detyrueshme" />
+                <p class="text-body-sm text-neutral-600">{{ $t('posIndex.cancelOrderBody', { id: actionOrder?.id }) }}</p>
+                <textarea v-model="actionReason" rows="3" class="w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('posIndex.cancelReasonPlaceholder')" />
             </div>
-            <template #footer><Button variant="outline" @click="showCancelModal = false">Mbyll</Button><Button variant="danger" :disabled="actionReason.trim().length < 3" @click="submitCancel">Anulo porosinë</Button></template>
+            <template #footer><Button variant="outline" @click="showCancelModal = false">{{ $t('posIndex.close') }}</Button><Button variant="danger" :disabled="actionReason.trim().length < 3" @click="submitCancel">{{ $t('posIndex.cancelOrderTitle') }}</Button></template>
         </Modal>
 
-        <Modal :show="showRefundModal" title="Rimburso porosinë" max-width="sm" @close="showRefundModal = false">
+        <Modal :show="showRefundModal" :title="$t('posIndex.refundOrderTitle')" max-width="sm" @close="showRefundModal = false">
             <div class="space-y-3">
-                <div class="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2.5 text-small text-warning-800">Do të kthehen {{ money(actionOrder?.total_amount) }}, do të krijohet lëvizja e kundërt në Financë dhe artikujt do të rikthehen në magazinë.</div>
-                <textarea v-model="actionReason" rows="3" class="w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500" placeholder="Arsyeja e rimbursimit · e detyrueshme" />
+                <div class="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2.5 text-small text-warning-800">{{ $t('posIndex.refundOrderBody', { amount: money(actionOrder?.total_amount) }) }}</div>
+                <textarea v-model="actionReason" rows="3" class="w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('posIndex.refundReasonPlaceholder')" />
             </div>
-            <template #footer><Button variant="outline" @click="showRefundModal = false">Mbyll</Button><Button variant="danger" :disabled="actionReason.trim().length < 3" @click="submitRefund">Konfirmo rimbursimin</Button></template>
+            <template #footer><Button variant="outline" @click="showRefundModal = false">{{ $t('posIndex.close') }}</Button><Button variant="danger" :disabled="actionReason.trim().length < 3" @click="submitRefund">{{ $t('posIndex.confirmRefund') }}</Button></template>
         </Modal>
 
         <!-- Thermal POS receipt preview -->
@@ -1364,7 +1364,7 @@ onMounted(() => {
                     variant="ghost"
                     size="sm"
                     @click="addOpeningCurrency"
-                >+ Shto gjendje për monedha të tjera</Button>
+                >{{ $t('posIndex.addForeignFloat') }}</Button>
             </div>
             <template #footer>
                 <Button variant="outline" @click="showOpenShift = false">{{ $t('admin.generated.k_182fb16b9fb0') }}</Button>
@@ -1400,10 +1400,10 @@ onMounted(() => {
 
                     <!-- Reported but not in drawer -->
                     <div class="rounded-lg bg-neutral-50/70 px-4 py-3 text-small text-neutral-500 space-y-1">
-                        <p class="font-medium text-neutral-600">Shitje me Kartë</p>
+                        <p class="font-medium text-neutral-600">{{ $t('posIndex.cardSalesSection') }}</p>
                         <div class="flex justify-between"><span>{{ $t('admin.generated.k_af92a6e399a8') }} (sistemi)</span><span class="font-semibold text-primary-900">{{ money(closeShiftTarget.card_sales) }}</span></div>
                         <div v-if="countedCardNum !== null" class="flex justify-between border-t border-neutral-200 pt-1">
-                            <span>POS-i fizik i kartës</span>
+                            <span>{{ $t('posIndex.physicalCardPos') }}</span>
                             <span class="font-medium" :class="cardVariance === 0 ? 'text-success-600' : 'text-error-600'">
                                 {{ money(countedCardNum) }}<template v-if="cardVariance !== 0"> ({{ cardVariance > 0 ? '+' : '' }}{{ cardVariance.toFixed(2) }})</template>
                             </span>
@@ -1431,9 +1431,9 @@ onMounted(() => {
                     <TextInput type="number" step="0.01" min="0" v-model="closeShiftForm.counted_cash" placeholder="0.00" :error="closeShiftForm.errors.counted_cash" />
                 </FormGroup>
 
-                <FormGroup label="Totali nga POS-i fizik i kartës" :error="closeShiftForm.errors.counted_card" :required="cardCountRequired" class="print:hidden">
+                <FormGroup :label="$t('posIndex.countedCardLabel')" :error="closeShiftForm.errors.counted_card" :required="cardCountRequired" class="print:hidden">
                     <TextInput type="number" step="0.01" min="0" v-model="closeShiftForm.counted_card" placeholder="0.00" :error="closeShiftForm.errors.counted_card" />
-                    <p class="mt-1 text-small text-neutral-400">Shkruaj totalin e printuar nga terminali i kartës — duhet të përputhet me shitjet me kartë të sistemit.</p>
+                    <p class="mt-1 text-small text-neutral-400">{{ $t('posIndex.countedCardHint') }}</p>
                 </FormGroup>
 
                 <!-- one count per foreign currency in the drawer -->
