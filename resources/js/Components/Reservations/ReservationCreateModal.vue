@@ -192,6 +192,14 @@ watch(
 // --- Inline "new guest" (stays inside this modal) ---
 const showNewGuest = ref(false);
 const guestForm = useForm({ first_name: '', last_name: '', email: '', phone: '', nationality: '' });
+// Fast add from the picker's empty state: the typed name pre-fills the inline
+// form (first word = first name, rest = last name; the desk completes the rest).
+function quickAddGuest(name) {
+    const parts = String(name).split(/\s+/).filter(Boolean);
+    guestForm.first_name = parts.shift() ?? '';
+    guestForm.last_name = parts.join(' ');
+    showNewGuest.value = true;
+}
 function saveNewGuest() {
     const existingIds = new Set(props.guests.map((g) => g.id));
     guestForm.post(route('guests.store'), {
@@ -260,7 +268,7 @@ function submit() {
             <!-- Shared: guest + dates + channel -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormGroup :label="$t('admin.generated.k_fd3481133d25')" :error="form.errors.guest_id" required>
-                    <SearchableSelect v-model="form.guest_id" :options="guestOptions" :placeholder="$t('admin.generated.k_738e39ddf7e3')" :search-placeholder="$t('admin.generated.k_d9965f809f66')" :error="form.errors.guest_id" />
+                    <SearchableSelect v-model="form.guest_id" :options="guestOptions" :placeholder="$t('admin.generated.k_738e39ddf7e3')" :search-placeholder="$t('admin.generated.k_d9965f809f66')" :error="form.errors.guest_id" :create-label="canCreateGuest ? 'Shto mysafirin' : null" @create="quickAddGuest" />
                     <button v-if="canCreateGuest" type="button" class="mt-1.5 text-tiny text-accent-700 hover:text-accent-800" @click="showNewGuest = !showNewGuest">
                         {{ showNewGuest ? $t('admin.generated.k_343301bf2715') : $t('admin.generated.k_857d0eeb0c90') }}
                     </button>

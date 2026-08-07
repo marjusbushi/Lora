@@ -11,8 +11,11 @@ const props = defineProps({
     searchPlaceholder: { type: String, default: translate('admin.generated.k_be6a5b496e4d') },
     error: { type: String, default: null },
     disabled: { type: Boolean, default: false },
+    // When set, the empty-results state offers "+ {createLabel} “{query}”" and
+    // emits 'create' with the typed query — for quick-add flows.
+    createLabel: { type: String, default: null },
 });
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'create']);
 
 const open = ref(false);
 const q = ref('');
@@ -36,6 +39,10 @@ function toggle() {
 }
 function pick(o) {
     emit('update:modelValue', o.value);
+    open.value = false;
+}
+function createFromQuery() {
+    emit('create', q.value.trim());
     open.value = false;
 }
 function onDocPointer(e) {
@@ -91,7 +98,18 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocPointer));
                 >
                     {{ o.label }}
                 </button>
-                <p v-if="!filtered.length" class="px-3 py-2 text-small text-neutral-400">{{ $t('admin.generated.k_f01d53634d09') }}</p>
+                <div v-if="!filtered.length" class="px-3 py-2">
+                    <p class="text-small text-neutral-400">{{ $t('admin.generated.k_f01d53634d09') }}</p>
+                    <button
+                        v-if="createLabel && q.trim()"
+                        type="button"
+                        class="mt-1.5 flex w-full items-center gap-1.5 rounded-md bg-accent-50 px-2.5 py-2 text-body-sm font-medium text-accent-700 transition-colors hover:bg-accent-100 focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+                        @click="createFromQuery"
+                    >
+                        <span aria-hidden="true">+</span>
+                        <span class="truncate">{{ createLabel }} “{{ q.trim() }}”</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
