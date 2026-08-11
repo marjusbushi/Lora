@@ -13,9 +13,9 @@ use App\Services\BaseCurrency;
  */
 class FinanceAccount extends TenantModel
 {
-    protected $fillable = ['name', 'type', 'currency', 'scope', 'iban', 'is_active'];
+    protected $fillable = ['name', 'type', 'currency', 'scope', 'iban', 'is_active', 'is_system'];
 
-    protected $casts = ['is_active' => 'boolean'];
+    protected $casts = ['is_active' => 'boolean', 'is_system' => 'boolean'];
 
     public function payments()
     {
@@ -43,7 +43,7 @@ class FinanceAccount extends TenantModel
     public static function ensureDefaults(): void
     {
         $currency = BaseCurrency::code();
-        static::firstOrCreate(['name' => 'Arka'], ['type' => 'cash', 'currency' => $currency]);
-        static::firstOrCreate(['name' => 'Banka'], ['type' => 'bank', 'currency' => $currency]);
+        static::firstOrCreate(['name' => 'Arka'], ['type' => 'cash', 'currency' => $currency, 'is_system' => true]);
+        static::firstOrCreate(['name' => 'Banka'], ['type' => 'bank', 'currency' => $currency, 'is_system' => true]);
     }
 }

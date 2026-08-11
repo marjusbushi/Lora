@@ -79,6 +79,7 @@ class FinanceLedger
                 'currency' => BaseCurrency::code(),
                 'scope' => 'general',
                 'is_active' => true,
+                'is_system' => true,
             ]);
         }
 
@@ -96,11 +97,16 @@ class FinanceLedger
             ? 'pos'
             : 'general';
 
+        // Only SYSTEM accounts may absorb automatic money. A custom account a
+        // hotel added by hand (Saturn's "Menaxher") can share type+currency+
+        // scope with a default, but automation must never treat it as one —
+        // the desk moves money there deliberately, with a transfer.
         $account = FinanceAccount::where('type', $type)
             ->where('currency', $currency)
             ->where('scope', $scope)
-            ->orderBy('id')
+            ->where('is_system', true)
             ->orderByDesc('is_active')
+            ->orderBy('id')
             ->first();
 
         if ($account) {
@@ -118,6 +124,7 @@ class FinanceLedger
             return FinanceAccount::where('type', $type)
                 ->where('currency', $currency)
                 ->where('scope', 'general')
+                ->where('is_system', true)
                 ->orderBy('id')
                 ->firstOrFail();
         }
@@ -133,6 +140,7 @@ class FinanceLedger
             'currency' => $currency,
             'scope' => $scope,
             'is_active' => true,
+            'is_system' => true,
         ]);
     }
 
@@ -167,6 +175,7 @@ class FinanceLedger
             'scope' => 'channel',
             'currency' => PricingCurrency::code(),
             'is_active' => true,
+            'is_system' => true,
         ]);
     }
 
@@ -197,9 +206,16 @@ class FinanceLedger
         $channel = $payment->reservation?->channel;
         $ledger->fill([
             'direction' => $type === 'refund' ? 'out' : 'in',
+            // Card/bank/POK money in a foreign currency lands on THAT
+            // currency's bank account (auto-created: "Banka EUR"), mirroring
+            // the POS tender path. Cash deliberately stays base-routed — the
+            // desk runs ONE drawer; POS multicurrency covers foreign drawers.
             'account_id' => ($method === 'ota'
                 ? self::channelAccountFor($channel)
-                : self::accountFor($method))->id,
+                : self::accountFor(
+                    $method,
+                    $method !== 'cash' && $currency !== $baseCurrency ? $currency : null,
+                ))->id,
             'amount' => $payment->amount,
             'currency' => $currency,
             // FinancePayment uses source units per 1 base unit; Payment stores
