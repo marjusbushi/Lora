@@ -5224,6 +5224,7 @@
       "commission": "Komisione",
       "netAdr": "ADR neto",
       "dailyNet": "Të ardhurat neto ditore",
+      "missingCommission": "Mungon komisioni në {count} rezervime OTA në këtë periudhë — komisioni dhe neto dalin të nënvlerësuara.",
       "grossRevenue": "Të ardhura bruto",
       "byChannel": "Performanca sipas kanalit",
       "share": "Pesha",
