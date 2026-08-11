@@ -100,8 +100,16 @@ final class ChannelPerformanceService
             'revenue_share' => $gross > 0 ? round($row['gross_revenue'] / $gross * 100, 1) : 0,
         ])->all();
 
+        // Data-quality guard: an OTA stay with no commission silently deflates
+        // the blended rate (the Aug-2026 migration gap sat at 5.1% unnoticed).
+        $otaMissingCommission = $reservations
+            ->filter(fn (Reservation $reservation) => Reservation::normalizeChannel($reservation->channel) !== 'direct'
+                && (float) $reservation->commission_amount_base <= 0)
+            ->count();
+
         return [
             'period' => $period->toArray(),
+            'data_quality' => ['ota_missing_commission' => $otaMissingCommission],
             'totals' => [
                 'bookings' => (int) collect($rows)->sum('bookings'),
                 'nights' => $nights,
