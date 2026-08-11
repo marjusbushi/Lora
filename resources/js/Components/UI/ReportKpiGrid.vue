@@ -62,6 +62,7 @@ function trendIcon(trend) {
                     <component v-if="item.trendText" :is="trendIcon(item.trend)" class="h-3.5 w-3.5" />
                     <span>{{ valueOf(item.trendText || item.detail) }}</span>
                 </div>
+                <div v-if="item.subtext" class="mt-1 text-tiny text-neutral-400">{{ valueOf(item.subtext) }}</div>
             </Card>
         </component>
     </div>
