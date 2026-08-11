@@ -5707,6 +5707,7 @@
       "title": "Bilance të papaguara & Aging",
       "short": "Borxhet, vonesat dhe prioritetet e arkëtimit.",
       "category": "Financë & arka",
+      "status": { "confirmed": "Konfirmuar", "checked_in": "Brenda", "checked_out": "Larguar" },
       "total": "Totali për arkëtim",
       "overdue": "Vlera e vonuar",
       "collectionRate": "Norma e arkëtimit",

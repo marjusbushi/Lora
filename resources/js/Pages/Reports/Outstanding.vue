@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { getIntlLocale, translate } from '@/i18n';
 import { channelMeta } from '@/channels';
+import { useCurrency } from '@/composables/useCurrency';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -11,25 +12,38 @@ import { AlertTriangle, CircleDollarSign, Gauge, TimerOff } from 'lucide-vue-nex
 
 const props = defineProps({
     analytics: { type: Object, default: () => ({}) },
-    rows: { type: Array, default: () => [] },
-    total: { type: Number, default: 0 },
     canViewReservations: { type: Boolean, default: false },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: '' },
+    baseToPricingRate: { type: Number, default: null },
 });
 
 const activeBucket = ref('all');
-const summary = computed(() => props.analytics.summary || { total: props.total, count: props.rows.length });
+const summary = computed(() => props.analytics.summary || {});
 const buckets = computed(() => props.analytics.buckets || []);
 const statuses = computed(() => props.analytics.statuses || []);
-const allRows = computed(() => props.analytics.rows || props.rows);
+const allRows = computed(() => props.analytics.rows || []);
 const filteredRows = computed(() => activeBucket.value === 'all'
     ? allRows.value
     : allRows.value.filter((row) => row.bucket === activeBucket.value));
 
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-})}`;
+const { baseCode, pricingCode, pricingSymbol } = useCurrency();
+
+// Same rule as Executive/Channels: convert to the selling currency only when
+// it differs from base AND a rate arrived — never a wrong symbol.
+const displayRate = computed(() => {
+    const rate = Number(props.baseToPricingRate || 0);
+    return rate > 0 && pricingCode.value !== baseCode.value ? rate : null;
+});
+const displaySymbol = computed(() => (displayRate.value ? pricingSymbol.value : props.currency));
+
+const money = (value) => {
+    const shown = Number(value ?? 0) * (displayRate.value ?? 1);
+    return `${displaySymbol.value}${shown.toLocaleString(getIntlLocale(), {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    })}`;
+};
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const fmt = (date) => date ? new Date(`${date}T00:00:00`).toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
@@ -43,9 +57,9 @@ const bucketLabels = computed(() => ({
 }));
 
 const statusBadge = {
-    confirmed: { variant: 'info', label: translate('admin.generated.k_ba233950cbc4') },
-    checked_in: { variant: 'success', label: translate('admin.generated.k_ceef4633e6ad') },
-    checked_out: { variant: 'neutral', label: translate('admin.generated.k_657b819bd70e') },
+    confirmed: { variant: 'info', label: translate('reports360.outstandingAging.status.confirmed') },
+    checked_in: { variant: 'success', label: translate('reports360.outstandingAging.status.checked_in') },
+    checked_out: { variant: 'neutral', label: translate('reports360.outstandingAging.status.checked_out') },
 };
 
 const kpis = computed(() => [
@@ -87,6 +101,7 @@ const kpis = computed(() => [
         :category="$t('reports360.outstandingAging.category')"
     >
         <ReportKpiGrid :items="kpis" />
+        <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.65fr)]">
             <Card :padding="false">
