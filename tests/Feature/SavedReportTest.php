@@ -37,6 +37,21 @@ class SavedReportTest extends TestCase
         $this->assertDatabaseMissing('saved_reports', ['id' => $id]);
     }
 
+    public function test_bank_payments_report_can_be_saved(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        // Regression: reports.bankPayments was the one report route missing
+        // from the whitelist — "Ruaj" on Pagesat bankare answered 422.
+        $this->actingAs($admin)->postJson(route('reports.saved.store'), [
+            'name' => 'Pagesat bankare',
+            'route_name' => 'reports.bankPayments',
+            'filters' => ['from' => '2026-08-01', 'to' => '2026-08-31'],
+        ])->assertCreated();
+    }
+
     public function test_scheduler_delivers_only_due_whitelisted_reports(): void
     {
         Mail::fake();
