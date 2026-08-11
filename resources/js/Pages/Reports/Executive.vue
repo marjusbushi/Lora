@@ -2,11 +2,12 @@
 import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { getIntlLocale, translate } from '@/i18n';
+import { useCurrency } from '@/composables/useCurrency';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
-import { Banknote, BedDouble, ChartNoAxesCombined, CircleAlert, Gauge, Target, TrendingUp, WalletCards } from 'lucide-vue-next';
+import { Banknote, BedDouble, ChartNoAxesCombined, CircleAlert, Gauge, LogIn, LogOut, Sparkles, Target, TrendingUp, Users, WalletCards } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -14,13 +15,30 @@ const props = defineProps({
     budget: { type: Object, default: () => ({}) },
     forecast: { type: Object, default: () => ({}) },
     outstanding: { type: Object, default: () => ({}) },
+    outstandingSplit: { type: Object, default: () => ({}) },
+    operations: { type: Object, default: () => ({}) },
     channels: { type: Array, default: () => [] },
     alerts: { type: Array, default: () => [] },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: '' },
+    baseToPricingRate: { type: Number, default: null },
+    occupancyAlertPct: { type: Number, default: 85 },
 });
+
+const { baseCode, pricingCode, pricingSymbol } = useCurrency();
+
+// The owner reads the selling currency (EUR at Saturn); the backend sends
+// base-currency (Lek) figures. Convert for display only when the two differ
+// AND a rate arrived — otherwise fall back to base, never to a wrong symbol.
+const displayRate = computed(() => {
+    const rate = Number(props.baseToPricingRate || 0);
+    return rate > 0 && pricingCode.value !== baseCode.value ? rate : null;
+});
+const displaySymbol = computed(() => (displayRate.value ? pricingSymbol.value : props.currency));
 
 const current = computed(() => props.analytics.current?.kpis || {});
 const changes = computed(() => props.analytics.changes || {});
+const previousYearKpis = computed(() => props.analytics.previous_year?.kpis || {});
 const daily = computed(() => Object.entries(props.analytics.current?.daily || {}).map(([date, value], index) => ({
     date,
     ...value,
@@ -32,24 +50,53 @@ const budgetProgress = computed(() => props.budget.revenue_target
     ? Math.min(100, Math.round(Number(current.value.total_revenue || 0) / Number(props.budget.revenue_target) * 100))
     : null);
 
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (value) => {
+    const shown = Number(value ?? 0) * (displayRate.value ?? 1);
+    return `${displaySymbol.value}${shown.toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const trendText = (key) => changes.value[key] === null || changes.value[key] === undefined
     ? translate('reports360.noComparison')
     : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}${key === 'occupancy' ? ' pp' : '%'}`;
 const trend = (key) => changes.value[key] > 0 ? 'up' : changes.value[key] < 0 ? 'down' : 'flat';
 
+// "vs last year" only when last year actually has data — a hotel new to the
+// system would otherwise show a noisy €0.00 on every card.
+const lastYear = (key, formatter) => {
+    const value = Number(previousYearKpis.value[key] || 0);
+    return value ? `${translate('reports360.lastYearShort')}: ${formatter(value)}` : null;
+};
+
 const kpis = computed(() => [
-    { label: translate('reports360.totalRevenue'), value: money(current.value.total_revenue), tone: 'accent', icon: Banknote, trend: trend('total_revenue'), trendText: trendText('total_revenue') },
-    { label: translate('reports360.occupancy'), value: pct(current.value.occupancy), tone: 'info', icon: BedDouble, trend: trend('occupancy'), trendText: trendText('occupancy') },
-    { label: 'ADR', value: money(current.value.adr), tone: 'neutral', icon: ChartNoAxesCombined, trend: trend('adr'), trendText: trendText('adr') },
-    { label: 'RevPAR', value: money(current.value.revpar), tone: 'success', icon: TrendingUp, trend: trend('revpar'), trendText: trendText('revpar') },
-    { label: 'TRevPAR', value: money(current.value.trevpar), tone: 'warning', icon: Gauge, trend: trend('trevpar'), trendText: trendText('trevpar') },
+    { label: translate('reports360.totalRevenue'), value: money(current.value.total_revenue), tone: 'accent', icon: Banknote, trend: trend('total_revenue'), trendText: trendText('total_revenue'), subtext: lastYear('total_revenue', money) },
+    { label: translate('reports360.occupancy'), value: pct(current.value.occupancy), tone: 'info', icon: BedDouble, trend: trend('occupancy'), trendText: trendText('occupancy'), subtext: lastYear('occupancy', pct) },
+    { label: 'ADR', value: money(current.value.adr), tone: 'neutral', icon: ChartNoAxesCombined, trend: trend('adr'), trendText: trendText('adr'), subtext: lastYear('adr', money) },
+    { label: 'RevPAR', value: money(current.value.revpar), tone: 'success', icon: TrendingUp, trend: trend('revpar'), trendText: trendText('revpar'), subtext: lastYear('revpar', money) },
+    { label: 'TRevPAR', value: money(current.value.trevpar), tone: 'warning', icon: Gauge, trend: trend('trevpar'), trendText: trendText('trevpar'), subtext: lastYear('trevpar', money) },
 ]);
+
+const opsItems = computed(() => {
+    const arrivals = props.operations.arrivals || {};
+    const departures = props.operations.departures || {};
+    const inHouse = props.operations.in_house || {};
+    const roomsToClean = Number(props.operations.rooms_to_clean ?? 0);
+    return [
+        { label: translate('reports360.opsArrivals'), value: `${arrivals.count ?? 0}`, tone: 'info', icon: LogIn, detail: translate('reports360.guestsCount', { count: arrivals.pax ?? 0 }), href: route('reports.guestMovements') },
+        { label: translate('reports360.opsDepartures'), value: `${departures.count ?? 0}`, tone: departures.open_pos > 0 ? 'warning' : 'neutral', icon: LogOut, detail: departures.open_pos > 0 ? translate('reports360.openPosCount', { count: departures.open_pos }) : translate('reports360.guestsCount', { count: departures.pax ?? 0 }), href: route('reports.guestMovements') },
+        { label: translate('reports360.opsInHouse'), value: `${inHouse.count ?? 0}`, tone: 'accent', icon: Users, detail: translate('reports360.guestsCount', { count: inHouse.pax ?? 0 }), href: route('reports.inHouse') },
+        { label: translate('reports360.opsRoomsToClean'), value: `${roomsToClean}`, tone: roomsToClean > 0 ? 'warning' : 'success', icon: Sparkles, href: route('housekeeping.index') },
+    ];
+});
+
+const splitRows = computed(() => [
+    { key: 'overdue', variant: 'error', label: translate('reports360.overdueBalances'), data: props.outstandingSplit.overdue },
+    { key: 'due_at_checkout', variant: 'warning', label: translate('reports360.dueAtCheckout'), data: props.outstandingSplit.due_at_checkout },
+    { key: 'future', variant: 'neutral', label: translate('reports360.futureStays'), data: props.outstandingSplit.future },
+].filter((row) => row.data));
 
 const alertMeta = (alert) => ({
     budget: { variant: 'warning', title: translate('reports360.budgetGap'), detail: money(alert.value), href: route('settings.index', { tab: 'pricing' }) },
-    outstanding: { variant: 'error', title: translate('reports360.outstanding'), detail: `${alert.count} · ${money(alert.value)}`, href: route('reports.outstanding') },
+    outstanding: { variant: 'error', title: translate('reports360.overdueBalances'), detail: `${alert.count} · ${money(alert.value)}`, href: route('reports.outstanding') },
     demand: { variant: 'success', title: translate('reports360.highDemand'), detail: `${alert.date} · ${pct(alert.value)}`, href: route('pricing.index') },
 }[alert.kind] || { variant: 'neutral', title: alert.kind, detail: '', href: route('reports.index') });
 </script>
@@ -57,6 +104,12 @@ const alertMeta = (alert) => ({
 <template>
     <ReportShell :title="$t('reports360.executiveDashboard')" route-name="reports.executive" :filters="filters" :description="$t('reports360.executiveShort')">
         <ReportKpiGrid :items="kpis" :columns="5" />
+        <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
+
+        <h2 class="mt-5 text-tiny font-semibold uppercase tracking-wider text-neutral-500">{{ $t('reports360.todayOps') }}</h2>
+        <div class="mt-2">
+            <ReportKpiGrid :items="opsItems" :columns="4" />
+        </div>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.7fr)]">
             <Card :padding="false">
@@ -142,6 +195,20 @@ const alertMeta = (alert) => ({
                     </Link>
                 </div>
                 <div v-else class="flex items-center gap-3 px-5 py-8"><WalletCards class="h-5 w-5 text-success-600" /><span class="text-body-sm text-neutral-600">{{ $t('reports360.noAlerts') }}</span></div>
+                <div v-if="splitRows.length" class="border-t border-neutral-200 px-5 py-4">
+                    <p class="text-tiny font-semibold uppercase tracking-wider text-neutral-500">{{ $t('reports360.unpaidBreakdown') }}</p>
+                    <ul class="mt-3 space-y-1 list-none p-0">
+                        <li v-for="row in splitRows" :key="row.key">
+                            <Link :href="route('reports.outstanding')" class="-mx-2 flex items-center justify-between gap-3 rounded-md px-2 py-1.5 no-underline hover:bg-neutral-50">
+                                <span class="flex min-w-0 items-center gap-2">
+                                    <Badge :variant="row.variant">{{ row.data.count }}</Badge>
+                                    <span class="truncate text-body-sm text-neutral-600">{{ row.label }}</span>
+                                </span>
+                                <b class="whitespace-nowrap text-body-sm text-primary-900">{{ money(row.data.total) }}</b>
+                            </Link>
+                        </li>
+                    </ul>
+                </div>
             </Card>
         </div>
     </ReportShell>
