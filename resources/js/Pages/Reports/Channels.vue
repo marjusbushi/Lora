@@ -7,6 +7,7 @@ import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import { Banknote, ChartNoAxesCombined, HandCoins, Percent, TriangleAlert } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
 import { useReportDrilldown } from '@/composables/useReportDrilldown';
@@ -53,10 +54,10 @@ const changeText = (key, suffix = '%') => changes.value[key] == null
     : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}${suffix}`;
 
 const kpis = computed(() => [
-    { label: translate('reports360.distribution.netRevenue'), value: money(totals.value.net_revenue), tone: 'success', icon: HandCoins, trend: trend(changes.value.net_revenue), trendText: changeText('net_revenue'), href: can('view_reservations') ? route('reservations.index', props.filters) : null },
-    { label: translate('reports360.distribution.directShare'), value: pct(totals.value.direct_share), tone: 'accent', icon: Percent, trend: trend(changes.value.direct_share), trendText: changeText('direct_share', 'pp'), href: channelHref('direct') },
-    { label: translate('reports360.distribution.commission'), value: money(totals.value.commission), tone: 'warning', icon: Banknote, detail: pct(totals.value.commission_rate) },
-    { label: translate('reports360.distribution.netAdr'), value: money(totals.value.net_adr), tone: 'info', icon: ChartNoAxesCombined, detail: `${totals.value.nights || 0} ${translate('reports360.nights')}` },
+    { label: translate('reports360.distribution.netRevenue'), help: translate('reports360.help.netRevenue'), value: money(totals.value.net_revenue), tone: 'success', icon: HandCoins, trend: trend(changes.value.net_revenue), trendText: changeText('net_revenue'), href: can('view_reservations') ? route('reservations.index', props.filters) : null },
+    { label: translate('reports360.distribution.directShare'), help: translate('reports360.help.directShare'), value: pct(totals.value.direct_share), tone: 'accent', icon: Percent, trend: trend(changes.value.direct_share), trendText: changeText('direct_share', 'pp'), href: channelHref('direct') },
+    { label: translate('reports360.distribution.commission'), help: translate('reports360.help.commission'), value: money(totals.value.commission), tone: 'warning', icon: Banknote, detail: pct(totals.value.commission_rate) },
+    { label: translate('reports360.distribution.netAdr'), help: translate('reports360.help.netAdr'), value: money(totals.value.net_adr), tone: 'info', icon: ChartNoAxesCombined, detail: `${totals.value.nights || 0} ${translate('reports360.nights')}` },
 ]);
 </script>
 
@@ -131,13 +132,13 @@ const kpis = computed(() => [
                     <thead class="bg-neutral-50 text-left text-label text-neutral-600">
                         <tr>
                             <th class="px-5 py-3">{{ $t('reports360.channel') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.distribution.share') }}</th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.distribution.share') }}<InfoTip :text="$t('reports360.help.revenueShare')" :label="$t('reports360.distribution.share')" /></span></th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.distribution.bookings') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.nights') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.distribution.grossRevenue') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.distribution.commission') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.distribution.netRevenue') }}</th>
-                            <th class="px-5 py-3 text-right">{{ $t('reports360.distribution.netAdr') }}</th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.distribution.grossRevenue') }}<InfoTip :text="$t('reports360.help.grossRevenue')" :label="$t('reports360.distribution.grossRevenue')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.distribution.commission') }}<InfoTip :text="$t('reports360.help.commission')" :label="$t('reports360.distribution.commission')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.distribution.netRevenue') }}<InfoTip :text="$t('reports360.help.netRevenue')" :label="$t('reports360.distribution.netRevenue')" /></span></th>
+                            <th class="px-5 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.distribution.netAdr') }}<InfoTip :text="$t('reports360.help.netAdr')" :label="$t('reports360.distribution.netAdr')" /></span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
