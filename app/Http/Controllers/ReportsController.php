@@ -225,11 +225,10 @@ class ReportsController extends Controller
 
         return Inertia::render('Reports/Outstanding', [
             'analytics' => $analytics,
-            // Preserve the original payload while report consumers migrate to analytics.
-            'rows' => $analytics['rows'],
-            'total' => $analytics['summary']['total'],
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 

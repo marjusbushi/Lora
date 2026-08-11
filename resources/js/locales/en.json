@@ -5707,6 +5707,7 @@
       "title": "Outstanding balances & Aging",
       "short": "Debt, overdue balances and collection priorities.",
       "category": "Finance & cash",
+      "status": { "confirmed": "Confirmed", "checked_in": "Inside", "checked_out": "Away" },
       "total": "Total to collect",
       "overdue": "Overdue value",
       "collectionRate": "Collection rate",
