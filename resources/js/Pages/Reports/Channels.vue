@@ -2,11 +2,12 @@
 import { computed } from 'vue';
 import { getIntlLocale, translate } from '@/i18n';
 import { channelMeta } from '@/channels';
+import { useCurrency } from '@/composables/useCurrency';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
-import { Banknote, ChartNoAxesCombined, HandCoins, Percent } from 'lucide-vue-next';
+import { Banknote, ChartNoAxesCombined, HandCoins, Percent, TriangleAlert } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
 import { useReportDrilldown } from '@/composables/useReportDrilldown';
 
@@ -14,6 +15,8 @@ const props = defineProps({
     filters: Object,
     analytics: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: '' },
+    baseToPricingRate: { type: Number, default: null },
 });
 const { can } = useReportDrilldown();
 const channelHref = (channel) => can('view_reservations') ? route('reservations.index', { channel, from: props.filters?.from, to: props.filters?.to }) : null;
@@ -28,7 +31,21 @@ const otaShare = computed(() => Number(totals.value.gross_revenue || 0) > 0
     ? Math.max(0, 100 - Number(totals.value.direct_share || 0))
     : 0);
 
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const { baseCode, pricingCode, pricingSymbol } = useCurrency();
+
+// Same rule as the Executive Dashboard: convert to the selling currency only
+// when it differs from base AND a rate arrived — never show a wrong symbol.
+const displayRate = computed(() => {
+    const rate = Number(props.baseToPricingRate || 0);
+    return rate > 0 && pricingCode.value !== baseCode.value ? rate : null;
+});
+const displaySymbol = computed(() => (displayRate.value ? pricingSymbol.value : props.currency));
+const missingCommission = computed(() => Number(current.value.data_quality?.ota_missing_commission || 0));
+
+const money = (value) => {
+    const shown = Number(value ?? 0) * (displayRate.value ?? 1);
+    return `${displaySymbol.value}${shown.toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const trend = (value) => value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
 const changeText = (key, suffix = '%') => changes.value[key] == null
@@ -52,6 +69,12 @@ const kpis = computed(() => [
         :category="$t('reports360.distribution.category')"
     >
         <ReportKpiGrid :items="kpis" />
+        <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
+
+        <div v-if="missingCommission > 0" class="mt-3 flex items-start gap-2.5 rounded-lg border border-warning-200 bg-warning-50 px-4 py-3">
+            <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-warning-700" />
+            <span class="text-body-sm text-warning-700">{{ $t('reports360.distribution.missingCommission', { count: missingCommission }) }}</span>
+        </div>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]">
             <Card :padding="false">

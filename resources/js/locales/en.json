@@ -5224,6 +5224,7 @@
       "commission": "Commissions",
       "netAdr": "Net ADR",
       "dailyNet": "Daily net revenue",
+      "missingCommission": "Commission is missing on {count} OTA reservations in this period — commission and net revenue are understated.",
       "grossRevenue": "Gross revenue",
       "byChannel": "Performance by channel",
       "share": "Share",

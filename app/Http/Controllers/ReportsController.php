@@ -213,6 +213,8 @@ class ReportsController extends Controller
             'filters' => $period->toArray(),
             'analytics' => $channelPerformance->withComparisons($period),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
