@@ -5137,6 +5137,24 @@
     }
   },
   "reports360": {
+    "help": {
+      "totalRevenue": "Gjithçka e fituar në periudhë: dhomat + bar/POS + shtesat, pas zbritjeve.",
+      "occupancy": "Sa i mbushur është hoteli: netët e shitura pjesëtuar me netët e disponueshme për shitje.",
+      "adr": "Çmimi mesatar për natë të SHITUR. Dhomat bosh nuk llogariten — tregon sa merr kur shet.",
+      "revpar": "Të ardhura për natë të DISPONUESHME (ADR × okupanca). Numri kryesor: gjykon çmimin dhe mbushjen bashkë — çdo dhomë bosh e ul.",
+      "trevpar": "Si RevPAR, por me TË GJITHA të ardhurat (dhomë + bar + shtesa) për natë të disponueshme — sa vlen realisht një mysafir përtej dhomës.",
+      "roomRevenue": "Vetëm të ardhurat nga dhomat (pa bar/POS dhe shtesa), pas zbritjeve.",
+      "netRevenue": "Çfarë të mbetet realisht pas komisioneve të OTA-ve.",
+      "directShare": "Pesha e të ardhurave nga kanalet e tua (recepsioni, telefoni, web-i) — pa komision. Çdo pikë e zhvendosur nga OTA-t kursen komisionin e tyre.",
+      "commission": "Sa të ngarkojnë OTA-t për rezervimet e periudhës.",
+      "netAdr": "Çmimi mesatar për natë PASI hiqet komisioni — versioni i ndershëm i ADR-së për të krahasuar kanalet.",
+      "grossRevenue": "Të ardhurat para komisioneve.",
+      "revenueShare": "Pesha e këtij kanali në të ardhurat bruto të periudhës.",
+      "budget": "Objektivi që ke vendosur për periudhën (Settings → Çmimet); progresi matet ndaj tij.",
+      "forecast30": "Rezervimet tashmë NË LIBRA për 30 ditët e ardhshme — jo parashikim, ajo që është e garantuar deri sot.",
+      "soldNights": "Netët me mysafir, brenda periudhës.",
+      "sellableNights": "Netët që mund të shiteshin: dhomat × ditët, minus netët e bllokuara nga mirëmbajtja."
+    },
     "executiveDashboard": "Dashboard Ekzekutiv",
     "executiveShort": "Performanca dhe sinjalet kryesore.",
     "noComparison": "Pa krahasim",

@@ -1,5 +1,6 @@
 <script setup>
 import Card from '@/Components/UI/Card.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import { Link } from '@inertiajs/vue3';
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-vue-next';
 
@@ -51,8 +52,12 @@ function trendIcon(trend) {
             <Card :class="['h-full border-l-4', tone(item).edge]">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
-                        <p class="text-tiny font-semibold uppercase tracking-wider text-neutral-500">{{ item.label }}</p>
+                        <p class="flex items-center gap-1 text-tiny font-semibold uppercase tracking-wider text-neutral-500">
+                            {{ item.label }}
+                            <InfoTip v-if="item.help" :text="valueOf(item.help)" :label="item.label" />
+                        </p>
                         <p :class="['mt-2 truncate text-h3', tone(item).value]">{{ valueOf(item.value) }}</p>
+                        <p v-if="item.subvalue" class="mt-0.5 truncate text-tiny text-neutral-400">{{ valueOf(item.subvalue) }}</p>
                     </div>
                     <span v-if="item.icon" :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tone(item).icon]">
                         <component :is="item.icon" class="h-4.5 w-4.5" :stroke-width="1.75" />
