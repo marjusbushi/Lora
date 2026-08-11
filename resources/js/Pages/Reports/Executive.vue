@@ -7,6 +7,7 @@ import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import { Banknote, BedDouble, ChartNoAxesCombined, CircleAlert, Gauge, LogIn, LogOut, Sparkles, Target, TrendingUp, Users, WalletCards } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -68,11 +69,11 @@ const lastYear = (key, formatter) => {
 };
 
 const kpis = computed(() => [
-    { label: translate('reports360.totalRevenue'), value: money(current.value.total_revenue), tone: 'accent', icon: Banknote, trend: trend('total_revenue'), trendText: trendText('total_revenue'), subtext: lastYear('total_revenue', money) },
-    { label: translate('reports360.occupancy'), value: pct(current.value.occupancy), tone: 'info', icon: BedDouble, trend: trend('occupancy'), trendText: trendText('occupancy'), subtext: lastYear('occupancy', pct) },
-    { label: 'ADR', value: money(current.value.adr), tone: 'neutral', icon: ChartNoAxesCombined, trend: trend('adr'), trendText: trendText('adr'), subtext: lastYear('adr', money) },
-    { label: 'RevPAR', value: money(current.value.revpar), tone: 'success', icon: TrendingUp, trend: trend('revpar'), trendText: trendText('revpar'), subtext: lastYear('revpar', money) },
-    { label: 'TRevPAR', value: money(current.value.trevpar), tone: 'warning', icon: Gauge, trend: trend('trevpar'), trendText: trendText('trevpar'), subtext: lastYear('trevpar', money) },
+    { label: translate('reports360.totalRevenue'), help: translate('reports360.help.totalRevenue'), value: money(current.value.total_revenue), tone: 'accent', icon: Banknote, trend: trend('total_revenue'), trendText: trendText('total_revenue'), subtext: lastYear('total_revenue', money) },
+    { label: translate('reports360.occupancy'), help: translate('reports360.help.occupancy'), value: pct(current.value.occupancy), tone: 'info', icon: BedDouble, trend: trend('occupancy'), trendText: trendText('occupancy'), subtext: lastYear('occupancy', pct) },
+    { label: 'ADR', help: translate('reports360.help.adr'), value: money(current.value.adr), tone: 'neutral', icon: ChartNoAxesCombined, trend: trend('adr'), trendText: trendText('adr'), subtext: lastYear('adr', money) },
+    { label: 'RevPAR', help: translate('reports360.help.revpar'), value: money(current.value.revpar), tone: 'success', icon: TrendingUp, trend: trend('revpar'), trendText: trendText('revpar'), subtext: lastYear('revpar', money) },
+    { label: 'TRevPAR', help: translate('reports360.help.trevpar'), value: money(current.value.trevpar), tone: 'warning', icon: Gauge, trend: trend('trevpar'), trendText: trendText('trevpar'), subtext: lastYear('trevpar', money) },
 ]);
 
 const opsItems = computed(() => {
@@ -141,7 +142,10 @@ const alertMeta = (alert) => ({
                 <Card>
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-tiny font-semibold uppercase tracking-wider text-neutral-500">{{ $t('reports360.budget') }}</p>
+                            <p class="flex items-center gap-1 text-tiny font-semibold uppercase tracking-wider text-neutral-500">
+                                {{ $t('reports360.budget') }}
+                                <InfoTip :text="$t('reports360.help.budget')" :label="$t('reports360.budget')" />
+                            </p>
                             <p class="mt-2 text-h3 text-primary-900">{{ budget.revenue_target ? money(budget.revenue_target) : '—' }}</p>
                         </div>
                         <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-50 text-accent-700"><Target class="h-4.5 w-4.5" /></span>
@@ -159,7 +163,10 @@ const alertMeta = (alert) => ({
                 </Card>
 
                 <Card>
-                    <p class="text-tiny font-semibold uppercase tracking-wider text-neutral-500">{{ $t('reports360.forecast30') }}</p>
+                    <p class="flex items-center gap-1 text-tiny font-semibold uppercase tracking-wider text-neutral-500">
+                        {{ $t('reports360.forecast30') }}
+                        <InfoTip :text="$t('reports360.help.forecast30')" :label="$t('reports360.forecast30')" />
+                    </p>
                     <div class="mt-3 grid grid-cols-2 gap-3">
                         <div><p class="text-tiny text-neutral-500">{{ $t('reports360.revenue') }}</p><p class="mt-1 text-body font-semibold text-primary-900">{{ money(forecastKpis.total_revenue) }}</p></div>
                         <div><p class="text-tiny text-neutral-500">{{ $t('reports360.occupancy') }}</p><p class="mt-1 text-body font-semibold text-primary-900">{{ pct(forecastKpis.occupancy) }}</p></div>

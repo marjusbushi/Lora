@@ -5137,6 +5137,24 @@
     }
   },
   "reports360": {
+    "help": {
+      "totalRevenue": "Everything earned in the period: rooms + bar/POS + extras, after discounts.",
+      "occupancy": "How full the hotel is: sold room-nights divided by the nights available to sell.",
+      "adr": "Average price per SOLD night. Empty rooms don't count — it shows what you get when you do sell.",
+      "revpar": "Revenue per AVAILABLE night (ADR × occupancy). The key number: it judges price and fill together — every empty room drags it down.",
+      "trevpar": "Like RevPAR but with ALL revenue (room + bar + extras) per available night — what a guest is really worth beyond the room.",
+      "roomRevenue": "Room revenue only (no bar/POS or extras), after discounts.",
+      "netRevenue": "What actually stays with you after OTA commissions.",
+      "directShare": "Share of revenue from your own channels (desk, phone, website) — commission-free. Every point shifted from the OTAs saves their commission.",
+      "commission": "What the OTAs charge for the period's bookings.",
+      "netAdr": "Average per-night price AFTER commission — the honest ADR for comparing channels.",
+      "grossRevenue": "Revenue before commissions.",
+      "revenueShare": "This channel's share of the period's gross revenue.",
+      "budget": "The target you set for this period (Settings → Pricing); progress is measured against it.",
+      "forecast30": "Bookings already ON THE BOOKS for the next 30 days — not a prediction, what is guaranteed as of today.",
+      "soldNights": "Nights with a guest, inside the period.",
+      "sellableNights": "Nights you could have sold: rooms × days, minus maintenance-blocked nights."
+    },
     "executiveDashboard": "Executive Dashboard",
     "executiveShort": "Key performance and alerts.",
     "noComparison": "No comparison",
