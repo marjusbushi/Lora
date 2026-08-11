@@ -5,6 +5,7 @@ import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import { Banknote, BedDouble, ChartNoAxesCombined, Gauge } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -39,10 +40,10 @@ const occupancyDelta = (row) => {
 };
 
 const kpis = computed(() => [
-    { label: translate('reports360.occupancy'), value: pct(kpiValues.value.occupancy), tone: 'info', icon: BedDouble, trend: trend('occupancy'), trendText: trendText('occupancy') },
-    { label: 'ADR', value: money(kpiValues.value.adr), tone: 'accent', icon: ChartNoAxesCombined, trend: trend('adr'), trendText: trendText('adr') },
-    { label: 'RevPAR', value: money(kpiValues.value.revpar), tone: 'success', icon: Gauge, trend: trend('revpar'), trendText: trendText('revpar') },
-    { label: translate('reports360.roomRevenue'), value: money(kpiValues.value.room_revenue), tone: 'neutral', icon: Banknote, trend: trend('room_revenue'), trendText: trendText('room_revenue') },
+    { label: translate('reports360.occupancy'), help: translate('reports360.help.occupancy'), value: pct(kpiValues.value.occupancy), tone: 'info', icon: BedDouble, trend: trend('occupancy'), trendText: trendText('occupancy') },
+    { label: 'ADR', help: translate('reports360.help.adr'), value: money(kpiValues.value.adr), tone: 'accent', icon: ChartNoAxesCombined, trend: trend('adr'), trendText: trendText('adr') },
+    { label: 'RevPAR', help: translate('reports360.help.revpar'), value: money(kpiValues.value.revpar), tone: 'success', icon: Gauge, trend: trend('revpar'), trendText: trendText('revpar') },
+    { label: translate('reports360.roomRevenue'), help: translate('reports360.help.roomRevenue'), value: money(kpiValues.value.room_revenue), tone: 'neutral', icon: Banknote, trend: trend('room_revenue'), trendText: trendText('room_revenue') },
 ]);
 
 const targets = computed(() => [
@@ -112,8 +113,8 @@ const targets = computed(() => [
                         <tr>
                             <th class="px-5 py-3">{{ $t('reports360.revenuePerformance.roomType') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.revenuePerformance.rooms') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.revenuePerformance.soldNights') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.revenuePerformance.sellableNights') }}</th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.revenuePerformance.soldNights') }}<InfoTip :text="$t('reports360.help.soldNights')" :label="$t('reports360.revenuePerformance.soldNights')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.revenuePerformance.sellableNights') }}<InfoTip :text="$t('reports360.help.sellableNights')" :label="$t('reports360.revenuePerformance.sellableNights')" /></span></th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.occupancy') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.roomRevenue') }}</th>
                             <th class="px-4 py-3 text-right">ADR</th>
