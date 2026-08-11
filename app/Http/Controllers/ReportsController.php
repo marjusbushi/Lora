@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CleaningTask;
 use App\Models\FinanceAccount;
 use App\Models\FolioItem;
 use App\Models\Guest;
@@ -9,7 +10,10 @@ use App\Models\Payment;
 use App\Models\PosOrder;
 use App\Models\Reservation;
 use App\Models\Room;
+use App\Models\Setting;
 use App\Services\BaseCurrency;
+use App\Services\CurrencyRates;
+use App\Services\PricingCurrency;
 use App\Services\Reporting\BankPaymentsReportService;
 use App\Services\Reporting\BookingBehaviorService;
 use App\Services\Reporting\BudgetTargetService;
@@ -62,21 +66,29 @@ class ReportsController extends Controller
         BudgetTargetService $budgetTargets,
         OutstandingBalanceService $outstandingBalances,
         StayRevenueAllocator $revenueAllocator,
+        GuestMovementService $guestMovements,
     ): Response {
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+        ]);
+
         [$from, $to] = $this->range($request);
         $period = new ReportingPeriod($from, $to);
         $analytics = $hotelKpis->withComparisons($period);
         $budget = $budgetTargets->forPeriod($period);
-        $outstanding = $outstandingBalances->summary();
+        $outstandingAnalytics = $outstandingBalances->analytics();
         $forecastPeriod = new ReportingPeriod(today()->toDateString(), today()->addDays(29)->toDateString());
         $forecast = $hotelKpis->summary($forecastPeriod);
 
+        // Every figure on this page is base-currency; the channel table must
+        // be too (the *_base columns), or the blocks aren't comparable.
         $channelRows = Reservation::query()
             ->where('status', '!=', 'cancelled')
             ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
             ->whereDate('check_out_date', '>', $period->from->toDateString())
-            ->get(['id', 'channel', 'check_in_date', 'check_out_date', 'total_amount', 'commission_amount'])
+            ->get(['id', 'channel', 'check_in_date', 'check_out_date', 'total_amount_base', 'commission_amount_base'])
             ->groupBy(fn (Reservation $reservation) => Reservation::normalizeChannel($reservation->channel))
             ->map(function ($reservations, string $channel) use ($period, $revenueAllocator) {
                 $revenue = 0.0;
@@ -87,7 +99,7 @@ class ReportsController extends Controller
                     $allocatedRevenue = $revenueAllocator->allocate(
                         $reservation->check_in_date,
                         $reservation->check_out_date,
-                        $reservation->total_amount,
+                        $reservation->total_amount_base,
                         $period,
                     );
                     $revenue += array_sum($allocatedRevenue);
@@ -95,7 +107,7 @@ class ReportsController extends Controller
                     $commission += array_sum($revenueAllocator->allocate(
                         $reservation->check_in_date,
                         $reservation->check_out_date,
-                        $reservation->commission_amount ?? 0,
+                        $reservation->commission_amount_base ?? 0,
                         $period,
                     ));
                 }
@@ -122,6 +134,22 @@ class ReportsController extends Controller
             ->sortByDesc('occupancy')
             ->first();
 
+        // Split what's owed by urgency: OVERDUE (past the due date — act now),
+        // DUE AT CHECKOUT (guest in house / leaving today), and FUTURE stays
+        // that simply haven't arrived yet (normal, not alarm-worthy).
+        $outstandingRows = collect($outstandingAnalytics['rows']);
+        $overdueRows = $outstandingRows->where('bucket', '!=', 'not_due');
+        $dueAtCheckoutRows = $outstandingRows->where('bucket', 'not_due')
+            ->whereIn('status', ['checked_in', 'checked_out']);
+        $futureRows = $outstandingRows->where('bucket', 'not_due')->where('status', 'confirmed');
+        $outstandingSplit = [
+            'overdue' => ['count' => $overdueRows->count(), 'total' => round((float) $overdueRows->sum('balance'), 2)],
+            'due_at_checkout' => ['count' => $dueAtCheckoutRows->count(), 'total' => round((float) $dueAtCheckoutRows->sum('balance'), 2)],
+            'future' => ['count' => $futureRows->count(), 'total' => round((float) $futureRows->sum('balance'), 2)],
+        ];
+
+        $occupancyAlertPct = min(100, max(1, (int) Setting::get('reports.occupancy_alert_pct', 85)));
+
         $alerts = collect();
         if ($budget['revenue_target'] && $analytics['current']['kpis']['total_revenue'] < $budget['revenue_target']) {
             $alerts->push([
@@ -129,22 +157,44 @@ class ReportsController extends Controller
                 'value' => round($budget['revenue_target'] - $analytics['current']['kpis']['total_revenue'], 2),
             ]);
         }
-        if ($outstanding['total'] > 0) {
-            $alerts->push(['kind' => 'outstanding', 'value' => $outstanding['total'], 'count' => $outstanding['count']]);
+        if ($outstandingSplit['overdue']['total'] > 0) {
+            $alerts->push([
+                'kind' => 'outstanding',
+                'value' => $outstandingSplit['overdue']['total'],
+                'count' => $outstandingSplit['overdue']['count'],
+            ]);
         }
-        if (($peakForecast['occupancy'] ?? 0) >= 85) {
+        if (($peakForecast['occupancy'] ?? 0) >= $occupancyAlertPct) {
             $alerts->push(['kind' => 'demand', 'value' => $peakForecast['occupancy'], 'date' => $peakForecast['date']]);
         }
+
+        // Today's operations at a glance — arrivals/departures/in-house/cleaning.
+        $todayPeriod = new ReportingPeriod(today()->toDateString(), today()->toDateString());
+        $movement = $guestMovements->summary($todayPeriod);
+        $operations = [
+            'arrivals' => $movement['summary']['arrivals'],
+            'departures' => $movement['summary']['departures'],
+            'in_house' => $movement['summary']['in_house'],
+            'rooms_to_clean' => CleaningTask::whereIn('status', ['pending', 'in_progress'])->count(),
+        ];
 
         return Inertia::render('Reports/Executive', [
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $analytics,
             'budget' => $budget,
             'forecast' => $forecast,
-            'outstanding' => $outstanding,
+            'outstanding' => [
+                'count' => $outstandingAnalytics['summary']['count'] ?? $outstandingRows->count(),
+                'total' => $outstandingAnalytics['summary']['total'] ?? round((float) $outstandingRows->sum('balance'), 2),
+            ],
+            'outstandingSplit' => $outstandingSplit,
+            'operations' => $operations,
             'channels' => $channelRows,
             'alerts' => $alerts,
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
+            'occupancyAlertPct' => $occupancyAlertPct,
         ]);
     }
 
