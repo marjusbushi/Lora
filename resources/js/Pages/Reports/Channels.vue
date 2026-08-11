@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { getIntlLocale, translate } from '@/i18n';
 import { channelMeta } from '@/channels';
-import { useCurrency } from '@/composables/useCurrency';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -32,21 +32,9 @@ const otaShare = computed(() => Number(totals.value.gross_revenue || 0) > 0
     ? Math.max(0, 100 - Number(totals.value.direct_share || 0))
     : 0);
 
-const { baseCode, pricingCode, pricingSymbol } = useCurrency();
-
-// Same rule as the Executive Dashboard: convert to the selling currency only
-// when it differs from base AND a rate arrived — never show a wrong symbol.
-const displayRate = computed(() => {
-    const rate = Number(props.baseToPricingRate || 0);
-    return rate > 0 && pricingCode.value !== baseCode.value ? rate : null;
-});
-const displaySymbol = computed(() => (displayRate.value ? pricingSymbol.value : props.currency));
+const { pricingCode, displayRate, showBase, money, moneyBase } = useReportCurrency(props);
+const baseLine = (value) => (showBase.value ? moneyBase(value) : null);
 const missingCommission = computed(() => Number(current.value.data_quality?.ota_missing_commission || 0));
-
-const money = (value) => {
-    const shown = Number(value ?? 0) * (displayRate.value ?? 1);
-    return `${displaySymbol.value}${shown.toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const trend = (value) => value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
 const changeText = (key, suffix = '%') => changes.value[key] == null
@@ -54,10 +42,10 @@ const changeText = (key, suffix = '%') => changes.value[key] == null
     : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}${suffix}`;
 
 const kpis = computed(() => [
-    { label: translate('reports360.distribution.netRevenue'), help: translate('reports360.help.netRevenue'), value: money(totals.value.net_revenue), tone: 'success', icon: HandCoins, trend: trend(changes.value.net_revenue), trendText: changeText('net_revenue'), href: can('view_reservations') ? route('reservations.index', props.filters) : null },
+    { label: translate('reports360.distribution.netRevenue'), help: translate('reports360.help.netRevenue'), value: money(totals.value.net_revenue), subvalue: baseLine(totals.value.net_revenue), tone: 'success', icon: HandCoins, trend: trend(changes.value.net_revenue), trendText: changeText('net_revenue'), href: can('view_reservations') ? route('reservations.index', props.filters) : null },
     { label: translate('reports360.distribution.directShare'), help: translate('reports360.help.directShare'), value: pct(totals.value.direct_share), tone: 'accent', icon: Percent, trend: trend(changes.value.direct_share), trendText: changeText('direct_share', 'pp'), href: channelHref('direct') },
-    { label: translate('reports360.distribution.commission'), help: translate('reports360.help.commission'), value: money(totals.value.commission), tone: 'warning', icon: Banknote, detail: pct(totals.value.commission_rate) },
-    { label: translate('reports360.distribution.netAdr'), help: translate('reports360.help.netAdr'), value: money(totals.value.net_adr), tone: 'info', icon: ChartNoAxesCombined, detail: `${totals.value.nights || 0} ${translate('reports360.nights')}` },
+    { label: translate('reports360.distribution.commission'), help: translate('reports360.help.commission'), value: money(totals.value.commission), subvalue: baseLine(totals.value.commission), tone: 'warning', icon: Banknote, detail: pct(totals.value.commission_rate) },
+    { label: translate('reports360.distribution.netAdr'), help: translate('reports360.help.netAdr'), value: money(totals.value.net_adr), subvalue: baseLine(totals.value.net_adr), tone: 'info', icon: ChartNoAxesCombined, detail: `${totals.value.nights || 0} ${translate('reports360.nights')}` },
 ]);
 </script>
 
@@ -108,6 +96,7 @@ const kpis = computed(() => [
                             <Badge variant="success">{{ pct(totals.direct_share) }}</Badge>
                         </div>
                         <p class="mt-2 text-h3 text-accent-700">{{ money(totals.direct_revenue) }}</p>
+                        <p v-if="showBase" class="mt-0.5 text-tiny text-neutral-400">{{ moneyBase(totals.direct_revenue) }}</p>
                     </div>
                     <div class="px-5 py-4">
                         <div class="flex items-center justify-between">
@@ -115,10 +104,11 @@ const kpis = computed(() => [
                             <Badge variant="warning">{{ pct(otaShare) }}</Badge>
                         </div>
                         <p class="mt-2 text-h3 text-warning-700">{{ money(totals.ota_revenue) }}</p>
+                        <p v-if="showBase" class="mt-0.5 text-tiny text-neutral-400">{{ moneyBase(totals.ota_revenue) }}</p>
                     </div>
                 </div>
                 <div class="border-t border-neutral-200 px-5 py-3 text-tiny text-neutral-500">
-                    {{ $t('reports360.distribution.grossRevenue') }} <b class="ml-1 text-primary-900">{{ money(totals.gross_revenue) }}</b>
+                    {{ $t('reports360.distribution.grossRevenue') }} <b class="ml-1 text-primary-900">{{ money(totals.gross_revenue) }}</b><small v-if="showBase" class="ml-1 text-neutral-400">({{ moneyBase(totals.gross_revenue) }})</small>
                 </div>
             </Card>
         </div>
@@ -149,10 +139,10 @@ const kpis = computed(() => [
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ pct(row.revenue_share) }}</td>
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.bookings }}</td>
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.nights }}</td>
-                            <td class="px-4 py-3 text-right text-body-sm text-primary-900">{{ money(row.gross_revenue) }}</td>
-                            <td class="px-4 py-3 text-right text-body-sm text-error-600">{{ row.commission ? `−${money(row.commission)}` : '—' }}</td>
-                            <td class="px-4 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.net_revenue) }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm text-neutral-700">{{ money(row.net_adr) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm text-primary-900">{{ money(row.gross_revenue) }}<small v-if="showBase" class="block text-tiny text-neutral-400">{{ moneyBase(row.gross_revenue) }}</small></td>
+                            <td class="px-4 py-3 text-right text-body-sm text-error-600">{{ row.commission ? `−${money(row.commission)}` : '—' }}<small v-if="showBase && row.commission" class="block text-tiny text-neutral-400">−{{ moneyBase(row.commission) }}</small></td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.net_revenue) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(row.net_revenue) }}</small></td>
+                            <td class="px-5 py-3 text-right text-body-sm text-neutral-700">{{ money(row.net_adr) }}<small v-if="showBase" class="block text-tiny text-neutral-400">{{ moneyBase(row.net_adr) }}</small></td>
                         </tr>
                     </tbody>
                     <tfoot v-if="rows.length" class="border-t-2 border-neutral-200 bg-neutral-50">
@@ -161,10 +151,10 @@ const kpis = computed(() => [
                             <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ Number(totals.gross_revenue || 0) > 0 ? '100%' : '0.0%' }}</td>
                             <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ totals.bookings }}</td>
                             <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ totals.nights }}</td>
-                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ money(totals.gross_revenue) }}</td>
-                            <td class="px-4 py-3 text-right text-body-sm font-semibold text-error-600">{{ totals.commission ? `−${money(totals.commission)}` : '—' }}</td>
-                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ money(totals.net_revenue) }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm font-semibold">{{ money(totals.net_adr) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ money(totals.gross_revenue) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(totals.gross_revenue) }}</small></td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold text-error-600">{{ totals.commission ? `−${money(totals.commission)}` : '—' }}<small v-if="showBase && totals.commission" class="block font-normal text-tiny text-neutral-400">−{{ moneyBase(totals.commission) }}</small></td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ money(totals.net_revenue) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(totals.net_revenue) }}</small></td>
+                            <td class="px-5 py-3 text-right text-body-sm font-semibold">{{ money(totals.net_adr) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(totals.net_adr) }}</small></td>
                         </tr>
                     </tfoot>
                 </table>

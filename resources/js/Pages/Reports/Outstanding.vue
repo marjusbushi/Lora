@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { getIntlLocale, translate } from '@/i18n';
 import { channelMeta } from '@/channels';
-import { useCurrency } from '@/composables/useCurrency';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -27,23 +27,8 @@ const filteredRows = computed(() => activeBucket.value === 'all'
     ? allRows.value
     : allRows.value.filter((row) => row.bucket === activeBucket.value));
 
-const { baseCode, pricingCode, pricingSymbol } = useCurrency();
-
-// Same rule as Executive/Channels: convert to the selling currency only when
-// it differs from base AND a rate arrived — never a wrong symbol.
-const displayRate = computed(() => {
-    const rate = Number(props.baseToPricingRate || 0);
-    return rate > 0 && pricingCode.value !== baseCode.value ? rate : null;
-});
-const displaySymbol = computed(() => (displayRate.value ? pricingSymbol.value : props.currency));
-
-const money = (value) => {
-    const shown = Number(value ?? 0) * (displayRate.value ?? 1);
-    return `${displaySymbol.value}${shown.toLocaleString(getIntlLocale(), {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })}`;
-};
+const { pricingCode, displayRate, showBase, money, moneyBase } = useReportCurrency(props);
+const baseLine = (value) => (showBase.value ? moneyBase(value) : null);
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const fmt = (date) => date ? new Date(`${date}T00:00:00`).toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
@@ -66,6 +51,7 @@ const kpis = computed(() => [
     {
         label: translate('reports360.outstandingAging.total'),
         value: money(summary.value.total),
+        subvalue: baseLine(summary.value.total),
         tone: summary.value.total ? 'error' : 'success',
         icon: CircleDollarSign,
         detail: `${summary.value.count || 0} ${translate('reports360.outstandingAging.accounts')}`,
@@ -73,6 +59,7 @@ const kpis = computed(() => [
     {
         label: translate('reports360.outstandingAging.overdue'),
         value: money(summary.value.overdue_total),
+        subvalue: baseLine(summary.value.overdue_total),
         tone: summary.value.overdue_total ? 'warning' : 'success',
         icon: TimerOff,
         detail: `${summary.value.overdue_count || 0} ${translate('reports360.outstandingAging.accounts')}`,
@@ -87,6 +74,7 @@ const kpis = computed(() => [
     {
         label: translate('reports360.outstandingAging.critical'),
         value: money(summary.value.critical_total),
+        subvalue: baseLine(summary.value.critical_total),
         tone: summary.value.critical_total ? 'error' : 'success',
         icon: AlertTriangle,
         detail: `${summary.value.critical_count || 0} ${translate('reports360.outstandingAging.accounts')}`,
@@ -101,6 +89,7 @@ const kpis = computed(() => [
         :category="$t('reports360.outstandingAging.category')"
     >
         <ReportKpiGrid :items="kpis" />
+        <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
         <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.65fr)]">
@@ -118,7 +107,7 @@ const kpis = computed(() => [
                     >
                         <span class="mb-1.5 flex items-center justify-between gap-3 text-body-sm">
                             <span :class="activeBucket === bucket.key ? 'font-semibold text-accent-700' : 'font-medium text-primary-900'">{{ bucketLabels[bucket.key] }}</span>
-                            <span class="text-neutral-600">{{ bucket.count }} · <b class="text-primary-900">{{ money(bucket.amount) }}</b></span>
+                            <span class="text-neutral-600">{{ bucket.count }} · <b class="text-primary-900">{{ money(bucket.amount) }}</b><small v-if="showBase" class="ml-1 text-neutral-400">({{ moneyBase(bucket.amount) }})</small></span>
                         </span>
                         <span class="block h-2 overflow-hidden rounded-full bg-neutral-100">
                             <i
@@ -141,12 +130,12 @@ const kpis = computed(() => [
                             <Badge :variant="statusBadge[row.status]?.variant || 'neutral'" size="sm">{{ statusBadge[row.status]?.label || row.status }}</Badge>
                             <span class="text-tiny text-neutral-500">{{ row.count }}</span>
                         </span>
-                        <b class="text-body-sm text-primary-900">{{ money(row.amount) }}</b>
+                        <b class="text-right text-body-sm text-primary-900">{{ money(row.amount) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(row.amount) }}</small></b>
                     </div>
                     <div v-if="!statuses.length" class="px-5 py-10 text-center text-body-sm text-neutral-400">{{ $t('reports360.noData') }}</div>
                 </div>
                 <div class="border-t border-neutral-200 px-5 py-3 text-tiny text-neutral-500">
-                    {{ $t('reports360.outstandingAging.average') }} <b class="ml-1 text-primary-900">{{ money(summary.average_balance) }}</b>
+                    {{ $t('reports360.outstandingAging.average') }} <b class="ml-1 text-primary-900">{{ money(summary.average_balance) }}</b><small v-if="showBase" class="ml-1 text-neutral-400">({{ moneyBase(summary.average_balance) }})</small>
                 </div>
             </Card>
         </div>
@@ -205,9 +194,9 @@ const kpis = computed(() => [
                                     {{ row.days_overdue ? `${row.days_overdue} ${$t('reports360.outstandingAging.days')}` : $t('reports360.outstandingAging.notDue') }}
                                 </Badge>
                             </td>
-                            <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ money(row.gross) }}</td>
-                            <td class="px-4 py-3 text-right text-body-sm text-success-700">{{ money(row.paid) }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm font-semibold text-error-700">{{ money(row.balance) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ money(row.gross) }}<small v-if="showBase" class="block text-tiny text-neutral-400">{{ moneyBase(row.gross) }}</small></td>
+                            <td class="px-4 py-3 text-right text-body-sm text-success-700">{{ money(row.paid) }}<small v-if="showBase" class="block text-tiny text-neutral-400">{{ moneyBase(row.paid) }}</small></td>
+                            <td class="px-5 py-3 text-right text-body-sm font-semibold text-error-700">{{ money(row.balance) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(row.balance) }}</small></td>
                         </tr>
                     </tbody>
                 </table>

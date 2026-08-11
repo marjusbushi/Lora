@@ -604,6 +604,11 @@ class ReportsController extends Controller
         RoomTypePerformanceService $performance,
         BudgetTargetService $budgetTargets,
     ): Response {
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+        ]);
+
         [$from, $to] = $this->range($request);
         $period = new ReportingPeriod($from, $to);
 
@@ -612,6 +617,8 @@ class ReportsController extends Controller
             'analytics' => $performance->withComparisons($period),
             'budget' => $budgetTargets->forPeriod($period),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 

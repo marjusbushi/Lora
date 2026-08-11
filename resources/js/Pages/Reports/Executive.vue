@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { getIntlLocale, translate } from '@/i18n';
-import { useCurrency } from '@/composables/useCurrency';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -26,16 +26,8 @@ const props = defineProps({
     occupancyAlertPct: { type: Number, default: 85 },
 });
 
-const { baseCode, pricingCode, pricingSymbol } = useCurrency();
-
-// The owner reads the selling currency (EUR at Saturn); the backend sends
-// base-currency (Lek) figures. Convert for display only when the two differ
-// AND a rate arrived — otherwise fall back to base, never to a wrong symbol.
-const displayRate = computed(() => {
-    const rate = Number(props.baseToPricingRate || 0);
-    return rate > 0 && pricingCode.value !== baseCode.value ? rate : null;
-});
-const displaySymbol = computed(() => (displayRate.value ? pricingSymbol.value : props.currency));
+const { pricingCode, displayRate, showBase, money, moneyBase } = useReportCurrency(props);
+const baseLine = (value) => (showBase.value ? moneyBase(value) : null);
 
 const current = computed(() => props.analytics.current?.kpis || {});
 const changes = computed(() => props.analytics.changes || {});
@@ -51,10 +43,6 @@ const budgetProgress = computed(() => props.budget.revenue_target
     ? Math.min(100, Math.round(Number(current.value.total_revenue || 0) / Number(props.budget.revenue_target) * 100))
     : null);
 
-const money = (value) => {
-    const shown = Number(value ?? 0) * (displayRate.value ?? 1);
-    return `${displaySymbol.value}${shown.toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const trendText = (key) => changes.value[key] === null || changes.value[key] === undefined
     ? translate('reports360.noComparison')
@@ -69,11 +57,11 @@ const lastYear = (key, formatter) => {
 };
 
 const kpis = computed(() => [
-    { label: translate('reports360.totalRevenue'), help: translate('reports360.help.totalRevenue'), value: money(current.value.total_revenue), tone: 'accent', icon: Banknote, trend: trend('total_revenue'), trendText: trendText('total_revenue'), subtext: lastYear('total_revenue', money) },
+    { label: translate('reports360.totalRevenue'), help: translate('reports360.help.totalRevenue'), value: money(current.value.total_revenue), subvalue: baseLine(current.value.total_revenue), tone: 'accent', icon: Banknote, trend: trend('total_revenue'), trendText: trendText('total_revenue'), subtext: lastYear('total_revenue', money) },
     { label: translate('reports360.occupancy'), help: translate('reports360.help.occupancy'), value: pct(current.value.occupancy), tone: 'info', icon: BedDouble, trend: trend('occupancy'), trendText: trendText('occupancy'), subtext: lastYear('occupancy', pct) },
-    { label: 'ADR', help: translate('reports360.help.adr'), value: money(current.value.adr), tone: 'neutral', icon: ChartNoAxesCombined, trend: trend('adr'), trendText: trendText('adr'), subtext: lastYear('adr', money) },
-    { label: 'RevPAR', help: translate('reports360.help.revpar'), value: money(current.value.revpar), tone: 'success', icon: TrendingUp, trend: trend('revpar'), trendText: trendText('revpar'), subtext: lastYear('revpar', money) },
-    { label: 'TRevPAR', help: translate('reports360.help.trevpar'), value: money(current.value.trevpar), tone: 'warning', icon: Gauge, trend: trend('trevpar'), trendText: trendText('trevpar'), subtext: lastYear('trevpar', money) },
+    { label: 'ADR', help: translate('reports360.help.adr'), value: money(current.value.adr), subvalue: baseLine(current.value.adr), tone: 'neutral', icon: ChartNoAxesCombined, trend: trend('adr'), trendText: trendText('adr'), subtext: lastYear('adr', money) },
+    { label: 'RevPAR', help: translate('reports360.help.revpar'), value: money(current.value.revpar), subvalue: baseLine(current.value.revpar), tone: 'success', icon: TrendingUp, trend: trend('revpar'), trendText: trendText('revpar'), subtext: lastYear('revpar', money) },
+    { label: 'TRevPAR', help: translate('reports360.help.trevpar'), value: money(current.value.trevpar), subvalue: baseLine(current.value.trevpar), tone: 'warning', icon: Gauge, trend: trend('trevpar'), trendText: trendText('trevpar'), subtext: lastYear('trevpar', money) },
 ]);
 
 const opsItems = computed(() => {
@@ -131,10 +119,10 @@ const alertMeta = (alert) => ({
                     <div v-else class="flex h-full items-center justify-center text-body-sm text-neutral-400">{{ $t('reports360.noData') }}</div>
                 </div>
                 <div class="flex flex-wrap gap-x-8 gap-y-2 border-t border-neutral-200 px-5 py-3 text-tiny text-neutral-500">
-                    <span>{{ $t('reports360.roomRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.room_revenue) }}</b></span>
-                    <span>{{ $t('reports360.posRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.pos_revenue) }}</b></span>
-                    <span>{{ $t('reports360.otherRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.other_revenue) }}</b></span>
-                    <span>{{ $t('reports360.netRoomRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.net_room_revenue) }}</b></span>
+                    <span>{{ $t('reports360.roomRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.room_revenue) }}</b><small v-if="showBase" class="ml-1 text-neutral-400">({{ moneyBase(current.room_revenue) }})</small></span>
+                    <span>{{ $t('reports360.posRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.pos_revenue) }}</b><small v-if="showBase" class="ml-1 text-neutral-400">({{ moneyBase(current.pos_revenue) }})</small></span>
+                    <span>{{ $t('reports360.otherRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.other_revenue) }}</b><small v-if="showBase" class="ml-1 text-neutral-400">({{ moneyBase(current.other_revenue) }})</small></span>
+                    <span>{{ $t('reports360.netRoomRevenue') }} <b class="ml-1 text-primary-900">{{ money(current.net_room_revenue) }}</b><small v-if="showBase" class="ml-1 text-neutral-400">({{ moneyBase(current.net_room_revenue) }})</small></span>
                 </div>
             </Card>
 
@@ -147,6 +135,7 @@ const alertMeta = (alert) => ({
                                 <InfoTip :text="$t('reports360.help.budget')" :label="$t('reports360.budget')" />
                             </p>
                             <p class="mt-2 text-h3 text-primary-900">{{ budget.revenue_target ? money(budget.revenue_target) : '—' }}</p>
+                            <p v-if="showBase && budget.revenue_target" class="mt-0.5 text-tiny text-neutral-400">{{ moneyBase(budget.revenue_target) }}</p>
                         </div>
                         <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-50 text-accent-700"><Target class="h-4.5 w-4.5" /></span>
                     </div>
@@ -168,7 +157,7 @@ const alertMeta = (alert) => ({
                         <InfoTip :text="$t('reports360.help.forecast30')" :label="$t('reports360.forecast30')" />
                     </p>
                     <div class="mt-3 grid grid-cols-2 gap-3">
-                        <div><p class="text-tiny text-neutral-500">{{ $t('reports360.revenue') }}</p><p class="mt-1 text-body font-semibold text-primary-900">{{ money(forecastKpis.total_revenue) }}</p></div>
+                        <div><p class="text-tiny text-neutral-500">{{ $t('reports360.revenue') }}</p><p class="mt-1 text-body font-semibold text-primary-900">{{ money(forecastKpis.total_revenue) }}</p><p v-if="showBase" class="text-tiny text-neutral-400">{{ moneyBase(forecastKpis.total_revenue) }}</p></div>
                         <div><p class="text-tiny text-neutral-500">{{ $t('reports360.occupancy') }}</p><p class="mt-1 text-body font-semibold text-primary-900">{{ pct(forecastKpis.occupancy) }}</p></div>
                     </div>
                 </Card>
@@ -184,7 +173,7 @@ const alertMeta = (alert) => ({
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-neutral-200">
                         <thead class="bg-neutral-50 text-left text-label text-neutral-600"><tr><th class="px-5 py-3">{{ $t('reports360.channel') }}</th><th class="px-4 py-3 text-right">{{ $t('reports360.nights') }}</th><th class="px-4 py-3 text-right">{{ $t('reports360.revenue') }}</th><th class="px-5 py-3 text-right">{{ $t('reports360.netRevenue') }}</th></tr></thead>
-                        <tbody class="divide-y divide-neutral-100"><tr v-for="row in channels.slice(0, 5)" :key="row.channel"><td class="px-5 py-3 text-body-sm font-medium text-primary-900">{{ row.channel }}</td><td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.nights }}</td><td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ money(row.revenue) }}</td><td class="px-5 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.net) }}</td></tr></tbody>
+                        <tbody class="divide-y divide-neutral-100"><tr v-for="row in channels.slice(0, 5)" :key="row.channel"><td class="px-5 py-3 text-body-sm font-medium text-primary-900">{{ row.channel }}</td><td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.nights }}</td><td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ money(row.revenue) }}<small v-if="showBase" class="block text-tiny text-neutral-400">{{ moneyBase(row.revenue) }}</small></td><td class="px-5 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.net) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(row.net) }}</small></td></tr></tbody>
                     </table>
                     <div v-if="!channels.length" class="px-5 py-8 text-center text-body-sm text-neutral-400">{{ $t('reports360.noData') }}</div>
                 </div>
@@ -211,7 +200,7 @@ const alertMeta = (alert) => ({
                                     <Badge :variant="row.variant">{{ row.data.count }}</Badge>
                                     <span class="truncate text-body-sm text-neutral-600">{{ row.label }}</span>
                                 </span>
-                                <b class="whitespace-nowrap text-body-sm text-primary-900">{{ money(row.data.total) }}</b>
+                                <b class="whitespace-nowrap text-right text-body-sm text-primary-900">{{ money(row.data.total) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(row.data.total) }}</small></b>
                             </Link>
                         </li>
                     </ul>
