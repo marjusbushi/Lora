@@ -31,7 +31,16 @@ class Payment extends TenantModel
             }
             $payment->currency = strtoupper((string) $payment->currency);
             if (! $payment->exchange_rate) {
-                $payment->exchange_rate = MoneySnapshot::make(1, $payment->currency)['exchange_rate'];
+                // A payment against a reservation in the SAME currency must
+                // freeze the reservation's rate, not today's — otherwise the
+                // folio "paid" and "owed" sides convert at different rates and
+                // fully-paid stays show phantom-cent differences.
+                $reservationRate = strtoupper((string) $payment->reservation?->currency) === $payment->currency
+                    ? (float) $payment->reservation?->exchange_rate
+                    : 0.0;
+                $payment->exchange_rate = $reservationRate > 0
+                    ? $reservationRate
+                    : MoneySnapshot::make(1, $payment->currency)['exchange_rate'];
             }
             if ($payment->isDirty('amount') || $payment->amount_base === null) {
                 $payment->amount_base = round((float) $payment->amount * (float) $payment->exchange_rate, 2);
