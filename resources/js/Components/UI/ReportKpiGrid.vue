@@ -57,6 +57,7 @@ function trendIcon(trend) {
                             <InfoTip v-if="item.help" :text="valueOf(item.help)" :label="item.label" />
                         </p>
                         <p :class="['mt-2 truncate text-h3', tone(item).value]">{{ valueOf(item.value) }}</p>
+                        <p v-if="item.subvalue" class="mt-0.5 truncate text-tiny text-neutral-400">{{ valueOf(item.subvalue) }}</p>
                     </div>
                     <span v-if="item.icon" :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tone(item).icon]">
                         <component :is="item.icon" class="h-4.5 w-4.5" :stroke-width="1.75" />

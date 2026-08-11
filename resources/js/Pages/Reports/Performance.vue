@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import { getIntlLocale, translate } from '@/i18n';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -13,6 +14,8 @@ const props = defineProps({
     analytics: { type: Object, default: () => ({}) },
     budget: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: '' },
+    baseToPricingRate: { type: Number, default: null },
 });
 
 const current = computed(() => props.analytics.current || {});
@@ -27,7 +30,7 @@ const daily = computed(() => Object.entries(current.value.daily || {}).map(([dat
 })));
 const maxDailyRevenue = computed(() => Math.max(1, ...daily.value.flatMap((day) => [day.room_revenue, day.previous])));
 
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const { pricingCode, displayRate, showBase, money, moneyBase } = useReportCurrency(props);
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const trendText = (key) => changes.value[key] === null || changes.value[key] === undefined
     ? translate('reports360.noComparison')
@@ -39,11 +42,20 @@ const occupancyDelta = (row) => {
     return Math.round((Number(row.occupancy) - Number(previous)) * 10) / 10;
 };
 
+// "Vjet:" only when last year actually has data — otherwise a new hotel would
+// see noisy zeros on every card (same rule as the Executive Dashboard).
+const previousYearKpis = computed(() => props.analytics.previous_year?.kpis || {});
+const lastYear = (key, formatter) => {
+    const value = Number(previousYearKpis.value[key] || 0);
+    return value ? `${translate('reports360.lastYearShort')}: ${formatter(value)}` : null;
+};
+const baseLine = (value) => (showBase.value ? moneyBase(value) : null);
+
 const kpis = computed(() => [
-    { label: translate('reports360.occupancy'), help: translate('reports360.help.occupancy'), value: pct(kpiValues.value.occupancy), tone: 'info', icon: BedDouble, trend: trend('occupancy'), trendText: trendText('occupancy') },
-    { label: 'ADR', help: translate('reports360.help.adr'), value: money(kpiValues.value.adr), tone: 'accent', icon: ChartNoAxesCombined, trend: trend('adr'), trendText: trendText('adr') },
-    { label: 'RevPAR', help: translate('reports360.help.revpar'), value: money(kpiValues.value.revpar), tone: 'success', icon: Gauge, trend: trend('revpar'), trendText: trendText('revpar') },
-    { label: translate('reports360.roomRevenue'), help: translate('reports360.help.roomRevenue'), value: money(kpiValues.value.room_revenue), tone: 'neutral', icon: Banknote, trend: trend('room_revenue'), trendText: trendText('room_revenue') },
+    { label: translate('reports360.occupancy'), help: translate('reports360.help.occupancy'), value: pct(kpiValues.value.occupancy), tone: 'info', icon: BedDouble, trend: trend('occupancy'), trendText: trendText('occupancy'), subtext: lastYear('occupancy', pct) },
+    { label: 'ADR', help: translate('reports360.help.adr'), value: money(kpiValues.value.adr), subvalue: baseLine(kpiValues.value.adr), tone: 'accent', icon: ChartNoAxesCombined, trend: trend('adr'), trendText: trendText('adr'), subtext: lastYear('adr', money) },
+    { label: 'RevPAR', help: translate('reports360.help.revpar'), value: money(kpiValues.value.revpar), subvalue: baseLine(kpiValues.value.revpar), tone: 'success', icon: Gauge, trend: trend('revpar'), trendText: trendText('revpar'), subtext: lastYear('revpar', money) },
+    { label: translate('reports360.roomRevenue'), help: translate('reports360.help.roomRevenue'), value: money(kpiValues.value.room_revenue), subvalue: baseLine(kpiValues.value.room_revenue), tone: 'neutral', icon: Banknote, trend: trend('room_revenue'), trendText: trendText('room_revenue'), subtext: lastYear('room_revenue', money) },
 ]);
 
 const targets = computed(() => [
@@ -63,6 +75,7 @@ const targets = computed(() => [
         :category="$t('reports360.revenuePerformance.category')"
     >
         <ReportKpiGrid :items="kpis" />
+        <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.65fr)]">
             <Card :padding="false">
@@ -131,9 +144,9 @@ const targets = computed(() => [
                                 <span class="font-semibold text-primary-900">{{ pct(row.occupancy) }}</span>
                                 <small v-if="occupancyDelta(row) !== null" :class="['ml-1', occupancyDelta(row) >= 0 ? 'text-success-600' : 'text-error-600']">{{ occupancyDelta(row) > 0 ? '+' : '' }}{{ occupancyDelta(row) }}pp</small>
                             </td>
-                            <td class="px-4 py-3 text-right text-body-sm font-medium text-primary-900">{{ money(row.room_revenue) }}</td>
-                            <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ money(row.adr) }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.revpar) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm font-medium text-primary-900">{{ money(row.room_revenue) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(row.room_revenue) }}</small></td>
+                            <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ money(row.adr) }}<small v-if="showBase" class="block text-tiny text-neutral-400">{{ moneyBase(row.adr) }}</small></td>
+                            <td class="px-5 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.revpar) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(row.revpar) }}</small></td>
                         </tr>
                     </tbody>
                     <tfoot v-if="rows.length" class="border-t-2 border-neutral-200 bg-neutral-50">
@@ -143,9 +156,9 @@ const targets = computed(() => [
                             <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ kpiValues.occupied_room_nights }}</td>
                             <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ kpiValues.sellable_room_nights }}</td>
                             <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ pct(kpiValues.occupancy) }}</td>
-                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ money(kpiValues.room_revenue) }}</td>
-                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ money(kpiValues.adr) }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm font-semibold">{{ money(kpiValues.revpar) }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ money(kpiValues.room_revenue) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(kpiValues.room_revenue) }}</small></td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold">{{ money(kpiValues.adr) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(kpiValues.adr) }}</small></td>
+                            <td class="px-5 py-3 text-right text-body-sm font-semibold">{{ money(kpiValues.revpar) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(kpiValues.revpar) }}</small></td>
                         </tr>
                     </tfoot>
                 </table>
