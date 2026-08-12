@@ -3,11 +3,15 @@
 namespace Tests\Feature;
 
 use App\Models\Guest;
+use App\Models\PlatformSetting;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomInventorySnapshot;
 use App\Models\RoomType;
+use App\Models\Setting;
+use App\Models\Tenant;
 use App\Models\User;
+use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -84,6 +88,30 @@ class PricingSnapshotTest extends TestCase
         $this->assertSame($count, RoomInventorySnapshot::count(), 'no duplicate rows on rerun');
         $this->assertSame(1, RoomInventorySnapshot::whereDate('stay_date', $in)
             ->where('room_type_id', $type->id)->first()->booked);
+    }
+
+    public function test_snapshot_stores_base_currency_revenue(): void
+    {
+        // Saturn shape: Lek base, EUR selling. The snapshot must store the
+        // BASE value (what PickupPaceService compares against) — storing the
+        // EUR figure made pickup-revenue subtract euros from lek.
+        $tenant = Tenant::query()->sole();
+        $tenant->update(['currency' => 'ALL']);
+        app(TenantContext::class)->set($tenant->fresh());
+        PlatformSetting::set('currencies.rates', ['ALL' => 93.72], 'json');
+        Setting::set('pricing.currency', 'EUR');
+
+        $type = RoomType::create(['name' => 'Std', 'base_price' => 80, 'max_occupancy' => 2, 'amenities' => []]);
+        $room = Room::create(['room_type_id' => $type->id, 'room_number' => '301', 'floor' => 3, 'status' => 'available']);
+        $in = now()->addDays(2)->toDateString();
+        $out = now()->addDays(4)->toDateString();
+        $this->reservation($room, $in, $out); // €100 → L9,372 base, 2 nights
+
+        $this->artisan('pricing:snapshot', ['--days' => 7])->assertSuccessful();
+
+        $night = RoomInventorySnapshot::whereDate('snapshot_date', now()->toDateString())
+            ->whereDate('stay_date', $in)->where('room_type_id', $type->id)->first();
+        $this->assertSame('4686.00', $night->booked_revenue, 'per-night revenue in BASE (L9,372 / 2 nights), not €50');
     }
 
     public function test_command_is_scheduled_nightly(): void
