@@ -491,6 +491,8 @@ class ReportsController extends Controller
             'noShows' => $overdueArrivals,
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
