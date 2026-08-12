@@ -5151,6 +5151,11 @@
       "gmBalance": "Sa i mbetet mysafirit për të paguar: qëndrimi + bar/shtesat − zbritjet − pagesat e bëra. Në nisje duhet të jetë zero.",
       "gmOpenPos": "Porosi POS ende të hapura të mysafirëve që largohen — mbyllini para check-out-it. Shuma poshtë është detyrimi total i nisjeve.",
       "gmInHouseLive": "Kjo listë është gjithmonë LIVE — tregon kush është brenda tani, pavarësisht datave të zgjedhura në filtër.",
+      "rsAvailable": "E lirë: gati për t'u shitur ose caktuar. Ky është statusi i RUAJTUR i dhomës — përditësohet nga stafi dhe nga check-in/check-out.",
+      "rsOccupied": "E zënë: ka mysafir brenda (check-in i bërë).",
+      "rsCleaning": "Në pastrim: pret ose ka pastrim në proces. Nëse s'ka pastrim të hapur, statusi ka mbetur pas — raporti e sinjalizon.",
+      "rsMaintenance": "Në mirëmbajtje: dhoma e bllokuar nga një problem teknik — nuk shitet dot.",
+      "rsStoredVsLive": "Ky raport tregon statusin e RUAJTUR të çdo dhome (mirëmbahet nga stafi). Për pamjen LIVE të gatishmërisë për mbërritjet shih \"Gatishmëria e dhomave\". Rreshtat \"Status i vjetruar?\" tregojnë se statusi s'përputhet me realitetin.",
       "totalRevenue": "Gjithçka e fituar në periudhë: dhomat + bar/POS + shtesat, pas zbritjeve.",
       "occupancy": "Sa i mbushur është hoteli: netët e shitura pjesëtuar me netët e disponueshme për shitje.",
       "adr": "Çmimi mesatar për natë të SHITUR. Dhomat bosh nuk llogariten — tregon sa merr kur shet.",
@@ -5428,6 +5433,18 @@
         "occupied": "Dhoma e mbërritjes nuk është gati",
         "overdue_arrival": "Mbërritje e vonuar — kontrollo rezervimin",
         "overdue_departure": "Nisje e vonuar — mysafiri ende i regjistruar"
+      }
+    },
+    "roomStatus": {
+      "allRooms": "Të gjitha dhomat",
+      "staleChip": "Status i vjetruar?",
+      "staleCount": "{n} dhoma me status që s'përputhet me realitetin — shiko rreshtat e shënuar",
+      "maintenanceOpen": "Problem mirëmbajtjeje i hapur në këtë dhomë",
+      "staleReasons": {
+        "occupied_no_guest": "E zënë, por s'ka asnjë mysafir me check-in — përditësoje statusin te Dhomat.",
+        "guest_not_occupied": "Ka mysafir me check-in, por dhoma s'është shënuar e zënë.",
+        "cleaning_no_task": "Në pastrim, por s'ka pastrim të hapur — liroje te Dhomat.",
+        "maintenance_no_issue": "Në mirëmbajtje, por s'ka problem të hapur — liroje te Dhomat."
       }
     },
     "guestMovements": {

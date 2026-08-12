@@ -5151,6 +5151,11 @@
       "gmBalance": "What the guest still owes: stay + bar/extras − discounts − payments made. It should be zero at departure.",
       "gmOpenPos": "POS orders still open for departing guests — close them before check-out. The amount below is the departures' total balance.",
       "gmInHouseLive": "This list is always LIVE — it shows who is inside right now, regardless of the dates picked in the filter.",
+      "rsAvailable": "Available: ready to sell or assign. This is the room's STORED status — updated by staff and by check-in/check-out.",
+      "rsOccupied": "Occupied: a guest is inside (checked in).",
+      "rsCleaning": "Cleaning: waiting for or undergoing cleaning. If no cleaning task is open, the status has fallen behind — the report flags it.",
+      "rsMaintenance": "Maintenance: the room is blocked by a technical issue — it cannot be sold.",
+      "rsStoredVsLive": "This report shows each room's STORED status (maintained by staff). For the LIVE arrival-readiness view see \"Room readiness\". Rows marked \"Stale status?\" mean the status does not match reality.",
       "totalRevenue": "Everything earned in the period: rooms + bar/POS + extras, after discounts.",
       "occupancy": "How full the hotel is: sold room-nights divided by the nights available to sell.",
       "adr": "Average price per SOLD night. Empty rooms don't count — it shows what you get when you do sell.",
@@ -5428,6 +5433,18 @@
         "occupied": "Arrival room is not ready",
         "overdue_arrival": "Overdue arrival — review the reservation",
         "overdue_departure": "Overdue departure — guest still checked in"
+      }
+    },
+    "roomStatus": {
+      "allRooms": "All rooms",
+      "staleChip": "Stale status?",
+      "staleCount": "{n} rooms whose status does not match reality — check the marked rows",
+      "maintenanceOpen": "Open maintenance issue on this room",
+      "staleReasons": {
+        "occupied_no_guest": "Occupied, but no guest is checked in — update the status under Rooms.",
+        "guest_not_occupied": "A guest is checked in, but the room is not marked occupied.",
+        "cleaning_no_task": "Cleaning, but no cleaning task is open — release it under Rooms.",
+        "maintenance_no_issue": "Maintenance, but no issue is open — release it under Rooms."
       }
     },
     "guestMovements": {

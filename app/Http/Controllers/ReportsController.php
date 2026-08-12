@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CleaningTask;
 use App\Models\FinanceAccount;
+use App\Models\MaintenanceIssue;
 use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\Payment;
@@ -813,13 +814,36 @@ class ReportsController extends Controller
             ->orderBy('room_number')
             ->get(['id', 'room_type_id', 'room_number', 'floor', 'status']);
 
-        $rows = $rooms->map(fn ($r) => [
-            'id' => $r->id,
-            'room_number' => $r->room_number,
-            'floor' => $r->floor,
-            'room_type' => $r->roomType?->name ?? '—',
-            'status' => $r->status,
-        ])->values();
+        // The stored status is maintained by hand and drifts (room 308 sat in
+        // "cleaning" for days after its task was inspected, blocking a
+        // check-in). Cross-check every room against operational truth so the
+        // report flags drift instead of mirroring it.
+        $checkedInRoomIds = Reservation::where('status', 'checked_in')->pluck('room_id')->filter()->unique();
+        $openTaskRoomIds = CleaningTask::whereIn('status', ['pending', 'in_progress'])->pluck('room_id')->filter()->unique();
+        $openIssueRoomIds = MaintenanceIssue::whereNotIn('status', ['verified', 'closed'])->pluck('room_id')->filter()->unique();
+
+        $rows = $rooms->map(function ($r) use ($checkedInRoomIds, $openTaskRoomIds, $openIssueRoomIds) {
+            $stale = null;
+            if ($r->status === 'occupied' && ! $checkedInRoomIds->contains($r->id)) {
+                $stale = 'occupied_no_guest';
+            } elseif ($r->status !== 'occupied' && $checkedInRoomIds->contains($r->id)) {
+                $stale = 'guest_not_occupied';
+            } elseif ($r->status === 'cleaning' && ! $openTaskRoomIds->contains($r->id)) {
+                $stale = 'cleaning_no_task';
+            } elseif ($r->status === 'maintenance' && ! $openIssueRoomIds->contains($r->id)) {
+                $stale = 'maintenance_no_issue';
+            }
+
+            return [
+                'id' => $r->id,
+                'room_number' => $r->room_number,
+                'floor' => $r->floor,
+                'room_type' => $r->roomType?->name ?? '—',
+                'status' => $r->status,
+                'stale' => $stale,
+                'maintenance_open' => $openIssueRoomIds->contains($r->id),
+            ];
+        })->values();
 
         $statuses = ['available', 'occupied', 'cleaning', 'maintenance'];
         $counts = [];
@@ -827,6 +851,7 @@ class ReportsController extends Controller
             $counts[$s] = (int) $rooms->where('status', $s)->count();
         }
         $counts['total'] = (int) $rooms->count();
+        $counts['stale'] = $rows->filter(fn (array $row) => $row['stale'] !== null)->count();
 
         return Inertia::render('Reports/RoomStatus', [
             'rows' => $rows,
