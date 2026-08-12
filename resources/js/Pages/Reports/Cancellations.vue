@@ -3,10 +3,12 @@ import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { getIntlLocale, translate } from '@/i18n';
 import { channelMeta } from '@/channels';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import { AlertTriangle, Ban, CirclePercent, WalletCards } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -14,6 +16,8 @@ const props = defineProps({
     analytics: { type: Object, default: () => ({}) },
     canViewReservations: { type: Boolean, default: false },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: '' },
+    baseToPricingRate: { type: Number, default: null },
 });
 
 const current = computed(() => props.analytics.current || {});
@@ -26,10 +30,8 @@ const riskLevels = computed(() => current.value.risk_levels || {});
 const changes = computed(() => props.analytics.changes || {});
 const maxDailyLoss = computed(() => Math.max(1, ...daily.value.flatMap((day) => [day.cancelled_value || 0, day.no_show_value || 0])));
 
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-})}`;
+const { pricingCode, displayRate, showBase, money, moneyBase } = useReportCurrency(props);
+const baseLine = (value) => (showBase.value ? moneyBase(value) : null);
 const num = (value) => Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const pct = (value) => `${num(value)}%`;
 const trend = (value) => value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
@@ -41,6 +43,7 @@ const riskVariant = (level) => ({ critical: 'error', high: 'warning', medium: 'i
 const kpis = computed(() => [
     {
         label: translate('reports360.cancellationRisk.cancellationRate'),
+        help: translate('reports360.help.cancellationRate'),
         value: pct(summary.value.cancellation_rate),
         tone: 'error',
         icon: CirclePercent,
@@ -49,7 +52,9 @@ const kpis = computed(() => [
     },
     {
         label: translate('reports360.cancellationRisk.lostValue'),
+        help: translate('reports360.help.lostValue'),
         value: money(summary.value.lost_value),
+        subvalue: baseLine(summary.value.lost_value),
         tone: 'warning',
         icon: WalletCards,
         trend: trend(changes.value.lost_value),
@@ -57,6 +62,7 @@ const kpis = computed(() => [
     },
     {
         label: translate('reports360.cancellationRisk.noShowRate'),
+        help: translate('reports360.help.noShow'),
         value: pct(summary.value.no_show_rate),
         tone: 'warning',
         icon: Ban,
@@ -65,6 +71,7 @@ const kpis = computed(() => [
     },
     {
         label: translate('reports360.cancellationRisk.atRisk'),
+        help: translate('reports360.help.atRisk'),
         value: summary.value.at_risk_count || 0,
         tone: summary.value.at_risk_count ? 'error' : 'success',
         icon: AlertTriangle,
@@ -82,6 +89,7 @@ const kpis = computed(() => [
         :category="$t('reports360.cancellationRisk.category')"
     >
         <ReportKpiGrid :items="kpis" />
+        <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]">
             <Card :padding="false">
@@ -141,9 +149,9 @@ const kpis = computed(() => [
                     </div>
                 </div>
                 <div class="border-t border-neutral-200 px-5 py-3 text-tiny text-neutral-500">
-                    {{ $t('reports360.cancellationRisk.cancelledValue') }} <b class="ml-1 text-primary-900">{{ money(summary.cancelled_value) }}</b>
+                    {{ $t('reports360.cancellationRisk.cancelledValue') }} <b class="ml-1 text-primary-900">{{ money(summary.cancelled_value) }}</b><small v-if="showBase" class="ml-1 text-neutral-400">({{ moneyBase(summary.cancelled_value) }})</small>
                     <span class="mx-2">·</span>
-                    No-show <b class="ml-1 text-primary-900">{{ money(summary.no_show_value) }}</b>
+                    No-show <b class="ml-1 text-primary-900">{{ money(summary.no_show_value) }}</b><small v-if="showBase" class="ml-1 text-neutral-400">({{ moneyBase(summary.no_show_value) }})</small>
                 </div>
             </Card>
         </div>
@@ -159,11 +167,11 @@ const kpis = computed(() => [
                             <th class="px-5 py-3">{{ $t('reports360.channel') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.cancellationRisk.totalBookings') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.cancellationRisk.cancelled') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.cancellationRisk.cancellationRate') }}</th>
-                            <th class="px-4 py-3 text-right">No-show</th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.cancellationRisk.cancellationRate') }}<InfoTip :text="$t('reports360.help.cancellationRate')" :label="$t('reports360.cancellationRisk.cancellationRate')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">No-show<InfoTip :text="$t('reports360.help.noShow')" label="No-show" /></span></th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.cancellationRisk.noShowRate') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.cancellationRisk.atRisk') }}</th>
-                            <th class="px-5 py-3 text-right">{{ $t('reports360.cancellationRisk.lostValue') }}</th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.cancellationRisk.atRisk') }}<InfoTip :text="$t('reports360.help.atRisk')" :label="$t('reports360.cancellationRisk.atRisk')" /></span></th>
+                            <th class="px-5 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.cancellationRisk.lostValue') }}<InfoTip :text="$t('reports360.help.lostValue')" :label="$t('reports360.cancellationRisk.lostValue')" /></span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
@@ -180,7 +188,7 @@ const kpis = computed(() => [
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ row.no_shows }}</td>
                             <td class="px-4 py-3 text-right text-body-sm text-warning-700">{{ pct(row.no_show_rate) }}</td>
                             <td class="px-4 py-3 text-right text-body-sm" :class="row.at_risk ? 'font-semibold text-error-700' : 'text-neutral-500'">{{ row.at_risk }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.lost_value) }}</td>
+                            <td class="px-5 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.lost_value) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(row.lost_value) }}</small></td>
                         </tr>
                     </tbody>
                 </table>
@@ -201,9 +209,9 @@ const kpis = computed(() => [
                             <th class="px-4 py-3">{{ $t('reports360.cancellationRisk.room') }}</th>
                             <th class="px-4 py-3">Check-in</th>
                             <th class="px-4 py-3">{{ $t('reports360.channel') }}</th>
-                            <th class="px-4 py-3">{{ $t('reports360.cancellationRisk.riskScore') }}</th>
+                            <th class="px-4 py-3"><span class="inline-flex items-center gap-1">{{ $t('reports360.cancellationRisk.riskScore') }}<InfoTip :text="$t('reports360.help.riskScore')" :label="$t('reports360.cancellationRisk.riskScore')" /></span></th>
                             <th class="px-4 py-3">{{ $t('reports360.cancellationRisk.action') }}</th>
-                            <th class="px-5 py-3 text-right">{{ $t('reports360.cancellationRisk.exposure') }}</th>
+                            <th class="px-5 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.cancellationRisk.exposure') }}<InfoTip :text="$t('reports360.help.exposure')" :label="$t('reports360.cancellationRisk.exposure')" /></span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
@@ -222,6 +230,7 @@ const kpis = computed(() => [
                             <td class="px-4 py-3 text-body-sm font-medium text-primary-900">{{ $t(`reports360.cancellationRisk.actions.${row.recommended_action}`) }}</td>
                             <td class="px-5 py-3 text-right">
                                 <b class="block text-body-sm text-error-700">{{ money(row.balance) }}</b>
+                                <small v-if="showBase" class="block text-tiny text-neutral-400">{{ moneyBase(row.balance) }}</small>
                                 <span class="text-tiny text-neutral-500">{{ $t('reports360.cancellationRisk.bookingValue') }} {{ money(row.value) }}</span>
                             </td>
                         </tr>
@@ -254,7 +263,7 @@ const kpis = computed(() => [
                             <td class="px-4 py-3"><Badge :variant="row.type === 'cancelled' ? 'error' : 'warning'">{{ row.type === 'cancelled' ? $t('reports360.cancellationRisk.cancelled') : 'No-show' }}</Badge></td>
                             <td class="px-4 py-3 text-body-sm text-neutral-600">{{ row.check_in }}</td>
                             <td class="px-4 py-3 text-body-sm text-neutral-600">{{ channelMeta(row.channel).label }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.value) }}</td>
+                            <td class="px-5 py-3 text-right text-body-sm font-semibold text-primary-900">{{ money(row.value) }}<small v-if="showBase" class="block font-normal text-tiny text-neutral-400">{{ moneyBase(row.value) }}</small></td>
                         </tr>
                     </tbody>
                 </table>
