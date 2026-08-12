@@ -128,10 +128,10 @@ const targets = computed(() => [
                             <th class="px-4 py-3 text-right">{{ $t('reports360.revenuePerformance.rooms') }}</th>
                             <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.revenuePerformance.soldNights') }}<InfoTip :text="$t('reports360.help.soldNights')" :label="$t('reports360.revenuePerformance.soldNights')" /></span></th>
                             <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.revenuePerformance.sellableNights') }}<InfoTip :text="$t('reports360.help.sellableNights')" :label="$t('reports360.revenuePerformance.sellableNights')" /></span></th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.occupancy') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.roomRevenue') }}</th>
-                            <th class="px-4 py-3 text-right">ADR</th>
-                            <th class="px-5 py-3 text-right">RevPAR</th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.occupancy') }}<InfoTip :text="$t('reports360.help.occupancy')" :label="$t('reports360.occupancy')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.roomRevenue') }}<InfoTip :text="$t('reports360.help.roomRevenue')" :label="$t('reports360.roomRevenue')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">ADR<InfoTip :text="$t('reports360.help.adr')" label="ADR" /></span></th>
+                            <th class="px-5 py-3 text-right"><span class="inline-flex items-center gap-1">RevPAR<InfoTip :text="$t('reports360.help.revpar')" label="RevPAR" /></span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
