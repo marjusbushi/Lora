@@ -5154,6 +5154,8 @@
       "forecast30": "Rezervimet tashmë NË LIBRA për 30 ditët e ardhshme — jo parashikim, ajo që është e garantuar deri sot.",
       "soldNights": "Netët me mysafir, brenda periudhës.",
       "sellableNights": "Netët që mund të shiteshin: dhomat × ditët, minus netët e bllokuara nga mirëmbajtja.",
+      "materialization": "E mësuar nga datat e mbyllura: nga netët që fotoja tregonte N ditë para mbërritjes, pjesa që ndodhi realisht. Nën 100% = anulimet hanë pjesë të librit; mbi 100% = rezervimet e minutës së fundit i tejkalojnë.",
+      "expectedArrivals": "Netët e sotme në libra, të korrigjuara me normën e mësuar të materializimit — numri realist, jo ai optimist.",
       "onBooksNights": "Netët e rezervuara TASHMË në libra për periudhën — ç'ke në dorë sot, jo parashikim.",
       "onBooksRevenue": "Vlera e atyre netëve të rezervuara, siç është rezervuar sot.",
       "pickup": "Ndryshimi që nga fotoja e librit N ditë më parë: sa ke shtuar (+) ose humbur (−) që atëherë.",
@@ -5237,7 +5239,11 @@
       "referenceNights": "Net referencë",
       "next7": "7 ditët e ardhshme",
       "next30": "30 ditët e ardhshme",
-      "next90": "90 ditët e ardhshme"
+      "next90": "90 ditët e ardhshme",
+      "expectedArrivals": "Pritet të mbërrijnë",
+      "materialization": "Materializimi",
+      "materializationDetail": "{pct}% materializim @ {days}d",
+      "sampleDays": "{count} ditë mësimi"
     },
     "distribution": {
       "title": "Direct vs OTA",
