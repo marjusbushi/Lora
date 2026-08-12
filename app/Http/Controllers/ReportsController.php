@@ -917,6 +917,8 @@ class ReportsController extends Controller
             'activeTab' => $request->input('tab', 'arrivals'),
             'analytics' => $report->summary(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -959,8 +961,34 @@ class ReportsController extends Controller
     }
 
     /** from/to (default = current month) + inclusive day count. */
+    /**
+     * Shared date window for every report endpoint. Validates HERE so all
+     * callers are protected centrally: malformed dates 422 instead of a
+     * Carbon parse 500, and the window is capped at 367 days so a crafted
+     * URL cannot load the whole reservation history in one request.
+     */
     private function range(Request $request): array
     {
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => [
+                'nullable',
+                'date_format:Y-m-d',
+                'after_or_equal:from',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    // Cap the EFFECTIVE window: with "from" omitted it defaults
+                    // to the start of the month, so a lone far-future "to"
+                    // must not slip past the cap.
+                    $effectiveFrom = $request->input('from', now()->startOfMonth()->toDateString());
+                    if (Carbon::parse($effectiveFrom)->diffInDays(Carbon::parse($value)) > 366) {
+                        $fail(app()->getLocale() === 'sq'
+                            ? 'Periudha e raportit nuk mund të kalojë 367 ditë.'
+                            : 'The report period cannot exceed 367 days.');
+                    }
+                },
+            ],
+        ]);
+
         $from = $request->input('from', now()->startOfMonth()->toDateString());
         $to = $request->input('to', now()->endOfMonth()->toDateString());
         $days = Carbon::parse($from)->diffInDays(Carbon::parse($to)) + 1;
