@@ -6,6 +6,7 @@ import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import Card from '@/Components/UI/Card.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import { CalendarClock, CalendarDays, Percent, ReceiptText } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -54,7 +55,9 @@ const kpis = computed(() => [
     },
     {
         label: translate('reports360.bookingBehavior.avgLead'),
+        help: translate('reports360.help.leadTime'),
         value: `${num(summary.value.avg_lead)} ${translate('reports360.bookingBehavior.days')}`,
+        subtext: `${translate('reports360.bookingBehavior.medianLead')}: ${num(summary.value.median_lead)} ${translate('reports360.bookingBehavior.days')}`,
         tone: 'info',
         icon: CalendarClock,
         trend: trend(changes.value.avg_lead),
@@ -62,6 +65,7 @@ const kpis = computed(() => [
     },
     {
         label: translate('reports360.bookingBehavior.avgStay'),
+        help: translate('reports360.help.lengthOfStay'),
         value: `${num(summary.value.avg_los)} ${translate('reports360.nights')}`,
         tone: 'success',
         icon: CalendarDays,
@@ -70,6 +74,7 @@ const kpis = computed(() => [
     },
     {
         label: translate('reports360.bookingBehavior.sameDayShare'),
+        help: translate('reports360.help.sameDayShare'),
         value: pct(summary.value.same_day_share),
         tone: 'warning',
         icon: Percent,
@@ -103,8 +108,9 @@ const kpis = computed(() => [
         <Card class="mt-4" :padding="false">
             <div class="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
                 <h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.bookingBehavior.byChannel') }}</h2>
-                <span class="text-tiny text-neutral-500">
+                <span class="flex items-center gap-1 text-tiny text-neutral-500">
                     {{ $t('reports360.bookingBehavior.medianLead') }}: {{ num(summary.median_lead) }} {{ $t('reports360.bookingBehavior.days') }}
+                    <InfoTip :text="$t('reports360.help.medianVsAvg')" :label="$t('reports360.bookingBehavior.medianLead')" />
                 </span>
             </div>
             <div class="overflow-x-auto">
@@ -114,10 +120,10 @@ const kpis = computed(() => [
                             <th class="px-5 py-3">{{ $t('reports360.channel') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.bookingBehavior.share') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.bookingBehavior.bookings') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.bookingBehavior.avgLead') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.bookingBehavior.medianLead') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.bookingBehavior.avgStay') }}</th>
-                            <th class="px-5 py-3 text-right">{{ $t('reports360.bookingBehavior.longStay') }}</th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.bookingBehavior.avgLead') }}<InfoTip :text="$t('reports360.help.leadTime')" :label="$t('reports360.bookingBehavior.avgLead')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.bookingBehavior.medianLead') }}<InfoTip :text="$t('reports360.help.medianVsAvg')" :label="$t('reports360.bookingBehavior.medianLead')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.bookingBehavior.avgStay') }}<InfoTip :text="$t('reports360.help.lengthOfStay')" :label="$t('reports360.bookingBehavior.avgStay')" /></span></th>
+                            <th class="px-5 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.bookingBehavior.longStay') }}<InfoTip :text="$t('reports360.help.longStayShare')" :label="$t('reports360.bookingBehavior.longStay')" /></span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
