@@ -5153,7 +5153,13 @@
       "budget": "The target you set for this period (Settings → Pricing); progress is measured against it.",
       "forecast30": "Bookings already ON THE BOOKS for the next 30 days — not a prediction, what is guaranteed as of today.",
       "soldNights": "Nights with a guest, inside the period.",
-      "sellableNights": "Nights you could have sold: rooms × days, minus maintenance-blocked nights."
+      "sellableNights": "Nights you could have sold: rooms × days, minus maintenance-blocked nights.",
+      "onBooksNights": "Nights ALREADY reserved on the books for this period — what you hold today, not a forecast.",
+      "onBooksRevenue": "The value of those reserved nights, as booked today.",
+      "pickup": "The change since the book's photo N days ago: what you gained (+) or lost (−) since then.",
+      "horizon": "How many days back the comparison photo of the booking book was taken.",
+      "snapshotDate": "The date the booking-book photo was taken (every night at 03:30).",
+      "referenceNights": "Nights that were on the books on the photo's day."
     },
     "executiveDashboard": "Executive Dashboard",
     "executiveShort": "Key performance and alerts.",
