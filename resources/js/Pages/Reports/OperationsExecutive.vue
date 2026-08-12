@@ -26,6 +26,12 @@ const actionsTruncated = computed(() => Number(props.analytics.actions_truncated
 const number = (value, digits = 0) => Number(value || 0).toLocaleString(getIntlLocale(), { maximumFractionDigits: digits });
 const { money, moneyBase, showBase, displayRate, pricingCode } = useReportCurrency(props);
 const updatedAt = computed(() => props.analytics.as_of ? new Date(props.analytics.as_of).toLocaleTimeString(getIntlLocale(), { hour: '2-digit', minute: '2-digit' }) : '—');
+const attentionRooms = computed(() => readiness.value.attention_rooms || []);
+const attentionRoomsLabel = computed(() => {
+    const shown = attentionRooms.value.slice(0, 3).join(' · ');
+    const rest = attentionRooms.value.length - 3;
+    return rest > 0 ? `${shown} +${rest}` : shown;
+});
 const overdueTag = (count) => translate('reports360.operationsExecutive.overdueTag', { n: number(count) });
 const kpis = computed(() => [
     {
@@ -97,7 +103,13 @@ const actionHref = (action) => {
             <Card :padding="false">
                 <div class="border-b border-neutral-200 px-5 py-4"><h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.operationsExecutive.todayControl') }}</h2></div>
                 <div class="grid grid-cols-2 gap-px bg-neutral-200 sm:grid-cols-4">
-                    <div class="bg-white px-5 py-5"><p class="flex items-center gap-1 text-tiny text-neutral-500">{{ $t('reports360.operationsExecutive.attention') }}<InfoTip :text="$t('reports360.help.opsAttention')" :label="$t('reports360.operationsExecutive.attention')" /></p><p class="mt-1 text-title font-semibold text-error-600">{{ readiness.attention || 0 }}</p></div>
+                    <div class="bg-white px-5 py-5">
+                        <p class="flex items-center gap-1 text-tiny text-neutral-500">{{ $t('reports360.operationsExecutive.attention') }}<InfoTip :text="$t('reports360.help.opsAttention')" :label="$t('reports360.operationsExecutive.attention')" /></p>
+                        <p class="mt-1 text-title font-semibold" :class="Number(readiness.attention) ? 'text-error-600' : 'text-success-700'">{{ readiness.attention || 0 }}</p>
+                        <Link v-if="attentionRooms.length" :href="route('reports.roomReadiness')" class="mt-0.5 block truncate text-tiny text-neutral-500 underline decoration-neutral-300 underline-offset-2 hover:text-primary-900 focus:outline-none focus:ring-2 focus:ring-accent-500" :title="attentionRooms.join(', ')">
+                            {{ attentionRoomsLabel }}
+                        </Link>
+                    </div>
                     <div class="bg-white px-5 py-5"><p class="flex items-center gap-1 text-tiny text-neutral-500">{{ $t('reports360.operationsExecutive.openPos') }}<InfoTip :text="$t('reports360.help.opsOpenPos')" :label="$t('reports360.operationsExecutive.openPos')" /></p><p class="mt-1 text-title font-semibold text-primary-900">{{ flow.open_pos || 0 }}</p></div>
                     <div class="bg-white px-5 py-5"><p class="flex items-center gap-1 text-tiny text-neutral-500">{{ $t('reports360.operationsExecutive.balance') }}<InfoTip :text="$t('reports360.help.opsDepartureBalance')" :label="$t('reports360.operationsExecutive.balance')" /></p><p class="mt-1 text-title font-semibold" :class="Number(flow.departure_balance) > 0 ? 'text-error-600' : 'text-success-700'">{{ money(flow.departure_balance) }}</p><small v-if="showBase" class="block text-tiny text-neutral-400">{{ moneyBase(flow.departure_balance) }}</small></div>
                     <div class="bg-white px-5 py-5"><p class="flex items-center gap-1 text-tiny text-neutral-500">{{ $t('reports360.operationsExecutive.overdue') }}<InfoTip :text="$t('reports360.help.opsMaintOverdue')" :label="$t('reports360.operationsExecutive.overdue')" /></p><p class="mt-1 text-title font-semibold" :class="Number(maintenance.overdue) ? 'text-error-600' : 'text-success-700'">{{ maintenance.overdue || 0 }}</p></div>

@@ -92,7 +92,36 @@ class OperationsExecutiveReportTest extends TestCase
                 ->component('Reports/OperationsExecutive')
                 ->where('analytics.flow.arrivals_overdue', 0)
                 ->where('analytics.flow.departures_overdue', 0)
-                ->where('analytics.actions_truncated', 0));
+                ->where('analytics.actions_truncated', 0)
+                ->where('analytics.readiness.attention_rooms', []));
+    }
+
+    public function test_attention_tile_names_the_rooms_that_are_not_ready(): void
+    {
+        $admin = $this->admin();
+        $type = RoomType::create(['name' => 'Std', 'base_price' => 80, 'max_occupancy' => 3, 'amenities' => []]);
+        $guest = Guest::create(['first_name' => 'Ana', 'last_name' => 'B']);
+
+        // Arrival into a room still being cleaned → not ready → needs attention.
+        Reservation::create([
+            'room_id' => $this->makeRoom($type, '205', 'cleaning')->id, 'guest_id' => $guest->id, 'created_by' => $admin->id,
+            'check_in_date' => today()->toDateString(), 'check_out_date' => today()->addDay()->toDateString(),
+            'status' => 'confirmed', 'total_amount' => 100, 'adults' => 1, 'channel' => 'direct',
+        ]);
+        // Arrival into an available room → ready → must NOT be listed.
+        Reservation::create([
+            'room_id' => $this->makeRoom($type, '206')->id, 'guest_id' => $guest->id, 'created_by' => $admin->id,
+            'check_in_date' => today()->toDateString(), 'check_out_date' => today()->addDay()->toDateString(),
+            'status' => 'confirmed', 'total_amount' => 100, 'adults' => 1, 'channel' => 'direct',
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('reports.operationsExecutive'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Reports/OperationsExecutive')
+                ->where('analytics.readiness.attention', 1)
+                ->where('analytics.readiness.attention_rooms', ['205']));
     }
 
     public function test_action_surplus_is_reported_as_truncated_not_silently_dropped(): void

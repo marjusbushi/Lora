@@ -118,6 +118,14 @@ final class OperationsExecutiveService
                     'priority' => $issue->priority,
                 ]);
 
+        // The rooms behind readiness.attention (remaining arrivals whose room
+        // is not ready): room number, or the guest name while unassigned.
+        $attentionRooms = collect($readiness['rooms'])
+            ->filter(fn (array $room) => in_array($room['arrival']['status'] ?? null, ['pending', 'confirmed'], true)
+                && $room['state'] !== 'ready')
+            ->map(fn (array $room) => $room['room_number'] ?? ($room['arrival']['guest'] ?? '—'))
+            ->values();
+
         $shownActions = $overdueActions
             ->concat($actions)
             ->concat($departureActions)
@@ -148,7 +156,10 @@ final class OperationsExecutiveService
                 'departure_balance' => round((float) $departures->where('status', 'checked_in')->sum(fn (array $row) => max(0, (float) $row['balance'])), 2),
                 'open_pos' => (int) $departures->where('status', 'checked_in')->sum('open_pos_count'),
             ],
-            'readiness' => $readiness['summary'] + ['states' => $readiness['states']],
+            'readiness' => $readiness['summary'] + [
+                'states' => $readiness['states'],
+                'attention_rooms' => $attentionRooms->all(),
+            ],
             'maintenance' => [
                 'open' => $openMaintenance->count(),
                 'overdue' => $activeMaintenance->filter(fn (MaintenanceIssue $issue) => $issue->due_at?->lt($now))->count(),
