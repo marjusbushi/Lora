@@ -5138,6 +5138,14 @@
   },
   "reports360": {
     "help": {
+      "opsArrivals": "Arrivals still expected today / today's total. The small line shows how many have checked in and whether any are unresolved from past days.",
+      "opsDepartures": "Departures still to leave today / today's total. The small line shows how many have checked out and whether anyone is past their departure date.",
+      "opsInHouse": "Reservations currently checked in (rooms occupied right now). \"Pax\" = total people in the hotel.",
+      "opsReadyRate": "Share of remaining arrivals whose room is ready (cleaned and free). Below: rooms ready / arrivals remaining.",
+      "opsAttention": "Rooms blocking operations right now: unassigned, under maintenance, or needing urgent cleaning before an arrival.",
+      "opsOpenPos": "POS orders still open for guests leaving today — close them before check-out.",
+      "opsDepartureBalance": "Unpaid balance of guests leaving today. It should be zero before they go.",
+      "opsMaintOverdue": "Maintenance issues past their due date and not yet resolved.",
       "totalRevenue": "Everything earned in the period: rooms + bar/POS + extras, after discounts.",
       "occupancy": "How full the hotel is: sold room-nights divided by the nights available to sell.",
       "adr": "Average price per SOLD night. Empty rooms don't count — it shows what you get when you do sell.",
@@ -5403,13 +5411,18 @@
       "urgent": "Urgent",
       "review": "Review",
       "noActions": "No operational actions pending.",
+      "overdueTag": "{n} overdue",
+      "daysOverdue": "{n} days overdue",
+      "moreActions": "+{n} more actions not shown",
       "actions": {
         "departure": "Close departure balance",
         "unassigned": "Assign a room to arrival",
         "maintenance": "Room blocked by maintenance",
         "cleaning_for_arrival": "Finish cleaning for arrival",
         "turnover": "Priority room turnaround",
-        "occupied": "Arrival room is not ready"
+        "occupied": "Arrival room is not ready",
+        "overdue_arrival": "Overdue arrival — review the reservation",
+        "overdue_departure": "Overdue departure — guest still checked in"
       }
     },
     "guestMovements": {
