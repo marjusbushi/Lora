@@ -902,6 +902,8 @@ class ReportsController extends Controller
             ),
             'permissions' => $permissions,
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 

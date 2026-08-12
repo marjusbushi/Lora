@@ -5138,6 +5138,14 @@
   },
   "reports360": {
     "help": {
+      "opsArrivals": "Mbërritjet e mbetura sot / totali i sotëm. Rreshti i vogël tregon sa kanë bërë check-in dhe sa kanë mbetur pa u zgjidhur nga ditët e shkuara.",
+      "opsDepartures": "Nisjet e mbetura sot / totali i sotëm. Rreshti i vogël tregon sa kanë bërë check-out dhe nëse dikush ka kaluar datën e nisjes.",
+      "opsInHouse": "Rezervime aktualisht me check-in (dhoma të zëna tani). \"Pax\" = personat gjithsej brenda hotelit.",
+      "opsReadyRate": "Sa përqind e mbërritjeve të mbetura e kanë dhomën gati (të pastruar e të lirë). Poshtë: dhoma gati / mbërritje të mbetura.",
+      "opsAttention": "Dhoma që bllokojnë operacionet tani: pa dhomë të caktuar, në mirëmbajtje, ose me pastrim urgjent para mbërritjes.",
+      "opsOpenPos": "Porosi POS ende të hapura të mysafirëve që largohen sot — mbyllini para check-out-it.",
+      "opsDepartureBalance": "Detyrimi i papaguar i mysafirëve që largohen sot. Duhet të jetë zero para se të largohen.",
+      "opsMaintOverdue": "Probleme mirëmbajtjeje që e kanë kaluar afatin e caktuar dhe s'janë mbyllur ende.",
       "totalRevenue": "Gjithçka e fituar në periudhë: dhomat + bar/POS + shtesat, pas zbritjeve.",
       "occupancy": "Sa i mbushur është hoteli: netët e shitura pjesëtuar me netët e disponueshme për shitje.",
       "adr": "Çmimi mesatar për natë të SHITUR. Dhomat bosh nuk llogariten — tregon sa merr kur shet.",
@@ -5403,13 +5411,18 @@
       "urgent": "Urgjente",
       "review": "Kontrollo",
       "noActions": "Nuk ka veprime operative në pritje.",
+      "overdueTag": "{n} të vonuara",
+      "daysOverdue": "{n} ditë vonesë",
+      "moreActions": "+{n} veprime të tjera nuk shfaqen",
       "actions": {
         "departure": "Mbyll detyrimin e nisjes",
         "maintenance": "Dhoma e bllokuar nga mirëmbajtja",
         "unassigned": "Cakto dhomën për mbërritjen",
         "cleaning_for_arrival": "Përfundo pastrimin për mbërritjen",
         "turnover": "Kthim prioritar i dhomës",
-        "occupied": "Dhoma e mbërritjes nuk është gati"
+        "occupied": "Dhoma e mbërritjes nuk është gati",
+        "overdue_arrival": "Mbërritje e vonuar — kontrollo rezervimin",
+        "overdue_departure": "Nisje e vonuar — mysafiri ende i regjistruar"
       }
     },
     "guestMovements": {
