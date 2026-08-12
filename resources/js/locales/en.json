@@ -5142,7 +5142,7 @@
       "opsDepartures": "Departures still to leave today / today's total. The small line shows how many have checked out and whether anyone is past their departure date.",
       "opsInHouse": "Reservations currently checked in (rooms occupied right now). \"Pax\" = total people in the hotel.",
       "opsReadyRate": "Share of remaining arrivals whose room is ready (cleaned and free). Below: rooms ready / arrivals remaining.",
-      "opsAttention": "Rooms blocking operations right now: unassigned, under maintenance, or needing urgent cleaning before an arrival.",
+      "opsAttention": "Today's arrivals whose room is not ready yet: unassigned, under maintenance, or still being cleaned. Click the room numbers below to open the readiness board.",
       "opsOpenPos": "POS orders still open for guests leaving today — close them before check-out.",
       "opsDepartureBalance": "Unpaid balance of guests leaving today. It should be zero before they go.",
       "opsMaintOverdue": "Maintenance issues past their due date and not yet resolved.",

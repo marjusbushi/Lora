@@ -5142,7 +5142,7 @@
       "opsDepartures": "Nisjet e mbetura sot / totali i sotëm. Rreshti i vogël tregon sa kanë bërë check-out dhe nëse dikush ka kaluar datën e nisjes.",
       "opsInHouse": "Rezervime aktualisht me check-in (dhoma të zëna tani). \"Pax\" = personat gjithsej brenda hotelit.",
       "opsReadyRate": "Sa përqind e mbërritjeve të mbetura e kanë dhomën gati (të pastruar e të lirë). Poshtë: dhoma gati / mbërritje të mbetura.",
-      "opsAttention": "Dhoma që bllokojnë operacionet tani: pa dhomë të caktuar, në mirëmbajtje, ose me pastrim urgjent para mbërritjes.",
+      "opsAttention": "Mbërritjet e sotme që s'e kanë ende dhomën gati: pa dhomë të caktuar, në mirëmbajtje, ose në pastrim. Kliko numrat e dhomave poshtë për bordin e gatishmërisë.",
       "opsOpenPos": "Porosi POS ende të hapura të mysafirëve që largohen sot — mbyllini para check-out-it.",
       "opsDepartureBalance": "Detyrimi i papaguar i mysafirëve që largohen sot. Duhet të jetë zero para se të largohen.",
       "opsMaintOverdue": "Probleme mirëmbajtjeje që e kanë kaluar afatin e caktuar dhe s'janë mbyllur ende.",
