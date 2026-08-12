@@ -5153,7 +5153,13 @@
       "budget": "Objektivi që ke vendosur për periudhën (Settings → Çmimet); progresi matet ndaj tij.",
       "forecast30": "Rezervimet tashmë NË LIBRA për 30 ditët e ardhshme — jo parashikim, ajo që është e garantuar deri sot.",
       "soldNights": "Netët me mysafir, brenda periudhës.",
-      "sellableNights": "Netët që mund të shiteshin: dhomat × ditët, minus netët e bllokuara nga mirëmbajtja."
+      "sellableNights": "Netët që mund të shiteshin: dhomat × ditët, minus netët e bllokuara nga mirëmbajtja.",
+      "onBooksNights": "Netët e rezervuara TASHMË në libra për periudhën — ç'ke në dorë sot, jo parashikim.",
+      "onBooksRevenue": "Vlera e atyre netëve të rezervuara, siç është rezervuar sot.",
+      "pickup": "Ndryshimi që nga fotoja e librit N ditë më parë: sa ke shtuar (+) ose humbur (−) që atëherë.",
+      "horizon": "Sa ditë prapa është marrë fotoja e krahasimit e librit të rezervimeve.",
+      "snapshotDate": "Data kur është marrë fotoja e librit (çdo natë në 03:30).",
+      "referenceNights": "Netët që ishin në libra ditën e fotos."
     },
     "executiveDashboard": "Dashboard Ekzekutiv",
     "executiveShort": "Performanca dhe sinjalet kryesore.",

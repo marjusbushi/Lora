@@ -1,16 +1,20 @@
 <script setup>
 import { computed } from 'vue';
 import { getIntlLocale, translate } from '@/i18n';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import { Banknote, BedDouble, CalendarClock, TrendingUp } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
     analytics: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: '' },
+    baseToPricingRate: { type: Number, default: null },
 });
 
 const current = computed(() => props.analytics.current || {});
@@ -21,16 +25,17 @@ const pickup30 = computed(() => horizons.value.find((item) => item.days === 30))
 const availableCount = computed(() => horizons.value.filter((item) => item.available).length);
 const maxNights = computed(() => Math.max(1, ...daily.value.flatMap((day) => [day.current_nights || 0, day.reference_nights || 0])));
 
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const { pricingCode, displayRate, showBase, money, moneyBase } = useReportCurrency(props);
+const baseLine = (value) => (showBase.value ? moneyBase(value) : null);
 const signed = (value, formatter = (item) => item) => value == null ? '—' : `${value > 0 ? '+' : ''}${formatter(value)}`;
 const shortDate = (value) => new Date(`${value}T00:00:00`).toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short' });
 const tone = (value) => value == null ? 'neutral' : value >= 0 ? 'success' : 'error';
 
 const kpis = computed(() => [
-    { label: translate('reports360.pickupPace.onBooksNights'), value: current.value.nights || 0, tone: 'info', icon: BedDouble },
-    { label: translate('reports360.pickupPace.onBooksRevenue'), value: money(current.value.revenue), tone: 'accent', icon: Banknote },
-    { label: translate('reports360.pickupPace.pickup7'), value: signed(pickup7.value?.pickup_nights), tone: tone(pickup7.value?.pickup_nights), icon: TrendingUp, detail: translate('reports360.nights') },
-    { label: translate('reports360.pickupPace.pickup30Revenue'), value: pickup30.value?.revenue_available ? signed(pickup30.value.pickup_revenue, money) : '—', tone: tone(pickup30.value?.pickup_revenue), icon: CalendarClock },
+    { label: translate('reports360.pickupPace.onBooksNights'), help: translate('reports360.help.onBooksNights'), value: current.value.nights || 0, tone: 'info', icon: BedDouble },
+    { label: translate('reports360.pickupPace.onBooksRevenue'), help: translate('reports360.help.onBooksRevenue'), value: money(current.value.revenue), subvalue: baseLine(current.value.revenue), tone: 'accent', icon: Banknote },
+    { label: translate('reports360.pickupPace.pickup7'), help: translate('reports360.help.pickup'), value: signed(pickup7.value?.pickup_nights), tone: tone(pickup7.value?.pickup_nights), icon: TrendingUp, detail: translate('reports360.nights') },
+    { label: translate('reports360.pickupPace.pickup30Revenue'), help: translate('reports360.help.pickup'), value: pickup30.value?.revenue_available ? signed(pickup30.value.pickup_revenue, money) : '—', tone: tone(pickup30.value?.pickup_revenue), icon: CalendarClock },
 ]);
 </script>
 
@@ -44,6 +49,7 @@ const kpis = computed(() => [
         preset-mode="future"
     >
         <ReportKpiGrid :items="kpis" />
+        <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.7fr)]">
             <Card :padding="false">
@@ -95,12 +101,12 @@ const kpis = computed(() => [
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50 text-left text-label text-neutral-600">
                         <tr>
-                            <th class="px-5 py-3">{{ $t('reports360.pickupPace.horizon') }}</th>
-                            <th class="px-4 py-3">{{ $t('reports360.pickupPace.snapshot') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.pickupPace.referenceNights') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.pickupPace.onBooksNights') }}</th>
-                            <th class="px-4 py-3 text-right">Pickup</th>
-                            <th class="px-5 py-3 text-right">{{ $t('reports360.revenue') }}</th>
+                            <th class="px-5 py-3"><span class="inline-flex items-center gap-1">{{ $t('reports360.pickupPace.horizon') }}<InfoTip :text="$t('reports360.help.horizon')" :label="$t('reports360.pickupPace.horizon')" /></span></th>
+                            <th class="px-4 py-3"><span class="inline-flex items-center gap-1">{{ $t('reports360.pickupPace.snapshot') }}<InfoTip :text="$t('reports360.help.snapshotDate')" :label="$t('reports360.pickupPace.snapshot')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.pickupPace.referenceNights') }}<InfoTip :text="$t('reports360.help.referenceNights')" :label="$t('reports360.pickupPace.referenceNights')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.pickupPace.onBooksNights') }}<InfoTip :text="$t('reports360.help.onBooksNights')" :label="$t('reports360.pickupPace.onBooksNights')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">Pickup<InfoTip :text="$t('reports360.help.pickup')" label="Pickup" /></span></th>
+                            <th class="px-5 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.revenue') }}<InfoTip :text="$t('reports360.help.pickup')" :label="$t('reports360.revenue')" /></span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
@@ -110,7 +116,7 @@ const kpis = computed(() => [
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.available ? row.reference_nights : '—' }}</td>
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ row.current_nights }}</td>
                             <td class="px-4 py-3 text-right text-body-sm font-semibold" :class="row.pickup_nights == null ? 'text-neutral-400' : row.pickup_nights >= 0 ? 'text-success-700' : 'text-error-700'">{{ signed(row.pickup_nights) }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm font-semibold" :class="row.pickup_revenue == null ? 'text-neutral-400' : row.pickup_revenue >= 0 ? 'text-success-700' : 'text-error-700'">{{ row.revenue_available ? signed(row.pickup_revenue, money) : '—' }}</td>
+                            <td class="px-5 py-3 text-right text-body-sm font-semibold" :class="row.pickup_revenue == null ? 'text-neutral-400' : row.pickup_revenue >= 0 ? 'text-success-700' : 'text-error-700'">{{ row.revenue_available ? signed(row.pickup_revenue, money) : '—' }}<small v-if="showBase && row.revenue_available && row.pickup_revenue != null" class="block font-normal text-tiny text-neutral-400">{{ signed(row.pickup_revenue, moneyBase) }}</small></td>
                         </tr>
                     </tbody>
                 </table>
