@@ -7,7 +7,7 @@ import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import InfoTip from '@/Components/UI/InfoTip.vue';
-import { Banknote, BedDouble, CalendarClock, TrendingUp } from 'lucide-vue-next';
+import { Banknote, BedDouble, CalendarClock, TrendingUp, UserCheck } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -36,6 +36,16 @@ const kpis = computed(() => [
     { label: translate('reports360.pickupPace.onBooksRevenue'), help: translate('reports360.help.onBooksRevenue'), value: money(current.value.revenue), subvalue: baseLine(current.value.revenue), tone: 'accent', icon: Banknote },
     { label: translate('reports360.pickupPace.pickup7'), help: translate('reports360.help.pickup'), value: signed(pickup7.value?.pickup_nights), tone: tone(pickup7.value?.pickup_nights), icon: TrendingUp, detail: translate('reports360.nights') },
     { label: translate('reports360.pickupPace.pickup30Revenue'), help: translate('reports360.help.pickup'), value: pickup30.value?.revenue_available ? signed(pickup30.value.pickup_revenue, money) : '—', tone: tone(pickup30.value?.pickup_revenue), icon: CalendarClock },
+    {
+        label: translate('reports360.pickupPace.expectedArrivals'),
+        help: translate('reports360.help.expectedArrivals'),
+        value: props.analytics.expected ? `${props.analytics.expected.nights}` : '—',
+        tone: props.analytics.expected ? 'success' : 'neutral',
+        icon: UserCheck,
+        detail: props.analytics.expected
+            ? translate('reports360.pickupPace.materializationDetail', { pct: props.analytics.expected.pct, days: props.analytics.expected.days })
+            : translate('reports360.pickupPace.buildingHistory'),
+    },
 ]);
 </script>
 
@@ -48,7 +58,7 @@ const kpis = computed(() => [
         :category="$t('reports360.pickupPace.category')"
         preset-mode="future"
     >
-        <ReportKpiGrid :items="kpis" />
+        <ReportKpiGrid :items="kpis" :columns="5" />
         <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.7fr)]">
@@ -106,7 +116,8 @@ const kpis = computed(() => [
                             <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.pickupPace.referenceNights') }}<InfoTip :text="$t('reports360.help.referenceNights')" :label="$t('reports360.pickupPace.referenceNights')" /></span></th>
                             <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.pickupPace.onBooksNights') }}<InfoTip :text="$t('reports360.help.onBooksNights')" :label="$t('reports360.pickupPace.onBooksNights')" /></span></th>
                             <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">Pickup<InfoTip :text="$t('reports360.help.pickup')" label="Pickup" /></span></th>
-                            <th class="px-5 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.revenue') }}<InfoTip :text="$t('reports360.help.pickup')" :label="$t('reports360.revenue')" /></span></th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.revenue') }}<InfoTip :text="$t('reports360.help.pickup')" :label="$t('reports360.revenue')" /></span></th>
+                            <th class="px-5 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.pickupPace.materialization') }}<InfoTip :text="$t('reports360.help.materialization')" :label="$t('reports360.pickupPace.materialization')" /></span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
@@ -116,7 +127,11 @@ const kpis = computed(() => [
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-600">{{ row.available ? row.reference_nights : '—' }}</td>
                             <td class="px-4 py-3 text-right text-body-sm text-neutral-700">{{ row.current_nights }}</td>
                             <td class="px-4 py-3 text-right text-body-sm font-semibold" :class="row.pickup_nights == null ? 'text-neutral-400' : row.pickup_nights >= 0 ? 'text-success-700' : 'text-error-700'">{{ signed(row.pickup_nights) }}</td>
-                            <td class="px-5 py-3 text-right text-body-sm font-semibold" :class="row.pickup_revenue == null ? 'text-neutral-400' : row.pickup_revenue >= 0 ? 'text-success-700' : 'text-error-700'">{{ row.revenue_available ? signed(row.pickup_revenue, money) : '—' }}<small v-if="showBase && row.revenue_available && row.pickup_revenue != null" class="block font-normal text-tiny text-neutral-400">{{ signed(row.pickup_revenue, moneyBase) }}</small></td>
+                            <td class="px-4 py-3 text-right text-body-sm font-semibold" :class="row.pickup_revenue == null ? 'text-neutral-400' : row.pickup_revenue >= 0 ? 'text-success-700' : 'text-error-700'">{{ row.revenue_available ? signed(row.pickup_revenue, money) : '—' }}<small v-if="showBase && row.revenue_available && row.pickup_revenue != null" class="block font-normal text-tiny text-neutral-400">{{ signed(row.pickup_revenue, moneyBase) }}</small></td>
+                            <td class="px-5 py-3 text-right text-body-sm text-neutral-700">
+                                <template v-if="row.materialization_pct != null">{{ row.materialization_pct }}%<small class="block text-tiny text-neutral-400">{{ $t('reports360.pickupPace.sampleDays', { count: row.materialization_sample }) }}</small></template>
+                                <template v-else>—</template>
+                            </td>
                         </tr>
                     </tbody>
                 </table>

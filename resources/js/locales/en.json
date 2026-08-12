@@ -5154,6 +5154,8 @@
       "forecast30": "Bookings already ON THE BOOKS for the next 30 days — not a prediction, what is guaranteed as of today.",
       "soldNights": "Nights with a guest, inside the period.",
       "sellableNights": "Nights you could have sold: rooms × days, minus maintenance-blocked nights.",
+      "materialization": "Learned from finished dates: of the nights the photo showed N days before arrival, the share that actually happened. Below 100% = cancellations eat part of the book; above 100% = last-minute bookings more than replace them.",
+      "expectedArrivals": "Today's on-books nights corrected by the learned materialization rate — the realistic number, not the optimistic one.",
       "onBooksNights": "Nights ALREADY reserved on the books for this period — what you hold today, not a forecast.",
       "onBooksRevenue": "The value of those reserved nights, as booked today.",
       "pickup": "The change since the book's photo N days ago: what you gained (+) or lost (−) since then.",
@@ -5237,7 +5239,11 @@
       "referenceNights": "Reference nights",
       "next7": "Next 7 days",
       "next30": "Next 30 days",
-      "next90": "Next 90 days"
+      "next90": "Next 90 days",
+      "expectedArrivals": "Expected to arrive",
+      "materialization": "Materialization",
+      "materializationDetail": "{pct}% materialization @ {days}d",
+      "sampleDays": "{count} learning days"
     },
     "distribution": {
       "title": "Direct vs OTA",
