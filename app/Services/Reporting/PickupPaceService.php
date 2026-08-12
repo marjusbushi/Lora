@@ -16,7 +16,7 @@ final class PickupPaceService
         private readonly RoomRevenueService $roomRevenue,
     ) {}
 
-    /** @return array{period:array,current:array,horizons:array,daily:array,baseline_days:?int,history_started_at:?string} */
+    /** @return array{period:array,current:array,horizons:array,daily:array,expected:?array,baseline_days:?int,history_started_at:?string} */
     public function summary(ReportingPeriod $period, ?CarbonImmutable $asOf = null): array
     {
         $asOf ??= CarbonImmutable::today();
@@ -52,8 +52,19 @@ final class PickupPaceService
             }
         }
 
+        $materialization = $this->materialization($asOf, $typeIds);
+        foreach ($horizons as $index => $horizon) {
+            $learned = $materialization[$horizon['days']] ?? null;
+            $horizons[$index]['materialization_pct'] = $learned['pct'] ?? null;
+            $horizons[$index]['materialization_sample'] = $learned['sample'] ?? 0;
+            $horizons[$index]['expected_nights'] = $learned
+                ? (int) round($current['nights'] * $learned['pct'] / 100)
+                : null;
+        }
+
         $baselineDays = collect([7, 3, 14, 1, 30])->first(fn (int $days) => isset($references[$days]));
         $baseline = $baselineDays ? $references[$baselineDays] : null;
+        $baselineMaterialization = $baselineDays ? ($materialization[$baselineDays] ?? null) : null;
         $daily = collect($current['daily'])->map(function (array $day, string $date) use ($baseline) {
             $reference = $baseline['daily'][$date] ?? null;
 
@@ -72,6 +83,14 @@ final class PickupPaceService
             'current' => ['nights' => $current['nights'], 'revenue' => $current['revenue']],
             'horizons' => $horizons,
             'daily' => $daily,
+            // "How much of the book really arrives" applied to today's book,
+            // learned at the same horizon the daily chart uses as baseline.
+            'expected' => $baselineMaterialization ? [
+                'days' => $baselineDays,
+                'pct' => $baselineMaterialization['pct'],
+                'sample' => $baselineMaterialization['sample'],
+                'nights' => (int) round($current['nights'] * $baselineMaterialization['pct'] / 100),
+            ] : null,
             'baseline_days' => $baselineDays,
             'history_started_at' => ($historyStart = RoomInventorySnapshot::query()->min('snapshot_date'))
                 ? CarbonImmutable::parse($historyStart)->toDateString()
@@ -120,6 +139,84 @@ final class PickupPaceService
             'revenue' => round((float) collect($daily)->sum('revenue'), 2),
             'daily' => $daily,
         ];
+    }
+
+    /**
+     * The materialization ("wash") rate per horizon, learned from ELAPSED stay
+     * dates: of the nights the photo showed N days before arrival, how many
+     * actually happened. Pairs whose photo shows 0 booked carry no signal and
+     * are skipped — this also keeps a migration gap (empty early photos) from
+     * poisoning the percentage.
+     *
+     * @param  array<int>  $typeIds
+     * @return array<int, array{pct: float, sample: int}>
+     */
+    private function materialization(CarbonImmutable $asOf, array $typeIds, int $learningDays = 30): array
+    {
+        if ($typeIds === []) {
+            return [];
+        }
+
+        $learnFrom = $asOf->subDays($learningDays);
+        $learnTo = $asOf->subDay();
+        if ($learnTo->lessThan($learnFrom)) {
+            return [];
+        }
+
+        $maxHorizon = max(self::HORIZONS);
+        // One fetch, PHP-side pairing: portable across MySQL and SQLite and
+        // tiny in volume (learning window × room types × horizon count).
+        $photoNights = RoomInventorySnapshot::query()
+            ->whereDate('stay_date', '>=', $learnFrom->toDateString())
+            ->whereDate('stay_date', '<=', $learnTo->toDateString())
+            ->whereDate('snapshot_date', '>=', $learnFrom->subDays($maxHorizon)->toDateString())
+            ->whereIn('room_type_id', $typeIds)
+            ->get(['snapshot_date', 'stay_date', 'booked'])
+            ->groupBy(fn (RoomInventorySnapshot $row) => $row->stay_date->toDateString()
+                .'|'.(int) $row->stay_date->toImmutable()->diffInDays($row->snapshot_date->toImmutable(), true))
+            ->map(fn ($rows) => (int) $rows->sum('booked'));
+
+        // What actually happened those nights: realized stays only.
+        $actualByDate = [];
+        $realized = Reservation::query()
+            ->whereIn('status', ['checked_in', 'checked_out'])
+            ->whereNull('no_show_at')
+            ->whereDate('check_in_date', '<=', $learnTo->toDateString())
+            ->whereDate('check_out_date', '>', $learnFrom->toDateString())
+            ->get(['id', 'room_id', 'check_in_date', 'check_out_date']);
+        foreach ($realized as $reservation) {
+            for ($date = $reservation->check_in_date->toImmutable(); $date->lt($reservation->check_out_date); $date = $date->addDay()) {
+                $key = $date->toDateString();
+                if ($date->gte($learnFrom) && $date->lte($learnTo)) {
+                    $actualByDate[$key][(string) $reservation->room_id] = true;
+                }
+            }
+        }
+
+        $learned = [];
+        foreach (self::HORIZONS as $days) {
+            $bookedSum = 0;
+            $actualSum = 0;
+            $sample = 0;
+            for ($date = $learnFrom; $date->lessThanOrEqualTo($learnTo); $date = $date->addDay()) {
+                $booked = $photoNights[$date->toDateString().'|'.$days] ?? 0;
+                if ($booked <= 0) {
+                    continue;
+                }
+                $bookedSum += $booked;
+                $actualSum += count($actualByDate[$date->toDateString()] ?? []);
+                $sample++;
+            }
+
+            if ($bookedSum > 0) {
+                $learned[$days] = [
+                    'pct' => round($actualSum / $bookedSum * 100, 1),
+                    'sample' => $sample,
+                ];
+            }
+        }
+
+        return $learned;
     }
 
     /** @param array<int> $typeIds */
