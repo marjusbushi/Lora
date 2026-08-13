@@ -3875,6 +3875,7 @@
     "problemPlaceholder": "e.g. Air conditioner is not cooling",
     "issueTypeOther": "Other — describe it yourself",
     "issueTypePlaceholder": "Select the issue…",
+    "categoryPlaceholder": "Select the category…",
     "issueTypes": {
       "tv_not_working": "TV not working",
       "tv_no_signal": "TV has no signal",
