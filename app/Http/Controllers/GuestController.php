@@ -548,8 +548,8 @@ class GuestController extends Controller
         abort_if($updates === [], 422, 'Fushat e zgjedhura nuk kanë të dhëna të lexueshme.');
 
         Validator::make($updates, [
-            'first_name' => ['sometimes', 'required', 'string', 'max:255'],
-            'last_name' => ['sometimes', 'required', 'string', 'max:255'],
+            'first_name' => ['sometimes', 'required', 'string', 'max:255', new \App\Rules\ContainsLetters(2)],
+            'last_name' => ['sometimes', 'required', 'string', 'max:255', new \App\Rules\ContainsLetters(1)],
             'nationality' => ['sometimes', 'nullable', 'string', 'size:3', 'regex:/^[A-Z]{3}$/'],
             'date_of_birth' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'before:today'],
             'document_type' => ['sometimes', 'nullable', 'in:id_card,passport,drivers_license'],

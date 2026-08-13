@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\ContainsLetters;
 use App\Tenancy\TenantRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -24,8 +25,8 @@ class GuestUpdateRequest extends FormRequest
         $guestId = $this->route('guest')->id;
 
         return [
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
+            'first_name' => ['required', 'string', 'max:255', new ContainsLetters(2)],
+            'last_name' => ['required', 'string', 'max:255', new ContainsLetters(1)],
             'email' => ['nullable', 'email', 'max:255', TenantRule::unique('guests', 'email')->ignore($guestId)->whereNull('deleted_at')],
             'phone' => ['nullable', 'string', 'max:30'],
             'document_type' => ['nullable', 'in:id_card,passport,drivers_license'],
