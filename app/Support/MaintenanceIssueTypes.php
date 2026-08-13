@@ -14,11 +14,11 @@ final class MaintenanceIssueTypes
 {
     /** @var array<string, list<string>> category => type keys */
     public const TYPES = [
-        'electronics' => ['tv_not_working', 'remote_missing', 'phone_not_working', 'safe_not_working', 'minibar_fridge_broken'],
+        'electronics' => ['tv_not_working', 'tv_no_signal', 'remote_missing', 'phone_not_working', 'safe_not_working', 'minibar_fridge_broken', 'kettle_broken', 'iron_broken', 'washing_machine_broken', 'kitchen_stove_broken', 'kitchen_hood_broken'],
         'climate' => ['ac_not_cooling', 'ac_leaking', 'ac_noisy', 'heating_not_working'],
-        'electrical' => ['light_bulb_out', 'power_socket_broken', 'no_power', 'boiler_no_hot_water', 'hair_dryer_broken'],
-        'plumbing' => ['water_leak', 'blocked_drain', 'toilet_flush_broken', 'low_water_pressure', 'shower_head_broken', 'faucet_dripping'],
-        'furniture' => ['door_lock_broken', 'door_handle_broken', 'window_not_closing', 'curtains_broken', 'bed_damaged', 'wardrobe_damaged', 'chair_table_damaged'],
+        'electrical' => ['light_bulb_out', 'lamp_fixture_broken', 'power_socket_broken', 'no_power', 'hair_dryer_broken'],
+        'plumbing' => ['boiler_no_hot_water', 'water_leak', 'blocked_drain', 'toilet_flush_broken', 'wc_seat_broken', 'sanitary_fixture_damage', 'shower_cabin_damage', 'low_water_pressure', 'shower_head_broken', 'faucet_dripping'],
+        'furniture' => ['door_lock_broken', 'door_handle_broken', 'balcony_door_broken', 'window_not_closing', 'curtains_broken', 'bed_damaged', 'mattress_damaged', 'mirror_broken', 'wardrobe_damaged', 'chair_table_damaged'],
         'safety' => ['smoke_detector_fault', 'fire_extinguisher_missing', 'balcony_railing_loose', 'emergency_light_out', 'key_card_reader_fault'],
         'other' => ['wifi_not_working', 'elevator_fault', 'pest_control', 'wall_paint_damage', 'floor_tile_damage'],
     ];
@@ -26,6 +26,19 @@ final class MaintenanceIssueTypes
     /** Albanian labels — the server derives the issue title from these. */
     public const LABELS_SQ = [
         'tv_not_working' => 'Televizori nuk punon',
+        'tv_no_signal' => 'Televizori pa sinjal',
+        'kettle_broken' => 'Ibriku elektrik i prishur',
+        'iron_broken' => 'Hekuri i hekurosjes i prishur',
+        'washing_machine_broken' => 'Lavatriçja nuk punon',
+        'kitchen_stove_broken' => 'Soba/pianura nuk punon',
+        'kitchen_hood_broken' => 'Aspiratori nuk punon',
+        'lamp_fixture_broken' => 'Ndriçuesi/abazhuri i prishur',
+        'wc_seat_broken' => 'Kapaku i WC-së i thyer',
+        'sanitary_fixture_damage' => 'Hidrosanitare të dëmtuara (lavaman/WC/vaskë)',
+        'shower_cabin_damage' => 'Kabina e dushit e dëmtuar',
+        'balcony_door_broken' => 'Dera e ballkonit nuk mbyllet',
+        'mattress_damaged' => 'Dysheku i dëmtuar',
+        'mirror_broken' => 'Pasqyra e thyer',
         'remote_missing' => 'Telekomanda mungon ose nuk punon',
         'phone_not_working' => 'Telefoni i dhomës nuk punon',
         'safe_not_working' => 'Kasaforta nuk punon',
