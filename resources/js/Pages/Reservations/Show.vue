@@ -1065,6 +1065,17 @@ function settleAndCheckout(method) {
     @page { size: A4; margin: 0; }
     body.printing-hotel-invoice * { visibility: hidden !important; }
     body.printing-hotel-invoice #hotel-invoice, body.printing-hotel-invoice #hotel-invoice * { visibility: visible !important; }
-    body.printing-hotel-invoice #hotel-invoice { position: absolute; left: 0; top: 0; margin: 0; box-shadow: none !important; }
+    /* The invoice prints from inside the modal's scroll panel: its absolute
+       placement anchors to that positioned, overflow-clipped panel, so only
+       the first screenful used to reach paper. Lift positioning, clipping and
+       height caps from every ANCESTOR (everything except the invoice itself)
+       so the document anchors to the page and paginates in full. */
+    body.printing-hotel-invoice :not(#hotel-invoice):not(#hotel-invoice *) {
+        position: static !important;
+        overflow: visible !important;
+        max-height: none !important;
+        transform: none !important;
+    }
+    body.printing-hotel-invoice #hotel-invoice { position: absolute !important; left: 0; top: 0; margin: 0; box-shadow: none !important; }
 }
 </style>
