@@ -55,6 +55,7 @@ final class RecurringMaintenanceIssueService
 
                 return ['date' => $date, 'value' => $repeatDates->filter(fn (string $repeatDate) => $repeatDate === $date)->count()];
             })->all(),
+            'groups_truncated' => max(0, $groups->count() - 50),
             'groups' => $groups->take(50)->map(fn (array $group) => collect($group)->except(['repeat_dates', 'interval_days', 'room_ids'])->all())->all(),
         ];
     }
