@@ -170,8 +170,22 @@ const checkoutState = computed(() => {
 
 function printInvoice() {
     document.body.classList.add('printing-hotel-invoice');
+    // The hidden page content still OCCUPIES layout space, which used to
+    // paginate into trailing blank pages. Clamp the printed document to the
+    // invoice's own height (works for multi-page invoices too).
+    const invoice = document.getElementById('hotel-invoice');
+    if (invoice) {
+        // BOTH html and body: body's overflow/height alone propagates to the
+        // viewport instead of clipping, leaving the blank pages in place.
+        document.documentElement.style.height = `${invoice.scrollHeight}px`;
+        document.body.style.height = `${invoice.scrollHeight}px`;
+    }
     window.print();
-    window.setTimeout(() => document.body.classList.remove('printing-hotel-invoice'), 500);
+    window.setTimeout(() => {
+        document.body.classList.remove('printing-hotel-invoice');
+        document.body.style.height = '';
+        document.documentElement.style.height = '';
+    }, 500);
 }
 
 const fiscalDocument = computed(() => props.fiscalization?.document || null);
@@ -1077,5 +1091,9 @@ function settleAndCheckout(method) {
         transform: none !important;
     }
     body.printing-hotel-invoice #hotel-invoice { position: absolute !important; left: 0; top: 0; margin: 0; box-shadow: none !important; }
+    /* Pair of the JS height clamp: nothing beyond the invoice may paginate.
+       html must clip too — body overflow alone propagates to the viewport. */
+    body.printing-hotel-invoice { overflow: hidden !important; }
+    html:has(> body.printing-hotel-invoice) { overflow: hidden !important; }
 }
 </style>
