@@ -8,6 +8,7 @@ import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import { AlertTriangle, CircleDollarSign, Gauge, TimerOff } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -50,6 +51,7 @@ const statusBadge = {
 const kpis = computed(() => [
     {
         label: translate('reports360.outstandingAging.total'),
+        help: translate('reports360.help.oaTotal'),
         value: money(summary.value.total),
         subvalue: baseLine(summary.value.total),
         tone: summary.value.total ? 'error' : 'success',
@@ -58,6 +60,7 @@ const kpis = computed(() => [
     },
     {
         label: translate('reports360.outstandingAging.overdue'),
+        help: translate('reports360.help.oaOverdue'),
         value: money(summary.value.overdue_total),
         subvalue: baseLine(summary.value.overdue_total),
         tone: summary.value.overdue_total ? 'warning' : 'success',
@@ -66,6 +69,7 @@ const kpis = computed(() => [
     },
     {
         label: translate('reports360.outstandingAging.collectionRate'),
+        help: translate('reports360.help.oaCollectionRate'),
         value: pct(summary.value.collection_rate),
         tone: summary.value.collection_rate >= 80 ? 'success' : 'warning',
         icon: Gauge,
@@ -73,6 +77,7 @@ const kpis = computed(() => [
     },
     {
         label: translate('reports360.outstandingAging.critical'),
+        help: translate('reports360.help.oaCritical'),
         value: money(summary.value.critical_total),
         subvalue: baseLine(summary.value.critical_total),
         tone: summary.value.critical_total ? 'error' : 'success',
@@ -90,12 +95,11 @@ const kpis = computed(() => [
     >
         <ReportKpiGrid :items="kpis" />
         <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
-        <p v-if="displayRate" class="mt-2 text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.65fr)]">
             <Card :padding="false">
                 <div class="border-b border-neutral-200 px-5 py-4">
-                    <h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.outstandingAging.aging') }}</h2>
+                    <h2 class="flex items-center gap-1 text-body font-semibold text-primary-900">{{ $t('reports360.outstandingAging.aging') }}<InfoTip :text="$t('reports360.help.oaAging')" :label="$t('reports360.outstandingAging.aging')" /></h2>
                 </div>
                 <div class="space-y-4 px-5 py-5">
                     <button
