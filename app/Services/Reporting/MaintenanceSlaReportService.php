@@ -60,6 +60,7 @@ final class MaintenanceSlaReportService
             'priorities' => $this->grouped($reported, $resolved, 'priority', $asOf),
             'categories' => $this->grouped($reported, $resolved, 'category', $asOf),
             'daily' => $this->daily($allIssues, $period, $asOf),
+            'issues_truncated' => max(0, $issues->count() - 50),
             'issues' => $issues->take(50)->map(function (MaintenanceIssue $issue) use ($asOf) {
                 $resolvedAt = $this->resolvedAt($issue, $asOf);
                 $status = $this->statusAt($issue, $asOf);
