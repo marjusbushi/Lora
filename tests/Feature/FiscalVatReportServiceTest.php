@@ -12,6 +12,7 @@ use App\Models\Room;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\FatureAlConfiguration;
 use App\Services\Reporting\FiscalVatReportService;
 use App\Services\Reporting\ReportingPeriod;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -128,6 +129,50 @@ class FiscalVatReportServiceTest extends TestCase
         $missing = collect($report['documents'])->firstWhere('source_id', $missingReservation->id);
         $this->assertSame('missing', $missing['status']);
         $this->assertSame(60.0, $missing['gross']);
+        $this->assertSame(120.0, $report['summary']['awaiting_gross']);
+        $this->assertSame('sandbox', $report['summary']['environment']);
+    }
+
+    public function test_environment_is_read_from_tenant_configuration(): void
+    {
+        Setting::set('financial.vat_status', 'registered');
+        $this->mock(FatureAlConfiguration::class, function ($mock) {
+            $mock->shouldReceive('get')->with('environment', 'sandbox')->andReturn('production');
+        });
+        $user = User::factory()->create();
+        $type = RoomType::create(['name' => 'Standard', 'base_price' => 100, 'max_occupancy' => 2, 'amenities' => []]);
+        $room = Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
+        $guest = Guest::create(['first_name' => 'Env', 'last_name' => 'Guest']);
+
+        $productionReservation = $this->reservation($room, $guest, $user, 100);
+        $sandboxReservation = $this->reservation($room, $guest, $user, 80);
+        foreach ([[$productionReservation, 'production', 'FISC-PROD'], [$sandboxReservation, 'sandbox', 'FISC-SAND']] as [$reservation, $environment, $number]) {
+            FiscalDocument::create([
+                'reservation_id' => $reservation->id,
+                'provider' => 'fature_al',
+                'environment' => $environment,
+                'document_type' => 'cash_invoice',
+                'internal_id' => $environment.'-'.$reservation->id,
+                'payment_method' => 'CARD',
+                'currency' => 'EUR',
+                'total' => $reservation->total_amount,
+                'vat_rate' => 6,
+                'request_hash' => str_repeat(substr($environment, 0, 1), 64),
+                'status' => FiscalDocument::STATUS_FISCALIZED,
+                'fiscal_number' => $number,
+                'fiscalized_at' => '2026-07-10 12:00:00',
+                'attempted_at' => '2026-07-10 12:00:00',
+            ]);
+        }
+
+        $report = app(FiscalVatReportService::class)->summary(new ReportingPeriod('2026-07-01', '2026-07-31'));
+
+        $this->assertSame('production', $report['summary']['environment']);
+        $this->assertSame(1, $report['summary']['fiscalized']);
+        $this->assertSame(1, $report['summary']['missing']);
+        $sandboxRow = collect($report['documents'])->firstWhere('source_id', $sandboxReservation->id);
+        $this->assertSame('missing', $sandboxRow['status']);
+        $this->assertSame(80.0, $report['summary']['awaiting_gross']);
     }
 
     private function reservation(Room $room, Guest $guest, User $user, float $total, string $checkOut = '2026-07-10'): Reservation

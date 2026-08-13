@@ -243,6 +243,8 @@ class ReportsController extends Controller
             'filters' => ['from' => $from, 'to' => $to],
             ...$analytics,
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -549,6 +551,8 @@ class ReportsController extends Controller
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'canViewPos' => (bool) $request->user()?->can('view_pos_orders'),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -600,6 +604,8 @@ class ReportsController extends Controller
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'canViewPos' => (bool) $request->user()?->can('view_pos_orders'),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -970,6 +976,8 @@ class ReportsController extends Controller
             'canViewReservations' => $request->user()?->can('view_reservations') ?? false,
             'canViewPos' => $request->user()?->can('view_pos_orders') ?? false,
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -982,6 +990,8 @@ class ReportsController extends Controller
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 

@@ -7,6 +7,8 @@ import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import { Banknote, CircleCheckBig, CreditCard, WalletCards } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -18,6 +20,8 @@ const props = defineProps({
     canViewReservations: { type: Boolean, default: false },
     canViewPos: { type: Boolean, default: false },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: null },
+    baseToPricingRate: { type: [Number, String], default: null },
 });
 
 const summary = computed(() => props.analytics.summary || props.totals || {});
@@ -27,10 +31,7 @@ const daily = computed(() => props.analytics.daily || props.rows);
 const issues = computed(() => props.analytics.issues || []);
 const maxDaily = computed(() => Math.max(1, ...daily.value.map((day) => Number(day.total || 0))));
 
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-})}`;
+const { money, moneyBase, showBase, displayRate, pricingCode } = useReportCurrency(props);
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const fmt = (date) => date ? new Date(`${date}T00:00:00`).toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short' }) : '—';
 
@@ -45,7 +46,9 @@ const methodBars = computed(() => methods.value.map((method) => ({
 const kpis = computed(() => [
     {
         label: translate('reports360.paymentReconciliation.collected'),
+        help: translate('reports360.help.prCollected'),
         value: money(summary.value.collected),
+        subvalue: showBase.value ? moneyBase(summary.value.collected) : null,
         tone: 'accent',
         icon: WalletCards,
         detail: `${summary.value.transaction_count || 0} ${translate('reports360.paymentReconciliation.transactions')}`,
@@ -53,17 +56,20 @@ const kpis = computed(() => [
     {
         label: translate('reports360.paymentReconciliation.cash'),
         value: money(summary.value.cash),
+        subvalue: showBase.value ? moneyBase(summary.value.cash) : null,
         tone: 'success',
         icon: Banknote,
     },
     {
         label: translate('reports360.paymentReconciliation.card'),
         value: money(summary.value.card),
+        subvalue: showBase.value ? moneyBase(summary.value.card) : null,
         tone: 'info',
         icon: CreditCard,
     },
     {
         label: translate('reports360.paymentReconciliation.reconciliationRate'),
+        help: translate('reports360.help.prReconciliationRate'),
         value: pct(summary.value.reconciliation_rate),
         tone: summary.value.issues_count ? 'warning' : 'success',
         icon: CircleCheckBig,
@@ -88,6 +94,7 @@ const issueHref = (issue) => {
         :category="$t('reports360.paymentReconciliation.category')"
     >
         <ReportKpiGrid :items="kpis" />
+        <div v-if="displayRate" class="mt-3 text-right text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</div>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(300px,0.65fr)_minmax(0,1.35fr)]">
             <ReportBarList
@@ -98,7 +105,7 @@ const issueHref = (issue) => {
 
             <Card :padding="false">
                 <div class="border-b border-neutral-200 px-5 py-4">
-                    <h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.paymentReconciliation.bySource') }}</h2>
+                    <h2 class="flex items-center gap-1 text-body font-semibold text-primary-900">{{ $t('reports360.paymentReconciliation.bySource') }}<InfoTip :text="$t('reports360.help.prSources')" :label="$t('reports360.paymentReconciliation.bySource')" /></h2>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-neutral-200">
@@ -162,12 +169,12 @@ const issueHref = (issue) => {
         <Card class="mt-4" :padding="false">
             <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
                 <div>
-                    <h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.paymentReconciliation.control') }}</h2>
+                    <h2 class="flex items-center gap-1 text-body font-semibold text-primary-900">{{ $t('reports360.paymentReconciliation.control') }}<InfoTip :text="$t('reports360.help.prControl')" :label="$t('reports360.paymentReconciliation.control')" /></h2>
                     <p class="mt-0.5 text-tiny text-neutral-500">{{ summary.matched_sources || 0 }} / {{ summary.expected_sources || 0 }} {{ $t('reports360.paymentReconciliation.matched') }}</p>
                 </div>
                 <div class="text-right">
                     <Badge :variant="issues.length ? 'warning' : 'success'">{{ issues.length }} {{ $t('reports360.paymentReconciliation.issues') }}</Badge>
-                    <p v-if="summary.unposted_total" class="mt-1 text-tiny font-semibold text-error-700">{{ money(summary.unposted_total) }}</p>
+                    <p v-if="summary.unposted_total" class="mt-1 inline-flex items-center gap-1 text-tiny font-semibold text-error-700">{{ money(summary.unposted_total) }}<InfoTip :text="$t('reports360.help.prUnposted')" :label="$t('reports360.paymentReconciliation.issues')" /></p>
                 </div>
             </div>
 
