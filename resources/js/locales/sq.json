@@ -3875,6 +3875,7 @@
     "problemPlaceholder": "p.sh. Kondicioneri nuk ftoh",
     "issueTypeOther": "Tjetër — përshkruaje vetë",
     "issueTypePlaceholder": "Zgjidh problemin…",
+    "categoryPlaceholder": "Zgjidh kategorinë…",
     "issueTypes": {
       "tv_not_working": "Televizori nuk punon",
       "tv_no_signal": "Televizori pa sinjal",
