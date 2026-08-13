@@ -27,6 +27,7 @@ class MaintenanceIssueService
                 'title' => $data['title'],
                 'description' => $data['description'] ?? null,
                 'category' => $data['category'] ?? 'other',
+                'issue_key' => $data['issue_key'] ?? null,
                 'kind' => $data['kind'] ?? 'corrective',
                 'priority' => $priority,
                 'status' => 'reported',

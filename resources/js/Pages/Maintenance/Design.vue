@@ -49,10 +49,26 @@ const statusTabs = computed(() => [
 ]);
 
 const reportForm = useForm({
-    room_id: '', title: '', description: '', category: 'other', kind: 'corrective',
+    room_id: '', issue_key: '', title: '', description: '', category: 'other', kind: 'corrective',
     priority: 'medium', asset_name: '', asset_code: '', block_room: false,
     scheduled_for: '', recurrence_days: '', attachments: [],
 });
+
+// Curated issue types per category (stable keys — labels translated per
+// locale; the key is what the Recurring Maintenance report groups on).
+// Keep in sync with app/Support/MaintenanceIssueTypes.php.
+const issueTypes = {
+    electronics: ['tv_not_working', 'remote_missing', 'phone_not_working', 'safe_not_working', 'minibar_fridge_broken'],
+    climate: ['ac_not_cooling', 'ac_leaking', 'ac_noisy', 'heating_not_working'],
+    electrical: ['light_bulb_out', 'power_socket_broken', 'no_power', 'boiler_no_hot_water', 'hair_dryer_broken'],
+    plumbing: ['water_leak', 'blocked_drain', 'toilet_flush_broken', 'low_water_pressure', 'shower_head_broken', 'faucet_dripping'],
+    furniture: ['door_lock_broken', 'door_handle_broken', 'window_not_closing', 'curtains_broken', 'bed_damaged', 'wardrobe_damaged', 'chair_table_damaged'],
+    safety: ['smoke_detector_fault', 'fire_extinguisher_missing', 'balcony_railing_loose', 'emergency_light_out', 'key_card_reader_fault'],
+    other: ['wifi_not_working', 'elevator_fault', 'pest_control', 'wall_paint_damage', 'floor_tile_damage'],
+};
+const typeOptions = computed(() => issueTypes[reportForm.category] || []);
+// Changing category invalidates the chosen type; back to "Tjetër".
+watch(() => reportForm.category, () => { reportForm.issue_key = ''; });
 
 watch(selected, (issue) => { assignedTo.value = issue?.assignee?.id || ''; }, { immediate: true });
 
@@ -187,7 +203,14 @@ function uploadAttachment() {
                         <label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.priority') }}<select v-model="reportForm.priority" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white"><option v-for="p in ['low','medium','high','critical']" :key="p" :value="p">{{ t(`maintenance.${p}`) }}</option></select></label>
                         <label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.category') }}<select v-model="reportForm.category" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white"><option v-for="c in ['electronics','climate','electrical','plumbing','furniture','safety','other']" :key="c" :value="c">{{ categoryLabel(c) }}</option></select></label>
                         <label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.type') }}<select v-model="reportForm.kind" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white"><option value="corrective">{{ t('maintenance.corrective') }}</option><option value="preventive">{{ t('maintenance.preventive') }}</option></select></label>
-                        <label class="sm:col-span-2 text-xs font-semibold text-neutral-700">{{ t('maintenance.problem') }}<input v-model="reportForm.title" required class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white" :placeholder="t('maintenance.problemPlaceholder')" /><span v-if="reportForm.errors.title" class="mt-1 block text-xs text-red-600">{{ reportForm.errors.title }}</span></label>
+                        <label class="sm:col-span-2 text-xs font-semibold text-neutral-700">{{ t('maintenance.problem') }}
+                            <select v-model="reportForm.issue_key" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white">
+                                <option v-for="key in typeOptions" :key="key" :value="key">{{ t(`maintenance.issueTypes.${key}`) }}</option>
+                                <option value="">{{ t('maintenance.issueTypeOther') }}</option>
+                            </select>
+                            <span v-if="reportForm.errors.issue_key" class="mt-1 block text-xs text-red-600">{{ reportForm.errors.issue_key }}</span>
+                        </label>
+                        <label v-if="!reportForm.issue_key" class="sm:col-span-2 text-xs font-semibold text-neutral-700">{{ t('maintenance.problemManual') }}<input v-model="reportForm.title" required class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white" :placeholder="t('maintenance.problemPlaceholder')" /><span v-if="reportForm.errors.title" class="mt-1 block text-xs text-red-600">{{ reportForm.errors.title }}</span></label>
                         <label class="sm:col-span-2 text-xs font-semibold text-neutral-700">{{ t('maintenance.description') }}<textarea v-model="reportForm.description" rows="2" class="mt-1.5 w-full resize-none rounded-lg border-neutral-200 bg-neutral-50 text-sm focus:bg-white" :placeholder="t('maintenance.descriptionPlaceholder')"></textarea></label>
                         <template v-if="reportForm.kind === 'preventive'"><label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.scheduledFor') }}<input v-model="reportForm.scheduled_for" type="datetime-local" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm" /></label><label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.recurrenceDays') }}<input v-model="reportForm.recurrence_days" type="number" min="1" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm" /></label></template>
                         <div class="sm:col-span-2 rounded-xl border border-neutral-200 bg-neutral-50/70"><button type="button" class="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs font-semibold text-neutral-700" @click="reportAdvancedOpen = !reportAdvancedOpen"><span>{{ t('maintenance.assetDetails') }} <small class="ml-1 font-normal text-neutral-400">{{ t('maintenance.optional') }}</small></span><span class="text-neutral-400">{{ reportAdvancedOpen ? '−' : '+' }}</span></button><div v-if="reportAdvancedOpen" class="grid gap-3 border-t border-neutral-200 p-3 sm:grid-cols-2"><label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.asset') }}<input v-model="reportForm.asset_name" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-white py-2 text-sm" /></label><label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.assetCode') }}<input v-model="reportForm.asset_code" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-white py-2 text-sm" /></label></div></div>
