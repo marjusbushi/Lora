@@ -49,7 +49,7 @@ const statusTabs = computed(() => [
 ]);
 
 const reportForm = useForm({
-    room_id: '', issue_key: '', title: '', description: '', category: 'other', kind: 'corrective',
+    room_id: '', issue_key: '', title: '', description: '', category: '', kind: 'corrective',
     priority: 'medium', asset_name: '', asset_code: '', block_room: false,
     scheduled_for: '', recurrence_days: '', attachments: [],
 });
@@ -203,10 +203,10 @@ function uploadAttachment() {
                     <div class="grid gap-3 p-4 sm:grid-cols-2">
                         <label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.roomLocation') }}<select v-model="reportForm.room_id" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white"><option value="">{{ t('maintenance.commonArea') }}</option><option v-for="room in rooms" :key="room.id" :value="room.id">{{ t('maintenance.room') }} {{ room.room_number }}</option></select></label>
                         <label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.priority') }}<select v-model="reportForm.priority" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white"><option v-for="p in ['low','medium','high','critical']" :key="p" :value="p">{{ t(`maintenance.${p}`) }}</option></select></label>
-                        <label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.category') }}<select v-model="reportForm.category" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white"><option v-for="c in ['electronics','climate','electrical','plumbing','furniture','safety','other']" :key="c" :value="c">{{ categoryLabel(c) }}</option></select></label>
+                        <label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.category') }}<select v-model="reportForm.category" required class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white"><option value="" disabled>{{ t('maintenance.categoryPlaceholder') }}</option><option v-for="c in ['electronics','climate','electrical','plumbing','furniture','safety','other']" :key="c" :value="c">{{ categoryLabel(c) }}</option></select></label>
                         <label class="text-xs font-semibold text-neutral-700">{{ t('maintenance.type') }}<select v-model="reportForm.kind" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white"><option value="corrective">{{ t('maintenance.corrective') }}</option><option value="preventive">{{ t('maintenance.preventive') }}</option></select></label>
                         <label class="sm:col-span-2 text-xs font-semibold text-neutral-700">{{ t('maintenance.problem') }}
-                            <select v-model="reportForm.issue_key" required class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white">
+                            <select v-model="reportForm.issue_key" required :disabled="!reportForm.category" class="mt-1.5 w-full rounded-lg border-neutral-200 bg-neutral-50 py-2 text-sm focus:bg-white disabled:opacity-60">
                                 <option value="" disabled>{{ t('maintenance.issueTypePlaceholder') }}</option>
                                 <option v-for="key in typeOptions" :key="key" :value="key">{{ t(`maintenance.issueTypes.${key}`) }}</option>
                                 <option value="__manual">{{ t('maintenance.issueTypeOther') }}</option>
