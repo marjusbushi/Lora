@@ -66,8 +66,16 @@ final class DiscountRefundCashFlowService
         $pmsDiscountTotal = (float) $folioDiscounts->sum('amount_base') + (float) $directDiscounts->sum('direct_discount_amount_base');
         $discountTotal = round($pmsDiscountTotal + (float) $posDiscounts->sum('discount_amount'), 2);
         $refundTotal = round((float) $pmsRefunds->sum('amount_base') + (float) $posRefunds->sum('amount'), 2);
-        $inflow = round((float) $ledger->where('direction', 'in')->sum('amount_base'), 2);
-        $outflow = round((float) $ledger->where('direction', 'out')->sum('amount_base'), 2);
+        // Migration settlement postings (method 'import', e.g. the Aug 2026
+        // Beds24 cutover) are bookkeeping, not money that moved in the period
+        // — mixed in, they made the cash flow unreadable (4.36M of 5.18M in
+        // one window). They get their own labeled line instead.
+        $operating = $ledger->where('method', '!=', 'import');
+        $importPostings = $ledger->where('method', 'import');
+        $inflow = round((float) $operating->where('direction', 'in')->sum('amount_base'), 2);
+        $outflow = round((float) $operating->where('direction', 'out')->sum('amount_base'), 2);
+        $importIn = round((float) $importPostings->where('direction', 'in')->sum('amount_base'), 2);
+        $importOut = round((float) $importPostings->where('direction', 'out')->sum('amount_base'), 2);
 
         $activity = collect()
             ->concat($folioDiscounts->map(fn (FolioItem $item) => [
@@ -112,10 +120,11 @@ final class DiscountRefundCashFlowService
             'summary' => [
                 'discounts' => $discountTotal, 'refunds' => $refundTotal,
                 'inflow' => $inflow, 'outflow' => $outflow, 'net_cash_flow' => round($inflow - $outflow, 2),
+                'import_in' => $importIn, 'import_out' => $importOut,
                 'discount_count' => $folioDiscounts->count() + $directDiscounts->count() + $posDiscounts->count(),
                 'refund_count' => $pmsRefunds->count() + $posRefunds->count(),
             ],
-            'daily' => $this->daily($period, $ledger),
+            'daily' => $this->daily($period, $operating),
             'discount_sources' => [
                 ['source' => 'pms', 'amount' => round($pmsDiscountTotal, 2), 'count' => $folioDiscounts->count() + $directDiscounts->count()],
                 ['source' => 'pos', 'amount' => round((float) $posDiscounts->sum('discount_amount'), 2), 'count' => $posDiscounts->count()],

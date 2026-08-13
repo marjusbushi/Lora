@@ -89,5 +89,36 @@ class DiscountRefundCashFlowServiceTest extends TestCase
         $this->assertSame(35.0, collect($report['discount_sources'])->firstWhere('source', 'pms')['amount']);
         $this->assertFalse(collect($report['activity'])->contains('reason', 'POS refund reversal'));
         $this->assertSame(200.0, collect($report['daily'])->firstWhere('date', '2026-07-02')['inflow']);
+        $this->assertSame(0.0, $report['summary']['import_in']);
+        $this->assertSame(0.0, $report['summary']['import_out']);
+    }
+
+    public function test_import_postings_are_split_out_of_operating_cash_flow(): void
+    {
+        $account = FinanceAccount::firstOrCreate(
+            ['name' => 'Arka'],
+            ['type' => 'cash', 'currency' => 'EUR'],
+        );
+        foreach ([
+            ['in', 200, 'cash', '2026-07-02 12:00:00'],
+            ['out', 40, 'cash', '2026-07-03 12:00:00'],
+            ['in', 5000, 'import', '2026-07-02 09:00:00'],
+            ['out', 300, 'import', '2026-07-03 09:00:00'],
+        ] as [$direction, $amount, $method, $paidAt]) {
+            FinancePayment::create([
+                'direction' => $direction, 'account_id' => $account->id, 'amount' => $amount,
+                'currency' => 'EUR', 'method' => $method, 'source' => 'manual', 'paid_at' => $paidAt,
+            ]);
+        }
+
+        $report = app(DiscountRefundCashFlowService::class)->summary(new ReportingPeriod('2026-07-01', '2026-07-31'));
+
+        $this->assertSame(200.0, $report['summary']['inflow']);
+        $this->assertSame(40.0, $report['summary']['outflow']);
+        $this->assertSame(160.0, $report['summary']['net_cash_flow']);
+        $this->assertSame(5000.0, $report['summary']['import_in']);
+        $this->assertSame(300.0, $report['summary']['import_out']);
+        $this->assertSame(200.0, collect($report['daily'])->firstWhere('date', '2026-07-02')['inflow']);
+        $this->assertSame(40.0, collect($report['daily'])->firstWhere('date', '2026-07-03')['outflow']);
     }
 }

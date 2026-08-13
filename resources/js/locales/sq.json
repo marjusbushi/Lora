@@ -5265,7 +5265,26 @@
       "pickup": "Ndryshimi që nga fotoja e librit N ditë më parë: sa ke shtuar (+) ose humbur (−) që atëherë.",
       "horizon": "Sa ditë prapa është marrë fotoja e krahasimit e librit të rezervimeve.",
       "snapshotDate": "Data kur është marrë fotoja e librit (çdo natë në 03:30).",
-      "referenceNights": "Netët që ishin në libra ditën e fotos."
+      "referenceNights": "Netët që ishin në libra ditën e fotos.",
+      "zrCashSales": "Shitjet cash të POS-it gjatë turneve të periudhës. NUK përfshin pagesat cash të bëra në PMS (recepsion) — ato i sheh te kolona \"Cash PMS\".",
+      "zrExpectedCash": "Sa duhet të ketë arka në mbyllje: paraja e nisjes (float) + shitjet cash të POS-it gjatë turnit.",
+      "zrOverShort": "Paraja e numëruar − paraja e pritur. Pozitive = tepricë (shpesh para e PMS-it e futur në të njëjtën arkë), negative = mungesë. Krahasoje me \"Cash PMS\" para se të dyshosh mungesë reale.",
+      "zrPmsCash": "Pagesat cash të regjistruara në PMS (recepsion) brenda orarit të turnit. Nuk hyjnë në pritshmërinë e arkës së POS-it — nëse stafi i fut në të njëjtën arkë, teprica e turnit shpjegohet pikërisht këtu.",
+      "prCollected": "Gjithë pagesat e arkëtuara në periudhë (pa ato të anuluara), me çdo metodë: cash, kartë, transfertë, OTA.",
+      "prReconciliationRate": "Sa përqind e pagesave janë lidhur me një folio rezervimi. 100% = çdo pagesë e gjurmueshme te një mysafir konkret.",
+      "prSources": "Ndarja e arkëtimeve sipas metodës së pagesës. Kliko një metodë për të parë pagesat përkatëse.",
+      "prControl": "Kontrolle automatike: diferenca arke mbi 5 €, pagesa pa folio, anulime të shpeshta. Zero probleme = periudhë e pastër.",
+      "prUnposted": "Pagesa të regjistruara por të palidhura me asnjë folio — para pa \"pronar\". Duhet të jetë zero; çdo shumë këtu kërkon hetim.",
+      "fvGross": "Vlera bruto (me TVSH) e dokumenteve tatimore të periudhës — fatura që sistemi ka gati për fiskalizim.",
+      "fvCoverage": "Sa përqind e dokumenteve janë fiskalizuar me sukses. Nën 100% = ka fatura pa u dërguar te tatimet — shih kartën \"Pa fiskalizuar\".",
+      "fvAwaiting": "Vlera bruto e dokumenteve që s'janë fiskalizuar ende: pa nisur, në proces, ose të dështuara. Kjo është ekspozimi yt tatimor — duhet të jetë zero.",
+      "fvSandbox": "Sistemi është i lidhur me mjedisin TEST të fiskalizimit — dokumentet NUK shkojnë te tatimet reale. Për të kaluar në prodhim, ndrysho mjedisin te konfigurimi i fiskalizimit.",
+      "dcDiscounts": "Zbritje të dhëna me dorë në folio (PMS) ose në POS — p.sh. çmim special për një mysafir, kompensim për ankesë. Zbritjet e OTA-ve (Genius, oferta Booking) NUK shfaqen këtu: ato vijnë si çmim më i ulët që në rezervim.",
+      "dcInflow": "Hyrjet reale të parave në periudhë (pagesa e depozita jo të anuluara). Postimet teknike të migrimit nga sistemi i vjetër janë veçuar — shih shënimin poshtë.",
+      "dcImport": "Postime teknike të krijuara nga importi i të dhënave nga sistemi i vjetër (shlyerje importi) — nuk janë para të lëvizura realisht në periudhë, ndaj mbahen jashtë hyrjeve/daljeve.",
+      "drTotal": "Të ardhurat neto të njohura në periudhë, të ndara sipas departamenteve: dhomat + POS + të tjera, pas zbritjeve.",
+      "drRooms": "Të ardhurat nga fjetja (tarifat e dhomës në folio), pas zbritjeve. Llogaritet mbi vlerat në monedhën bazë — kursi i ditës nuk e shtrembëron.",
+      "drOther": "Gjithçka jashtë dhomave dhe POS-it: shtesa, shërbime, transferta, taksa qëndrimi etj."
     },
     "executiveDashboard": "Dashboard Ekzekutiv",
     "executiveShort": "Performanca dhe sinjalet kryesore.",
@@ -5645,6 +5664,7 @@
       "transactions": "transaksione",
       "cashFlow": "Cash flow ditor",
       "ledgerOnly": "Vetëm lëvizje reale në ledger",
+      "importPostings": "Postime migrimi",
       "discountSources": "Uljet sipas burimit",
       "topReasons": "Arsyet kryesore",
       "activity": "Uljet dhe rimbursimet",
@@ -5682,7 +5702,9 @@
       "pms": "Rezervime",
       "pos": "POS",
       "verify": "Verifiko",
-      "missingStatus": "Mungon"
+      "missingStatus": "Mungon",
+      "awaitingGross": "Pa fiskalizuar (vlera)",
+      "sandboxNote": "Mjedisi fiskal: SANDBOX (test)"
     },
     "posControls": {
       "title": "Pagesat & Kontrollet POS",
@@ -5805,7 +5827,9 @@
       "saveError": "Raporti nuk u ruajt."
     },
     "zReport": {
-      "mismatch": "Mospërputhje"
+      "mismatch": "Mospërputhje",
+      "pmsCash": "Cash PMS",
+      "suspectEntry": "Shifër e dyshimtë?"
     },
     "cancellationRisk": {
       "title": "Anulime & No-Show",
@@ -5886,7 +5910,7 @@
       "days": "ditë"
     },
     "paymentReconciliation": {
-      "title": "Pagesat & Reconciliation",
+      "title": "Pagesat & Përputhshmëria",
       "short": "Arkëtimet reale dhe mospërputhjet që kërkojnë kontroll.",
       "category": "Financë & arka",
       "collected": "Arkëtuar neto",

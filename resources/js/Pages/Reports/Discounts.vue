@@ -7,6 +7,8 @@ import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import { ArrowDownToLine, ArrowUpFromLine, CirclePercent, RefreshCcw } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -15,13 +17,16 @@ const props = defineProps({
     canViewReservations: { type: Boolean, default: false },
     canViewPos: { type: Boolean, default: false },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: null },
+    baseToPricingRate: { type: [Number, String], default: null },
 });
 
 const summary = computed(() => props.analytics.summary || {});
 const daily = computed(() => props.analytics.daily || []);
 const activity = computed(() => props.analytics.activity || []);
 const maxFlow = computed(() => Math.max(1, ...daily.value.flatMap((day) => [Number(day.inflow || 0), Number(day.outflow || 0)])));
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const { money, moneyBase, showBase, displayRate, pricingCode } = useReportCurrency(props);
+const importTotal = computed(() => Number(summary.value.import_in || 0) - Number(summary.value.import_out || 0));
 const fmt = (date) => date ? new Date(`${date}T00:00:00`).toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
 const sourceBars = computed(() => (props.analytics.discount_sources || []).map((row) => ({
@@ -39,10 +44,10 @@ const reasonBars = computed(() => (props.analytics.reasons || []).map((row) => (
     barClass: 'bg-warning-500',
 })));
 const kpis = computed(() => [
-    { label: translate('reports360.discountCashFlow.discounts'), value: money(summary.value.discounts), tone: 'warning', icon: CirclePercent, detail: `${summary.value.discount_count || 0} ${translate('reports360.discountCashFlow.transactions')}` },
-    { label: translate('reports360.discountCashFlow.refunds'), value: money(summary.value.refunds), tone: 'error', icon: RefreshCcw, detail: `${summary.value.refund_count || 0} ${translate('reports360.discountCashFlow.transactions')}` },
-    { label: translate('reports360.discountCashFlow.inflow'), value: money(summary.value.inflow), tone: 'success', icon: ArrowDownToLine },
-    { label: translate('reports360.discountCashFlow.net'), value: money(summary.value.net_cash_flow), tone: Number(summary.value.net_cash_flow || 0) >= 0 ? 'accent' : 'error', icon: ArrowUpFromLine, detail: `${translate('reports360.discountCashFlow.outflow')}: ${money(summary.value.outflow)}` },
+    { label: translate('reports360.discountCashFlow.discounts'), help: translate('reports360.help.dcDiscounts'), value: money(summary.value.discounts), subvalue: showBase.value ? moneyBase(summary.value.discounts) : null, tone: 'warning', icon: CirclePercent, detail: `${summary.value.discount_count || 0} ${translate('reports360.discountCashFlow.transactions')}` },
+    { label: translate('reports360.discountCashFlow.refunds'), value: money(summary.value.refunds), subvalue: showBase.value ? moneyBase(summary.value.refunds) : null, tone: 'error', icon: RefreshCcw, detail: `${summary.value.refund_count || 0} ${translate('reports360.discountCashFlow.transactions')}` },
+    { label: translate('reports360.discountCashFlow.inflow'), help: translate('reports360.help.dcInflow'), value: money(summary.value.inflow), subvalue: showBase.value ? moneyBase(summary.value.inflow) : null, tone: 'success', icon: ArrowDownToLine, detail: importTotal.value ? `${translate('reports360.discountCashFlow.importPostings')}: ${money(importTotal.value)}` : null },
+    { label: translate('reports360.discountCashFlow.net'), value: money(summary.value.net_cash_flow), subvalue: showBase.value ? moneyBase(summary.value.net_cash_flow) : null, tone: Number(summary.value.net_cash_flow || 0) >= 0 ? 'accent' : 'error', icon: ArrowUpFromLine, detail: `${translate('reports360.discountCashFlow.outflow')}: ${money(summary.value.outflow)}` },
 ]);
 const href = (row) => {
     if (row.link_kind === 'reservation' && props.canViewReservations) return route('reservations.show', row.link_id);
@@ -60,6 +65,11 @@ const href = (row) => {
         :category="$t('reports360.discountCashFlow.category')"
     >
         <ReportKpiGrid :items="kpis" />
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-tiny text-neutral-500">
+            <span v-if="importTotal" class="inline-flex items-center gap-1">{{ $t('reports360.discountCashFlow.importPostings') }}: {{ money(importTotal) }}<InfoTip :text="$t('reports360.help.dcImport')" :label="$t('reports360.discountCashFlow.importPostings')" /></span>
+            <span v-else />
+            <span v-if="displayRate">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</span>
+        </div>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
             <Card :padding="false">

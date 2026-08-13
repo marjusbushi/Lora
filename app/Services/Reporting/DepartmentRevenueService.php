@@ -44,7 +44,7 @@ final class DepartmentRevenueService
             ->whereHas('reservation', fn ($query) => $query->where('status', '!=', 'cancelled')->whereNull('no_show_at'))
             ->whereBetween('charge_date', [$period->from->toDateString(), $period->to->toDateString()])
             ->whereNotIn('type', ['room', 'discount'])
-            ->get(['id', 'reservation_id', 'type', 'amount', 'charge_date']);
+            ->get(['id', 'reservation_id', 'type', 'amount_base', 'charge_date']);
 
         $orders = PosOrder::query()
             ->where('status', 'completed')
@@ -96,7 +96,9 @@ final class DepartmentRevenueService
             if (! $date || ! isset($daily[$date])) {
                 continue;
             }
-            $amount = round((float) $item->amount * ($factors[$item->reservation_id] ?? 1), 2);
+            // amount_base, not amount: a EUR-denominated extra summed at its
+            // document value would corrupt the Lek totals (Nationality-bug class).
+            $amount = round((float) $item->amount_base * ($factors[$item->reservation_id] ?? 1), 2);
             $row = $daily->get($date);
             $row['other'] = round($row['other'] + $amount, 2);
             $daily->put($date, $row);
