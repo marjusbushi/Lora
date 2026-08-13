@@ -80,4 +80,25 @@ class DepartmentRevenueServiceTest extends TestCase
         $this->assertSame(86.4, collect($report['current']['departments'])->firstWhere('department', 'rooms')['share']);
         $this->assertNull($report['changes']['total']);
     }
+
+    public function test_folio_extras_count_at_base_currency_value(): void
+    {
+        $user = User::factory()->create();
+        $type = RoomType::create(['name' => 'Standard', 'base_price' => 100, 'max_occupancy' => 2, 'amenities' => []]);
+        $room = Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'occupied']);
+        $guest = Guest::create(['first_name' => 'Base', 'last_name' => 'Guest']);
+        $reservation = Reservation::create([
+            'room_id' => $room->id, 'guest_id' => $guest->id, 'created_by' => $user->id,
+            'check_in_date' => '2026-07-01', 'check_out_date' => '2026-07-02', 'status' => 'checked_out',
+            'total_amount' => 100, 'adults' => 1, 'children' => 0, 'channel' => 'direct',
+        ]);
+        FolioItem::create([
+            'reservation_id' => $reservation->id, 'description' => 'Spa në EUR',
+            'amount' => 30, 'exchange_rate' => 100, 'type' => 'extra', 'charge_date' => '2026-07-01',
+        ]);
+
+        $report = app(DepartmentRevenueService::class)->summary(new ReportingPeriod('2026-07-01', '2026-07-02'));
+
+        $this->assertSame(3000.0, $report['summary']['other']);
+    }
 }

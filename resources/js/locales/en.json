@@ -5265,7 +5265,26 @@
       "pickup": "The change since the book's photo N days ago: what you gained (+) or lost (−) since then.",
       "horizon": "How many days back the comparison photo of the booking book was taken.",
       "snapshotDate": "The date the booking-book photo was taken (every night at 03:30).",
-      "referenceNights": "Nights that were on the books on the photo's day."
+      "referenceNights": "Nights that were on the books on the photo's day.",
+      "zrCashSales": "POS cash sales during the period's shifts. Does NOT include cash payments taken in the PMS (front desk) — see the \"PMS cash\" column for those.",
+      "zrExpectedCash": "What the drawer should hold at closing: opening float + POS cash sales during the shift.",
+      "zrOverShort": "Counted cash − expected cash. Positive = surplus (often PMS cash dropped into the same drawer), negative = shortage. Compare with \"PMS cash\" before suspecting a real loss.",
+      "zrPmsCash": "Cash payments recorded in the PMS (front desk) within the shift's hours. They are not part of the POS drawer expectation — if staff put them in the same drawer, the shift's surplus is explained right here.",
+      "prCollected": "All payments collected in the period (voided ones excluded), across every method: cash, card, transfer, OTA.",
+      "prReconciliationRate": "Share of payments linked to a reservation folio. 100% = every payment traceable to a specific guest.",
+      "prSources": "Collections broken down by payment method. Click a method to see its payments.",
+      "prControl": "Automatic checks: drawer differences over €5, payments without a folio, frequent voids. Zero issues = a clean period.",
+      "prUnposted": "Payments recorded but not linked to any folio — money without an \"owner\". Should be zero; any amount here needs investigating.",
+      "fvGross": "Gross value (VAT included) of the period's tax documents — the invoices the system has ready for fiscalization.",
+      "fvCoverage": "Share of documents successfully fiscalized. Below 100% = invoices not yet sent to the tax authority — see the \"Awaiting fiscalization\" card.",
+      "fvAwaiting": "Gross value of documents not yet fiscalized: not started, processing, or failed. This is your tax exposure — it should be zero.",
+      "fvSandbox": "The system is connected to the TEST fiscalization environment — documents are NOT sent to the real tax authority. To go live, change the environment in the fiscalization settings.",
+      "dcDiscounts": "Discounts granted manually on a folio (PMS) or in the POS — e.g. a special rate for a guest, compensation for a complaint. OTA discounts (Genius, Booking deals) do NOT appear here: they arrive as a lower price already on the reservation.",
+      "dcInflow": "Real money inflows in the period (non-voided payments and deposits). Technical migration postings from the old system are kept separate — see the note below.",
+      "dcImport": "Technical postings created by the data import from the old system (import settlements) — not money that actually moved in the period, so they are kept out of inflows/outflows.",
+      "drTotal": "Net revenue recognized in the period, split by department: rooms + POS + other, after discounts.",
+      "drRooms": "Revenue from lodging (room charges on the folio), after discounts. Computed on base-currency values — the day's exchange rate cannot distort it.",
+      "drOther": "Everything outside rooms and POS: extras, services, transfers, stay taxes, etc."
     },
     "executiveDashboard": "Executive Dashboard",
     "executiveShort": "Key performance and alerts.",
@@ -5645,6 +5664,7 @@
       "transactions": "transactions",
       "cashFlow": "Daily cash flow",
       "ledgerOnly": "Actual ledger movements only",
+      "importPostings": "Migration postings",
       "discountSources": "Discounts by source",
       "topReasons": "Top reasons",
       "activity": "Discounts and refunds",
@@ -5682,7 +5702,9 @@
       "pms": "Reservations",
       "pos": "POS",
       "verify": "Verify",
-      "missingStatus": "Missing"
+      "missingStatus": "Missing",
+      "awaitingGross": "Awaiting fiscalization (value)",
+      "sandboxNote": "Fiscal environment: SANDBOX (test)"
     },
     "posControls": {
       "title": "POS Payments & Controls",
@@ -5805,7 +5827,9 @@
       "saveError": "The report could not be saved."
     },
     "zReport": {
-      "mismatch": "Mismatch"
+      "mismatch": "Mismatch",
+      "pmsCash": "PMS cash",
+      "suspectEntry": "Suspect figure?"
     },
     "cancellationRisk": {
       "title": "Cancellations & No-Show",

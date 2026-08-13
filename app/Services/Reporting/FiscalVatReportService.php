@@ -6,6 +6,7 @@ use App\Models\FiscalDocument;
 use App\Models\PosFiscalDocument;
 use App\Models\PosOrder;
 use App\Models\Reservation;
+use App\Services\FatureAlConfiguration;
 use App\Services\VatConfiguration;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -14,9 +15,20 @@ final class FiscalVatReportService
 {
     private const PROVIDER = 'fature_al';
 
-    private const ENVIRONMENT = 'sandbox';
+    public function __construct(
+        private readonly VatConfiguration $vatConfiguration,
+        private readonly FatureAlConfiguration $fatureAl,
+    ) {}
 
-    public function __construct(private readonly VatConfiguration $vatConfiguration) {}
+    /**
+     * The tenant's LIVE fiscal environment — the same setting the fiscalizer
+     * itself uses. Hardcoding 'sandbox' here would silently blind the report
+     * the day the hotel switches to production fiscalization.
+     */
+    private function environment(): string
+    {
+        return (string) $this->fatureAl->get('environment', 'sandbox');
+    }
 
     /** @return array{period:array,summary:array,statuses:array,sources:array,rates:array,documents:array} */
     public function summary(ReportingPeriod $period): array
@@ -25,7 +37,7 @@ final class FiscalVatReportService
         $end = $period->to->endOfDay();
         $fiscalReservationIds = FiscalDocument::query()
             ->where('provider', self::PROVIDER)
-            ->where('environment', self::ENVIRONMENT)
+            ->where('environment', $this->environment())
             ->where(function (Builder $query) use ($start, $end) {
                 $query->whereBetween('fiscalized_at', [$start, $end])
                     ->orWhere(fn (Builder $attempted) => $attempted
@@ -34,7 +46,7 @@ final class FiscalVatReportService
             })->pluck('reservation_id');
         $fiscalPosIds = PosFiscalDocument::query()
             ->where('provider', self::PROVIDER)
-            ->where('environment', self::ENVIRONMENT)
+            ->where('environment', $this->environment())
             ->where(function (Builder $query) use ($start, $end) {
                 $query->whereBetween('fiscalized_at', [$start, $end])
                     ->orWhere(fn (Builder $attempted) => $attempted
@@ -63,7 +75,7 @@ final class FiscalVatReportService
         $reservationDocuments = FiscalDocument::query()
             ->whereIn('reservation_id', $reservations->pluck('id'))
             ->where('provider', self::PROVIDER)
-            ->where('environment', self::ENVIRONMENT)
+            ->where('environment', $this->environment())
             ->orderByDesc('id')
             ->get()
             ->unique('reservation_id')
@@ -71,7 +83,7 @@ final class FiscalVatReportService
         $posDocuments = PosFiscalDocument::query()
             ->whereIn('pos_order_id', $posOrders->pluck('id'))
             ->where('provider', self::PROVIDER)
-            ->where('environment', self::ENVIRONMENT)
+            ->where('environment', $this->environment())
             ->orderByDesc('id')
             ->get()
             ->unique('pos_order_id')
@@ -149,6 +161,10 @@ final class FiscalVatReportService
                 'processing' => $rows->where('status', 'processing')->count(),
                 'missing' => $rows->where('status', 'missing')->count(),
                 'coverage_rate' => $rows->count() > 0 ? round($covered->count() / $rows->count() * 100, 1) : 100.0,
+                // Real money still WAITING for a fiscal invoice — without this
+                // a hotel that has not fiscalized yet sees only zeros.
+                'awaiting_gross' => round((float) $rows->where('status', '!=', FiscalDocument::STATUS_FISCALIZED)->sum('gross'), 2),
+                'environment' => $this->environment(),
                 'gross' => $gross,
                 'vat' => $vat,
                 'net' => round($gross - $vat, 2),
