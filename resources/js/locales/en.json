@@ -5284,7 +5284,17 @@
       "dcImport": "Technical postings created by the data import from the old system (import settlements) — not money that actually moved in the period, so they are kept out of inflows/outflows.",
       "drTotal": "Net revenue recognized in the period, split by department: rooms + POS + other, after discounts.",
       "drRooms": "Revenue from lodging (room charges on the folio), after discounts. Computed on base-currency values — the day's exchange rate cannot distort it.",
-      "drOther": "Everything outside rooms and POS: extras, services, transfers, stay taxes, etc."
+      "drOther": "Everything outside rooms and POS: extras, services, transfers, stay taxes, etc.",
+      "oaTotal": "Unpaid balances of all active reservations (cancelled ones excluded): stay + extras − discounts − payments. The \"accounts\" figure = reservations carrying debt.",
+      "oaOverdue": "The part of the debt past its due date. Due date = the CHECK-OUT date — after departure, every unpaid day ages the debt.",
+      "oaCollectionRate": "Share of the invoiced value already collected: paid ÷ gross. Below 80% the report flags it with color.",
+      "oaCritical": "Debts more than 30 days past check-out — the hardest to collect. These need immediate contact with the guest or the agency.",
+      "oaAging": "Debts are grouped by age: how many days have passed since the check-out date without payment. \"Not due\" = the guest hasn't checked out yet. Click a bar to filter the list below.",
+      "bpIn": "All money that entered the bank accounts during the period, converted to the base currency: payments auto-routed from PMS/POS + manual postings + incoming transfers.",
+      "bpOut": "All money that left the bank accounts in the period, in the base currency: withdrawals, supplier payments, outgoing transfers.",
+      "bpNet": "Inflows − outflows, in the base currency. Transfers between two of your own banks leave one and enter the other — the net doesn't change.",
+      "bpMovements": "Number of movements in the list. A bank-to-bank transfer touches two accounts but shows as a single row with an arrow.",
+      "bpBase": "The document amount converted to the base currency at the payment day's rate — so accounts in different currencies add up into one total."
     },
     "executiveDashboard": "Executive Dashboard",
     "executiveShort": "Key performance and alerts.",

@@ -4,6 +4,7 @@ import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import { ArrowDownToLine, ArrowUpFromLine, Landmark, Scale } from 'lucide-vue-next';
 import { router } from '@inertiajs/vue3';
 
@@ -38,10 +39,10 @@ const sourceLabel = { auto: translate('reportsBank.auto'), manual: translate('re
 const methodLabel = { cash: translate('reportsBank.cash'), card: translate('reportsBank.card'), bank: translate('reportsBank.bank'), room_charge: translate('reportsBank.roomCharge') };
 
 const kpis = [
-    { label: translate('reportsBank.kpiIn'), value: () => money(props.totals?.in_base), tone: 'success', icon: ArrowDownToLine },
-    { label: translate('reportsBank.kpiOut'), value: () => money(props.totals?.out_base), tone: 'error', icon: ArrowUpFromLine },
-    { label: translate('reportsBank.kpiNet'), value: () => money(props.totals?.net_base), tone: () => Number(props.totals?.net_base ?? 0) >= 0 ? 'success' : 'error', icon: Scale },
-    { label: translate('reportsBank.kpiMovements'), value: () => props.rows.length, tone: 'neutral', icon: Landmark },
+    { label: translate('reportsBank.kpiIn'), help: translate('reports360.help.bpIn'), value: () => money(props.totals?.in_base), tone: 'success', icon: ArrowDownToLine },
+    { label: translate('reportsBank.kpiOut'), help: translate('reports360.help.bpOut'), value: () => money(props.totals?.out_base), tone: 'error', icon: ArrowUpFromLine },
+    { label: translate('reportsBank.kpiNet'), help: translate('reports360.help.bpNet'), value: () => money(props.totals?.net_base), tone: () => Number(props.totals?.net_base ?? 0) >= 0 ? 'success' : 'error', icon: Scale },
+    { label: translate('reportsBank.kpiMovements'), help: translate('reports360.help.bpMovements'), value: () => props.rows.length, tone: 'neutral', icon: Landmark },
 ];
 </script>
 
@@ -87,7 +88,7 @@ const kpis = [
                             <th class="px-4 py-3 text-left text-label text-neutral-600">{{ $t('reportsBank.colMethod') }}</th>
                             <th class="px-4 py-3 text-left text-label text-neutral-600">{{ $t('reportsBank.colType') }}</th>
                             <th class="px-4 py-3 text-right text-label text-neutral-600">{{ $t('reportsBank.colAmount') }}</th>
-                            <th class="px-4 py-3 text-right text-label text-neutral-600">{{ $t('reportsBank.colBase') }}</th>
+                            <th class="px-4 py-3 text-right text-label text-neutral-600"><span class="inline-flex items-center gap-1">{{ $t('reportsBank.colBase') }}<InfoTip :text="$t('reports360.help.bpBase')" :label="$t('reportsBank.colBase')" /></span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">
