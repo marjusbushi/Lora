@@ -5,12 +5,16 @@ import ReportShell from '@/Components/UI/ReportShell.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import Card from '@/Components/UI/Card.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import { Banknote, BedDouble, Building2, Utensils } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
     analytics: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: null },
+    baseToPricingRate: { type: [Number, String], default: null },
 });
 
 const current = computed(() => props.analytics.current || {});
@@ -19,7 +23,7 @@ const changes = computed(() => props.analytics.changes || {});
 const daily = computed(() => current.value.daily || []);
 const maxDaily = computed(() => Math.max(1, ...daily.value.map((day) => ['rooms', 'pos', 'other']
     .reduce((sum, key) => sum + Math.max(0, Number(day[key] || 0)), 0))));
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const { money, moneyBase, showBase, displayRate, pricingCode } = useReportCurrency(props);
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 const trend = (key) => changes.value[key] > 0 ? 'up' : changes.value[key] < 0 ? 'down' : 'flat';
 const trendText = (key) => changes.value[key] == null ? translate('reports360.noComparison') : `${changes.value[key] > 0 ? '+' : ''}${changes.value[key]}%`;
@@ -32,10 +36,10 @@ const bars = computed(() => (current.value.departments || []).map((row) => ({
     barClass: row.department === 'rooms' ? 'bg-accent-500' : row.department === 'pos' ? 'bg-success-500' : 'bg-info-500',
 })));
 const kpis = computed(() => [
-    { label: translate('reports360.departmentRevenue.total'), value: money(summary.value.total), tone: 'accent', icon: Banknote, trend: trend('total'), trendText: trendText('total') },
-    { label: departmentLabel('rooms'), value: money(summary.value.rooms), tone: 'info', icon: BedDouble, trend: trend('rooms'), trendText: trendText('rooms') },
-    { label: departmentLabel('pos'), value: money(summary.value.pos), tone: 'success', icon: Utensils, trend: trend('pos'), trendText: trendText('pos') },
-    { label: departmentLabel('other'), value: money(summary.value.other), tone: 'neutral', icon: Building2, trend: trend('other'), trendText: trendText('other') },
+    { label: translate('reports360.departmentRevenue.total'), help: translate('reports360.help.drTotal'), value: money(summary.value.total), subvalue: showBase.value ? moneyBase(summary.value.total) : null, tone: 'accent', icon: Banknote, trend: trend('total'), trendText: trendText('total') },
+    { label: departmentLabel('rooms'), help: translate('reports360.help.drRooms'), value: money(summary.value.rooms), subvalue: showBase.value ? moneyBase(summary.value.rooms) : null, tone: 'info', icon: BedDouble, trend: trend('rooms'), trendText: trendText('rooms') },
+    { label: departmentLabel('pos'), value: money(summary.value.pos), subvalue: showBase.value ? moneyBase(summary.value.pos) : null, tone: 'success', icon: Utensils, trend: trend('pos'), trendText: trendText('pos') },
+    { label: departmentLabel('other'), help: translate('reports360.help.drOther'), value: money(summary.value.other), subvalue: showBase.value ? moneyBase(summary.value.other) : null, tone: 'neutral', icon: Building2, trend: trend('other'), trendText: trendText('other') },
 ]);
 </script>
 
@@ -48,6 +52,7 @@ const kpis = computed(() => [
         :category="$t('reports360.departmentRevenue.category')"
     >
         <ReportKpiGrid :items="kpis" />
+        <div v-if="displayRate" class="mt-3 text-right text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</div>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.6fr)]">
             <Card :padding="false">

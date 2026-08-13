@@ -4,6 +4,8 @@ import { Link } from '@inertiajs/vue3';
 import ReportShell from '@/Components/UI/ReportShell.vue';
 import Card from '@/Components/UI/Card.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import { BadgeCheck, CircleAlert, FileCheckCorner, ReceiptText } from 'lucide-vue-next';
 import { computed } from 'vue';
 
@@ -15,10 +17,12 @@ const props = defineProps({
     canViewReservations: Boolean,
     canViewPos: Boolean,
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: null },
+    baseToPricingRate: { type: [Number, String], default: null },
 });
 
 const t = (key) => translate(`reports360.fiscalVat.${key}`);
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const { money, moneyBase, showBase, displayRate, pricingCode } = useReportCurrency(props);
 const pct = (value) => `${Number(value ?? 0).toLocaleString(getIntlLocale(), { maximumFractionDigits: 1 })}%`;
 const fmt = (date) => date ? new Date(`${date}T12:00:00`).toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 const summary = computed(() => props.analytics.summary || props.summary || {});
@@ -39,16 +43,21 @@ const sourceHref = (row) => row.source === 'pms' && props.canViewReservations
     : row.source === 'pos' && props.canViewPos ? route('pos.index', { order: row.source_id }) : null;
 
 const kpis = computed(() => [
-    { label: t('gross'), value: money(summary.value.gross), tone: 'accent', icon: ReceiptText, detail: `${summary.value.tax_documents || 0} ${t('documents')}` },
-    { label: t('vat'), value: money(summary.value.vat), tone: 'warning', icon: FileCheckCorner, detail: `${t('net')}: ${money(summary.value.net)}` },
-    { label: t('coverage'), value: pct(summary.value.coverage_rate), tone: Number(summary.value.coverage_rate) >= 100 ? 'success' : 'warning', icon: BadgeCheck, detail: `${summary.value.fiscalized || 0}/${summary.value.documents || 0}` },
-    { label: t('missing'), value: summary.value.missing || 0, tone: Number(summary.value.missing) > 0 ? 'error' : 'success', icon: CircleAlert, detail: `${summary.value.failed || 0} ${t('failed').toLocaleLowerCase(getIntlLocale())}` },
+    { label: t('gross'), help: translate('reports360.help.fvGross'), value: money(summary.value.gross), subvalue: showBase.value ? moneyBase(summary.value.gross) : null, tone: 'accent', icon: ReceiptText, detail: `${summary.value.tax_documents || 0} ${t('documents')}` },
+    { label: t('vat'), value: money(summary.value.vat), subvalue: showBase.value ? moneyBase(summary.value.vat) : null, tone: 'warning', icon: FileCheckCorner, detail: `${t('net')}: ${money(summary.value.net)}` },
+    { label: t('coverage'), help: translate('reports360.help.fvCoverage'), value: pct(summary.value.coverage_rate), tone: Number(summary.value.coverage_rate) >= 100 ? 'success' : 'warning', icon: BadgeCheck, detail: `${summary.value.fiscalized || 0}/${summary.value.documents || 0}` },
+    { label: t('awaitingGross'), help: translate('reports360.help.fvAwaiting'), value: money(summary.value.awaiting_gross), subvalue: showBase.value ? moneyBase(summary.value.awaiting_gross) : null, tone: Number(summary.value.awaiting_gross) > 0 ? 'error' : 'success', icon: CircleAlert, detail: `${summary.value.missing || 0} ${t('missingStatus').toLocaleLowerCase(getIntlLocale())} · ${summary.value.failed || 0} ${t('failed').toLocaleLowerCase(getIntlLocale())}` },
 ]);
 </script>
 
 <template>
     <ReportShell :title="t('title')" :description="t('short')" :category="t('category')" route-name="reports.vat" :filters="filters">
         <ReportKpiGrid :items="kpis" />
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-tiny text-neutral-500">
+            <span v-if="summary.environment === 'sandbox'" class="inline-flex items-center gap-1">{{ t('sandboxNote') }}<InfoTip :text="$t('reports360.help.fvSandbox')" :label="t('title')" /></span>
+            <span v-else />
+            <span v-if="displayRate">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</span>
+        </div>
 
         <div class="mt-5 grid gap-4 xl:grid-cols-3">
             <Card :padding="false">
