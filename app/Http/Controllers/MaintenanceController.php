@@ -81,7 +81,8 @@ class MaintenanceController extends Controller
     {
         $data = $request->validate([
             'room_id' => ['nullable', TenantRule::exists('rooms')],
-            'title' => ['required', 'string', 'max:180'],
+            'issue_key' => ['nullable', Rule::in(\App\Support\MaintenanceIssueTypes::keys())],
+            'title' => ['required_without:issue_key', 'nullable', 'string', 'max:180'],
             'description' => ['nullable', 'string', 'max:5000'],
             'category' => ['required', Rule::in(['electronics', 'climate', 'electrical', 'plumbing', 'furniture', 'safety', 'other'])],
             'kind' => ['required', Rule::in(['corrective', 'preventive'])],
@@ -95,6 +96,13 @@ class MaintenanceController extends Controller
             'attachments.*' => ['file', 'mimetypes:image/jpeg,image/png,image/webp,video/mp4,video/quicktime,application/pdf', 'max:20480'],
         ]);
 
+        // A catalog type derives the title server-side (Albanian-first product)
+        // so every report/list keeps working on `title` unchanged, while the
+        // stable key powers language-independent recurrence grouping.
+        if (! empty($data['issue_key'])) {
+            $data['title'] = \App\Support\MaintenanceIssueTypes::labelSq($data['issue_key']);
+        }
+
         $issue = $this->issues->report($data + ['source' => 'manual'], $request->user());
         foreach ($request->file('attachments', []) as $file) {
             $this->saveAttachment($issue, $file, $request->user()->id);
@@ -106,6 +114,7 @@ class MaintenanceController extends Controller
     public function update(Request $request, MaintenanceIssue $maintenanceIssue): RedirectResponse
     {
         $data = $request->validate([
+            'issue_key' => ['sometimes', 'nullable', Rule::in(\App\Support\MaintenanceIssueTypes::keys())],
             'title' => ['sometimes', 'required', 'string', 'max:180'],
             'description' => ['sometimes', 'nullable', 'string', 'max:5000'],
             'category' => ['sometimes', Rule::in(['electronics', 'climate', 'electrical', 'plumbing', 'furniture', 'safety', 'other'])],
@@ -115,6 +124,10 @@ class MaintenanceController extends Controller
             'scheduled_for' => ['sometimes', 'nullable', 'date'],
             'recurrence_days' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:730'],
         ]);
+
+        if (! empty($data['issue_key'])) {
+            $data['title'] = \App\Support\MaintenanceIssueTypes::labelSq($data['issue_key']);
+        }
 
         $maintenanceIssue->update($data);
 
@@ -205,6 +218,7 @@ class MaintenanceController extends Controller
             'title' => $issue->title,
             'description' => $issue->description,
             'category' => $issue->category,
+            'issue_key' => $issue->issue_key,
             'kind' => $issue->kind,
             'priority' => $issue->priority,
             'status' => $issue->status,
