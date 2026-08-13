@@ -5289,7 +5289,12 @@
       "oaOverdue": "Pjesa e borxhit që e ka kaluar afatin. Afati = data e CHECK-OUT-it — pas nisjes, çdo ditë pa pagesë e rrit moshën e borxhit.",
       "oaCollectionRate": "Sa përqind e vlerës së faturuar është arkëtuar tashmë: e paguara ÷ bruto. Nën 80% raporti e sinjalizon me ngjyrë.",
       "oaCritical": "Borxhe mbi 30 ditë pas check-out-it — më të vështirat për t'u mbledhur. Këto kërkojnë kontakt të menjëhershëm me mysafirin ose agjencinë.",
-      "oaAging": "Borxhet grupohen sipas moshës: sa ditë kanë kaluar nga data e check-out-it pa u paguar. \"Pa afat\" = mysafiri s'ka bërë ende check-out. Kliko një shirit për të filtruar listën poshtë."
+      "oaAging": "Borxhet grupohen sipas moshës: sa ditë kanë kaluar nga data e check-out-it pa u paguar. \"Pa afat\" = mysafiri s'ka bërë ende check-out. Kliko një shirit për të filtruar listën poshtë.",
+      "bpIn": "Gjithë paratë e hyra në llogaritë bankare gjatë periudhës, të kthyera në monedhën bazë: pagesat e rrugëzuara automatikisht nga PMS/POS + postimet manuale + transfertat hyrëse.",
+      "bpOut": "Gjithë paratë e dala nga llogaritë bankare në periudhë, në monedhën bazë: tërheqje, pagesa furnitorësh, transferta dalëse.",
+      "bpNet": "Hyrjet − daljet, në monedhën bazë. Transfertat mes dy bankave të tua dalin nga njëra e hyjnë te tjetra — neto s'ndryshon.",
+      "bpMovements": "Numri i lëvizjeve në listë. Një transfertë bankë-në-bankë prek dy llogari, por shfaqet si një rresht i vetëm me shigjetë.",
+      "bpBase": "Shuma e dokumentit e kthyer në monedhën bazë me kursin e ditës së pagesës — kështu llogari në monedha të ndryshme mblidhen në një total."
     },
     "executiveDashboard": "Dashboard Ekzekutiv",
     "executiveShort": "Performanca dhe sinjalet kryesore.",
