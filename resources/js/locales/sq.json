@@ -5284,7 +5284,17 @@
       "dcImport": "Postime teknike të krijuara nga importi i të dhënave nga sistemi i vjetër (shlyerje importi) — nuk janë para të lëvizura realisht në periudhë, ndaj mbahen jashtë hyrjeve/daljeve.",
       "drTotal": "Të ardhurat neto të njohura në periudhë, të ndara sipas departamenteve: dhomat + POS + të tjera, pas zbritjeve.",
       "drRooms": "Të ardhurat nga fjetja (tarifat e dhomës në folio), pas zbritjeve. Llogaritet mbi vlerat në monedhën bazë — kursi i ditës nuk e shtrembëron.",
-      "drOther": "Gjithçka jashtë dhomave dhe POS-it: shtesa, shërbime, transferta, taksa qëndrimi etj."
+      "drOther": "Gjithçka jashtë dhomave dhe POS-it: shtesa, shërbime, transferta, taksa qëndrimi etj.",
+      "oaTotal": "Bilancet e papaguara të të gjitha rezervimeve aktive (pa të anuluarat): qëndrimi + shtesat − zbritjet − pagesat. Karta \"llogari\" = rezervime me borxh.",
+      "oaOverdue": "Pjesa e borxhit që e ka kaluar afatin. Afati = data e CHECK-OUT-it — pas nisjes, çdo ditë pa pagesë e rrit moshën e borxhit.",
+      "oaCollectionRate": "Sa përqind e vlerës së faturuar është arkëtuar tashmë: e paguara ÷ bruto. Nën 80% raporti e sinjalizon me ngjyrë.",
+      "oaCritical": "Borxhe mbi 30 ditë pas check-out-it — më të vështirat për t'u mbledhur. Këto kërkojnë kontakt të menjëhershëm me mysafirin ose agjencinë.",
+      "oaAging": "Borxhet grupohen sipas moshës: sa ditë kanë kaluar nga data e check-out-it pa u paguar. \"Pa afat\" = mysafiri s'ka bërë ende check-out. Kliko një shirit për të filtruar listën poshtë.",
+      "bpIn": "Gjithë paratë e hyra në llogaritë bankare gjatë periudhës, të kthyera në monedhën bazë: pagesat e rrugëzuara automatikisht nga PMS/POS + postimet manuale + transfertat hyrëse.",
+      "bpOut": "Gjithë paratë e dala nga llogaritë bankare në periudhë, në monedhën bazë: tërheqje, pagesa furnitorësh, transferta dalëse.",
+      "bpNet": "Hyrjet − daljet, në monedhën bazë. Transfertat mes dy bankave të tua dalin nga njëra e hyjnë te tjetra — neto s'ndryshon.",
+      "bpMovements": "Numri i lëvizjeve në listë. Një transfertë bankë-në-bankë prek dy llogari, por shfaqet si një rresht i vetëm me shigjetë.",
+      "bpBase": "Shuma e dokumentit e kthyer në monedhën bazë me kursin e ditës së pagesës — kështu llogari në monedha të ndryshme mblidhen në një total."
     },
     "executiveDashboard": "Dashboard Ekzekutiv",
     "executiveShort": "Performanca dhe sinjalet kryesore.",
@@ -5881,7 +5891,7 @@
       }
     },
     "outstandingAging": {
-      "title": "Bilance të papaguara & Aging",
+      "title": "Bilance të papaguara & Vjetërsia",
       "short": "Borxhet, vonesat dhe prioritetet e arkëtimit.",
       "category": "Financë & arka",
       "status": { "confirmed": "Konfirmuar", "checked_in": "Brenda", "checked_out": "Larguar" },
@@ -5890,7 +5900,7 @@
       "collectionRate": "Norma e arkëtimit",
       "critical": "Borxh kritik 31+",
       "accounts": "llogari",
-      "aging": "Aging i borxhit",
+      "aging": "Vjetërsia e borxhit",
       "all": "Të gjitha",
       "notDue": "Pa afat",
       "days1to7": "1–7 ditë",
