@@ -12,7 +12,7 @@ class MaintenanceIssue extends TenantModel
 
     protected $fillable = [
         'room_id', 'cleaning_task_id', 'reported_by', 'assigned_to', 'verified_by',
-        'title', 'description', 'category', 'kind', 'priority', 'status', 'source',
+        'title', 'description', 'category', 'issue_key', 'kind', 'priority', 'status', 'source',
         'asset_name', 'asset_code', 'room_blocked', 'previous_room_status',
         'recurrence_days', 'scheduled_for', 'due_at', 'started_at', 'resolved_at',
         'verified_at', 'closed_at',
