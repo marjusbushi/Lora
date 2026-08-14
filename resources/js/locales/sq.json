@@ -5850,7 +5850,12 @@
       "hourly": "Kërkesa sipas orës",
       "items": "artikuj",
       "cost": "Kosto e vlerësuar",
-      "margin": "Marzhi"
+      "margin": "Marzhi",
+      "outletFilterLabel": "Pika",
+      "outletFilterAll": "Të gjitha pikat",
+      "byOutlet": "Xhiro sipas pikës",
+      "byOutletHint": "Totali i porosive të përfunduara për çdo pikë shitjeje në periudhën e zgjedhur; rimbursimet zbriten te pika ku u bë shitja.",
+      "noOutlet": "Pa pikë"
     },
     "stockValuation": {
       "group": "Inventar & furnizim",
@@ -6622,7 +6627,33 @@
     "passwordPlaceholder": "Minimumi 8 karaktere",
     "pinLabel": "PIN-i unik i POS-it",
     "cancel": "Anulo",
-    "createWaiter": "Krijo kamarierin"
+    "createWaiter": "Krijo kamarierin",
+    "outletsTitle": "Pikat e shitjes",
+    "outletsHint": "Restorant, Bar, Beach Bar — çdo porosi vuloset me pikën ku u krijua dhe raportet filtrohen sipas saj.",
+    "addOutlet": "Shto pikë",
+    "addFirstOutlet": "Shto pikën e parë",
+    "outletsEmpty": "S'ka pika të konfiguruara — POS-i punon si një pikë e vetme, siç ka punuar deri sot. Shto p.sh. \"Restorant\", \"Bar\", \"Beach Bar\" që porositë, stoku dhe raportet të ndahen sipas pikës.",
+    "outletName": "Emri i pikës",
+    "outletNamePlaceholder": "p.sh. Beach Bar",
+    "outletWarehouse": "Magazina e pikës",
+    "outletWarehouseAuto": "Automatike (si deri sot)",
+    "outletWarehouseHint": "Kur cakton magazinë, çdo porosi e kësaj pike zbret stokun prej saj; pa magazinë, ndiqet rregulli i kategorisë si sot.",
+    "outletWarehouseLine": "Magazina: {name}",
+    "outletWarehouseAutoLine": "Magazina: automatike",
+    "outletActive": "Aktive",
+    "outletInactive": "Joaktive",
+    "outletActiveLabel": "Pika është aktive (shfaqet në POS)",
+    "outletEdit": "Ndrysho",
+    "outletDelete": "Fshi",
+    "outletEditTitle": "Pika",
+    "outletSaved": "Pika u ruajt.",
+    "outletDeleted": "Pika u fshi.",
+    "outletDeleteConfirm": "Të fshihet pika \"{name}\"?",
+    "outletSave": "Ruaj",
+    "outletCreate": "Krijo pikën",
+    "outletDeactivate": "Çaktivizo",
+    "outletDeactivateConfirm": "Ta çaktivizoj pikën \"{name}\"? Nuk do shfaqet më në POS; historiku dhe raportet mbeten.",
+    "outletDeactivated": "Pika u çaktivizua."
   },
   "pricingIndex": {
     "monthsShort": {
@@ -6854,7 +6885,9 @@
       "deleteCategoryConfirm": "Fshi kategorine \"{name}\"?",
       "deleteItemConfirm": "Fshi \"{name}\"?",
       "unavailable": "jo disponueshem",
-      "available": "disponueshem"
+      "available": "disponueshem",
+      "visibleIn": "Shfaqet në pikat",
+      "visibleInHint": "Të gjitha të zgjedhura = kategoria shfaqet kudo (edhe në pika që shtohen më vonë). Hiq shenjën për ta kufizuar."
     },
     "notifications": {
       "title": "Njoftimet",
@@ -7005,6 +7038,10 @@
     "step3": "Hyr me llogarinë Lora dhe aprovo vetëm hotelin e shfaqur.",
     "recentAiActivity": "Aktiviteti i fundit AI",
     "noAiActions": "Nuk ka ende veprime të ekzekutuara nga AI."
+  },
+  "posOutlets": {
+    "label": "Pika e shitjes",
+    "switchConfirm": "Shporta ka artikuj të paruajtur — ndërrimi i pikës i fshin. Të vazhdoj?"
   },
   "beach": {
     "nav": {

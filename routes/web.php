@@ -541,6 +541,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/settings/financial', [SettingsController::class, 'updateFinancial'])->name('settings.financial');
         Route::put('/settings/pos', [SettingsController::class, 'updatePos'])->middleware('module:pos')->name('settings.pos');
         Route::post('/settings/pos/salespeople', [SettingsController::class, 'storePosSalesperson'])->middleware('module:pos')->name('settings.pos.salespeople.store');
+        Route::post('/settings/pos/outlets', [SettingsController::class, 'storePosOutlet'])->middleware('module:pos')->name('settings.pos.outlets.store');
+        Route::put('/settings/pos/outlets/{posOutlet}', [SettingsController::class, 'updatePosOutlet'])->middleware('module:pos')->name('settings.pos.outlets.update');
+        Route::delete('/settings/pos/outlets/{posOutlet}', [SettingsController::class, 'destroyPosOutlet'])->middleware('module:pos')->name('settings.pos.outlets.destroy');
         Route::put('/settings/market-rates', [SettingsController::class, 'updateMarketRates'])->name('settings.market-rates');
         Route::put('/settings/currencies', [SettingsController::class, 'updateCurrencies'])->middleware('module:finance')->name('settings.currencies');
         Route::put('/settings/pricing-programs', [SettingsController::class, 'updatePricingPrograms'])->name('settings.pricing-programs');
