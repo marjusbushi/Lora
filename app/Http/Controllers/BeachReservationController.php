@@ -8,6 +8,8 @@ use App\Models\BeachReservation;
 use App\Models\BeachUnit;
 use App\Models\BeachZone;
 use App\Models\Setting;
+use App\Services\BeachPricing;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -211,6 +213,27 @@ class BeachReservationController extends Controller
         return back()->with('success', 'Shënimi i pagesës u hoq.');
     }
 
+    /**
+     * Çmim informativ live për modalin e krijimit — i njëjti resolver sezonal
+     * si ruajtja, që recepsioni t'i thotë klientit në telefon shumën e vërtetë.
+     */
+    public function quote(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'beach_unit_id' => ['required', 'integer'],
+            'start_date' => ['required', 'date_format:Y-m-d'],
+            'end_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+        ]);
+
+        /** @var BeachUnit $unit */
+        $unit = BeachUnit::query()->whereKey($data['beach_unit_id'])->firstOrFail();
+
+        return response()->json([
+            'days' => Carbon::parse($data['start_date'])->diffInDays(Carbon::parse($data['end_date'])) + 1,
+            'total' => number_format(app(BeachPricing::class)->totalFor($unit, $data['start_date'], $data['end_date']), 2, '.', ''),
+        ]);
+    }
+
     private function lockUnit(int $unitId): BeachUnit
     {
         /** @var BeachUnit $unit */
@@ -230,9 +253,8 @@ class BeachReservationController extends Controller
 
     private function totalFor(BeachUnit $unit, string $start, string $end): float
     {
-        // Ditë INKLUZIVE: 15–17 = 3 ditë plazh.
-        $days = Carbon::parse($start)->diffInDays(Carbon::parse($end)) + 1;
-
-        return round($days * (float) $unit->zone->price_per_day, 2);
+        // Ditë INKLUZIVE me çmim sezonal ditë-për-ditë — një burim i vetëm
+        // llogaritjeje me faqen publike (BeachPricing).
+        return app(BeachPricing::class)->totalFor($unit, $start, $end);
     }
 }

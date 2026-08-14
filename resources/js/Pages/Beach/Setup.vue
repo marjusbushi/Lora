@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { Head, useForm, router, usePage } from '@inertiajs/vue3';
 import { translate } from '@/i18n';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -10,10 +10,12 @@ import Badge from '@/Components/UI/Badge.vue';
 import Modal from '@/Components/UI/Modal.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import QrCode from '@/Components/UI/QrCode.vue';
 
 const props = defineProps({
     zones: { type: Array, default: () => [] },
+    seasons: { type: Array, default: () => [] },
     settings: { type: Object, default: () => ({}) },
 });
 
@@ -104,6 +106,113 @@ function deleteUnit(unit) {
         preserveScroll: true,
         onSuccess: () => (showUnitModal.value = false),
     });
+}
+
+// --- Sezonet e çmimeve: i njëjti dizajn si faqja e çmimeve të dhomave ---
+// (matricë zona × sezone me çmimin bazë si placeholder + ruajtje me një POST)
+const SEASON_TONES = [
+    { bg: '#e7eef7', text: '#2f5578', edge: '#8fb0d1' }, // sea blue
+    { bg: '#f8eddc', text: '#7d5316', edge: '#d9ad62' }, // amber
+    { bg: '#e6f0ea', text: '#2c5d45', edge: '#8db8a2' }, // green
+    { bg: '#f8e7e3', text: '#8c3d2e', edge: '#d69182' }, // terracotta
+    { bg: '#ece8f6', text: '#4f3d80', edge: '#a795d6' }, // violet
+    { bg: '#e2f0ef', text: '#275f5c', edge: '#85b7b3' }, // teal
+];
+const seasonColor = computed(() => {
+    const map = {};
+    [...props.seasons].sort((a, b) => a.id - b.id).forEach((s, i) => { map[s.id] = SEASON_TONES[i % SEASON_TONES.length]; });
+    return map;
+});
+
+const isoDay = (value) => String(value ?? '').slice(0, 10);
+const shortDate = (value) => {
+    const [, m, d] = isoDay(value).split('-');
+    return d && m ? `${d}.${m}` : '';
+};
+
+const base = reactive({});
+const rates = reactive({});
+function buildMatrix() {
+    props.zones.forEach((zone) => { base[zone.id] = zone.price_per_day ?? ''; });
+    Object.keys(base).forEach((id) => {
+        if (!props.zones.some((zone) => String(zone.id) === String(id))) delete base[id];
+    });
+    props.seasons.forEach((season) => {
+        rates[season.id] = rates[season.id] || {};
+        props.zones.forEach((zone) => {
+            const row = (season.prices ?? []).find((price) => price.beach_zone_id === zone.id);
+            rates[season.id][zone.id] = row ? row.price_per_day : '';
+        });
+    });
+    Object.keys(rates).forEach((sid) => {
+        if (!props.seasons.some((season) => String(season.id) === String(sid))) delete rates[sid];
+    });
+}
+buildMatrix();
+
+// Shiriti i ruajtjes shfaqet vetëm kur matrica ndryshon nga fotografia e fundit.
+const matrixSnap = ref('');
+function snapMatrix() { matrixSnap.value = JSON.stringify({ base, rates }); }
+snapMatrix();
+watch(() => [props.zones, props.seasons], () => { buildMatrix(); snapMatrix(); });
+const dirtyCount = computed(() => {
+    let count = 0;
+    let snap;
+    try { snap = JSON.parse(matrixSnap.value || '{}'); } catch { return 0; }
+    props.zones.forEach((zone) => { if (String(snap.base?.[zone.id] ?? '') !== String(base[zone.id] ?? '')) count += 1; });
+    props.seasons.forEach((season) => props.zones.forEach((zone) => {
+        if (String(snap.rates?.[season.id]?.[zone.id] ?? '') !== String(rates[season.id]?.[zone.id] ?? '')) count += 1;
+    }));
+    return count;
+});
+function resetMatrix() {
+    let snap;
+    try { snap = JSON.parse(matrixSnap.value || '{}'); } catch { return; }
+    props.zones.forEach((zone) => { base[zone.id] = snap.base?.[zone.id] ?? ''; });
+    props.seasons.forEach((season) => {
+        rates[season.id] = rates[season.id] || {};
+        props.zones.forEach((zone) => { rates[season.id][zone.id] = snap.rates?.[season.id]?.[zone.id] ?? ''; });
+    });
+}
+function saveRates() {
+    router.post(route('beach.seasons.rates.save'), { base, rates }, {
+        preserveScroll: true,
+        onSuccess: () => snapMatrix(),
+    });
+}
+
+const showSeasonModal = ref(false);
+const editingSeason = ref(null);
+const seasonForm = useForm({ name: '', start_date: '', end_date: '' });
+
+function openCreateSeason() {
+    editingSeason.value = null;
+    seasonForm.reset();
+    seasonForm.clearErrors();
+    showSeasonModal.value = true;
+}
+
+function openEditSeason(season) {
+    editingSeason.value = season;
+    seasonForm.name = season.name;
+    seasonForm.start_date = isoDay(season.start_date);
+    seasonForm.end_date = isoDay(season.end_date);
+    seasonForm.clearErrors();
+    showSeasonModal.value = true;
+}
+
+function submitSeason() {
+    const options = { preserveScroll: true, onSuccess: () => (showSeasonModal.value = false) };
+    if (editingSeason.value) {
+        seasonForm.put(route('beach.seasons.update', editingSeason.value.id), options);
+    } else {
+        seasonForm.post(route('beach.seasons.store'), options);
+    }
+}
+
+function deleteSeason(season) {
+    if (!confirm(translate('beach.setup.deleteSeasonConfirm', { name: season.name }))) return;
+    router.delete(route('beach.seasons.destroy', season.id), { preserveScroll: true });
 }
 
 // --- Fleta QR për printim ---
@@ -197,6 +306,95 @@ function printQrSheet() {
                         {{ $t('beach.setup.noUnits') }}
                     </p>
                 </Card>
+
+                <!-- Sezonet e çmimeve — matricë identike me faqen e çmimeve të dhomave -->
+                <Card v-if="zones.length">
+                    <template #header>
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="min-w-0">
+                                <h3 class="text-h4 text-primary-900">{{ $t('beach.setup.seasonsTitle') }}</h3>
+                                <p class="text-small text-neutral-500 mt-0.5">{{ $t('beach.setup.seasonsHint') }}</p>
+                            </div>
+                            <Button v-if="can('create_beach')" size="sm" variant="primary" class="shrink-0" @click="openCreateSeason">
+                                {{ $t('beach.setup.addSeason') }}
+                            </Button>
+                        </div>
+                    </template>
+
+                    <p v-if="!seasons.length" class="py-6 text-center text-body-sm text-neutral-500">
+                        {{ $t('beach.setup.noSeasons') }}
+                    </p>
+
+                    <template v-else>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-body-sm">
+                                <thead>
+                                    <tr>
+                                        <th class="px-3 pb-2 text-left text-label text-neutral-600 align-bottom">{{ $t('beach.setup.zoneCol') }}</th>
+                                        <th class="px-3 pb-2 text-left align-bottom">
+                                            <span class="inline-block rounded-lg bg-primary-950 px-2.5 py-1.5 text-tiny font-extrabold leading-tight text-white shadow-sm">
+                                                {{ $t('beach.setup.basePriceCol') }}
+                                                <small class="block text-[9px] font-bold opacity-80">{{ $t('beach.setup.basePriceColSub') }}</small>
+                                            </span>
+                                        </th>
+                                        <th v-for="season in seasons" :key="season.id" class="px-3 pb-2 text-left align-bottom">
+                                            <span
+                                                class="inline-flex items-start gap-1.5 rounded-lg px-2.5 py-1.5 text-tiny font-extrabold leading-tight"
+                                                :style="{ background: seasonColor[season.id].bg, color: seasonColor[season.id].text, boxShadow: `inset 0 0 0 1px ${seasonColor[season.id].edge}55, inset 0 -2px 0 ${seasonColor[season.id].edge}` }"
+                                            >
+                                                <span>
+                                                    {{ season.name }}
+                                                    <small class="block text-[9px] font-bold opacity-85">{{ shortDate(season.start_date) }} – {{ shortDate(season.end_date) }}</small>
+                                                </span>
+                                                <button
+                                                    v-if="can('update_beach')"
+                                                    type="button"
+                                                    class="rounded bg-black/5 px-1 font-extrabold hover:bg-black/15"
+                                                    :title="$t('beach.setup.editSeason')"
+                                                    @click="openEditSeason(season)"
+                                                >✎</button>
+                                            </span>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-neutral-100">
+                                    <tr v-for="zone in zones" :key="zone.id" class="hover:bg-neutral-50/60">
+                                        <td class="px-3 py-2 font-semibold text-primary-900 whitespace-nowrap">{{ zone.name }}</td>
+                                        <td class="px-3 py-2">
+                                            <input
+                                                v-model="base[zone.id]"
+                                                type="number" min="0" step="0.01"
+                                                :disabled="!can('update_beach')"
+                                                class="w-24 rounded-lg border border-primary-200 bg-primary-50 px-2 py-1.5 text-right text-body-sm font-bold tabular-nums text-primary-900 focus:border-accent-500 focus:ring-2 focus:ring-accent-500/40 disabled:opacity-60"
+                                            />
+                                        </td>
+                                        <td v-for="season in seasons" :key="season.id" class="px-3 py-2">
+                                            <input
+                                                v-if="rates[season.id]"
+                                                v-model="rates[season.id][zone.id]"
+                                                type="number" min="0" step="0.01"
+                                                :placeholder="String(base[zone.id] ?? '')"
+                                                :disabled="!can('update_beach')"
+                                                class="w-24 rounded-lg border border-neutral-300 px-2 py-1.5 text-right text-body-sm font-semibold tabular-nums placeholder:font-normal placeholder:text-neutral-300 focus:border-accent-500 focus:ring-2 focus:ring-accent-500/40 disabled:opacity-60"
+                                            />
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="mt-2 text-tiny text-neutral-400">{{ $t('beach.setup.matrixFoot') }}</p>
+                    </template>
+
+                    <div
+                        v-if="dirtyCount && can('update_beach')"
+                        class="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-2.5"
+                    >
+                        <span class="text-body-sm font-bold text-primary-900">{{ $t('beach.setup.unsavedChanges', { count: dirtyCount }) }}</span>
+                        <span class="flex-1" />
+                        <Button size="sm" variant="outline" @click="resetMatrix">{{ $t('beach.setup.cancel') }}</Button>
+                        <Button size="sm" variant="primary" @click="saveRates">{{ $t('beach.setup.saveRates') }}</Button>
+                    </div>
+                </Card>
             </div>
         </div>
 
@@ -246,6 +444,42 @@ function printQrSheet() {
                 <Button variant="outline" @click="showZoneModal = false">{{ $t('beach.setup.cancel') }}</Button>
                 <Button variant="primary" :loading="zoneForm.processing" @click="submitZone">
                     {{ editingZone ? $t('beach.setup.save') : $t('beach.setup.create') }}
+                </Button>
+            </template>
+        </Modal>
+
+        <!-- Modal: sezoni i çmimeve -->
+        <Modal
+            :show="showSeasonModal"
+            :title="editingSeason ? $t('beach.setup.editSeason') : $t('beach.setup.addSeason')"
+            @close="showSeasonModal = false"
+        >
+            <form class="space-y-4" @submit.prevent="submitSeason">
+                <FormGroup :label="$t('beach.setup.seasonName')" :error="seasonForm.errors.name" required>
+                    <TextInput v-model="seasonForm.name" :placeholder="$t('beach.setup.seasonNamePlaceholder')" :error="seasonForm.errors.name" />
+                </FormGroup>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormGroup :label="$t('beach.setup.seasonFrom')" :error="seasonForm.errors.start_date" required>
+                        <DatePicker v-model="seasonForm.start_date" :error="seasonForm.errors.start_date" />
+                    </FormGroup>
+                    <FormGroup :label="$t('beach.setup.seasonUntil')" :error="seasonForm.errors.end_date" required>
+                        <DatePicker v-model="seasonForm.end_date" :error="seasonForm.errors.end_date" />
+                    </FormGroup>
+                </div>
+                <p class="text-small text-neutral-500">{{ $t('beach.setup.seasonPricesHint') }}</p>
+            </form>
+            <template #footer>
+                <Button
+                    v-if="editingSeason && can('delete_beach')"
+                    variant="ghost"
+                    class="mr-auto text-error-600"
+                    @click="deleteSeason(editingSeason)"
+                >
+                    {{ $t('beach.setup.delete') }}
+                </Button>
+                <Button variant="outline" @click="showSeasonModal = false">{{ $t('beach.setup.cancel') }}</Button>
+                <Button variant="primary" :loading="seasonForm.processing" @click="submitSeason">
+                    {{ editingSeason ? $t('beach.setup.save') : $t('beach.setup.create') }}
                 </Button>
             </template>
         </Modal>

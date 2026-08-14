@@ -8,7 +8,7 @@ import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import Select from '@/Components/UI/Select.vue';
 
-const props = defineProps({ settings: Object, accountMode: { type: String, default: 'shared' }, toasts: Object });
+const props = defineProps({ settings: Object, accountMode: { type: String, default: 'shared' }, posOutlets: { type: Array, default: () => [] }, toasts: Object });
 
 // Ku shkojnë paratë e plazhit — ruhet menjëherë, pavarësisht formës kryesore (si POS).
 const accountMode = ref(props.accountMode);
@@ -32,6 +32,7 @@ const form = useForm({
     season_start: props.settings?.season_start ?? '',
     season_end: props.settings?.season_end ?? '',
     payment_mode: props.settings?.payment_mode ?? 'both',
+    pos_outlet_id: Number(props.settings?.pos_outlet_id ?? 0) || null,
 });
 
 const paymentModeOptions = [
@@ -80,6 +81,14 @@ function submit() {
             <FormGroup :label="$t('beach.settings.paymentModeLabel')" :error="form.errors.payment_mode" required>
                 <Select v-model="form.payment_mode" :options="paymentModeOptions" :error="form.errors.payment_mode" />
                 <p class="text-small text-neutral-500 mt-1">{{ $t('beach.settings.paymentModeHint') }}</p>
+            </FormGroup>
+
+            <FormGroup v-if="posOutlets.length" :label="$t('beach.settings.posOutletLabel')" :error="form.errors.pos_outlet_id">
+                <select v-model="form.pos_outlet_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                    <option :value="null">{{ $t('beach.settings.posOutletNone') }}</option>
+                    <option v-for="outlet in posOutlets.filter((entry) => entry.is_active)" :key="outlet.id" :value="outlet.id">{{ outlet.name }}</option>
+                </select>
+                <p class="text-small text-neutral-500 mt-1">{{ $t('beach.settings.posOutletHint') }}</p>
             </FormGroup>
 
             <div class="flex justify-end">

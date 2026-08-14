@@ -4523,7 +4523,10 @@
       "testConnection": "Testo lidhjen",
       "auditNote": "Ndryshimet regjistrohen në audit log.",
       "saving": "Duke ruajtur…",
-      "saveChanges": "Ruaj ndryshimet"
+      "saveChanges": "Ruaj ndryshimet",
+      "contractLength": "Gjatësia e kontratës",
+      "contractOption": "{years} vjet — {percent}% zbritje",
+      "contractOverride": "Ky tenant ka zbritje të negociuar veç: {percent}% (fiton mbi shkallën)"
     },
     "billing": {
       "unitMonth": "muaj",
@@ -6694,7 +6697,9 @@
     "outletCreate": "Krijo pikën",
     "outletDeactivate": "Çaktivizo",
     "outletDeactivateConfirm": "Ta çaktivizoj pikën \"{name}\"? Nuk do shfaqet më në POS; historiku dhe raportet mbeten.",
-    "outletDeactivated": "Pika u çaktivizua."
+    "outletDeactivated": "Pika u çaktivizua.",
+    "outletSubscription": "{count} nga {limit} pika të abonimit",
+    "outletLimitReached": "Limiti u arrit — për një pikë të re kontaktoni Lora PMS"
   },
   "pricingIndex": {
     "monthsShort": {
@@ -7108,6 +7113,23 @@
       "noUnits": "Kjo zonë s'ka ende çadra — gjeneroji me një klik.",
       "deleteZoneConfirm": "Fshi zonën \"{name}\" bashkë me çadrat e saj?",
       "deleteUnitConfirm": "Fshi çadrën {number}?",
+      "seasonsTitle": "Sezonet e çmimeve",
+      "seasonsHint": "Si te çmimet e dhomave: çmimi bazë vlen gjithmonë, sezonet e mbishkruajnë për datat e tyre. Kuti bosh = zona përdor çmimin bazë.",
+      "addSeason": "Shto sezon",
+      "editSeason": "Ndrysho sezonin",
+      "seasonName": "Emri i sezonit",
+      "seasonNamePlaceholder": "p.sh. Gusht",
+      "seasonFrom": "Nga data",
+      "seasonUntil": "Deri më (përfshirë)",
+      "seasonPricesHint": "Çmimet per zonë i vendos te matrica pasi ta ruash sezonin.",
+      "deleteSeasonConfirm": "Fshi sezonin \"{name}\"? Zonat kthehen te çmimi bazë për ato data.",
+      "noSeasons": "S'ka sezone ende — çmimi bazë i çdo zone vlen gjithë verën. Shto një sezon (p.sh. \"Gusht\") për të shitur më shtrenjtë datat e pikut.",
+      "zoneCol": "Zona",
+      "basePriceCol": "Çmimi bazë",
+      "basePriceColSub": "kur s'ka sezon",
+      "matrixFoot": "Rezervimet shumëditore çmohen ditë-për-ditë — një interval që kap dy sezone paguan çmimin e saktë të secilës ditë.",
+      "unsavedChanges": "{count} ndryshime pa ruajtur",
+      "saveRates": "Ruaj çmimet",
       "zoneName": "Emri i zonës",
       "zoneNamePlaceholder": "p.sh. Rreshti 1",
       "pricePerDay": "Çmimi / ditë",
@@ -7159,7 +7181,10 @@
       "accountSplitAll": "Të dyja më vete",
       "accountSplitAllText": "Cash te \"Arka Plazh\", kartat/online te \"Banka Plazh\".",
       "accountModeSaved": "Modaliteti i arkës së plazhit u ruajt.",
-      "accountModeNotSaved": "Modaliteti nuk u ruajt — provo përsëri."
+      "accountModeNotSaved": "Modaliteti nuk u ruajt — provo përsëri.",
+      "posOutletLabel": "Pika POS e porosive nga plazhi",
+      "posOutletNone": "— (QR çon vetëm te rezervimi)",
+      "posOutletHint": "Kur cakton pikën, QR i çadrës hap menunë e saj dhe porositë hyjnë te POS-i me vendndodhjen \"Çadra N\". Pa të, QR çon vetëm te rezervimi i shezllonëve."
     },
     "calendar": {
       "title": "Kalendari i çadrave",
@@ -7277,6 +7302,25 @@
       "overShort": "Diferenca: {amount}",
       "closingNote": "Shënim mbylljeje (opsional)",
       "closeConfirm": "Mbyll turnin"
+    },
+    "order": {
+      "unitBadge": "Çadra {number}",
+      "title": "Porosit te bari",
+      "subtitle": "Porosia të vjen direkt te çadra — përgatitet nga {outlet}.",
+      "reserveLink": "Do të rezervosh shezllon për ditë të tjera? →",
+      "addOne": "Shto {name}",
+      "removeOne": "Hiq {name}",
+      "emptyMenu": "Menuja s'është gati ende — pyet stafin te bari.",
+      "totalLabel": "Totali",
+      "submit": "Porosit ({count})",
+      "sending": "Po dërgohet…",
+      "payOnDelivery": "Paguaj në dorëzim — stafi vjen te çadra jote me porosinë.",
+      "confirmedTitle": "Porosia u mor!",
+      "confirmedBody": "Po përgatitet dhe të vjen te Çadra {number}.",
+      "statusOpen": "Po përgatitet",
+      "statusCompleted": "U dorëzua dhe u pagua",
+      "statusCancelled": "E anuluar",
+      "refresh": "Rifresko statusin"
     }
   }
 }

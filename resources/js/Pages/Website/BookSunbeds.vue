@@ -31,7 +31,9 @@ watch(step, async () => {
     wizardTop.value?.focus({ preventScroll: true });
 });
 const busyUnitIds = ref([]);
-const selectedUnit = ref(null); // {id, number, zoneName, price}
+// Çmimet reale per zonë për datat e zgjedhura (nga serveri): {total, min_daily, max_daily}
+const zonePricing = ref({});
+const selectedUnit = ref(null); // {id, number, zoneId, zoneName, price}
 const loading = ref(false);
 const checkError = ref('');
 
@@ -82,6 +84,7 @@ async function checkAvailability() {
             return;
         }
         busyUnitIds.value = data.busy_unit_ids ?? [];
+        zonePricing.value = data.zone_pricing ?? {};
         selectedUnit.value = null;
         step.value = 2;
     } catch {
@@ -96,14 +99,32 @@ function pickUnit(zone, unit) {
     selectedUnit.value = {
         id: unit.id,
         number: unit.number,
+        zoneId: zone.id,
         zoneName: zone.name,
         price: Number(zone.price_per_day),
     };
 }
 
-const total = computed(() =>
-    selectedUnit.value ? (days.value * selectedUnit.value.price).toFixed(2) : null,
-);
+const trimPrice = (value) => String(Math.round(Number(value) * 100) / 100);
+
+// Etiketa e çmimit të zonës për DATAT e zgjedhura: "€12" ose "€7–12" kur
+// intervali kap dy nivele çmimi (sezone). Pa të dhëna nga serveri → baza.
+function zonePriceLabel(zone) {
+    const pricing = zonePricing.value[zone.id];
+    if (!pricing) return props.currency + zone.price_per_day;
+    const min = trimPrice(pricing.min_daily);
+    const max = trimPrice(pricing.max_daily);
+    return min === max ? props.currency + min : `${props.currency}${min}–${max}`;
+}
+
+// Totali i shfaqur = ai i serverit për zonën (i njëjti resolver sezonal që
+// ruan rezervimin); fallback te llogaritja bazë nëse mungon në përgjigje.
+const total = computed(() => {
+    if (!selectedUnit.value) return null;
+    const pricing = zonePricing.value[selectedUnit.value.zoneId];
+    if (pricing) return Number(pricing.total).toFixed(2);
+    return (days.value * selectedUnit.value.price).toFixed(2);
+});
 
 const form = useForm({
     beach_unit_id: '',
@@ -207,7 +228,7 @@ function submit() {
                                 <div v-if="index > 0" class="walkway my-5" role="presentation" />
                                 <div class="mb-3 flex flex-wrap items-center gap-2.5">
                                     <h2 class="font-serif text-xl font-medium text-ink">{{ zone.name }}</h2>
-                                    <span class="rounded-full bg-white/80 px-3 py-0.5 text-body-sm font-semibold text-brass-dark ring-1 ring-brass/25">{{ $t('beach.public.pricePerDay', { price: currency + zone.price_per_day }) }}</span>
+                                    <span class="rounded-full bg-white/80 px-3 py-0.5 text-body-sm font-semibold text-brass-dark ring-1 ring-brass/25">{{ $t('beach.public.pricePerDay', { price: zonePriceLabel(zone) }) }}</span>
                                 </div>
                                 <div class="flex flex-wrap justify-center gap-1 sm:gap-2">
                                     <SunbedSpot

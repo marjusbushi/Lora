@@ -91,7 +91,12 @@ Route::get('/book-sunbeds/availability', [WebsiteBeachController::class, 'availa
 Route::post('/book-sunbeds', [WebsiteBeachController::class, 'submit'])->middleware(['module:beach', 'throttle:10,1'])->name('website.beach.submit');
 Route::get('/book-sunbeds/confirmation/{token}', [WebsiteBeachController::class, 'confirmation'])->middleware('module:beach')->name('website.beach.confirmation');
 // QR i përjetshëm i çadrës (i printuar një herë): V1 → rezervimi; V2 → porosia te bari.
-Route::get('/s/{qrToken}', [WebsiteBeachController::class, 'qr'])->middleware(['module:beach', 'throttle:60,1'])->name('website.beach.qr');
+// Kova throttle me PREFIKS për secilën rrugë QR: throttle-i inline pa prefiks
+// ndan një numërues të vetëm per domain|ip me gjithë faqen publike — Wi-Fi i
+// përbashkët i plazhit do t'ia bllokonte porosinë mysafirit real.
+Route::get('/s/{qrToken}', [WebsiteBeachController::class, 'qr'])->middleware(['module:beach', 'throttle:60,1,beach-qr'])->name('website.beach.qr');
+Route::post('/s/{qrToken}/order', [WebsiteBeachController::class, 'order'])->middleware(['module:beach', 'throttle:12,1,beach-order'])->name('website.beach.order.submit');
+Route::get('/beach-order/{guestToken}', [WebsiteBeachController::class, 'orderStatus'])->middleware(['module:beach', 'throttle:60,1,beach-status'])->name('website.beach.order.status');
 // Pagesa POK e çadrës (opsionale — rezervimi vlen edhe "paguaj në plazh").
 Route::get('/book-sunbeds/pay/{token}', [WebsiteBeachController::class, 'payment'])->middleware(['module:beach', 'throttle:30,1'])->name('website.beach.pay');
 Route::post('/book-sunbeds/pay/{token}', [WebsiteBeachController::class, 'paymentConfirm'])->middleware(['module:beach', 'throttle:20,1'])->name('website.beach.pay.confirm');
@@ -467,6 +472,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     // Plazhi (Beach) — kalendari i çadrave + setup i zonave/çadrave
     Route::middleware(['module:beach', 'permission:view_beach'])->group(function () {
         Route::get('/beach/calendar', [BeachReservationController::class, 'calendar'])->name('beach.calendar');
+        Route::get('/beach/reservations/quote', [BeachReservationController::class, 'quote'])->name('beach.reservations.quote');
         Route::post('/beach/reservations', [BeachReservationController::class, 'store'])->middleware('permission:create_beach')->name('beach.reservations.store');
         Route::put('/beach/reservations/{beachReservation}', [BeachReservationController::class, 'update'])->middleware('permission:update_beach')->name('beach.reservations.update');
         Route::post('/beach/reservations/{beachReservation}/cancel', [BeachReservationController::class, 'cancel'])->middleware('permission:update_beach')->name('beach.reservations.cancel');
@@ -478,6 +484,10 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/beach/zones', [BeachSetupController::class, 'storeZone'])->middleware('permission:create_beach')->name('beach.zones.store');
         Route::put('/beach/zones/{zone}', [BeachSetupController::class, 'updateZone'])->middleware('permission:update_beach')->name('beach.zones.update');
         Route::delete('/beach/zones/{zone}', [BeachSetupController::class, 'destroyZone'])->middleware('permission:delete_beach')->name('beach.zones.destroy');
+        Route::post('/beach/seasons/rates', [BeachSetupController::class, 'saveSeasonRates'])->middleware('permission:update_beach')->name('beach.seasons.rates.save');
+        Route::post('/beach/seasons', [BeachSetupController::class, 'storeSeason'])->middleware('permission:create_beach')->name('beach.seasons.store');
+        Route::put('/beach/seasons/{season}', [BeachSetupController::class, 'updateSeason'])->middleware('permission:update_beach')->name('beach.seasons.update');
+        Route::delete('/beach/seasons/{season}', [BeachSetupController::class, 'destroySeason'])->middleware('permission:delete_beach')->name('beach.seasons.destroy');
         Route::post('/beach/zones/{zone}/units', [BeachSetupController::class, 'generateUnits'])->middleware('permission:create_beach')->name('beach.units.generate');
         Route::put('/beach/units/{unit}', [BeachSetupController::class, 'updateUnit'])->middleware('permission:update_beach')->name('beach.units.update');
         Route::delete('/beach/units/{unit}', [BeachSetupController::class, 'destroyUnit'])->middleware('permission:delete_beach')->name('beach.units.destroy');

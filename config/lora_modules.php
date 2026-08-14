@@ -1,7 +1,15 @@
 <?php
 
 return [
-    'annual_discount_percent' => 20,
+    // Zbritja sipas gjatësisë së kontratës (vite => %). Penaliteti i prishjes
+    // (gjysma e vlerës së pashfrytëzuar) rregullohet në dokumentin e kontratës,
+    // jo në sistem — vendim i pronarit (2026-08-14).
+    'contract_discounts' => [
+        1 => 10,
+        2 => 15,
+        3 => 20,
+        5 => 30,
+    ],
 
     'modules' => [
         'core' => [
@@ -16,8 +24,9 @@ return [
             'description' => 'Sinkronizim me OTA-t dhe marrje automatike e rezervimeve.',
             'billing_model' => 'tiered_per_room',
             'unit_label' => 'dhomë',
+            // €7/dhomë deri në 30 dhoma; vetëm dhomat MBI 30 me €5 (jo gjithë hoteli).
             'unit_price_cents' => 700,
-            'tier_limit' => 50,
+            'tier_limit' => 30,
             'excess_unit_price_cents' => 500,
         ],
         'booking_engine' => [
@@ -36,9 +45,11 @@ return [
         ],
         'pos' => [
             'name' => 'POS Bar/Restorant',
-            'description' => 'Porosi, turne dhe pika shitjeje.',
+            'description' => 'Porosi, turne dhe pika shitjeje — me fiskalizim të përfshirë dhe pa limit përdoruesish.',
             'billing_model' => 'per_pos',
             'unit_label' => 'pikë shitjeje',
+            // Pika e parë €49 (mbulon fiskalizimin + përdorues pa limit); çdo pikë shtesë €19.
+            'first_unit_price_cents' => 4900,
             'unit_price_cents' => 1900,
         ],
         'finance' => [
@@ -53,14 +64,14 @@ return [
             'description' => 'Sugjerime çmimesh dhe autopilot.',
             'billing_model' => 'flat',
             'unit_label' => 'muaj',
-            'unit_price_cents' => 1900,
+            'unit_price_cents' => 4900,
         ],
         'beach' => [
             'name' => 'Plazhi',
             'description' => 'Rezervim shezllonesh online dhe porosi me QR nga çadra.',
             'billing_model' => 'flat',
             'unit_label' => 'muaj',
-            'unit_price_cents' => 1900,
+            'unit_price_cents' => 2900,
         ],
     ],
 ];

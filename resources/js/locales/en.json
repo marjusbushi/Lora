@@ -4523,7 +4523,10 @@
       "testConnection": "Test the connection",
       "auditNote": "Changes are recorded in the audit log.",
       "saving": "Saving…",
-      "saveChanges": "Save changes"
+      "saveChanges": "Save changes",
+      "contractLength": "Contract length",
+      "contractOption": "{years} yr — {percent}% off",
+      "contractOverride": "This tenant has an individually negotiated discount: {percent}% (overrides the ladder)"
     },
     "billing": {
       "unitMonth": "month",
@@ -6694,7 +6697,9 @@
     "outletCreate": "Create outlet",
     "outletDeactivate": "Deactivate",
     "outletDeactivateConfirm": "Deactivate outlet \"{name}\"? It disappears from the POS; history and reports remain.",
-    "outletDeactivated": "Outlet deactivated."
+    "outletDeactivated": "Outlet deactivated.",
+    "outletSubscription": "{count} of {limit} subscribed outlets",
+    "outletLimitReached": "Limit reached — contact Lora PMS for an additional outlet"
   },
   "pricingIndex": {
     "monthsShort": {
@@ -7108,6 +7113,23 @@
       "noUnits": "This zone has no sunbeds yet — generate them in one click.",
       "deleteZoneConfirm": "Delete zone \"{name}\" together with its sunbeds?",
       "deleteUnitConfirm": "Delete sunbed {number}?",
+      "seasonsTitle": "Price seasons",
+      "seasonsHint": "Same as room pricing: the base price always applies, seasons override it for their dates. Empty cell = the zone uses its base price.",
+      "addSeason": "Add season",
+      "editSeason": "Edit season",
+      "seasonName": "Season name",
+      "seasonNamePlaceholder": "e.g. August",
+      "seasonFrom": "From date",
+      "seasonUntil": "Until (inclusive)",
+      "seasonPricesHint": "Set the per-zone prices in the matrix after saving the season.",
+      "deleteSeasonConfirm": "Delete season \"{name}\"? Zones fall back to their base price for those dates.",
+      "noSeasons": "No seasons yet — each zone's base price applies all summer. Add a season (e.g. \"August\") to charge more on peak dates.",
+      "zoneCol": "Zone",
+      "basePriceCol": "Base price",
+      "basePriceColSub": "when no season",
+      "matrixFoot": "Multi-day bookings are priced day by day — an interval spanning two seasons pays each day's exact price.",
+      "unsavedChanges": "{count} unsaved changes",
+      "saveRates": "Save prices",
       "zoneName": "Zone name",
       "zoneNamePlaceholder": "e.g. Front Row",
       "pricePerDay": "Price / day",
@@ -7159,7 +7181,10 @@
       "accountSplitAll": "Both separate",
       "accountSplitAllText": "Cash to \"Arka Plazh\", cards/online to \"Banka Plazh\".",
       "accountModeSaved": "Beach account mode saved.",
-      "accountModeNotSaved": "The mode was not saved — try again."
+      "accountModeNotSaved": "The mode was not saved — try again.",
+      "posOutletLabel": "POS outlet for beach orders",
+      "posOutletNone": "— (QR opens the reservation only)",
+      "posOutletHint": "With an outlet set, the sunbed QR opens its menu and orders land in the POS located at \"Sunbed N\". Without it, the QR only opens sunbed booking."
     },
     "calendar": {
       "title": "Sunbed calendar",
@@ -7277,6 +7302,25 @@
       "overShort": "Difference: {amount}",
       "closingNote": "Closing note (optional)",
       "closeConfirm": "Close shift"
+    },
+    "order": {
+      "unitBadge": "Sunbed {number}",
+      "title": "Order at the bar",
+      "subtitle": "Your order comes straight to your sunbed — prepared by {outlet}.",
+      "reserveLink": "Want to reserve a sunbed for other days? →",
+      "addOne": "Add {name}",
+      "removeOne": "Remove {name}",
+      "emptyMenu": "The menu isn't ready yet — ask the staff at the bar.",
+      "totalLabel": "Total",
+      "submit": "Order ({count})",
+      "sending": "Sending…",
+      "payOnDelivery": "Pay on delivery — the staff brings the order to your sunbed.",
+      "confirmedTitle": "Order received!",
+      "confirmedBody": "It's being prepared and coming to Sunbed {number}.",
+      "statusOpen": "Being prepared",
+      "statusCompleted": "Delivered and paid",
+      "statusCancelled": "Cancelled",
+      "refresh": "Refresh status"
     }
   }
 }
