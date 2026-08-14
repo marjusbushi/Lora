@@ -7140,7 +7140,10 @@
       "accountSplitAll": "Të dyja më vete",
       "accountSplitAllText": "Cash te \"Arka Plazh\", kartat/online te \"Banka Plazh\".",
       "accountModeSaved": "Modaliteti i arkës së plazhit u ruajt.",
-      "accountModeNotSaved": "Modaliteti nuk u ruajt — provo përsëri."
+      "accountModeNotSaved": "Modaliteti nuk u ruajt — provo përsëri.",
+      "posOutletLabel": "Pika POS e porosive nga plazhi",
+      "posOutletNone": "— (QR çon vetëm te rezervimi)",
+      "posOutletHint": "Kur cakton pikën, QR i çadrës hap menunë e saj dhe porositë hyjnë te POS-i me vendndodhjen \"Çadra N\". Pa të, QR çon vetëm te rezervimi i shezllonëve."
     },
     "calendar": {
       "title": "Kalendari i çadrave",
@@ -7258,6 +7261,25 @@
       "overShort": "Diferenca: {amount}",
       "closingNote": "Shënim mbylljeje (opsional)",
       "closeConfirm": "Mbyll turnin"
+    },
+    "order": {
+      "unitBadge": "Çadra {number}",
+      "title": "Porosit te bari",
+      "subtitle": "Porosia të vjen direkt te çadra — përgatitet nga {outlet}.",
+      "reserveLink": "Do të rezervosh shezllon për ditë të tjera? →",
+      "addOne": "Shto {name}",
+      "removeOne": "Hiq {name}",
+      "emptyMenu": "Menuja s'është gati ende — pyet stafin te bari.",
+      "totalLabel": "Totali",
+      "submit": "Porosit ({count})",
+      "sending": "Po dërgohet…",
+      "payOnDelivery": "Paguaj në dorëzim — stafi vjen te çadra jote me porosinë.",
+      "confirmedTitle": "Porosia u mor!",
+      "confirmedBody": "Po përgatitet dhe të vjen te Çadra {number}.",
+      "statusOpen": "Po përgatitet",
+      "statusCompleted": "U dorëzua dhe u pagua",
+      "statusCancelled": "E anuluar",
+      "refresh": "Rifresko statusin"
     }
   }
 }

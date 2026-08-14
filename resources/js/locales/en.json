@@ -7140,7 +7140,10 @@
       "accountSplitAll": "Both separate",
       "accountSplitAllText": "Cash to \"Arka Plazh\", cards/online to \"Banka Plazh\".",
       "accountModeSaved": "Beach account mode saved.",
-      "accountModeNotSaved": "The mode was not saved — try again."
+      "accountModeNotSaved": "The mode was not saved — try again.",
+      "posOutletLabel": "POS outlet for beach orders",
+      "posOutletNone": "— (QR opens the reservation only)",
+      "posOutletHint": "With an outlet set, the sunbed QR opens its menu and orders land in the POS located at \"Sunbed N\". Without it, the QR only opens sunbed booking."
     },
     "calendar": {
       "title": "Sunbed calendar",
@@ -7258,6 +7261,25 @@
       "overShort": "Difference: {amount}",
       "closingNote": "Closing note (optional)",
       "closeConfirm": "Close shift"
+    },
+    "order": {
+      "unitBadge": "Sunbed {number}",
+      "title": "Order at the bar",
+      "subtitle": "Your order comes straight to your sunbed — prepared by {outlet}.",
+      "reserveLink": "Want to reserve a sunbed for other days? →",
+      "addOne": "Add {name}",
+      "removeOne": "Remove {name}",
+      "emptyMenu": "The menu isn't ready yet — ask the staff at the bar.",
+      "totalLabel": "Total",
+      "submit": "Order ({count})",
+      "sending": "Sending…",
+      "payOnDelivery": "Pay on delivery — the staff brings the order to your sunbed.",
+      "confirmedTitle": "Order received!",
+      "confirmedBody": "It's being prepared and coming to Sunbed {number}.",
+      "statusOpen": "Being prepared",
+      "statusCompleted": "Delivered and paid",
+      "statusCancelled": "Cancelled",
+      "refresh": "Refresh status"
     }
   }
 }
