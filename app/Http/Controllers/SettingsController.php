@@ -677,12 +677,16 @@ class SettingsController extends Controller
             'season_end' => ['nullable', 'date', 'required_with:season_start', 'after_or_equal:season_start'],
             // cash = vetëm në plazh; online = vetëm me kartë online; both = klienti zgjedh.
             'payment_mode' => ['required', 'in:cash,online,both'],
+            // Pika POS ku rrugëtohen porositë nga QR i çadrës (V2) — bosh = QR
+            // çon vetëm te rezervimi, si në V1.
+            'pos_outlet_id' => ['nullable', 'integer', TenantRule::exists('pos_outlets')->where('is_active', true)],
         ]);
 
         Setting::set('beach.booking_window_days', (int) $data['booking_window_days'], 'number');
         Setting::set('beach.season_start', (string) ($data['season_start'] ?? ''), 'text');
         Setting::set('beach.season_end', (string) ($data['season_end'] ?? ''), 'text');
         Setting::set('beach.payment_mode', (string) $data['payment_mode'], 'text');
+        Setting::set('beach.pos_outlet_id', (int) ($data['pos_outlet_id'] ?? 0), 'number');
 
         return back()->with('success', 'Cilësimet e plazhit u ruajtën.');
     }

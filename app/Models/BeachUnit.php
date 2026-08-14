@@ -36,4 +36,9 @@ class BeachUnit extends TenantModel
     {
         return $this->hasMany(BeachReservation::class);
     }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(PosOrder::class, 'beach_unit_id');
+    }
 }
