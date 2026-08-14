@@ -316,6 +316,53 @@ class FinanceLedger
         return $ledger;
     }
 
+    /**
+     * Pasqyron mbylljen e një turni plazhi: vetëm diferencën e numërimit
+     * (over/short) — vetë pagesat kanë hyrë në arkë në momentin e shënimit.
+     * Rihapja/diferenca zero s'lë asnjë rresht.
+     */
+    public function recordBeachShiftClose(\App\Models\BeachShift $shift): ?FinancePayment
+    {
+        if ($shift->status !== 'closed' || ! $shift->closed_at) {
+            $this->removeFor($shift); // turn i rihapur → hiqet rreshti
+
+            return null;
+        }
+
+        $variance = (float) $shift->over_short;
+        if ($variance == 0.0) {
+            $this->removeFor($shift);
+
+            return null;
+        }
+
+        $baseCurrency = BaseCurrency::code();
+        $currency = strtoupper(PricingCurrency::code());
+        $fx = $currency === $baseCurrency ? null : $this->fxRate($currency);
+
+        $ledger = FinancePayment::firstOrNew([
+            'sourceable_type' => \App\Models\BeachShift::class,
+            'sourceable_id' => $shift->id,
+        ]);
+        $ledger->fill([
+            'direction' => $variance > 0 ? 'in' : 'out',
+            'account_id' => self::accountFor('cash', null, unit: 'beach')->id,
+            'amount' => abs($variance),
+            'currency' => $currency,
+            'fx_rate' => $fx ? round($fx, 6) : null,
+            'method' => 'cash',
+            'source' => 'auto',
+            'description' => 'Diferencë turni plazhi — '
+                .($shift->user?->name ?? ('turni #'.$shift->id))
+                .sprintf(' (%+.2f)', $variance),
+            'paid_at' => $shift->closed_at,
+            'created_by' => $shift->closed_by,
+        ]);
+        $ledger->withFrozenAmountBase($fx ? round(abs($variance) / $fx, 2) : abs($variance))->save();
+
+        return $ledger;
+    }
+
     /** Mirror one POS tender/refund. Room charges stay in the guest folio, not Arka/Banka. */
     public function recordPosOrderPayment(PosOrderPayment $payment): ?FinancePayment
     {

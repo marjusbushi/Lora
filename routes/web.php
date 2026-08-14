@@ -470,6 +470,8 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/beach/reservations/{beachReservation}/cancel', [BeachReservationController::class, 'cancel'])->middleware('permission:update_beach')->name('beach.reservations.cancel');
         Route::post('/beach/reservations/{beachReservation}/mark-paid', [BeachReservationController::class, 'markPaid'])->middleware('permission:update_beach')->name('beach.reservations.mark-paid');
         Route::post('/beach/reservations/{beachReservation}/unmark-paid', [BeachReservationController::class, 'unmarkPaid'])->middleware('permission:update_beach')->name('beach.reservations.unmark-paid');
+        Route::post('/beach/shifts/open', [\App\Http\Controllers\BeachShiftController::class, 'open'])->middleware('permission:open_beach_shift')->name('beach.shifts.open');
+        Route::post('/beach/shifts/{beachShift}/close', [\App\Http\Controllers\BeachShiftController::class, 'close'])->middleware('permission:close_beach_shift')->name('beach.shifts.close');
         Route::get('/beach/setup', [BeachSetupController::class, 'index'])->name('beach.setup');
         Route::post('/beach/zones', [BeachSetupController::class, 'storeZone'])->middleware('permission:create_beach')->name('beach.zones.store');
         Route::put('/beach/zones/{zone}', [BeachSetupController::class, 'updateZone'])->middleware('permission:update_beach')->name('beach.zones.update');

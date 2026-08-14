@@ -66,6 +66,8 @@ class BeachReservationController extends Controller
                 'start' => (string) Setting::get('beach.season_start', ''),
                 'end' => (string) Setting::get('beach.season_end', ''),
             ],
+            // Turni i hapur i userit — UI e përdor për gating-un e pagesave + banner.
+            'currentShift' => tap(\App\Models\BeachShift::currentFor((int) auth()->id()), fn ($shift) => $shift?->setAttribute('live_expected_cash', $shift->liveExpectedCash())),
         ]);
     }
 
@@ -119,17 +121,26 @@ class BeachReservationController extends Controller
         return back()->with('success', 'Rezervimi u anullua — çadra u lirua.');
     }
 
-    /** Shënon pagesën e marrë NË PLAZH (cash/kartë atje) — vetëm një herë. */
+    /** Shënon pagesën e marrë NË PLAZH (cash/kartë atje) — vetëm një herë, me turn të hapur. */
     public function markPaid(Request $request, BeachReservation $beachReservation): RedirectResponse
     {
         $data = $request->validate(['method' => ['required', 'in:cash,card']]);
+
+        // Si POS-i: paraja e plazhit hyn gjithmonë në një turn të hapur të userit,
+        // që sirtari të mbyllet me numërim dhe diferenca të shkojë në Financë.
+        $shift = \App\Models\BeachShift::currentFor((int) auth()->id());
+        if (! $shift) {
+            throw ValidationException::withMessages([
+                'method' => 'Hap turnin e plazhit para se të shënosh pagesa.',
+            ]);
+        }
 
         // Flip atomik: vetëm një rezervim ende i papaguar dhe jo i anulluar shënohet —
         // dy klikime të njëkohshme s'e shënojnë dot dy herë.
         $flipped = BeachReservation::whereKey($beachReservation->id)
             ->whereNull('paid_at')
             ->where('status', '!=', BeachReservation::STATUS_CANCELLED)
-            ->update(['paid_at' => now(), 'payment_method' => $data['method']]);
+            ->update(['paid_at' => now(), 'payment_method' => $data['method'], 'beach_shift_id' => $shift->id]);
 
         if ($flipped !== 1) {
             throw ValidationException::withMessages([
@@ -157,7 +168,15 @@ class BeachReservationController extends Controller
             ]);
         }
 
-        $beachReservation->update(['paid_at' => null, 'payment_method' => null]);
+        // Turni i mbyllur ka Z-raport të ngrirë — historia s'ndryshohet më.
+        if ($beachReservation->beach_shift_id
+            && \App\Models\BeachShift::withoutGlobalScopes()->whereKey($beachReservation->beach_shift_id)->value('status') === 'closed') {
+            throw ValidationException::withMessages([
+                'method' => 'Turni i kësaj pagese është mbyllur — shënimi s\'hiqet më.',
+            ]);
+        }
+
+        $beachReservation->update(['paid_at' => null, 'payment_method' => null, 'beach_shift_id' => null]);
 
         return back()->with('success', 'Shënimi i pagesës u hoq.');
     }

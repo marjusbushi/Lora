@@ -1,0 +1,159 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\BeachReservation;
+use App\Models\BeachShift;
+use App\Models\BeachZone;
+use App\Models\FinanceAccount;
+use App\Models\FinancePayment;
+use App\Models\Setting;
+use App\Models\User;
+use App\Services\FinanceLedger;
+use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class BeachShiftTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $admin;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seed(RolePermissionSeeder::class);
+        $this->admin = User::factory()->create();
+        $this->admin->assignRole('admin');
+    }
+
+    private function paidReservation(float $total, string $method): BeachReservation
+    {
+        $zone = BeachZone::create(['name' => 'Zona '.uniqid(), 'price_per_day' => $total]);
+        $unit = $zone->units()->create(['number' => (string) random_int(10000, 99999)]);
+        $reservation = BeachReservation::create([
+            'beach_unit_id' => $unit->id,
+            'guest_name' => 'Guest Shift', 'guest_phone' => '069',
+            'start_date' => today()->toDateString(),
+            'end_date' => today()->toDateString(),
+            'status' => BeachReservation::STATUS_CONFIRMED,
+            'source' => BeachReservation::SOURCE_RECEPTION,
+            'total_amount' => $total,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('beach.reservations.mark-paid', $reservation), ['method' => $method])
+            ->assertSessionHasNoErrors();
+
+        return $reservation->fresh();
+    }
+
+    public function test_full_shift_cycle_expected_cash_and_variance_to_finance(): void
+    {
+        // Hapja me float 100.
+        $this->actingAs($this->admin)
+            ->post(route('beach.shifts.open'), ['opening_float' => 100])
+            ->assertSessionHasNoErrors();
+        $shift = BeachShift::currentFor($this->admin->id);
+        $this->assertNotNull($shift);
+
+        // 500 cash + 300 kartë gjatë turnit — vetëm cash-i pritet në sirtar.
+        $cash = $this->paidReservation(500, 'cash');
+        $card = $this->paidReservation(300, 'card');
+        $this->assertSame($shift->id, $cash->beach_shift_id);
+        $this->assertSame($shift->id, $card->beach_shift_id);
+
+        // Mbyllja me 590 të numëruara → expected 600 (100+500), diferenca -10.
+        $this->actingAs($this->admin)
+            ->post(route('beach.shifts.close', $shift), ['counted_cash' => 590])
+            ->assertSessionHasNoErrors();
+
+        $closed = $shift->fresh();
+        $this->assertSame('closed', $closed->status);
+        $this->assertSame('600.00', $closed->expected_cash);
+        $this->assertSame('500.00', $closed->cash_sales);
+        $this->assertSame('300.00', $closed->card_sales);
+        $this->assertSame('-10.00', $closed->over_short);
+
+        // Diferenca postohet në Financë (drejtim 'out' se mungon).
+        $variance = FinancePayment::where('sourceable_type', BeachShift::class)
+            ->where('sourceable_id', $shift->id)->first();
+        $this->assertNotNull($variance);
+        $this->assertSame('out', $variance->direction);
+        $this->assertSame('10.00', $variance->amount);
+
+        // Pas mbylljes: heqja e shënimit të pagesës refuzohet (Z-raport i ngrirë).
+        $this->actingAs($this->admin)
+            ->postJson(route('beach.reservations.unmark-paid', $cash), [])
+            ->assertStatus(422);
+    }
+
+    public function test_variance_goes_to_arka_plazh_in_split_mode_and_reopen_removes_row(): void
+    {
+        Setting::set('finance.beach_account_mode', FinanceLedger::POS_MODE_SPLIT_CASH);
+
+        $this->actingAs($this->admin)->post(route('beach.shifts.open'), ['opening_float' => 0]);
+        $shift = BeachShift::currentFor($this->admin->id);
+        $this->actingAs($this->admin)->post(route('beach.shifts.close', $shift), ['counted_cash' => 25]);
+
+        $variance = FinancePayment::where('sourceable_type', BeachShift::class)
+            ->where('sourceable_id', $shift->id)->first();
+        $this->assertNotNull($variance);
+        $this->assertSame('in', $variance->direction); // +25 tepricë
+        $account = FinanceAccount::find($variance->account_id);
+        $this->assertSame('beach', $account->scope);
+        $this->assertStringContainsString('Plazh', $account->name);
+
+        // Rihapja (drejtpërdrejt në DB, s'ka route) → observer-i e heq rreshtin.
+        $shift->fresh()->update(['status' => 'open', 'closed_at' => null, 'closed_by' => null]);
+        $this->assertNull(FinancePayment::where('sourceable_type', BeachShift::class)
+            ->where('sourceable_id', $shift->id)->first());
+    }
+
+    public function test_double_open_is_refused_and_permissions_enforced(): void
+    {
+        $this->actingAs($this->admin)->post(route('beach.shifts.open'), ['opening_float' => 0]);
+        $this->assertSame(1, BeachShift::where('user_id', $this->admin->id)->where('status', 'open')->count());
+
+        // Hapja e dytë → refuzohet me error flash, mbetet NJË turn i hapur.
+        $this->actingAs($this->admin)->post(route('beach.shifts.open'), ['opening_float' => 50])
+            ->assertSessionHas('error');
+        $this->assertSame(1, BeachShift::where('user_id', $this->admin->id)->where('status', 'open')->count());
+
+        // Pa leje beach-shift → 403 (housekeeping s'ka open_beach_shift).
+        $housekeeper = User::factory()->create();
+        $housekeeper->assignRole('housekeeping');
+        $this->actingAs($housekeeper)->post(route('beach.shifts.open'), ['opening_float' => 0])
+            ->assertForbidden();
+
+        // Recepsionisti s'mbyll dot turnin e tjetrit (s'ka close_any_beach_shift).
+        $receptionist = User::factory()->create();
+        $receptionist->assignRole('receptionist');
+        $shift = BeachShift::currentFor($this->admin->id);
+        $this->actingAs($receptionist)->post(route('beach.shifts.close', $shift), ['counted_cash' => 0])
+            ->assertForbidden();
+    }
+
+    public function test_online_payment_never_enters_expected_cash(): void
+    {
+        $this->actingAs($this->admin)->post(route('beach.shifts.open'), ['opening_float' => 100]);
+        $shift = BeachShift::currentFor($this->admin->id);
+
+        // Pagesë online (POK) — pa turn, pa sirtar.
+        $zone = BeachZone::create(['name' => 'Zona Online', 'price_per_day' => 700]);
+        $unit = $zone->units()->create(['number' => '77777']);
+        BeachReservation::create([
+            'beach_unit_id' => $unit->id,
+            'guest_name' => 'Online Guest', 'guest_phone' => '069',
+            'start_date' => today()->toDateString(), 'end_date' => today()->toDateString(),
+            'status' => BeachReservation::STATUS_CONFIRMED,
+            'source' => BeachReservation::SOURCE_WEBSITE,
+            'total_amount' => 700,
+            'paid_at' => now(), 'payment_method' => 'online',
+        ]);
+
+        $this->assertSame(100.0, $shift->liveExpectedCash());
+    }
+}

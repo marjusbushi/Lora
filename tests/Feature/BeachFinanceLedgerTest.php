@@ -45,6 +45,14 @@ class BeachFinanceLedgerTest extends TestCase
         ]);
     }
 
+    private function openShift(): \App\Models\BeachShift
+    {
+        return \App\Models\BeachShift::firstOrCreate(
+            ['user_id' => $this->admin->id, 'status' => 'open'],
+            ['opening_float' => 0, 'opened_at' => now()],
+        );
+    }
+
     private function ledgerRowFor(BeachReservation $reservation): ?FinancePayment
     {
         return FinancePayment::where('sourceable_type', BeachReservation::class)
@@ -54,6 +62,7 @@ class BeachFinanceLedgerTest extends TestCase
 
     public function test_shared_mode_routes_cash_to_general_arka_and_unmark_removes_row(): void
     {
+        $this->openShift();
         $reservation = $this->reservation(500);
 
         $this->actingAs($this->admin)
@@ -77,6 +86,7 @@ class BeachFinanceLedgerTest extends TestCase
 
     public function test_split_cash_auto_creates_arka_plazh(): void
     {
+        $this->openShift();
         Setting::set('finance.beach_account_mode', FinanceLedger::POS_MODE_SPLIT_CASH);
         $reservation = $this->reservation(500);
 

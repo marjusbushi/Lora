@@ -109,10 +109,25 @@ class BeachReservationTest extends TestCase
         $this->assertSame('4000.00', BeachReservation::sole()->total_amount);
     }
 
+    private function openShiftFor(\App\Models\User $user): \App\Models\BeachShift
+    {
+        return \App\Models\BeachShift::create([
+            'user_id' => $user->id, 'status' => 'open',
+            'opening_float' => 0, 'opened_at' => now(),
+        ]);
+    }
+
     public function test_mark_paid_guards(): void
     {
         $d = fn (int $offset) => today()->addDays($offset)->toDateString();
         $reservation = $this->reserve($d(1), $d(2));
+
+        // Pa turn të hapur → 422 (si POS-i).
+        $this->actingAs($this->admin)
+            ->postJson(route('beach.reservations.mark-paid', $reservation), ['method' => 'cash'])
+            ->assertStatus(422);
+
+        $shift = $this->openShiftFor($this->admin);
 
         // Shënohet një herë…
         $this->actingAs($this->admin)
@@ -121,6 +136,7 @@ class BeachReservationTest extends TestCase
         $fresh = $reservation->fresh();
         $this->assertNotNull($fresh->paid_at);
         $this->assertSame('cash', $fresh->payment_method);
+        $this->assertSame($shift->id, $fresh->beach_shift_id);
 
         // …dy herë jo (flip atomik 0 rreshta → 422).
         $this->actingAs($this->admin)
