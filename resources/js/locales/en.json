@@ -5297,7 +5297,16 @@
       "bpOut": "All money that left the bank accounts in the period, in the base currency: withdrawals, supplier payments, outgoing transfers.",
       "bpNet": "Inflows − outflows, in the base currency. Transfers between two of your own banks leave one and enter the other — the net doesn't change.",
       "bpMovements": "Number of movements in the list. A bank-to-bank transfer touches two accounts but shows as a single row with an arrow.",
-      "bpBase": "The document amount converted to the base currency at the payment day's rate — so accounts in different currencies add up into one total."
+      "bpBase": "The document amount converted to the base currency at the payment day's rate — so accounts in different currencies add up into one total.",
+      "dbTonight": "Rooms with a guest tonight divided by sellable rooms (all rooms minus those in maintenance).",
+      "dbMovements": "The big number: how many are LEFT to do — arrivals / departures. The small line: how many are already done today.",
+      "dbCleaning": "Rooms with an open cleaning task in the system. RUSH = rooms from this queue where a guest arrives TODAY — clean those first. The age line shows how many tasks are today's and how many have stayed open from previous days.",
+      "dbDueToday": "Debt collectible NOW: in-house guests whose departure date is today or past, with an open balance. Same concept as \"Real debt\" on the outstanding report — not future reservations.",
+      "dbRoomFlow": "Every room with today's movements in one row: who leaves, what cleaning is needed, who arrives. Ordered most-urgent first (RUSH and arrivals without a ready room on top).",
+      "dbActions": "The badge number is the SUM of cases (e.g. 6 rooms + 1 cash difference = 7), not the number of cards. Ordered by risk level.",
+      "dbForecast": "Occupancy for the next 14 days from reservations ON THE BOOKS today — not a statistical forecast. Each bar: rooms occupied that night / sellable.",
+      "dbPulse": "Real collections (voided excluded): PMS payments + settled POS sales, in the selling currency with the base beneath. The month compares against the same period last month; top channel = the channel with the most revenue in the last 30 days.",
+      "dbChannex": "PMS → Channex sync health: checks every room type for availability and rates, incomplete mappings, and sync age. \"Selling until\" = how far ahead OTAs have published rates and availability."
     },
     "executiveDashboard": "Executive Dashboard",
     "executiveShort": "Key performance and alerts.",
@@ -6806,7 +6815,8 @@
       "inspection": "Inspection"
     },
     "dashboard": {
-      "allRooms": "All ({count})"
+      "allRooms": "All ({count})",
+      "cleaningAge": "{today} from today · {older} older"
     },
     "financePayments": {
       "reservationOnly": "Showing only the movements linked to reservation",
