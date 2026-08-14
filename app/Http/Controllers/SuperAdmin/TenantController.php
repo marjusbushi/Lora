@@ -510,6 +510,7 @@ class TenantController extends Controller
         $rules = [
             'status' => ['required', Rule::in(['trialing', 'active', 'past_due', 'suspended', 'canceled'])],
             'billing_cycle' => ['required', Rule::in(['monthly', 'annual'])],
+            'contract_years' => ['required', Rule::in(array_keys(config('lora_modules.contract_discounts', [1 => 10])))],
             'current_period_ends_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'modules' => ['required', 'array:'.implode(',', $moduleCodes)],

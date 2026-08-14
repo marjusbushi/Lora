@@ -4523,7 +4523,10 @@
       "testConnection": "Test the connection",
       "auditNote": "Changes are recorded in the audit log.",
       "saving": "Saving…",
-      "saveChanges": "Save changes"
+      "saveChanges": "Save changes",
+      "contractLength": "Contract length",
+      "contractOption": "{years} yr — {percent}% off",
+      "contractOverride": "This tenant has an individually negotiated discount: {percent}% (overrides the ladder)"
     },
     "billing": {
       "unitMonth": "month",

@@ -4523,7 +4523,10 @@
       "testConnection": "Testo lidhjen",
       "auditNote": "Ndryshimet regjistrohen në audit log.",
       "saving": "Duke ruajtur…",
-      "saveChanges": "Ruaj ndryshimet"
+      "saveChanges": "Ruaj ndryshimet",
+      "contractLength": "Gjatësia e kontratës",
+      "contractOption": "{years} vjet — {percent}% zbritje",
+      "contractOverride": "Ky tenant ka zbritje të negociuar veç: {percent}% (fiton mbi shkallën)"
     },
     "billing": {
       "unitMonth": "muaj",

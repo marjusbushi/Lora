@@ -25,8 +25,17 @@ class TenantBillingTest extends TestCase
 
         $this->assertSame('active', $billing['status']);
         $this->assertSame('monthly', $billing['billing_cycle']);
-        $this->assertSame(13100, $billing['monthly_fixed_cents']);
-        $this->assertSame(125760, $billing['annual_cents']);
+        // core 2900 + channel_manager 700 (1 dhomë) + housekeeping 900 + pos 4900 (pika e parë)
+        // + finance 2900 + smart_pricing 4900 + beach 2900 = 20100.
+        $this->assertSame(20100, $billing['monthly_fixed_cents']);
+        // Pa override: shkalla e kontratës, default 1 vit → 10%: 20100×12×0.9.
+        $this->assertSame(1, $billing['contract_years']);
+        $this->assertSame(10, $billing['annual_discount_percent']);
+        $this->assertSame(217080, $billing['annual_cents']);
+        $this->assertSame(
+            [1 => 10, 2 => 15, 3 => 20, 5 => 30],
+            collect($billing['contract_options'])->pluck('discount_percent', 'years')->all(),
+        );
         $this->assertSame(
             array_keys(config('lora_modules.modules')),
             array_keys(array_filter($billing['modules'], fn (array $module) => $module['enabled'])),
@@ -99,6 +108,7 @@ class TenantBillingTest extends TestCase
         $payload = [
             'status' => 'active',
             'billing_cycle' => 'annual',
+            'contract_years' => 3,
             'current_period_ends_at' => '2027-07-11',
             'notes' => 'Kontratë vjetore test.',
             'modules' => [
@@ -125,8 +135,13 @@ class TenantBillingTest extends TestCase
 
         $this->assertTrue($summary['modules']['core']['enabled'], 'Core must stay enabled.');
         $this->assertSame(60, $summary['modules']['channel_manager']['quantity']);
-        $this->assertSame(57100, $summary['monthly_fixed_cents']);
-        $this->assertSame(548160, $summary['annual_cents']);
+        // core 2900 + cm 60 dhoma (30×700 + 30×500 = 36000) + hk 2×900 + pos 3 pika
+        // (4900 + 2×1900 = 8700) + finance 2900 + smart 4900 + beach 2900 = 60100.
+        $this->assertSame(60100, $summary['monthly_fixed_cents']);
+        // Kontrata 3-vjeçare → 20%: 60100×12×0.8.
+        $this->assertSame(3, $summary['contract_years']);
+        $this->assertSame(20, $summary['annual_discount_percent']);
+        $this->assertSame(576960, $summary['annual_cents']);
         $this->assertSame(100, $summary['modules']['booking_engine']['percentage_bps']);
         $this->assertDatabaseHas('audit_logs', [
             'tenant_id' => $tenant->id,
@@ -164,6 +179,29 @@ class TenantBillingTest extends TestCase
         app(TenantContext::class)->set($tenant->fresh());
 
         $this->assertTrue(app(ChannexConfiguration::class)->configured());
+    }
+
+    public function test_contract_ladder_discounts_and_negotiated_override(): void
+    {
+        $tenant = Tenant::query()->sole();
+        $subscription = $tenant->subscription;
+
+        // Çdo shkallë e kontratës jep zbritjen e vet mbi totalin vjetor.
+        foreach ([1 => 10, 2 => 15, 3 => 20, 5 => 30] as $years => $percent) {
+            $subscription->update(['contract_years' => $years]);
+            $summary = app(TenantBillingService::class)->summary($tenant->fresh());
+            $this->assertSame($percent, $summary['annual_discount_percent'], "Kontrata {$years}-vjeçare");
+            $this->assertSame(
+                (int) round($summary['monthly_fixed_cents'] * 12 * ((100 - $percent) / 100)),
+                $summary['annual_cents'],
+            );
+        }
+
+        // Negociata e veçantë (override) fiton mbi shkallën.
+        $subscription->update(['contract_years' => 1, 'discount_override_percent' => 25]);
+        $summary = app(TenantBillingService::class)->summary($tenant->fresh());
+        $this->assertSame(25, $summary['annual_discount_percent']);
+        $this->assertSame(25, $summary['discount_override_percent']);
     }
 
     private function billingPayload(array $summary): array
