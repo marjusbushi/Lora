@@ -6647,7 +6647,10 @@
     "outletDeleted": "Outlet deleted.",
     "outletDeleteConfirm": "Delete outlet \"{name}\"?",
     "outletSave": "Save",
-    "outletCreate": "Create outlet"
+    "outletCreate": "Create outlet",
+    "outletDeactivate": "Deactivate",
+    "outletDeactivateConfirm": "Deactivate outlet \"{name}\"? It disappears from the POS; history and reports remain.",
+    "outletDeactivated": "Outlet deactivated."
   },
   "pricingIndex": {
     "monthsShort": {
@@ -7033,6 +7036,7 @@
     "noAiActions": "No AI-executed actions yet."
   },
   "posOutlets": {
-    "label": "Sales outlet"
+    "label": "Sales outlet",
+    "switchConfirm": "The cart has unsaved items — switching outlet clears it. Continue?"
   }
 }

@@ -67,7 +67,7 @@ const categoryBars = computed(() => props.byCategory.map((row) => ({
 </script>
 
 <template>
-    <ReportShell :title="$t('reports360.posPerformance.title')" route-name="reports.posSales" :filters="filters" :description="$t('reports360.posPerformance.short')" :category="$t('reports360.posPerformance.category')">
+    <ReportShell :title="$t('reports360.posPerformance.title')" route-name="reports.posSales" :filters="filters" :query="filters?.outlet ? { outlet: filters.outlet } : {}" :description="$t('reports360.posPerformance.short')" :category="$t('reports360.posPerformance.category')">
         <div v-if="outlets.length" class="mb-4 flex flex-wrap items-center gap-2">
             <span class="flex items-center gap-1 text-tiny font-semibold uppercase tracking-wide text-neutral-400">
                 <MapPin class="h-3.5 w-3.5" /> {{ $t('reports360.posPerformance.outletFilterLabel') }}

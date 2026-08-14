@@ -134,7 +134,8 @@ class SettingsController extends Controller
                     $category->setAttribute('outlet_ids', $category->outlets->pluck('id')->values());
                     $category->unsetRelation('outlets');
                 }),
-            'posOutlets' => PosOutlet::ordered()->get(['id', 'name', 'warehouse_id', 'is_active', 'sort_order']),
+            'posOutlets' => PosOutlet::ordered()->withCount('orders')
+                ->get(['id', 'name', 'warehouse_id', 'is_active', 'sort_order']),
             'inventoryCategoryTree' => InventoryCategory::flatTree(),
             'inventoryItems' => InventoryItem::where('is_active', true)->where('type', '!=', 'service')
                 ->orderBy('name')->get(['id', 'name', 'sku', 'unit']),
@@ -917,6 +918,13 @@ class SettingsController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
+        // Deactivating with open tickets would strand them: the outlet's tables
+        // leave every POS view, so those accounts could never be billed.
+        $deactivating = $posOutlet->is_active && ($data['is_active'] ?? true) == false;
+        if ($deactivating && $posOutlet->orders()->where('status', 'open')->exists()) {
+            return back()->with('error', "Pika \"{$posOutlet->name}\" ka porosi të hapura — mbylli ose anuloji ato para se ta çaktivizosh.");
+        }
+
         $posOutlet->update([
             'name' => $data['name'],
             'warehouse_id' => $data['warehouse_id'] ?? null,
@@ -930,14 +938,30 @@ class SettingsController extends Controller
     public function destroyPosOutlet(PosOutlet $posOutlet): RedirectResponse
     {
         if ($posOutlet->orders()->exists()) {
+            if ($posOutlet->is_active && $posOutlet->orders()->where('status', 'open')->exists()) {
+                return back()->with('error', "Pika \"{$posOutlet->name}\" ka porosi të hapura — mbylli ose anuloji ato para se ta çaktivizosh.");
+            }
             $posOutlet->update(['is_active' => false]);
 
             return back()->with('error', "Pika \"{$posOutlet->name}\" ka porosi të regjistruara — u çaktivizua në vend të fshirjes, që raportet historike të mbeten të sakta.");
         }
 
+        // Tell the admin what the delete quietly un-scopes: cascade removes the
+        // visibility rows (restricted categories go everywhere) and nullOnDelete
+        // makes the outlet's tables shared.
+        $affectedCategories = $posOutlet->menuCategories()->count();
+        $affectedTables = $posOutlet->tables()->count();
         $posOutlet->delete();
 
-        return back()->with('success', 'Pika u fshi.');
+        $message = 'Pika u fshi.';
+        if ($affectedCategories > 0) {
+            $message .= " {$affectedCategories} kategori që ishin të kufizuara te kjo pikë tani shfaqen në të gjitha pikat.";
+        }
+        if ($affectedTables > 0) {
+            $message .= " {$affectedTables} tavolina u bënë të përbashkëta (pa pikë).";
+        }
+
+        return back()->with('success', $message);
     }
 
     // --- Menu Categories CRUD ---

@@ -11,6 +11,9 @@ const props = defineProps({
     outlets: { type: Array, default: () => [] },
     currentOutletId: { type: Number, default: null },
     dense: { type: Boolean, default: false },
+    // Non-empty = ask before a MANUAL switch (e.g. items in the cart would be
+    // lost); the silent localStorage restore on load never needs it.
+    confirmBeforeSwitch: { type: String, default: '' },
 });
 
 const STORAGE_KEY = 'pos.outlet_id';
@@ -18,9 +21,13 @@ const switchingTo = ref(null);
 
 function switchTo(outletId, options = {}) {
     if (switchingTo.value || outletId === props.currentOutletId) return;
+    if (!options.replace && props.confirmBeforeSwitch && !window.confirm(props.confirmBeforeSwitch)) return;
     switchingTo.value = outletId;
     try { localStorage.setItem(STORAGE_KEY, String(outletId)); } catch { /* private mode */ }
-    router.get(window.location.pathname, { outlet: outletId }, {
+    // Keep the rest of the query string (order_id/action/table…) — the switch
+    // changes the outlet, not where the user stands in a flow.
+    const query = Object.fromEntries(new URLSearchParams(window.location.search));
+    router.get(window.location.pathname, { ...query, outlet: outletId }, {
         preserveScroll: true,
         replace: Boolean(options.replace),
         onFinish: () => { switchingTo.value = null; },

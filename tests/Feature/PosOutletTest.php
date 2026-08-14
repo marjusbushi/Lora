@@ -195,6 +195,71 @@ class PosOutletTest extends TestCase
         $this->assertSame(8.0, $beer->fresh()->stock($beachWarehouse->id));
     }
 
+    public function test_reassigning_the_outlet_warehouse_mid_ticket_does_not_deduct_stock_twice(): void
+    {
+        $admin = $this->admin();
+        Warehouse::ensureDefault();
+        $first = Warehouse::create(['name' => 'Magazina A', 'type' => 'bar', 'is_active' => true]);
+        $second = Warehouse::create(['name' => 'Magazina B', 'type' => 'bar', 'is_active' => true]);
+        $beach = $this->outlet('Beach Bar', ['warehouse_id' => $first->id]);
+
+        $beer = InventoryItem::create(['name' => 'Bire', 'sku' => 'BIRE', 'type' => 'product', 'unit' => 'piece']);
+        app(InventoryLedger::class)->openingBalance($beer, $first, 10, 1.0, null, $admin->id);
+        app(InventoryLedger::class)->openingBalance($beer, $second, 10, 1.0, null, $admin->id);
+
+        $category = MenuCategory::create(['name' => 'Pije', 'sort_order' => 1]);
+        $item = $this->menuItemIn($category, 'Bire', 3.50);
+        $item->inventoryComponents()->create(['inventory_item_id' => $beer->id, 'quantity' => 1]);
+        $this->openShiftFor($admin);
+
+        // store() reserves stock from warehouse A…
+        $this->actingAs($admin)->post(route('pos.store'), [
+            'outlet_id' => $beach->id,
+            'items' => [['menu_item_id' => $item->id, 'quantity' => 2]],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame(8.0, $beer->fresh()->stock($first->id));
+
+        // …the admin re-points the outlet at warehouse B while the ticket is open…
+        $this->actingAs($admin)->put(route('settings.pos.outlets.update', $beach), [
+            'name' => 'Beach Bar', 'warehouse_id' => $second->id,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        // …and completing must NOT consume a second time from warehouse B.
+        $order = PosOrder::latest('id')->sole();
+        $this->actingAs($admin)->post(route('pos.complete', $order), ['payment_method' => 'cash'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame(8.0, $beer->fresh()->stock($first->id));
+        $this->assertSame(10.0, $beer->fresh()->stock($second->id));
+    }
+
+    public function test_outlet_with_open_orders_cannot_be_deactivated(): void
+    {
+        $admin = $this->admin();
+        $beach = $this->outlet('Beach Bar');
+        $category = MenuCategory::create(['name' => 'Pije', 'sort_order' => 1]);
+        $item = $this->menuItemIn($category, 'Bire', 3.50);
+        $this->openShiftFor($admin);
+
+        $this->actingAs($admin)->post(route('pos.store'), [
+            'outlet_id' => $beach->id,
+            'items' => [['menu_item_id' => $item->id, 'quantity' => 1]],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        // Open ticket → deactivation refused (its tables would leave every POS view).
+        $this->actingAs($admin)->put(route('settings.pos.outlets.update', $beach), [
+            'name' => 'Beach Bar', 'is_active' => false,
+        ])->assertRedirect()->assertSessionHas('error');
+        $this->assertTrue($beach->fresh()->is_active);
+
+        // Paid ticket → deactivation is allowed.
+        $order = PosOrder::latest('id')->sole();
+        $this->actingAs($admin)->post(route('pos.complete', $order), ['payment_method' => 'cash'])->assertRedirect();
+        $this->actingAs($admin)->put(route('settings.pos.outlets.update', $beach), [
+            'name' => 'Beach Bar', 'is_active' => false,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertFalse($beach->fresh()->is_active);
+    }
+
     public function test_tenant_b_is_refused_on_every_operation_over_tenant_a_outlets(): void
     {
         $admin = $this->admin();

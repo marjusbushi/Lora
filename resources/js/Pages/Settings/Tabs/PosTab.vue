@@ -60,7 +60,26 @@ function deleteOutlet(outlet) {
         onSuccess: (page) => {
             const flashError = page?.props?.flash?.error;
             if (flashError) props.toasts?.error(flashError);
-            else props.toasts?.success(translate('settingsPos.outletDeleted'));
+            else props.toasts?.success(page?.props?.flash?.success || translate('settingsPos.outletDeleted'));
+        },
+    });
+}
+
+// An outlet with recorded orders can never be deleted (history must stay
+// correct) — the honest action is deactivation, offered as such. The server
+// still refuses while open tickets exist.
+function deactivateOutlet(outlet) {
+    if (!confirm(translate('settingsPos.outletDeactivateConfirm', { name: outlet.name }))) return;
+    router.put(route('settings.pos.outlets.update', outlet.id), {
+        name: outlet.name,
+        warehouse_id: outlet.warehouse_id,
+        is_active: false,
+    }, {
+        preserveScroll: true,
+        onSuccess: (page) => {
+            const flashError = page?.props?.flash?.error;
+            if (flashError) props.toasts?.error(flashError);
+            else props.toasts?.success(translate('settingsPos.outletDeactivated'));
         },
     });
 }
@@ -197,7 +216,8 @@ function digitsOnly(event) {
                         </div>
                         <div class="flex gap-1.5">
                             <Button type="button" size="sm" variant="ghost" @click="openEditOutlet(outlet)">{{ $t('settingsPos.outletEdit') }}</Button>
-                            <Button type="button" size="sm" variant="ghost" class="text-error-600" @click="deleteOutlet(outlet)">{{ $t('settingsPos.outletDelete') }}</Button>
+                            <Button v-if="!outlet.orders_count" type="button" size="sm" variant="ghost" class="text-error-600" @click="deleteOutlet(outlet)">{{ $t('settingsPos.outletDelete') }}</Button>
+                            <Button v-else-if="outlet.is_active" type="button" size="sm" variant="ghost" class="text-warning-700" @click="deactivateOutlet(outlet)">{{ $t('settingsPos.outletDeactivate') }}</Button>
                         </div>
                     </div>
                 </div>

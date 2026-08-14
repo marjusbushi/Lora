@@ -207,11 +207,14 @@ class InventoryLedger
 
             foreach ($orderItem->menuItem?->inventoryComponents ?? [] as $component) {
                 $item = InventoryItem::query()->lockForUpdate()->findOrFail($component->inventory_item_id);
+                // Idempotency is per order-line + item, NOT per warehouse: if the
+                // resolved warehouse changes between store() and complete() (an
+                // admin re-assigns the outlet/category warehouse while a ticket
+                // is open), a warehouse-scoped check would deduct a second time.
                 $existing = InventoryMovement::query()
                     ->where('sourceable_type', PosOrderItem::class)
                     ->where('sourceable_id', $orderItem->id)
                     ->where('type', 'sale')
-                    ->where('warehouse_id', $warehouse->id)
                     ->where('inventory_item_id', $item->id)
                     ->exists();
                 if ($existing) {

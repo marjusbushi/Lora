@@ -49,7 +49,10 @@ function openEditCat(cat) {
 
 function restrictedOutletNames(cat) {
     if (!cat.outlet_ids?.length) return null;
-    return props.posOutlets.filter((outlet) => cat.outlet_ids.includes(outlet.id)).map((outlet) => outlet.name).join(' · ');
+    return props.posOutlets
+        .filter((outlet) => cat.outlet_ids.includes(outlet.id))
+        .map((outlet) => outlet.is_active ? outlet.name : `${outlet.name} (${translate('settingsPos.outletInactive')})`)
+        .join(' · ');
 }
 
 function submitCat() {
@@ -241,7 +244,8 @@ function deleteItem(item) {
                 <TextInput v-model="catForm.name" :placeholder="$t('admin.generated.k_2454362e8872')" :error="catForm.errors.name" />
             </FormGroup>
             <div class="grid gap-4 sm:grid-cols-2">
-                <FormGroup :label="$t('inventory.pos.outlet')">
+                <!-- Legacy warehouse-type hint; superseded by real outlets once any exist -->
+                <FormGroup v-if="!posOutlets.length" :label="$t('inventory.pos.outlet')">
                     <select v-model="catForm.outlet" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
                         <option value="">—</option><option value="bar">Bar</option><option value="restaurant">{{ $t('inventory.warehouseTypes.restaurant') }}</option>
                     </select>

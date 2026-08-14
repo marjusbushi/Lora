@@ -152,7 +152,10 @@ class PosTableServiceController extends Controller
             if (! $order) {
                 // A table's own outlet is the truth for table service; a
                 // shared (outlet-less) table falls back to the device outlet.
-                $outletId = $table->outlet_id
+                // Both values are re-validated as ACTIVE outlets of this
+                // tenant — a table pinned to a deactivated outlet must not
+                // stamp fresh orders with it.
+                $outletId = ($table->outlet_id ? PosOutlet::active()->whereKey($table->outlet_id)->value('id') : null)
                     ?: PosOutlet::active()->whereKey((int) $request->session()->get('pos.outlet_id'))->value('id');
 
                 $order = PosOrder::create([
@@ -255,6 +258,9 @@ class PosTableServiceController extends Controller
         return redirect()->route('pos.tables', ['table' => $posTable->id]);
     }
 
+    // OUTLET CONTRACT (deliberate, board-reviewed): a transferred order KEEPS the
+    // outlet where it was opened — revenue and stock stay attributed to the
+    // origin outlet even if the destination table belongs to another one.
     public function transfer(Request $request, PosTable $posTable): RedirectResponse
     {
         $data = $request->validate(['destination_table_id' => ['required', 'integer', 'different:'.$posTable->id, TenantRule::exists('pos_tables')]]);

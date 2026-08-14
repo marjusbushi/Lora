@@ -78,6 +78,12 @@ class PosController extends Controller
                 'area' => $table->area,
                 'seats' => $table->seats,
             ];
+            // Serving a table means serving ITS outlet: the menu must match
+            // what storeRound will stamp, even if the device last remembered
+            // another outlet (back-navigation, shared handhelds).
+            if ($table->outlet_id && ($tableOutlet = $outlets->firstWhere('id', $table->outlet_id))) {
+                $currentOutlet = $tableOutlet;
+            }
         }
         $query = PosOrder::select(
             'id', 'reservation_id', 'table_number', 'pos_table_id', 'status',
@@ -383,6 +389,10 @@ class PosController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        // NOTE (deliberate): items are validated as the tenant's, NOT against the
+        // outlet's visible categories — visibility is merchandising filtering for
+        // the till; price and stock stay server-side, so a stale tab ordering a
+        // hidden item is acceptable.
         $request->validate([
             'table_number' => ['nullable', 'string', 'max:10'],
             'outlet_id' => ['nullable', 'integer', TenantRule::exists('pos_outlets')->where('is_active', true)],

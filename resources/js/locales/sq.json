@@ -6647,7 +6647,10 @@
     "outletDeleted": "Pika u fshi.",
     "outletDeleteConfirm": "Të fshihet pika \"{name}\"?",
     "outletSave": "Ruaj",
-    "outletCreate": "Krijo pikën"
+    "outletCreate": "Krijo pikën",
+    "outletDeactivate": "Çaktivizo",
+    "outletDeactivateConfirm": "Ta çaktivizoj pikën \"{name}\"? Nuk do shfaqet më në POS; historiku dhe raportet mbeten.",
+    "outletDeactivated": "Pika u çaktivizua."
   },
   "pricingIndex": {
     "monthsShort": {
@@ -7033,6 +7036,7 @@
     "noAiActions": "Nuk ka ende veprime të ekzekutuara nga AI."
   },
   "posOutlets": {
-    "label": "Pika e shitjes"
+    "label": "Pika e shitjes",
+    "switchConfirm": "Shporta ka artikuj të paruajtur — ndërrimi i pikës i fshin. Të vazhdoj?"
   }
 }

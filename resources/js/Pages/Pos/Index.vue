@@ -783,7 +783,7 @@ onMounted(() => {
                 <p v-if="!touchMode || view !== 'sale'" class="mt-1 text-body-sm text-neutral-500">{{ view === 'sale' ? $t('posIndex.subtitleSale') : view === 'orders' ? $t('posIndex.subtitleOrders') : view === 'receipts' ? $t('posIndex.subtitleReceipts') : $t('posIndex.subtitleShifts') }}</p>
             </div>
             <div v-if="view === 'sale'" class="flex flex-wrap items-center gap-2">
-                <OutletSwitcher v-if="!tableContext" :outlets="outlets" :current-outlet-id="currentOutletId" />
+                <OutletSwitcher v-if="!tableContext" :outlets="outlets" :current-outlet-id="currentOutletId" :confirm-before-switch="cart.length ? $t('posOutlets.switchConfirm') : ''" />
                 <PosSalespersonSwitcher v-if="posSettings.salesperson_enabled" :current="currentSalesperson" :salespeople="salespeople" />
                 <Button v-if="tableContext" variant="outline" class="h-[58px]" :href="route('pos.tables', { table: tableContext.id })"><ArrowLeft class="h-4 w-4" /> {{ $t('posIndex.tables') }}</Button>
                 <Button v-else-if="posSettings.service_mode === 'hybrid'" variant="outline" class="h-[58px]" :href="route('pos.tables')">{{ $t('posIndex.tables') }}</Button>
