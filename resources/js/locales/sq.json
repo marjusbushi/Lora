@@ -7063,7 +7063,12 @@
       "seasonEnd": "Mbyllja e sezonit",
       "seasonHint": "Bosh = plazhi i hapur gjithë vitin.",
       "save": "Ruaj cilësimet",
-      "saved": "Cilësimet e plazhit u ruajtën."
+      "saved": "Cilësimet e plazhit u ruajtën.",
+      "paymentModeLabel": "Mënyra e pagesës për rezervimet online",
+      "paymentModeHint": "Cash = paguhet vetëm në plazh · Online = klienti çohet direkt te pagesa me kartë · Me zgjedhje = klienti vendos vetë.",
+      "paymentCash": "Vetëm në plazh (cash/kartë atje)",
+      "paymentOnline": "Vetëm online me kartë",
+      "paymentBoth": "Me zgjedhje — klienti vendos"
     },
     "calendar": {
       "title": "Kalendari i çadrave",
@@ -7129,7 +7134,10 @@
       "downloadQr": "Shkarko QR-në si foto",
       "keepLink": "Edhe linku i kësaj faqeje të ruan rezervimin — rihape kurdo.",
       "paidBadge": "E paguar online — {date}",
-      "payOnline": "Paguaj online me kartë"
+      "payOnline": "Paguaj online me kartë",
+      "payOnlineRequired": "Pagesa bëhet online me kartë menjëherë pas rezervimit.",
+      "payChoice": "Paguan në plazh ose online me kartë — si të duash.",
+      "completeOnline": "Përfundo pagesën online për ta mbyllur rezervimin."
     },
     "pay": {
       "headTitle": "Pagesa e çadrës",

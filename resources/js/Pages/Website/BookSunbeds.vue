@@ -10,7 +10,15 @@ const props = defineProps({
     bookingWindowDays: { type: Number, default: 10 },
     season: { type: Object, default: () => ({ start: '', end: '' }) },
     today: { type: String, required: true },
+    currency: { type: String, default: '€' },
+    paymentMode: { type: String, default: 'both' }, // cash | online | both
 });
+
+const payNoteKey = computed(() => ({
+    cash: 'beach.public.payOnSite',
+    online: 'beach.public.payOnlineRequired',
+    both: 'beach.public.payChoice',
+}[props.paymentMode] ?? 'beach.public.payChoice'));
 
 const step = ref(1);
 const wizardTop = ref(null);
@@ -185,7 +193,7 @@ function submit() {
                                 <div v-if="index > 0" class="my-4 border-t-2 border-dashed border-driftwood/30" role="presentation" />
                                 <div class="mb-2 flex flex-wrap items-baseline gap-2">
                                     <h2 class="font-semibold text-ink">{{ zone.name }}</h2>
-                                    <span class="text-body-sm text-driftwood">{{ $t('beach.public.pricePerDay', { price: zone.price_per_day }) }}</span>
+                                    <span class="text-body-sm text-driftwood">{{ $t('beach.public.pricePerDay', { price: currency + zone.price_per_day }) }}</span>
                                 </div>
                                 <div class="flex flex-wrap justify-center gap-1 sm:gap-2">
                                     <SunbedSpot
@@ -203,7 +211,7 @@ function submit() {
                     <div class="flex flex-col gap-3 rounded-2xl border border-driftwood/20 bg-white p-5 shadow-sm sm:flex-row sm:items-center">
                         <p v-if="selectedUnit" class="text-body font-medium text-ink">
                             <Umbrella class="mr-1 inline h-4 w-4 text-ionian" />
-                            {{ $t('beach.public.selectionSummary', { number: selectedUnit.number, zone: selectedUnit.zoneName, days, total }) }}
+                            {{ $t('beach.public.selectionSummary', { number: selectedUnit.number, zone: selectedUnit.zoneName, days, total: currency + total }) }}
                         </p>
                         <p v-else class="text-body-sm text-driftwood">{{ $t('beach.public.pickHint') }}</p>
                         <button
@@ -224,7 +232,7 @@ function submit() {
                             <p class="text-body-sm font-semibold text-ink">
                                 {{ $t('beach.public.finalSummary', { number: selectedUnit.number, zone: selectedUnit.zoneName, start: dates.start, end: dates.end }) }}
                             </p>
-                            <p class="text-lg font-bold text-ink">{{ $t('beach.public.totalLine', { days, total }) }}</p>
+                            <p class="text-lg font-bold text-ink">{{ $t('beach.public.totalLine', { days, total: currency + total }) }}</p>
                         </div>
 
                         <div class="space-y-3">
@@ -252,7 +260,7 @@ function submit() {
                         <p v-if="form.errors.beach_unit_id" role="alert" class="mt-3 rounded-xl border border-error-200 bg-error-50 p-3 text-body-sm text-error-700">{{ form.errors.beach_unit_id }}</p>
                         <p v-if="form.errors.start_date || form.errors.end_date" role="alert" class="mt-3 rounded-xl border border-error-200 bg-error-50 p-3 text-body-sm text-error-700">{{ form.errors.start_date || form.errors.end_date }}</p>
 
-                        <p class="mt-3 flex items-center gap-1.5 text-body-sm text-driftwood"><ShieldCheck class="h-4 w-4" />{{ $t('beach.public.payOnSite') }}</p>
+                        <p class="mt-3 flex items-center gap-1.5 text-body-sm text-driftwood"><ShieldCheck class="h-4 w-4" />{{ $t(payNoteKey) }}</p>
                         <button
                             type="submit"
                             class="mt-3 w-full rounded-xl bg-ionian px-6 py-3.5 text-body font-semibold text-bone transition hover:opacity-90 disabled:opacity-50"

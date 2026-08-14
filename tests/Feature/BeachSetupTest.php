@@ -125,14 +125,23 @@ class BeachSetupTest extends TestCase
             ->assertStatus(422);
 
         $this->actingAs($admin)
+            ->putJson(route('settings.beach'), [
+                'booking_window_days' => 15,
+                'payment_mode' => 'invalid',
+            ])
+            ->assertStatus(422);
+
+        $this->actingAs($admin)
             ->put(route('settings.beach'), [
                 'booking_window_days' => 15,
                 'season_start' => '2026-05-01',
                 'season_end' => '2026-09-30',
+                'payment_mode' => 'cash',
             ])
             ->assertSessionHasNoErrors();
 
         $this->assertSame(15, (int) Setting::get('beach.booking_window_days'));
         $this->assertSame('2026-05-01', (string) Setting::get('beach.season_start'));
+        $this->assertSame('cash', (string) Setting::get('beach.payment_mode'));
     }
 }

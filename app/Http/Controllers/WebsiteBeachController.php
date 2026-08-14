@@ -31,6 +31,8 @@ class WebsiteBeachController extends Controller
             'bookingWindowDays' => $this->windowDays(),
             'season' => $this->season(),
             'today' => now()->toDateString(),
+            'currency' => PricingCurrency::symbol(),
+            'paymentMode' => $this->paymentMode(),
         ]);
     }
 
@@ -106,6 +108,12 @@ class WebsiteBeachController extends Controller
             ]);
         });
 
+        // Mënyra 'online': klienti çohet direkt te pagesa (rezervimi ruhet gjithsesi;
+        // nëse POK s'është i konfiguruar, biem natyrshëm te konfirmimi).
+        if ($this->paymentMode() === 'online' && app(PokClient::class)->configured()) {
+            return redirect()->route('website.beach.pay', $reservation->confirmation_token);
+        }
+
         return redirect()->route('website.beach.confirmation', $reservation->confirmation_token);
     }
 
@@ -135,13 +143,17 @@ class WebsiteBeachController extends Controller
                 'end_date' => $reservation->end_date->toDateString(),
                 'days' => $reservation->totalDays(),
                 'total_amount' => $reservation->total_amount,
+                'currency' => PricingCurrency::symbol(),
                 'guest_name' => $reservation->guest_name,
                 'status' => $reservation->status,
                 'paid_at' => $reservation->paid_at?->toDateTimeString(),
                 'confirmation_url' => route('website.beach.confirmation', $token),
                 'pay_url' => route('website.beach.pay', $token),
-                // Pagesa online ofrohet vetëm kur POK është i konfiguruar dhe s'është paguar ende.
-                'pok_enabled' => app(PokClient::class)->configured()
+                'payment_mode' => $this->paymentMode(),
+                // Pagesa online ofrohet sipas cilësimit të hotelit (kurrë në mënyrën 'cash')
+                // dhe vetëm kur POK është i konfiguruar e s'është paguar ende.
+                'pok_enabled' => $this->paymentMode() !== 'cash'
+                    && app(PokClient::class)->configured()
                     && $reservation->paid_at === null
                     && $reservation->status !== BeachReservation::STATUS_CANCELLED
                     && (float) $reservation->total_amount > 0,
@@ -165,6 +177,7 @@ class WebsiteBeachController extends Controller
 
         if ($reservation->paid_at
             || $reservation->status === BeachReservation::STATUS_CANCELLED
+            || $this->paymentMode() === 'cash'
             || ! $pok->configured()
             || (float) $reservation->total_amount <= 0) {
             return redirect()->route('website.beach.confirmation', $token);
@@ -271,6 +284,14 @@ class WebsiteBeachController extends Controller
     private function windowDays(): int
     {
         return max(1, (int) Setting::get('beach.booking_window_days', 10));
+    }
+
+    /** cash = vetëm në plazh · online = vetëm me kartë · both = klienti zgjedh (default). */
+    private function paymentMode(): string
+    {
+        $mode = (string) Setting::get('beach.payment_mode', 'both');
+
+        return in_array($mode, ['cash', 'online', 'both'], true) ? $mode : 'both';
     }
 
     /** @return array{start: string, end: string} */

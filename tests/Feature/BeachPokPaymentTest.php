@@ -134,6 +134,42 @@ class BeachPokPaymentTest extends TestCase
                 ->whereNot('reservation.paid_at', null));
     }
 
+    public function test_cash_mode_disables_online_payment_entirely(): void
+    {
+        $this->configurePok();
+        \App\Models\Setting::set('beach.payment_mode', 'cash');
+        $reservation = $this->reservation(500, ['pok_order_id' => null]);
+
+        // Butoni s'ofrohet…
+        $this->get(route('website.beach.confirmation', $reservation->confirmation_token))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('reservation.pok_enabled', false)
+                ->where('reservation.payment_mode', 'cash'));
+
+        // …dhe as URL-ja direkt s'hap formë karte.
+        $this->get(route('website.beach.pay', $reservation->confirmation_token))
+            ->assertRedirect(route('website.beach.confirmation', $reservation->confirmation_token));
+    }
+
+    public function test_online_mode_sends_guest_straight_to_payment_after_submit(): void
+    {
+        $this->configurePok();
+        $this->fakePok($this->paidStatus(['isCompleted' => false]));
+        \App\Models\Setting::set('beach.payment_mode', 'online');
+        $zone = BeachZone::create(['name' => 'Rreshti 2', 'price_per_day' => 500]);
+        $unit = $zone->units()->create(['number' => '2']);
+
+        $start = today()->addDay()->toDateString();
+        $response = $this->post(route('website.beach.submit'), [
+            'beach_unit_id' => $unit->id,
+            'start_date' => $start, 'end_date' => $start,
+            'guest_name' => 'Guest Online', 'guest_phone' => '069',
+        ]);
+
+        $reservation = BeachReservation::sole();
+        $response->assertRedirect(route('website.beach.pay', $reservation->confirmation_token));
+    }
+
     public function test_pay_routes_carry_module_and_throttle(): void
     {
         $this->assertContains('module:beach', Route::getRoutes()->getByName('website.beach.pay')->middleware());

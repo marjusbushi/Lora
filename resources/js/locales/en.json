@@ -7063,7 +7063,12 @@
       "seasonEnd": "Season end",
       "seasonHint": "Empty = the beach is open all year.",
       "save": "Save settings",
-      "saved": "Beach settings saved."
+      "saved": "Beach settings saved.",
+      "paymentModeLabel": "Payment method for online bookings",
+      "paymentModeHint": "Cash = pay at the beach only · Online = the guest goes straight to card payment · Guest's choice = they decide.",
+      "paymentCash": "At the beach only (cash/card there)",
+      "paymentOnline": "Online by card only",
+      "paymentBoth": "Guest's choice — they decide"
     },
     "calendar": {
       "title": "Sunbed calendar",
@@ -7129,7 +7134,10 @@
       "downloadQr": "Download QR as an image",
       "keepLink": "This page link also keeps your booking — reopen it anytime.",
       "paidBadge": "Paid online — {date}",
-      "payOnline": "Pay online by card"
+      "payOnline": "Pay online by card",
+      "payOnlineRequired": "Payment is made online by card right after booking.",
+      "payChoice": "Pay at the beach or online by card — your choice.",
+      "completeOnline": "Complete the online payment to finalize your booking."
     },
     "pay": {
       "headTitle": "Sunbed payment",

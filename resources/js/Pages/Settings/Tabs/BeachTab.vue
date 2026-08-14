@@ -5,6 +5,7 @@ import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
+import Select from '@/Components/UI/Select.vue';
 
 const props = defineProps({ settings: Object, toasts: Object });
 
@@ -12,7 +13,14 @@ const form = useForm({
     booking_window_days: Number(props.settings?.booking_window_days ?? 10),
     season_start: props.settings?.season_start ?? '',
     season_end: props.settings?.season_end ?? '',
+    payment_mode: props.settings?.payment_mode ?? 'both',
 });
+
+const paymentModeOptions = [
+    { value: 'cash', label: translate('beach.settings.paymentCash') },
+    { value: 'online', label: translate('beach.settings.paymentOnline') },
+    { value: 'both', label: translate('beach.settings.paymentBoth') },
+];
 
 function submit() {
     form.transform((data) => ({
@@ -50,6 +58,11 @@ function submit() {
                 </FormGroup>
             </div>
             <p class="text-small text-neutral-500 -mt-2">{{ $t('beach.settings.seasonHint') }}</p>
+
+            <FormGroup :label="$t('beach.settings.paymentModeLabel')" :error="form.errors.payment_mode" required>
+                <Select v-model="form.payment_mode" :options="paymentModeOptions" :error="form.errors.payment_mode" />
+                <p class="text-small text-neutral-500 mt-1">{{ $t('beach.settings.paymentModeHint') }}</p>
+            </FormGroup>
 
             <div class="flex justify-end">
                 <Button variant="primary" :loading="form.processing" @click="submit">

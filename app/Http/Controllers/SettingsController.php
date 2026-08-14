@@ -666,11 +666,14 @@ class SettingsController extends Controller
             // Sezoni është opsional: pa data = plazhi i hapur gjithë vitin.
             'season_start' => ['nullable', 'date'],
             'season_end' => ['nullable', 'date', 'required_with:season_start', 'after_or_equal:season_start'],
+            // cash = vetëm në plazh; online = vetëm me kartë online; both = klienti zgjedh.
+            'payment_mode' => ['required', 'in:cash,online,both'],
         ]);
 
         Setting::set('beach.booking_window_days', (int) $data['booking_window_days'], 'number');
         Setting::set('beach.season_start', (string) ($data['season_start'] ?? ''), 'text');
         Setting::set('beach.season_end', (string) ($data['season_end'] ?? ''), 'text');
+        Setting::set('beach.payment_mode', (string) $data['payment_mode'], 'text');
 
         return back()->with('success', 'Cilësimet e plazhit u ruajtën.');
     }
