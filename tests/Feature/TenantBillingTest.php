@@ -25,8 +25,8 @@ class TenantBillingTest extends TestCase
 
         $this->assertSame('active', $billing['status']);
         $this->assertSame('monthly', $billing['billing_cycle']);
-        $this->assertSame(11200, $billing['monthly_fixed_cents']);
-        $this->assertSame(107520, $billing['annual_cents']);
+        $this->assertSame(13100, $billing['monthly_fixed_cents']);
+        $this->assertSame(125760, $billing['annual_cents']);
         $this->assertSame(
             array_keys(config('lora_modules.modules')),
             array_keys(array_filter($billing['modules'], fn (array $module) => $module['enabled'])),
@@ -109,6 +109,7 @@ class TenantBillingTest extends TestCase
                 'pos' => ['enabled' => true, 'quantity' => 3],
                 'finance' => ['enabled' => true, 'quantity' => 1],
                 'smart_pricing' => ['enabled' => true, 'quantity' => 1],
+                'beach' => ['enabled' => true, 'quantity' => 1],
             ],
         ];
 
@@ -124,8 +125,8 @@ class TenantBillingTest extends TestCase
 
         $this->assertTrue($summary['modules']['core']['enabled'], 'Core must stay enabled.');
         $this->assertSame(60, $summary['modules']['channel_manager']['quantity']);
-        $this->assertSame(55200, $summary['monthly_fixed_cents']);
-        $this->assertSame(529920, $summary['annual_cents']);
+        $this->assertSame(57100, $summary['monthly_fixed_cents']);
+        $this->assertSame(548160, $summary['annual_cents']);
         $this->assertSame(100, $summary['modules']['booking_engine']['percentage_bps']);
         $this->assertDatabaseHas('audit_logs', [
             'tenant_id' => $tenant->id,
