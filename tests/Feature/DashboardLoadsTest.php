@@ -72,7 +72,7 @@ class DashboardLoadsTest extends TestCase
                 $this->sortedKeys($props['operational'][$movement]),
             );
         }
-        $this->assertSame(['open', 'rush'], $this->sortedKeys($props['operational']['housekeeping']));
+        $this->assertSame(['open', 'open_older', 'open_today', 'rush'], $this->sortedKeys($props['operational']['housekeeping']));
         $this->assertSame(['amount', 'count'], $this->sortedKeys($props['operational']['due_today']));
         $this->assertArrayHasKey('in_house_reservations', $props['operational']);
         $this->assertSame(['count', 'total'], $this->sortedKeys($props['operational']['open_pos']));
@@ -481,6 +481,44 @@ class DashboardLoadsTest extends TestCase
 
         $this->assertSame('attention', $props['otaHealth']['status']);
         $this->assertNull($props['otaHealth']['sell_until']);
+    }
+
+    public function test_owner_pulse_sums_base_amounts_and_housekeeping_splits_by_age(): void
+    {
+        $admin = $this->user('admin');
+        $type = $this->roomType();
+        $room = $this->room($type, '101');
+        $reservation = $this->reservation($room, $admin, 'checked_in', '2026-07-09', '2026-07-12');
+
+        // Selling-currency payment: document 100, base 9300. Summing documents
+        // and labeling the total with the base symbol was the ~93× pulse bug.
+        Payment::create([
+            'reservation_id' => $reservation->id,
+            'amount' => 100,
+            'currency' => 'EUR',
+            'exchange_rate' => 93,
+            'method' => 'cash',
+            'created_by' => $admin->id,
+        ]);
+
+        $roomToday = $this->room($type, '102');
+        $roomOld = $this->room($type, '103');
+        CleaningTask::create(['room_id' => $roomToday->id, 'type' => 'checkout_clean', 'status' => 'pending', 'priority' => 'normal']);
+        $stale = CleaningTask::create(['room_id' => $roomOld->id, 'type' => 'checkout_clean', 'status' => 'pending', 'priority' => 'normal']);
+        $stale->timestamps = false;
+        $stale->forceFill(['created_at' => '2026-07-08 09:00:00', 'updated_at' => '2026-07-08 09:00:00'])->saveQuietly();
+
+        $props = $this->props($this->actingAs($admin)->get(route('dashboard'))->assertOk());
+
+        $this->assertSame(9300.0, (float) $props['ownerPulse']['collected_today']);
+        $this->assertSame(9300.0, (float) $props['ownerPulse']['cash_today']);
+        $this->assertSame(9300.0, (float) $props['ownerPulse']['collected_month']);
+        $this->assertArrayHasKey('pricingCurrency', $props);
+        $this->assertArrayHasKey('baseToPricingRate', $props);
+        $this->assertArrayHasKey('currency', $props);
+        $this->assertSame(2, $props['operational']['housekeeping']['open']);
+        $this->assertSame(1, $props['operational']['housekeeping']['open_today']);
+        $this->assertSame(1, $props['operational']['housekeeping']['open_older']);
     }
 
     private function user(string $role): User

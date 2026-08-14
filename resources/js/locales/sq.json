@@ -5297,7 +5297,16 @@
       "bpOut": "Gjithë paratë e dala nga llogaritë bankare në periudhë, në monedhën bazë: tërheqje, pagesa furnitorësh, transferta dalëse.",
       "bpNet": "Hyrjet − daljet, në monedhën bazë. Transfertat mes dy bankave të tua dalin nga njëra e hyjnë te tjetra — neto s'ndryshon.",
       "bpMovements": "Numri i lëvizjeve në listë. Një transfertë bankë-në-bankë prek dy llogari, por shfaqet si një rresht i vetëm me shigjetë.",
-      "bpBase": "Shuma e dokumentit e kthyer në monedhën bazë me kursin e ditës së pagesës — kështu llogari në monedha të ndryshme mblidhen në një total."
+      "bpBase": "Shuma e dokumentit e kthyer në monedhën bazë me kursin e ditës së pagesës — kështu llogari në monedha të ndryshme mblidhen në një total.",
+      "dbTonight": "Dhoma me mysafir sonte pjesëtuar me dhomat e shitshme (të gjitha dhomat minus ato në mirëmbajtje).",
+      "dbMovements": "Numri i madh: sa mbeten PA u kryer — mbërritje / nisje. Rreshti i vogël: sa janë kryer tashmë sot.",
+      "dbCleaning": "Dhoma me detyrë pastrimi të hapur në sistem. RUSH = dhoma nga kjo radhë ku mbërrin mysafir SOT — pastroji të parat. Rreshti i moshës tregon sa detyra janë të sotme dhe sa kanë mbetur hapur nga ditët e shkuara.",
+      "dbDueToday": "Borxhi i arkëtueshëm TANI: mysafirë brenda me datë nisjeje sot ose të kaluar, me bilanc të hapur. I njëjti koncept si \"Borxh real\" te raporti i bilanceve — jo rezervimet e ardhshme.",
+      "dbRoomFlow": "Çdo dhomë me lëvizjet e sotme në një rresht: kush del, çfarë pastrimi duhet, kush hyn. Renditja: më urgjentet lart (RUSH e mbërritje pa dhomë gati të parat).",
+      "dbActions": "Numri në badge është SHUMA e rasteve (p.sh. 6 dhoma + 1 diferencë arke = 7), jo numri i kartave. Renditur nga niveli i rrezikut.",
+      "dbForecast": "Okupanca e 14 ditëve të ardhshme nga rezervimet NË LIBRA sot — jo parashikim statistikor. Çdo shtyllë: dhoma të zëna atë natë / të shitshme.",
+      "dbPulse": "Arkëtimet reale (pa të anuluarat): pagesat e PMS-it + shitjet e mbyllura të POS-it, në monedhën e shitjes me bazën poshtë. Muaji krahasohet me të njëjtën periudhë të muajit të kaluar; kanali kryesor = kanali me më shumë të ardhura në 30 ditët e fundit.",
+      "dbChannex": "Gjendja e sinkronizimit PMS → Channex: kontrollon çdo tip dhome për disponibilitet e çmime, lidhjet e paplota dhe moshën e sinkronizimit. \"Shitja deri\" = deri kur OTA-t kanë çmime e disponibilitet të publikuar."
     },
     "executiveDashboard": "Dashboard Ekzekutiv",
     "executiveShort": "Performanca dhe sinjalet kryesore.",
@@ -6806,7 +6815,8 @@
       "inspection": "Inspektim"
     },
     "dashboard": {
-      "allRooms": "Të gjitha ({count})"
+      "allRooms": "Të gjitha ({count})",
+      "cleaningAge": "{today} të sotme · {older} të vjetra"
     },
     "financePayments": {
       "reservationOnly": "Po shfaqen vetëm lëvizjet e lidhura me rezervimin",
