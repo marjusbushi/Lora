@@ -53,9 +53,18 @@ class PosOutletTest extends TestCase
         return MenuItem::create(['menu_category_id' => $category->id, 'name' => $name, 'price' => $price, 'is_available' => true]);
     }
 
+    /** Abonimi mbulon N pika — rrit sasinë e entitlement-it 'pos' për testet që hapin shumë pika. */
+    private function subscribePosOutlets(int $quantity): void
+    {
+        Tenant::query()->sole()->moduleEntitlements()
+            ->where('module_code', 'pos')
+            ->update(['quantity' => $quantity]);
+    }
+
     public function test_admin_creates_outlets_and_pos_index_lists_only_active_ones(): void
     {
         $admin = $this->admin();
+        $this->subscribePosOutlets(3);
 
         foreach (['Restorant', 'Bar', 'Beach Bar'] as $name) {
             $this->actingAs($admin)->post(route('settings.pos.outlets.store'), ['name' => $name])
@@ -76,6 +85,40 @@ class PosOutletTest extends TestCase
         // Duplicate name is refused per tenant.
         $this->actingAs($admin)->post(route('settings.pos.outlets.store'), ['name' => 'Restorant'])
             ->assertSessionHasErrors('name');
+    }
+
+    public function test_outlet_creation_is_capped_by_the_subscribed_quantity(): void
+    {
+        $admin = $this->admin();
+        $this->subscribePosOutlets(2);
+
+        // Brenda limitit: dy pikat e para krijohen normalisht.
+        foreach (['Restorant', 'Bar'] as $name) {
+            $this->actingAs($admin)->post(route('settings.pos.outlets.store'), ['name' => $name])
+                ->assertRedirect()->assertSessionHasNoErrors();
+        }
+
+        // Mbi limitin → 422 me mesazh të qartë; asgjë s'krijohet.
+        $this->actingAs($admin)->postJson(route('settings.pos.outlets.store'), ['name' => 'Beach Bar'])
+            ->assertStatus(422);
+        $this->assertSame(2, PosOutlet::count());
+
+        // Rritja e abonimit e hap sërish krijimin…
+        $this->subscribePosOutlets(3);
+        $this->actingAs($admin)->post(route('settings.pos.outlets.store'), ['name' => 'Beach Bar'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame(3, PosOutlet::count());
+
+        // …dhe pas fshirjes së një pike (pa porosi) lirohet një vend.
+        PosOutlet::where('name', 'Bar')->sole()->delete();
+        $this->actingAs($admin)->post(route('settings.pos.outlets.store'), ['name' => 'Tarraca'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame(3, PosOutlet::count());
+
+        // UI merr limitin nga Settings (posOutletLimit) — pasqyrimi i guard-it.
+        $this->withoutVite();
+        $this->actingAs($admin)->get(route('settings.index'))
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('posOutletLimit', 3));
     }
 
     public function test_category_without_pivot_is_visible_everywhere_and_restriction_filters_the_menu(): void

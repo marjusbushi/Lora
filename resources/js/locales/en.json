@@ -4523,7 +4523,10 @@
       "testConnection": "Test the connection",
       "auditNote": "Changes are recorded in the audit log.",
       "saving": "Saving…",
-      "saveChanges": "Save changes"
+      "saveChanges": "Save changes",
+      "contractLength": "Contract length",
+      "contractOption": "{years} yr — {percent}% off",
+      "contractOverride": "This tenant has an individually negotiated discount: {percent}% (overrides the ladder)"
     },
     "billing": {
       "unitMonth": "month",
@@ -6653,7 +6656,9 @@
     "outletCreate": "Create outlet",
     "outletDeactivate": "Deactivate",
     "outletDeactivateConfirm": "Deactivate outlet \"{name}\"? It disappears from the POS; history and reports remain.",
-    "outletDeactivated": "Outlet deactivated."
+    "outletDeactivated": "Outlet deactivated.",
+    "outletSubscription": "{count} of {limit} subscribed outlets",
+    "outletLimitReached": "Limit reached — contact Lora PMS for an additional outlet"
   },
   "pricingIndex": {
     "monthsShort": {

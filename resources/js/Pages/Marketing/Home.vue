@@ -20,6 +20,7 @@ import {
     ShieldCheck,
     Sparkles,
     Store,
+    Umbrella,
     UsersRound,
     UtensilsCrossed,
     WalletCards,
@@ -35,6 +36,15 @@ const demoMail = computed(() => `mailto:hello@lorapms.com?subject=${encodeURICom
 
 const mobileOpen = ref(false);
 const annualBilling = ref(false);
+// Shkalla e kontratave — e njëjta me config/lora_modules.php (contract_discounts).
+const CONTRACT_OPTIONS = [
+    { years: 1, percent: 10 },
+    { years: 2, percent: 15 },
+    { years: 3, percent: 20 },
+    { years: 5, percent: 30 },
+];
+const contractYears = ref(1);
+const contractDiscount = computed(() => CONTRACT_OPTIONS.find((option) => option.years === contractYears.value)?.percent ?? 10);
 const rooms = ref(10);
 const posPoints = ref(1);
 const carouselReverse = ref(false);
@@ -83,14 +93,16 @@ const featureGroups = computed(() => {
 
 const pricingCards = computed(() => {
     const cards = tm('marketing.pricing.cards');
+    // Çmimet = pasqyrim 1:1 i katalogut real (config/lora_modules.php).
     return [
         { ...cards.core, monthlyPrice: 29, icon: ShieldCheck },
         { ...cards.channel, monthlyPrice: 7, icon: Zap },
         { ...cards.booking, displayPrice: '1%', icon: Globe2 },
         { ...cards.housekeeping, monthlyPrice: 9, icon: UsersRound },
-        { ...cards.pos, monthlyPrice: 19, icon: Store },
-        { ...cards.smart, monthlyPrice: 19, icon: Sparkles },
-        { ...cards.finance, monthlyPrice: 19, icon: WalletCards },
+        { ...cards.pos, monthlyPrice: 49, icon: Store },
+        { ...cards.smart, monthlyPrice: 49, icon: Sparkles },
+        { ...cards.finance, monthlyPrice: 29, icon: WalletCards },
+        { ...cards.beach, monthlyPrice: 29, icon: Umbrella },
     ];
 });
 
@@ -152,22 +164,30 @@ const normalizedPosPoints = computed(() => Math.min(30, Math.max(0, Number(posPo
 const channelCost = computed(() => {
     if (!modules.value.channel) return 0;
 
+    // €7/dhomë deri në 30; vetëm dhomat mbi 30 me €5 — si katalogu real.
     const count = normalizedRooms.value;
-    return Math.min(count, 50) * 7 + Math.max(count - 50, 0) * 5;
+    return Math.min(count, 30) * 7 + Math.max(count - 30, 0) * 5;
+});
+
+// Pika e parë POS €49 (fiskalizimi brenda, pa limit përdoruesish), çdo shtesë €19.
+const posCost = computed(() => {
+    if (!modules.value.pos || normalizedPosPoints.value < 1) return 0;
+
+    return 49 + (normalizedPosPoints.value - 1) * 19;
 });
 
 const monthlyFixed = computed(() => {
     return 29
         + channelCost.value
         + (modules.value.housekeeping ? 9 : 0)
-        + (modules.value.pos ? normalizedPosPoints.value * 19 : 0)
-        + (modules.value.smartPricing ? 19 : 0)
-        + (modules.value.finance ? 19 : 0);
+        + posCost.value
+        + (modules.value.smartPricing ? 49 : 0)
+        + (modules.value.finance ? 29 : 0);
 });
 
-const annualMonthly = computed(() => monthlyFixed.value * 0.8);
+const annualMonthly = computed(() => monthlyFixed.value * ((100 - contractDiscount.value) / 100));
 const annualInvoice = computed(() => annualMonthly.value * 12);
-const annualSavings = computed(() => monthlyFixed.value * 12 * 0.2);
+const annualSavings = computed(() => monthlyFixed.value * 12 * (contractDiscount.value / 100));
 const displayedMonthly = computed(() => annualBilling.value ? annualMonthly.value : monthlyFixed.value);
 
 const money = (value) => new Intl.NumberFormat('en-IE', {
@@ -178,7 +198,7 @@ const money = (value) => new Intl.NumberFormat('en-IE', {
 }).format(value);
 
 const cardPrice = (card) => card.displayPrice
-    ?? money(card.monthlyPrice * (annualBilling.value ? 0.8 : 1));
+    ?? money(card.monthlyPrice * (annualBilling.value ? (100 - contractDiscount.value) / 100 : 1));
 
 const cardNote = (card) => annualBilling.value && card.annualNote
     ? card.annualNote
@@ -483,15 +503,15 @@ const adjust = (target, amount) => {
                         </div>
                         <div class="inline-flex rounded-xl border border-[#123d32]/10 bg-white p-1.5 shadow-sm" role="group" :aria-label="t('marketing.pricing.billingPeriod')">
                             <button type="button" class="rounded-lg px-4 py-2.5 text-sm font-semibold transition" :class="!annualBilling ? 'bg-[#123d32] text-white' : 'text-[#66716d]'" @click="annualBilling = false">{{ t('marketing.pricing.monthly') }}</button>
-                            <button type="button" class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition" :class="annualBilling ? 'bg-[#123d32] text-white' : 'text-[#66716d]'" @click="annualBilling = true">{{ t('marketing.pricing.annual') }} <span class="rounded-full bg-[#dff4e8] px-2 py-0.5 text-[10px] font-bold text-[#16875d]">−20%</span></button>
+                            <button type="button" class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition" :class="annualBilling ? 'bg-[#123d32] text-white' : 'text-[#66716d]'" @click="annualBilling = true">{{ t('marketing.pricing.annual') }} <span class="rounded-full bg-[#dff4e8] px-2 py-0.5 text-[10px] font-bold text-[#16875d]">−{{ contractDiscount }}%</span></button>
                         </div>
                     </div>
 
-                    <div class="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+                    <div class="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         <article v-for="card in pricingCards" :key="card.title" class="flex min-h-[13.5rem] flex-col rounded-2xl border border-[#123d32]/10 bg-white p-5 shadow-[0_15px_40px_-38px_rgba(18,61,50,.5)]">
                             <div class="flex items-start justify-between gap-2">
                                 <span class="grid h-10 w-10 place-items-center rounded-xl bg-[#edf7f1] text-[#16875d]"><component :is="card.icon" class="h-5 w-5" /></span>
-                                <span v-if="annualBilling && card.monthlyPrice" class="rounded-full bg-[#dff4e8] px-2 py-1 text-[10px] font-bold text-[#16875d]">−20%</span>
+                                <span v-if="annualBilling && card.monthlyPrice" class="rounded-full bg-[#dff4e8] px-2 py-1 text-[10px] font-bold text-[#16875d]">−{{ contractDiscount }}%</span>
                             </div>
                             <h3 class="mt-5 min-h-[2.5rem] text-sm font-semibold leading-5 text-[#33403b]">{{ card.title }}</h3>
                             <div class="mt-3 flex items-baseline gap-1"><strong class="text-3xl font-semibold tracking-[-0.04em] text-[#14221c]">{{ cardPrice(card) }}</strong><span class="text-[10px] font-medium text-[#77827d]">{{ card.unit }}</span></div>
@@ -555,7 +575,20 @@ const adjust = (target, amount) => {
                                     <div class="mt-7 rounded-2xl border border-[#d8b77b]/50 bg-white/80 p-5">
                                         <div class="flex items-center justify-between gap-3">
                                             <span class="text-sm font-semibold text-[#34413c]">{{ t('marketing.pricing.annualPayment') }}</span>
-                                            <span class="rounded-full bg-[#dff4e8] px-2.5 py-1 text-xs font-bold text-[#16875d]">{{ t('marketing.pricing.save20') }}</span>
+                                            <span class="rounded-full bg-[#dff4e8] px-2.5 py-1 text-xs font-bold text-[#16875d]">{{ t('marketing.pricing.contractSave', { percent: contractDiscount }) }}</span>
+                                        </div>
+                                        <div class="mt-3 grid grid-cols-4 gap-1.5" role="group" :aria-label="t('marketing.pricing.contractLength')">
+                                            <button
+                                                v-for="option in CONTRACT_OPTIONS"
+                                                :key="option.years"
+                                                type="button"
+                                                class="rounded-lg border px-1 py-2 text-center transition"
+                                                :class="contractYears === option.years ? 'border-[#16875d] bg-[#16875d] text-white' : 'border-[#123d32]/15 bg-white text-[#4a5651] hover:border-[#16875d]/40'"
+                                                @click="contractYears = option.years"
+                                            >
+                                                <span class="block text-xs font-bold">{{ t('marketing.pricing.contractYears', { years: option.years }) }}</span>
+                                                <span class="block text-[10px] font-semibold" :class="contractYears === option.years ? 'text-[#dff4e8]' : 'text-[#16875d]'">−{{ option.percent }}%</span>
+                                            </button>
                                         </div>
                                         <p class="mt-3 text-2xl font-semibold tracking-tight text-[#123d32]">{{ money(annualMonthly) }} <small class="text-xs font-medium text-[#6e7974]">{{ t('marketing.common.month') }}</small></p>
                                         <p class="mt-1 text-xs text-[#6f7975]">{{ t('marketing.pricing.annualInvoice', { invoice: money(annualInvoice), savings: money(annualSavings) }) }}</p>

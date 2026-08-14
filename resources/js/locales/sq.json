@@ -4523,7 +4523,10 @@
       "testConnection": "Testo lidhjen",
       "auditNote": "Ndryshimet regjistrohen në audit log.",
       "saving": "Duke ruajtur…",
-      "saveChanges": "Ruaj ndryshimet"
+      "saveChanges": "Ruaj ndryshimet",
+      "contractLength": "Gjatësia e kontratës",
+      "contractOption": "{years} vjet — {percent}% zbritje",
+      "contractOverride": "Ky tenant ka zbritje të negociuar veç: {percent}% (fiton mbi shkallën)"
     },
     "billing": {
       "unitMonth": "muaj",
@@ -6653,7 +6656,9 @@
     "outletCreate": "Krijo pikën",
     "outletDeactivate": "Çaktivizo",
     "outletDeactivateConfirm": "Ta çaktivizoj pikën \"{name}\"? Nuk do shfaqet më në POS; historiku dhe raportet mbeten.",
-    "outletDeactivated": "Pika u çaktivizua."
+    "outletDeactivated": "Pika u çaktivizua.",
+    "outletSubscription": "{count} nga {limit} pika të abonimit",
+    "outletLimitReached": "Limiti u arrit — për një pikë të re kontaktoni Lora PMS"
   },
   "pricingIndex": {
     "monthsShort": {

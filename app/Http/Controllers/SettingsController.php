@@ -136,6 +136,9 @@ class SettingsController extends Controller
                 }),
             'posOutlets' => PosOutlet::ordered()->withCount('orders')
                 ->get(['id', 'name', 'warehouse_id', 'is_active', 'sort_order']),
+            // Sa pika mbulon abonimi (quantity e entitlement-it 'pos') — UI e pasqyron;
+            // kufiri real zbatohet server-side te storePosOutlet.
+            'posOutletLimit' => $this->posOutletLimit(),
             'inventoryCategoryTree' => InventoryCategory::flatTree(),
             'inventoryItems' => InventoryItem::where('is_active', true)->where('type', '!=', 'service')
                 ->orderBy('name')->get(['id', 'name', 'sku', 'unit']),
@@ -919,6 +922,17 @@ class SettingsController extends Controller
     }
 
     // --- POS Outlets (pikat e shitjes: Restorant / Bar / Beach Bar) ---
+
+    /** Sa pika shitjeje mbulon abonimi — quantity e entitlement-it 'pos' (min 1). */
+    private function posOutletLimit(): int
+    {
+        $tenant = app(\App\Tenancy\TenantContext::class)->tenant();
+
+        return max(1, (int) ($tenant?->moduleEntitlements()
+            ->where('module_code', 'pos')
+            ->value('quantity') ?? 1));
+    }
+
     public function storePosOutlet(Request $request): RedirectResponse
     {
         $data = $request->validate([
@@ -926,11 +940,29 @@ class SettingsController extends Controller
             'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
         ]);
 
-        PosOutlet::create([
-            'name' => $data['name'],
-            'warehouse_id' => $data['warehouse_id'] ?? null,
-            'sort_order' => ((int) PosOutlet::max('sort_order')) + 1,
-        ]);
+        // Limiti i abonimit: hoteli hap vetëm aq pika sa ka paguar. Kufiri zbatohet
+        // KËTU (server-side) — butoni i fikur në UI është vetëm pasqyrim. Kyçja mbi
+        // rreshtin e tenant-it e bën numërim+krijim atomik: dy kërkesa të njëkohshme
+        // me një vend të lirë s'e kalojnë dot të dyja tavanin.
+        DB::transaction(function () use ($data) {
+            DB::table('tenants')
+                ->whereKey(app(\App\Tenancy\TenantContext::class)->tenant()->id)
+                ->lockForUpdate()
+                ->first();
+
+            $limit = $this->posOutletLimit();
+            if (PosOutlet::count() >= $limit) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'name' => "Abonimi juaj mbulon {$limit} pika shitjeje — për një pikë të re kontaktoni Lora PMS.",
+                ]);
+            }
+
+            PosOutlet::create([
+                'name' => $data['name'],
+                'warehouse_id' => $data['warehouse_id'] ?? null,
+                'sort_order' => ((int) PosOutlet::max('sort_order')) + 1,
+            ]);
+        });
 
         return back()->with('success', "Pika \"{$data['name']}\" u shtua.");
     }
