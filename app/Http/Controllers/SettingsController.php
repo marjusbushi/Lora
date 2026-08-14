@@ -658,6 +658,23 @@ class SettingsController extends Controller
         return back()->with('success', 'Konfigurimet e housekeeping u ruajten.');
     }
 
+    // --- Plazhi (Beach) ---
+    public function updateBeach(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'booking_window_days' => ['required', 'integer', 'min:1', 'max:365'],
+            // Sezoni është opsional: pa data = plazhi i hapur gjithë vitin.
+            'season_start' => ['nullable', 'date'],
+            'season_end' => ['nullable', 'date', 'required_with:season_start', 'after_or_equal:season_start'],
+        ]);
+
+        Setting::set('beach.booking_window_days', (int) $data['booking_window_days'], 'number');
+        Setting::set('beach.season_start', (string) ($data['season_start'] ?? ''), 'text');
+        Setting::set('beach.season_end', (string) ($data['season_end'] ?? ''), 'text');
+
+        return back()->with('success', 'Cilësimet e plazhit u ruajtën.');
+    }
+
     // --- AI (Gemini key for the Pricing Assistant) ---
     public function updateAi(Request $request): RedirectResponse
     {

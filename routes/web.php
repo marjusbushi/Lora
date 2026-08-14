@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\BeachSetupController;
 use App\Http\Controllers\ChannexController;
 use App\Http\Controllers\ChannexWebhookController;
 use App\Http\Controllers\CleaningTaskController;
@@ -447,6 +448,17 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::delete('/categories/{category}', [InventoryController::class, 'destroyCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.destroy');
     });
 
+    // Plazhi (Beach) — setup i zonave/çadrave; kalendari vjen me kontrollerin e rezervimeve
+    Route::middleware(['module:beach', 'permission:view_beach'])->group(function () {
+        Route::get('/beach/setup', [BeachSetupController::class, 'index'])->name('beach.setup');
+        Route::post('/beach/zones', [BeachSetupController::class, 'storeZone'])->middleware('permission:create_beach')->name('beach.zones.store');
+        Route::put('/beach/zones/{zone}', [BeachSetupController::class, 'updateZone'])->middleware('permission:update_beach')->name('beach.zones.update');
+        Route::delete('/beach/zones/{zone}', [BeachSetupController::class, 'destroyZone'])->middleware('permission:delete_beach')->name('beach.zones.destroy');
+        Route::post('/beach/zones/{zone}/units', [BeachSetupController::class, 'generateUnits'])->middleware('permission:create_beach')->name('beach.units.generate');
+        Route::put('/beach/units/{unit}', [BeachSetupController::class, 'updateUnit'])->middleware('permission:update_beach')->name('beach.units.update');
+        Route::delete('/beach/units/{unit}', [BeachSetupController::class, 'destroyUnit'])->middleware('permission:delete_beach')->name('beach.units.destroy');
+    });
+
     // Admin-only: User Management + Settings
     Route::middleware('role:admin')->group(function () {
         Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
@@ -512,6 +524,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/settings/pricing-programs', [SettingsController::class, 'updatePricingPrograms'])->name('settings.pricing-programs');
         Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->middleware('module:housekeeping')->name('settings.housekeeping');
         Route::put('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai');
+        Route::put('/settings/beach', [SettingsController::class, 'updateBeach'])->middleware('module:beach')->name('settings.beach');
         Route::post('/settings/integrations/{provider}/test', [SettingsController::class, 'testIntegration'])
             ->whereIn('provider', ['fature_al'])->middleware('throttle:10,1')->name('settings.integrations.test');
 
