@@ -44,6 +44,7 @@ use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantControll
 use App\Http\Controllers\TenantHandoffController;
 use App\Http\Controllers\TenantUserInvitationController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WebsiteBeachController;
 use App\Http\Controllers\WebsiteController;
 use App\Http\Middleware\AuthenticateSignedTenantInvitation;
 use App\Models\Setting;
@@ -82,6 +83,12 @@ Route::get('/book/pay/{token}', [WebsiteController::class, 'bookingPayment'])->m
 Route::post('/book/pay/{token}', [WebsiteController::class, 'confirmPayment'])->middleware(['module:booking_engine', 'throttle:20,1'])->name('website.pay.confirm');
 // POK server-to-server webhook (CSRF-excluded in bootstrap/app.php; verifies via getOrder, never trusts the body).
 Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware(['module:booking_engine', 'throttle:120,1'])->name('website.pay.webhook');
+
+// Plazhi — Book Sunbeds publik (host-resolved si çdo website.*; moduli 'beach' per-tenant)
+Route::get('/book-sunbeds', [WebsiteBeachController::class, 'index'])->middleware('module:beach')->name('website.beach');
+Route::get('/book-sunbeds/availability', [WebsiteBeachController::class, 'availability'])->middleware(['module:beach', 'throttle:60,1'])->name('website.beach.availability');
+Route::post('/book-sunbeds', [WebsiteBeachController::class, 'submit'])->middleware(['module:beach', 'throttle:10,1'])->name('website.beach.submit');
+Route::get('/book-sunbeds/confirmation/{token}', [WebsiteBeachController::class, 'confirmation'])->middleware('module:beach')->name('website.beach.confirmation');
 
 Route::get('/about', [WebsiteController::class, 'about'])->name('website.about');
 Route::get('/contact', [WebsiteController::class, 'contact'])->name('website.contact');
