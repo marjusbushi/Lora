@@ -2,6 +2,8 @@
 
 namespace App\Services\Reporting;
 
+use App\Models\Bill;
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
 use App\Models\Warehouse;
@@ -98,10 +100,76 @@ final class StockValuationReportService
             'items' => $rows->sortByDesc(fn (array $row) => match ($row['status']) {
                 'negative' => 4, 'out' => 3, 'low' => 2, default => 1,
             })->values()->all(),
+            'categories' => $this->categoryRollup($rows),
             'warehouses' => $warehouseRows->all(),
             'top_consumption' => $rows->filter(fn (array $row) => $row['consumed_value'] > 0)
                 ->sortByDesc('consumed_value')->take(8)->values()->all(),
         ];
+    }
+
+    /**
+     * Stock/received/consumed value rolled up the category tree — an item on
+     * a leaf credits every ancestor exactly once, so each drill-down level
+     * carries its true total. Items without a tree category get one honest
+     * "Të tjera" row.
+     *
+     * @return list<array{id:?int,category:string,parent_id:?int,depth:int,stock_value:float,received_value:float,consumed_value:float,item_count:int}>
+     */
+    private function categoryRollup(Collection $rows): array
+    {
+        $tree = InventoryCategory::flatTree();
+        $ancestry = InventoryCategory::ancestryMap();
+        $totals = [];
+        $uncategorized = ['stock_value' => 0.0, 'received_value' => 0.0, 'consumed_value' => 0.0, 'item_count' => 0];
+
+        foreach ($rows as $row) {
+            $path = $ancestry[$row['category_id']] ?? null;
+            if ($path === null) {
+                $uncategorized['stock_value'] += $row['ending_value'];
+                $uncategorized['received_value'] += $row['received_value'];
+                $uncategorized['consumed_value'] += $row['consumed_value'];
+                $uncategorized['item_count']++;
+
+                continue;
+            }
+            foreach ($path as $categoryId) {
+                $node = $totals[$categoryId] ??= ['stock_value' => 0.0, 'received_value' => 0.0, 'consumed_value' => 0.0, 'item_count' => 0];
+                $node['stock_value'] += $row['ending_value'];
+                $node['received_value'] += $row['received_value'];
+                $node['consumed_value'] += $row['consumed_value'];
+                $node['item_count']++;
+                $totals[$categoryId] = $node;
+            }
+        }
+
+        $result = collect($tree)
+            ->filter(fn (array $node) => isset($totals[$node['id']]))
+            ->map(fn (array $node) => [
+                'id' => $node['id'],
+                'category' => $node['name'],
+                'parent_id' => $node['parent_id'],
+                'depth' => $node['depth'],
+                'stock_value' => round($totals[$node['id']]['stock_value'], 2),
+                'received_value' => round($totals[$node['id']]['received_value'], 2),
+                'consumed_value' => round($totals[$node['id']]['consumed_value'], 2),
+                'item_count' => $totals[$node['id']]['item_count'],
+            ])
+            ->values();
+
+        if ($uncategorized['item_count'] > 0) {
+            $result->push([
+                'id' => null,
+                'category' => Bill::UNCATEGORIZED,
+                'parent_id' => null,
+                'depth' => 0,
+                'stock_value' => round($uncategorized['stock_value'], 2),
+                'received_value' => round($uncategorized['received_value'], 2),
+                'consumed_value' => round($uncategorized['consumed_value'], 2),
+                'item_count' => $uncategorized['item_count'],
+            ]);
+        }
+
+        return $result->all();
     }
 
     private function itemRow(InventoryItem $item, Collection $movements, int $days): array
@@ -137,6 +205,7 @@ final class StockValuationReportService
             'name' => $item->name,
             'sku' => $item->sku,
             'category' => $item->category?->name ?: $item->type,
+            'category_id' => $item->category_id,
             'unit' => $item->unit,
             'is_active' => $item->is_active,
             'opening_quantity' => $openingQuantity,
