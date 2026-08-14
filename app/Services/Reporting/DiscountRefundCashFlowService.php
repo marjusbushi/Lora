@@ -2,18 +2,18 @@
 
 namespace App\Services\Reporting;
 
-use App\Models\FinancePayment;
 use App\Models\FolioItem;
 use App\Models\Payment;
 use App\Models\PosOrder;
 use App\Models\PosOrderPayment;
 use App\Models\Reservation;
-use Carbon\CarbonPeriod;
 use Illuminate\Support\Collection;
 
 final class DiscountRefundCashFlowService
 {
-    /** @return array{period:array,summary:array,daily:array,discount_sources:array,reasons:array,activity:array} */
+    public function __construct(private readonly DepartmentRevenueService $departmentRevenue) {}
+
+    /** @return array{period:array,summary:array,discount_sources:array,reasons:array,activity:array} */
     public function summary(ReportingPeriod $period): array
     {
         $start = $period->from->startOfDay();
@@ -58,24 +58,26 @@ final class DiscountRefundCashFlowService
             ->with('order:id,refund_reason')
             ->get(['id', 'pos_order_id', 'amount', 'method', 'paid_at']);
 
-        $ledger = FinancePayment::query()
-            ->whereBetween('paid_at', [$start, $end])
-            ->whereIn('direction', ['in', 'out'])
-            ->get(['id', 'direction', 'amount_base', 'method', 'description', 'paid_at', 'invoice_id', 'bill_id']);
-
         $pmsDiscountTotal = (float) $folioDiscounts->sum('amount_base') + (float) $directDiscounts->sum('direct_discount_amount_base');
         $discountTotal = round($pmsDiscountTotal + (float) $posDiscounts->sum('discount_amount'), 2);
         $refundTotal = round((float) $pmsRefunds->sum('amount_base') + (float) $posRefunds->sum('amount'), 2);
-        // Migration settlement postings (method 'import', e.g. the Aug 2026
-        // Beds24 cutover) are bookkeeping, not money that moved in the period
-        // — mixed in, they made the cash flow unreadable (4.36M of 5.18M in
-        // one window). They get their own labeled line instead.
-        $operating = $ledger->where('method', '!=', 'import');
-        $importPostings = $ledger->where('method', 'import');
-        $inflow = round((float) $operating->where('direction', 'in')->sum('amount_base'), 2);
-        $outflow = round((float) $operating->where('direction', 'out')->sum('amount_base'), 2);
-        $importIn = round((float) $importPostings->where('direction', 'in')->sum('amount_base'), 2);
-        $importOut = round((float) $importPostings->where('direction', 'out')->sum('amount_base'), 2);
+
+        // Leakage needs a scale to be judged against: discounts against the
+        // period's net recognized revenue (the same figure the Department
+        // Revenue report shows), refunds against what was actually collected.
+        $revenueNet = round((float) $this->departmentRevenue->summary($period)['summary']['total'], 2);
+        $collections = round(
+            (float) Payment::query()
+                ->notVoided()
+                ->whereRaw("COALESCE(type, 'payment') IN ('payment', 'deposit')")
+                ->whereBetween('created_at', [$start, $end])
+                ->sum('amount_base')
+            + (float) PosOrderPayment::query()
+                ->where('direction', 'in')
+                ->whereBetween('paid_at', [$start, $end])
+                ->sum('amount'),
+            2,
+        );
 
         $activity = collect()
             ->concat($folioDiscounts->map(fn (FolioItem $item) => [
@@ -119,12 +121,13 @@ final class DiscountRefundCashFlowService
             'period' => $period->toArray(),
             'summary' => [
                 'discounts' => $discountTotal, 'refunds' => $refundTotal,
-                'inflow' => $inflow, 'outflow' => $outflow, 'net_cash_flow' => round($inflow - $outflow, 2),
-                'import_in' => $importIn, 'import_out' => $importOut,
                 'discount_count' => $folioDiscounts->count() + $directDiscounts->count() + $posDiscounts->count(),
                 'refund_count' => $pmsRefunds->count() + $posRefunds->count(),
+                'revenue_net' => $revenueNet,
+                'discount_share' => $revenueNet > 0 ? round($discountTotal / $revenueNet * 100, 1) : null,
+                'collections' => $collections,
+                'refund_share' => $collections > 0 ? round($refundTotal / $collections * 100, 1) : null,
             ],
-            'daily' => $this->daily($period, $operating),
             'discount_sources' => [
                 ['source' => 'pms', 'amount' => round($pmsDiscountTotal, 2), 'count' => $folioDiscounts->count() + $directDiscounts->count()],
                 ['source' => 'pos', 'amount' => round((float) $posDiscounts->sum('discount_amount'), 2), 'count' => $posDiscounts->count()],
@@ -134,17 +137,5 @@ final class DiscountRefundCashFlowService
             ])->sortByDesc('amount')->values()->take(8)->all(),
             'activity' => $activity->all(),
         ];
-    }
-
-    private function daily(ReportingPeriod $period, Collection $ledger): array
-    {
-        return collect(CarbonPeriod::create($period->from, $period->to))->map(function ($day) use ($ledger) {
-            $date = $day->toDateString();
-            $rows = $ledger->filter(fn (FinancePayment $payment) => $payment->paid_at?->toDateString() === $date);
-            $in = round((float) $rows->where('direction', 'in')->sum('amount_base'), 2);
-            $out = round((float) $rows->where('direction', 'out')->sum('amount_base'), 2);
-
-            return ['date' => $date, 'inflow' => $in, 'outflow' => $out, 'net' => round($in - $out, 2)];
-        })->all();
     }
 }
