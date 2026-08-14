@@ -133,11 +133,15 @@ class PaymentReconciliationServiceTest extends TestCase
         $this->assertSame(85.7, $analytics['summary']['reconciliation_rate']);
         $this->assertSame(7, $analytics['summary']['transaction_count']);
         $this->assertSame(60.0, $analytics['summary']['unposted_total']);
-        $this->assertSame(3, $analytics['summary']['issues_count']);
+        // Drawer over/short is NOT an issue row anymore — the Z-Report owns
+        // counting variances; here it survives only as an aggregate summary.
+        $this->assertSame(2, $analytics['summary']['issues_count']);
         $this->assertEqualsCanonicalizing(
-            ['cash_variance', 'legacy_settlement_date', 'missing_ledger'],
+            ['legacy_settlement_date', 'missing_ledger'],
             collect($analytics['issues'])->pluck('type')->all(),
         );
+        $this->assertSame(5.0, $analytics['summary']['cash_variance']);
+        $this->assertSame(1, $analytics['summary']['cash_variance_count']);
         $this->assertSame(60.0, collect($analytics['daily'])->firstWhere('date', '2026-07-03')['total']);
     }
 
