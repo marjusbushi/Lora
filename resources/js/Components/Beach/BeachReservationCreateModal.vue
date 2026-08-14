@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import { translate } from '@/i18n';
 import Modal from '@/Components/UI/Modal.vue';
@@ -50,7 +50,40 @@ watch(
 );
 
 // Informativ — çmimi PËRFUNDIMTAR llogaritet gjithmonë në server.
+// Hint-i pyet serverin (i njëjti resolver SEZONAL si ruajtja) me debounce,
+// që recepsioni t'i thotë klientit në telefon shumën e vërtetë; sa pa ardhur
+// përgjigja (ose po dështoi), tregohet llogaritja nga çmimi bazë.
+const serverQuote = ref(null);
+let quoteTimer = null;
+let quoteSeq = 0;
+
+watch(
+    () => [form.beach_unit_id, form.start_date, form.end_date],
+    () => {
+        serverQuote.value = null;
+        clearTimeout(quoteTimer);
+        if (!form.beach_unit_id || !form.start_date || !form.end_date || form.end_date < form.start_date) return;
+        const seq = ++quoteSeq;
+        quoteTimer = setTimeout(async () => {
+            try {
+                const url = route('beach.reservations.quote', {
+                    beach_unit_id: form.beach_unit_id,
+                    start_date: form.start_date,
+                    end_date: form.end_date,
+                });
+                const response = await fetch(url, { headers: { Accept: 'application/json' } });
+                if (!response.ok) return;
+                const data = await response.json();
+                if (seq === quoteSeq) serverQuote.value = data;
+            } catch {
+                // heshtur — mbetet hint-i nga çmimi bazë
+            }
+        }, 250);
+    },
+);
+
 const totalHint = computed(() => {
+    if (serverQuote.value) return { days: serverQuote.value.days, total: serverQuote.value.total };
     const unit = props.units.find((u) => u.value === Number(form.beach_unit_id));
     if (!unit || !form.start_date || !form.end_date || form.end_date < form.start_date) return null;
     const days = Math.round((new Date(form.end_date) - new Date(form.start_date)) / 86400000) + 1;

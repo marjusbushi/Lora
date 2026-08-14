@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Beach\GenerateBeachUnitsRequest;
+use App\Http\Requests\Beach\SaveBeachSeasonRequest;
 use App\Http\Requests\Beach\StoreBeachZoneRequest;
 use App\Http\Requests\Beach\UpdateBeachZoneRequest;
 use App\Models\BeachReservation;
+use App\Models\BeachSeason;
 use App\Models\BeachUnit;
 use App\Models\BeachZone;
 use App\Models\Setting;
@@ -27,12 +29,104 @@ class BeachSetupController extends Controller
                 ->orderBy('sort_order')
                 ->orderBy('name')
                 ->get(),
+            'seasons' => BeachSeason::query()
+                ->with('prices')
+                ->orderBy('start_date')
+                ->get(),
             'settings' => [
                 'booking_window_days' => (int) Setting::get('beach.booking_window_days', 10),
                 'season_start' => (string) Setting::get('beach.season_start', ''),
                 'season_end' => (string) Setting::get('beach.season_end', ''),
             ],
         ]);
+    }
+
+    public function storeSeason(SaveBeachSeasonRequest $request): RedirectResponse
+    {
+        DB::transaction(function () use ($request) {
+            $season = BeachSeason::create($request->safe()->only(['name', 'start_date', 'end_date']));
+            $this->syncSeasonPrices($season, $request->validated('prices') ?? []);
+        });
+
+        return back()->with('success', 'Sezoni i çmimeve u krijua.');
+    }
+
+    public function updateSeason(SaveBeachSeasonRequest $request, BeachSeason $season): RedirectResponse
+    {
+        DB::transaction(function () use ($request, $season) {
+            $season->update($request->safe()->only(['name', 'start_date', 'end_date']));
+            $this->syncSeasonPrices($season, $request->validated('prices') ?? []);
+        });
+
+        return back()->with('success', 'Sezoni i çmimeve u përditësua.');
+    }
+
+    public function destroySeason(BeachSeason $season): RedirectResponse
+    {
+        // Çmimet e sezonit fshihen me cascade; rezervimet e bëra mbajnë
+        // total_amount të ngrirë — historia s'preket.
+        $season->delete();
+
+        return back()->with('success', 'Sezoni u fshi — zonat kthehen te çmimi bazë.');
+    }
+
+    /**
+     * Ruajtja e matricës me NJË kërkesë (si pricing.rates.save i dhomave):
+     * base per zonë + rates per sezon per zonë. Id-të e panjohura (tenant
+     * tjetër ose të fshira) kapërcehen — modelet e skopuara i filtrojnë.
+     */
+    public function saveSeasonRates(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'base' => ['nullable', 'array'],
+            'base.*' => ['nullable', 'numeric', 'min:0', 'max:99999'],
+            'rates' => ['nullable', 'array'],
+            'rates.*' => ['nullable', 'array'],
+            'rates.*.*' => ['nullable', 'numeric', 'min:0', 'max:99999'],
+        ]);
+
+        DB::transaction(function () use ($data) {
+            $zones = BeachZone::query()->get()->keyBy('id');
+            foreach (($data['base'] ?? []) as $zoneId => $price) {
+                // Bazë bosh s'do të thotë zero — thjesht s'preket.
+                if (! isset($zones[(int) $zoneId]) || $price === null || $price === '') {
+                    continue;
+                }
+                $zones[(int) $zoneId]->update(['price_per_day' => (float) $price]);
+            }
+
+            $seasons = BeachSeason::query()->get()->keyBy('id');
+            foreach (($data['rates'] ?? []) as $seasonId => $zonePrices) {
+                if (! isset($seasons[(int) $seasonId]) || ! is_array($zonePrices)) {
+                    continue;
+                }
+                $this->syncSeasonPrices($seasons[(int) $seasonId], $zonePrices);
+            }
+        });
+
+        return back()->with('success', 'Çmimet e plazhit u ruajtën.');
+    }
+
+    /**
+     * Vlerë e mbushur = çmim sezonal për zonën; bosh/null = zona bie te çmimi
+     * bazë (rreshti hiqet fare, s'ruajmë zero fantazmë).
+     *
+     * @param  array<int|string, mixed>  $prices
+     */
+    private function syncSeasonPrices(BeachSeason $season, array $prices): void
+    {
+        foreach ($prices as $zoneId => $price) {
+            if ($price === null || $price === '') {
+                $season->prices()->where('beach_zone_id', (int) $zoneId)->delete();
+
+                continue;
+            }
+
+            $season->prices()->updateOrCreate(
+                ['beach_zone_id' => (int) $zoneId],
+                ['price_per_day' => (float) $price],
+            );
+        }
     }
 
     public function storeZone(StoreBeachZoneRequest $request): RedirectResponse

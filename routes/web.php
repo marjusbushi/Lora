@@ -466,6 +466,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     // Plazhi (Beach) — kalendari i çadrave + setup i zonave/çadrave
     Route::middleware(['module:beach', 'permission:view_beach'])->group(function () {
         Route::get('/beach/calendar', [BeachReservationController::class, 'calendar'])->name('beach.calendar');
+        Route::get('/beach/reservations/quote', [BeachReservationController::class, 'quote'])->name('beach.reservations.quote');
         Route::post('/beach/reservations', [BeachReservationController::class, 'store'])->middleware('permission:create_beach')->name('beach.reservations.store');
         Route::put('/beach/reservations/{beachReservation}', [BeachReservationController::class, 'update'])->middleware('permission:update_beach')->name('beach.reservations.update');
         Route::post('/beach/reservations/{beachReservation}/cancel', [BeachReservationController::class, 'cancel'])->middleware('permission:update_beach')->name('beach.reservations.cancel');
@@ -477,6 +478,10 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/beach/zones', [BeachSetupController::class, 'storeZone'])->middleware('permission:create_beach')->name('beach.zones.store');
         Route::put('/beach/zones/{zone}', [BeachSetupController::class, 'updateZone'])->middleware('permission:update_beach')->name('beach.zones.update');
         Route::delete('/beach/zones/{zone}', [BeachSetupController::class, 'destroyZone'])->middleware('permission:delete_beach')->name('beach.zones.destroy');
+        Route::post('/beach/seasons/rates', [BeachSetupController::class, 'saveSeasonRates'])->middleware('permission:update_beach')->name('beach.seasons.rates.save');
+        Route::post('/beach/seasons', [BeachSetupController::class, 'storeSeason'])->middleware('permission:create_beach')->name('beach.seasons.store');
+        Route::put('/beach/seasons/{season}', [BeachSetupController::class, 'updateSeason'])->middleware('permission:update_beach')->name('beach.seasons.update');
+        Route::delete('/beach/seasons/{season}', [BeachSetupController::class, 'destroySeason'])->middleware('permission:delete_beach')->name('beach.seasons.destroy');
         Route::post('/beach/zones/{zone}/units', [BeachSetupController::class, 'generateUnits'])->middleware('permission:create_beach')->name('beach.units.generate');
         Route::put('/beach/units/{unit}', [BeachSetupController::class, 'updateUnit'])->middleware('permission:update_beach')->name('beach.units.update');
         Route::delete('/beach/units/{unit}', [BeachSetupController::class, 'destroyUnit'])->middleware('permission:delete_beach')->name('beach.units.destroy');
