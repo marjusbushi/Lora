@@ -204,6 +204,50 @@ class TenantBillingTest extends TestCase
         $this->assertSame(25, $summary['discount_override_percent']);
     }
 
+    public function test_snapshot_backfill_migration_moves_old_frozen_prices_to_the_new_catalog(): void
+    {
+        $tenant = Tenant::query()->sole();
+
+        // Simulo një tenant EKZISTUES: snapshot i ngrirë me çmimin e vjetër të plazhit
+        // (1900c) — summary e respekton snapshot-in dhe faturon çmimin e vjetër.
+        $tenant->moduleEntitlements()->where('module_code', 'beach')->update([
+            'pricing_snapshot' => json_encode(array_replace(
+                config('lora_modules.modules.beach'),
+                ['unit_price_cents' => 1900],
+            )),
+            'unit_price_cents' => 1900,
+        ]);
+        $summary = app(TenantBillingService::class)->summary($tenant->fresh());
+        $this->assertSame(1900, $summary['modules']['beach']['monthly_cents']);
+
+        // Backfill-i i migrimit i sjell të gjithë te katalogu i ri — pa ri-ruajtje dorazi.
+        (require database_path('migrations/2026_08_14_210000_backfill_entitlement_pricing_snapshots.php'))->up();
+
+        $tenant = Tenant::query()->sole()->fresh();
+        $tenant->unsetRelation('moduleEntitlements');
+        $summary = app(TenantBillingService::class)->summary($tenant);
+        $this->assertSame(2900, $summary['modules']['beach']['monthly_cents']);
+    }
+
+    public function test_billing_update_without_contract_years_keeps_the_existing_value(): void
+    {
+        config(['lora.control_panel_hosts' => ['localhost']]);
+        $tenant = Tenant::query()->sole();
+        $tenant->subscription->update(['contract_years' => 3]);
+        $superAdmin = User::factory()->create(['is_super_admin' => true, 'current_tenant_id' => $tenant->id]);
+
+        // Sirtari i listës së tenant-ëve s'e dërgon contract_years — s'duhet të thyhet
+        // dhe vlera ekzistuese e kontratës duhet të mbetet.
+        $summary = app(TenantBillingService::class)->summary($tenant);
+        $this->actingAs($superAdmin)
+            ->withSession(['tenant_id' => $tenant->id])
+            ->put(route('super-admin.tenants.subscription.update', $tenant), $this->billingPayload($summary))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(3, $tenant->fresh()->subscription->contract_years);
+    }
+
     private function billingPayload(array $summary): array
     {
         return [

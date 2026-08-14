@@ -937,19 +937,28 @@ class SettingsController extends Controller
         ]);
 
         // Limiti i abonimit: hoteli hap vetëm aq pika sa ka paguar. Kufiri zbatohet
-        // KËTU (server-side) — butoni i fikur në UI është vetëm pasqyrim.
-        $limit = $this->posOutletLimit();
-        if (PosOutlet::count() >= $limit) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'name' => "Abonimi juaj mbulon {$limit} pika shitjeje — për një pikë të re kontaktoni Lora PMS.",
-            ]);
-        }
+        // KËTU (server-side) — butoni i fikur në UI është vetëm pasqyrim. Kyçja mbi
+        // rreshtin e tenant-it e bën numërim+krijim atomik: dy kërkesa të njëkohshme
+        // me një vend të lirë s'e kalojnë dot të dyja tavanin.
+        DB::transaction(function () use ($data) {
+            DB::table('tenants')
+                ->whereKey(app(\App\Tenancy\TenantContext::class)->tenant()->id)
+                ->lockForUpdate()
+                ->first();
 
-        PosOutlet::create([
-            'name' => $data['name'],
-            'warehouse_id' => $data['warehouse_id'] ?? null,
-            'sort_order' => ((int) PosOutlet::max('sort_order')) + 1,
-        ]);
+            $limit = $this->posOutletLimit();
+            if (PosOutlet::count() >= $limit) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'name' => "Abonimi juaj mbulon {$limit} pika shitjeje — për një pikë të re kontaktoni Lora PMS.",
+                ]);
+            }
+
+            PosOutlet::create([
+                'name' => $data['name'],
+                'warehouse_id' => $data['warehouse_id'] ?? null,
+                'sort_order' => ((int) PosOutlet::max('sort_order')) + 1,
+            ]);
+        });
 
         return back()->with('success', "Pika \"{$data['name']}\" u shtua.");
     }

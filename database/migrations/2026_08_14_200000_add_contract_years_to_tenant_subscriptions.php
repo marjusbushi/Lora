@@ -17,10 +17,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('tenant_subscriptions', function (Blueprint $table) {
-            $table->unsignedTinyInteger('contract_years')->default(1)->after('billing_cycle');
-            $table->unsignedTinyInteger('discount_override_percent')->nullable()->after('annual_discount_percent');
-        });
+        // Të mbrojtura një-nga-një: ri-ekzekutimi mbi çdo gjendje është no-op i pastër.
+        if (! Schema::hasColumn('tenant_subscriptions', 'contract_years')) {
+            Schema::table('tenant_subscriptions', function (Blueprint $table) {
+                $table->unsignedTinyInteger('contract_years')->default(1)->after('billing_cycle');
+            });
+        }
+
+        if (! Schema::hasColumn('tenant_subscriptions', 'discount_override_percent')) {
+            Schema::table('tenant_subscriptions', function (Blueprint $table) {
+                $table->unsignedTinyInteger('discount_override_percent')->nullable()->after('annual_discount_percent');
+            });
+        }
     }
 
     public function down(): void
