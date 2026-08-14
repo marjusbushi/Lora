@@ -70,6 +70,34 @@ class InventoryCategory extends TenantModel
     }
 
     /**
+     * Every category id mapped to its full path INCLUDING itself, leaf first
+     * (Verë → [Verë, Alkoolike, Pije]) — one query for the whole tree, so a
+     * value attributed to a leaf credits every ancestor exactly once when a
+     * report rolls amounts up the drill-down.
+     *
+     * @return array<int, list<int>>
+     */
+    public static function ancestryMap(): array
+    {
+        $nodes = static::query()->get(['id', 'parent_id'])->keyBy('id');
+
+        $map = [];
+        foreach ($nodes as $id => $node) {
+            $path = [$id];
+            $current = $node;
+            $guard = 0;
+            while ($current->parent_id !== null && $guard < 3 && $nodes->has($current->parent_id)) {
+                $path[] = $current->parent_id;
+                $current = $nodes->get($current->parent_id);
+                $guard++;
+            }
+            $map[$id] = $path;
+        }
+
+        return $map;
+    }
+
+    /**
      * Every category id mapped to the NAME of its root ancestor — one query
      * for the whole tree, so spend rollups group leaves under their root
      * ("Energji Elektrike" reports as "Shpenzime Fikse").

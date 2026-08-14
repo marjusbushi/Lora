@@ -33,6 +33,7 @@ use App\Services\Reporting\OperationsExecutiveService;
 use App\Services\Reporting\OutstandingBalanceService;
 use App\Services\Reporting\PaymentReconciliationService;
 use App\Services\Reporting\PickupPaceService;
+use App\Services\Reporting\PurchasesByCategoryReportService;
 use App\Services\Reporting\PosControlReportService;
 use App\Services\Reporting\PosPerformanceService;
 use App\Services\Reporting\RecurringMaintenanceIssueService;
@@ -830,6 +831,8 @@ class ReportsController extends Controller
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -841,6 +844,21 @@ class ReportsController extends Controller
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
+        ]);
+    }
+
+    public function purchasesByCategory(Request $request, PurchasesByCategoryReportService $report): Response
+    {
+        [$from, $to] = $this->range($request);
+
+        return Inertia::render('Reports/PurchasesByCategory', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
+            'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
