@@ -24,6 +24,9 @@ class FinanceReportsCurrencyContractTest extends TestCase
             'reports.vat' => 'Reports/Vat',
             'reports.discounts' => 'Reports/Discounts',
             'reports.departmentRevenue' => 'Reports/DepartmentRevenue',
+            'reports.supplierPerformance' => 'Reports/SupplierPerformance',
+            'reports.stockValuation' => 'Reports/StockValuation',
+            'reports.purchasesByCategory' => 'Reports/PurchasesByCategory',
         ];
 
         foreach ($routes as $name => $component) {

@@ -86,48 +86,85 @@ final class SupplierPerformanceReportService
     }
 
     /**
-     * Spend per ROOT inventory-tree category, read from the LINES — a mixed
-     * bill splits across categories instead of following one hand-picked
-     * document label. Totals-only bills fall back to their stored category.
+     * Line-accurate spend over the FULL category tree: a line on "Verë"
+     * credits Verë, Alkoolike and Pije each exactly once, so every level of
+     * the drill-down carries its true total. Mixed bills split across
+     * branches; totals-only bills fall back to their stored document
+     * category (matched to a root by name).
      *
-     * @return list<array{category: string, spend: float, bill_count: int}>
+     * @return list<array{id:?int,category:string,parent_id:?int,depth:int,spend:float,bill_count:int,share:float}>
      */
     private function lineAccurateCategories(Collection $currentBills): array
     {
-        $rootNames = InventoryCategory::rootNameMap();
+        $tree = InventoryCategory::flatTree();
+        $ancestry = InventoryCategory::ancestryMap();
+        $rootIdByName = collect($tree)->where('depth', 0)->pluck('id', 'name');
         $spend = [];
-        $billsPerCategory = [];
+        $bills = [];
+        $uncategorizedSpend = 0.0;
+        $uncategorizedBills = [];
+
+        $credit = function (array $path, float $amount, int $billId) use (&$spend, &$bills): void {
+            foreach ($path as $categoryId) {
+                $spend[$categoryId] = ($spend[$categoryId] ?? 0.0) + $amount;
+                $bills[$categoryId][$billId] = true;
+            }
+        };
 
         foreach ($currentBills as $bill) {
             $ratio = (float) $bill->total > 0 ? (float) $bill->total_base / (float) $bill->total : 0.0;
-            $touched = [];
 
             if ($bill->items->isEmpty()) {
-                $name = $bill->category ?: Bill::UNCATEGORIZED;
-                $spend[$name] = ($spend[$name] ?? 0.0) + (float) $bill->total_base;
-                $touched[$name] = true;
-            } else {
-                foreach ($bill->items as $line) {
-                    $name = $rootNames[$line->item?->category_id] ?? Bill::UNCATEGORIZED;
-                    $spend[$name] = ($spend[$name] ?? 0.0) + round((float) $line->line_total * $ratio, 2);
-                    $touched[$name] = true;
+                $rootId = $bill->category ? $rootIdByName->get($bill->category) : null;
+                if ($rootId !== null) {
+                    $credit([$rootId], (float) $bill->total_base, $bill->id);
+                } else {
+                    $uncategorizedSpend += (float) $bill->total_base;
+                    $uncategorizedBills[$bill->id] = true;
                 }
+
+                continue;
             }
 
-            foreach (array_keys($touched) as $name) {
-                $billsPerCategory[$name] = ($billsPerCategory[$name] ?? 0) + 1;
+            foreach ($bill->items as $line) {
+                $amount = round((float) $line->line_total * $ratio, 2);
+                $path = $ancestry[$line->item?->category_id] ?? null;
+                if ($path !== null) {
+                    $credit($path, $amount, $bill->id);
+                } else {
+                    $uncategorizedSpend += $amount;
+                    $uncategorizedBills[$bill->id] = true;
+                }
             }
         }
 
-        return collect($spend)
-            ->map(fn (float $amount, string $name) => [
-                'category' => $name,
-                'spend' => round($amount, 2),
-                'bill_count' => $billsPerCategory[$name] ?? 0,
+        $totalSpend = round((float) $currentBills->sum('total_base'), 2);
+        $rows = collect($tree)
+            ->filter(fn (array $node) => ($spend[$node['id']] ?? 0.0) > 0.005)
+            ->map(fn (array $node) => [
+                'id' => $node['id'],
+                'category' => $node['name'],
+                'parent_id' => $node['parent_id'],
+                'depth' => $node['depth'],
+                'spend' => round($spend[$node['id']], 2),
+                'bill_count' => count($bills[$node['id']] ?? []),
+                'share' => $totalSpend > 0 ? round($spend[$node['id']] / $totalSpend * 100, 1) : 0.0,
             ])
-            ->sortByDesc('spend')
-            ->values()
-            ->all();
+            ->values();
+
+        if ($uncategorizedSpend > 0.005) {
+            $rows->push([
+                'id' => null,
+                'category' => Bill::UNCATEGORIZED,
+                'parent_id' => null,
+                'depth' => 0,
+                'spend' => round($uncategorizedSpend, 2),
+                'bill_count' => count($uncategorizedBills),
+                'share' => $totalSpend > 0 ? round($uncategorizedSpend / $totalSpend * 100, 1) : 0.0,
+            ]);
+        }
+
+        return $rows->all();
     }
 
     private function supplierRow(Collection $bills, CarbonInterface $from, CarbonInterface $end): array
