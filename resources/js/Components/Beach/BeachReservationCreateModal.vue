@@ -1,6 +1,7 @@
 <script setup>
 import { computed, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
+import { translate } from '@/i18n';
 import Modal from '@/Components/UI/Modal.vue';
 import Button from '@/Components/UI/Button.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
@@ -22,7 +23,15 @@ const form = useForm({
     guest_name: '',
     guest_phone: '',
     guest_email: '',
+    status: 'confirmed',
 });
+
+// Feedback i Marjusit: statusi zgjidhet QË NË KRIJIM — i konfirmuar si default,
+// 'në pritje' me një klik — që recepsioni të mos bëjë dy herë punë.
+const statusOptions = computed(() => [
+    { value: 'confirmed', label: translate('beach.calendar.statusConfirmed') },
+    { value: 'pending', label: translate('beach.calendar.statusPending') },
+]);
 
 watch(
     () => props.show,
@@ -36,6 +45,7 @@ watch(
         form.guest_name = '';
         form.guest_phone = '';
         form.guest_email = '';
+        form.status = 'confirmed';
     },
 );
 
@@ -80,6 +90,9 @@ function submit() {
                     <TextInput v-model="form.guest_email" type="email" :error="form.errors.guest_email" />
                 </FormGroup>
             </div>
+            <FormGroup :label="$t('beach.calendar.status')" :error="form.errors.status">
+                <Select v-model="form.status" :options="statusOptions" :error="form.errors.status" />
+            </FormGroup>
             <p v-if="totalHint" class="rounded-lg bg-primary-50 px-3 py-2 text-body-sm font-semibold text-primary-900">
                 {{ $t('beach.calendar.totalHint', { days: totalHint.days, total: totalHint.total }) }}
             </p>
