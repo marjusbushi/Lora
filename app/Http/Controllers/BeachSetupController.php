@@ -74,8 +74,10 @@ class BeachSetupController extends Controller
      */
     private function assertNoSeasonOverlapLocked(string $start, string $end, ?int $excludeId = null): void
     {
+        // KUJDES: where('id', …) — whereKey te query-builder-i bazë bëhet WHERE `key`
+        // (kolonë inekzistente → 500 në MySQL; sqlite e fsheh si string-literal).
         DB::table('tenants')
-            ->whereKey(app(\App\Tenancy\TenantContext::class)->tenant()->id)
+            ->where('id', app(\App\Tenancy\TenantContext::class)->tenant()->id)
             ->lockForUpdate()
             ->first();
 
