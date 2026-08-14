@@ -8,7 +8,7 @@ import Badge from '@/Components/UI/Badge.vue';
 import Modal from '@/Components/UI/Modal.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
-import { Package, Plus, Trash2 } from 'lucide-vue-next';
+import { MapPin, Package, Plus, Trash2 } from 'lucide-vue-next';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
@@ -17,6 +17,7 @@ const props = defineProps({
     warehouses: Array,
     tree: { type: Array, default: () => [] },
     inventoryEnabled: { type: Boolean, default: false },
+    posOutlets: { type: Array, default: () => [] },
     toasts: Object,
 });
 
@@ -31,9 +32,28 @@ function treeLabel(node) {
 // settings (outlet, source warehouse) are edited; names live on the tree.
 const showCatModal = ref(false);
 const editingCat = ref(null);
-const catForm = useForm({ name: '', outlet: '', warehouse_id: null });
+const catForm = useForm({ name: '', outlet: '', warehouse_id: null, outlet_ids: [] });
 
-function openEditCat(cat) { editingCat.value = cat; Object.assign(catForm, { name: cat.name, outlet: cat.outlet || '', warehouse_id: cat.warehouse_id || null }); showCatModal.value = true; }
+// No saved restriction = visible in EVERY outlet, so the checkboxes open
+// all-checked; the server normalizes a full selection back to "everywhere".
+function openEditCat(cat) {
+    editingCat.value = cat;
+    Object.assign(catForm, {
+        name: cat.name,
+        outlet: cat.outlet || '',
+        warehouse_id: cat.warehouse_id || null,
+        outlet_ids: cat.outlet_ids?.length ? [...cat.outlet_ids] : props.posOutlets.map((outlet) => outlet.id),
+    });
+    showCatModal.value = true;
+}
+
+function restrictedOutletNames(cat) {
+    if (!cat.outlet_ids?.length) return null;
+    return props.posOutlets
+        .filter((outlet) => cat.outlet_ids.includes(outlet.id))
+        .map((outlet) => outlet.is_active ? outlet.name : `${outlet.name} (${translate('settingsPos.outletInactive')})`)
+        .join(' · ');
+}
 
 function submitCat() {
     catForm.put(route('settings.menu-categories.update', editingCat.value.id), {
@@ -173,6 +193,7 @@ function deleteItem(item) {
                         <h4 class="text-label text-primary-900">{{ cat.name }}</h4>
                         <Badge variant="neutral" size="sm">{{ cat.items?.length || 0 }} {{ $t('admin.generated.k_d24c59d8b853') }}</Badge>
                         <Badge v-if="inventoryEnabled && cat.warehouse_id" variant="success" size="sm"><Package class="h-3 w-3" /> {{ warehouses.find(warehouse => warehouse.id === cat.warehouse_id)?.name }}</Badge>
+                        <Badge v-if="restrictedOutletNames(cat)" variant="info" size="sm"><MapPin class="h-3 w-3" /> {{ restrictedOutletNames(cat) }}</Badge>
                     </div>
                     <div class="flex gap-1.5">
                         <Button size="sm" variant="ghost" @click="openCreateItem(cat)">{{ $t('admin.generated.k_3acd3ffafdb5') }}</Button>
@@ -223,7 +244,8 @@ function deleteItem(item) {
                 <TextInput v-model="catForm.name" :placeholder="$t('admin.generated.k_2454362e8872')" :error="catForm.errors.name" />
             </FormGroup>
             <div class="grid gap-4 sm:grid-cols-2">
-                <FormGroup :label="$t('inventory.pos.outlet')">
+                <!-- Legacy warehouse-type hint; superseded by real outlets once any exist -->
+                <FormGroup v-if="!posOutlets.length" :label="$t('inventory.pos.outlet')">
                     <select v-model="catForm.outlet" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
                         <option value="">—</option><option value="bar">Bar</option><option value="restaurant">{{ $t('inventory.warehouseTypes.restaurant') }}</option>
                     </select>
@@ -234,6 +256,21 @@ function deleteItem(item) {
                     </select>
                 </FormGroup>
             </div>
+            <FormGroup v-if="posOutlets.length" :label="$t('settingsTabs.menu.visibleIn')" :error="catForm.errors.outlet_ids">
+                <div class="space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                    <label v-for="outlet in posOutlets" :key="outlet.id" class="flex items-center gap-2.5">
+                        <input
+                            v-model="catForm.outlet_ids"
+                            type="checkbox"
+                            :value="outlet.id"
+                            class="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                        >
+                        <span class="text-body-sm text-primary-900">{{ outlet.name }}</span>
+                        <span v-if="!outlet.is_active" class="text-tiny text-neutral-400">({{ $t('settingsPos.outletInactive') }})</span>
+                    </label>
+                    <p class="text-tiny text-neutral-400">{{ $t('settingsTabs.menu.visibleInHint') }}</p>
+                </div>
+            </FormGroup>
         </div>
         <template #footer>
             <Button variant="outline" @click="showCatModal = false">{{ $t('admin.generated.k_71826e412580') }}</Button>

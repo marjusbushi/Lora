@@ -43,6 +43,7 @@ const props = defineProps({
     integrations: { type: Array, default: () => [] },
     posStaff: { type: Array, default: () => [] },
     posAccountMode: { type: String, default: 'shared' },
+    posOutlets: { type: Array, default: () => [] },
     inventoryCategoryTree: { type: Array, default: () => [] },
 });
 
@@ -165,8 +166,8 @@ function selectMobileTab(tabId) {
                     <RoomTypesTab v-else-if="activeTab === 'room-types'" :room-types="roomTypes" :amenities="amenities" :toasts="toasts" />
                     <AmenitiesTab v-else-if="activeTab === 'amenities'" :amenities="amenities" :toasts="toasts" />
                     <FloorsTab v-else-if="activeTab === 'floors'" :floors="floors" :toasts="toasts" />
-                    <PosTab v-else-if="activeTab === 'pos'" :settings="settings.pos || {}" :staff="posStaff" :account-mode="posAccountMode" :toasts="toasts" />
-                    <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :tree="inventoryCategoryTree" :inventory-enabled="modules.finance === true" :toasts="toasts" />
+                    <PosTab v-else-if="activeTab === 'pos'" :settings="settings.pos || {}" :staff="posStaff" :account-mode="posAccountMode" :outlets="posOutlets" :warehouses="inventoryWarehouses" :toasts="toasts" />
+                    <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :tree="inventoryCategoryTree" :inventory-enabled="modules.finance === true" :pos-outlets="posOutlets" :toasts="toasts" />
                     <HousekeepingTab v-else-if="activeTab === 'housekeeping'" :settings="settings.housekeeping || {}" :checklist-defaults="checklistDefaults" :toasts="toasts" />
                     <FinancialTab v-else-if="activeTab === 'financial'" :settings="settings.financial || {}" :toasts="toasts" />
                     <CurrenciesTab v-else-if="activeTab === 'currencies'" :settings="settings.currencies || {}" :toasts="toasts" />

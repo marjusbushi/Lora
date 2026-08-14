@@ -4364,7 +4364,10 @@
     "active": "Active",
     "all": "All",
     "inactive": "Inactive",
-    "types": { "cash": "Cash", "bank": "Bank" },
+    "types": {
+      "cash": "Cash",
+      "bank": "Bank"
+    },
     "noAccounts": "No accounts found.",
     "balance": "Balance",
     "inToday": "In today",
@@ -4378,8 +4381,19 @@
     "folio": "Folio",
     "expense": "Expense",
     "manual": "Manual",
-    "sourceLabels": { "folio": "Folio", "pos": "POS", "expense": "Expense", "transfer": "Transfer", "manual": "Manual" },
-    "methods": { "Kartë": "Card", "Cash": "Cash", "Bankë": "Bank", "Transferim": "Transfer" },
+    "sourceLabels": {
+      "folio": "Folio",
+      "pos": "POS",
+      "expense": "Expense",
+      "transfer": "Transfer",
+      "manual": "Manual"
+    },
+    "methods": {
+      "Kartë": "Card",
+      "Cash": "Cash",
+      "Bankë": "Bank",
+      "Transferim": "Transfer"
+    },
     "export": "Export",
     "date": "Date",
     "movement": "Movement",
@@ -4918,7 +4932,6 @@
       "slug": "Identifier (slug)",
       "slugHelp": "Used in internal addresses; letters, numbers and hyphens only.",
       "primaryDomain": "Primary domain",
-      "optional": "optional",
       "localization": "Localization",
       "localizationHelp": "Sets the default time and currency across the PMS.",
       "timezone": "Timezone",
@@ -5459,8 +5472,19 @@
       "priority": "Priority",
       "responseTime": "Response time",
       "date": "Date",
-      "priorities": { "critical": "Critical", "high": "High", "medium": "Medium", "low": "Low" },
-      "sla": { "met": "Within SLA", "breached": "SLA breached", "overdue": "Overdue", "open": "Open", "not_set": "No SLA" }
+      "priorities": {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "sla": {
+        "met": "Within SLA",
+        "breached": "SLA breached",
+        "overdue": "Overdue",
+        "open": "Open",
+        "not_set": "No SLA"
+      }
     },
     "recurringMaintenance": {
       "title": "Recurring Maintenance Issues",
@@ -5510,8 +5534,23 @@
       "task": "Cleaning task",
       "unassignedRoom": "Room not assigned",
       "unassignedStaff": "Unassigned",
-      "tabs": { "all": "All rooms", "arrivals": "Arrivals", "attention": "Attention" },
-      "states": { "ready": "Ready for arrival", "available": "Available", "checked_in": "Checked in", "cleaning": "Cleaning", "cleaning_for_arrival": "Cleaning for arrival", "turnover": "Checkout + arrival", "departure_pending": "Departure pending", "maintenance": "Maintenance", "occupied": "Occupied / blocked", "unassigned": "Room not assigned" }
+      "tabs": {
+        "all": "All rooms",
+        "arrivals": "Arrivals",
+        "attention": "Attention"
+      },
+      "states": {
+        "ready": "Ready for arrival",
+        "available": "Available",
+        "checked_in": "Checked in",
+        "cleaning": "Cleaning",
+        "cleaning_for_arrival": "Cleaning for arrival",
+        "turnover": "Checkout + arrival",
+        "departure_pending": "Departure pending",
+        "maintenance": "Maintenance",
+        "occupied": "Occupied / blocked",
+        "unassigned": "Room not assigned"
+      }
     },
     "operationsExecutive": {
       "title": "Operations Executive Dashboard",
@@ -5568,15 +5607,32 @@
       "title": "Guest Movements",
       "short": "Arrivals, departures and in-house guests in one workspace.",
       "category": "Operations",
-      "tabs": { "arrivals": "Arrivals", "departures": "Departures", "in_house": "In-house live" },
-      "kpis": { "arrivals": "Arrivals", "departures": "Departures", "in_house": "In-house stays", "guests": "Guests", "nights": "Nights", "balance": "Outstanding", "openPos": "Open POS orders" },
+      "tabs": {
+        "arrivals": "Arrivals",
+        "departures": "Departures",
+        "in_house": "In-house live"
+      },
+      "kpis": {
+        "arrivals": "Arrivals",
+        "departures": "Departures",
+        "in_house": "In-house stays",
+        "guests": "Guests",
+        "nights": "Nights",
+        "balance": "Outstanding",
+        "openPos": "Open POS orders"
+      },
       "guest": "Guest",
       "room": "Room",
       "period": "Stay",
       "status": "Status",
       "pax": "Pax",
       "balance": "Balance",
-      "statuses": { "pending": "Pending", "confirmed": "Confirmed", "checked_in": "Checked in", "checked_out": "Checked out" }
+      "statuses": {
+        "pending": "Pending",
+        "confirmed": "Confirmed",
+        "checked_in": "Checked in",
+        "checked_out": "Checked out"
+      }
     },
     "guestLtv": {
       "title": "Repeat Guests & Lifetime Value",
@@ -5603,7 +5659,11 @@
       "avgStay": "Average stay",
       "lastVisit": "Last visit",
       "upcomingStay": "upcoming",
-      "segments": { "one_time": "One-time", "returning": "Returning", "loyal": "Loyal" }
+      "segments": {
+        "one_time": "One-time",
+        "returning": "Returning",
+        "loyal": "Loyal"
+      }
     },
     "guestSegments": {
       "title": "Guest Segments",
@@ -5625,8 +5685,21 @@
       "lastVisit": "Last visit",
       "action": "Recommended action",
       "days": "days",
-      "segments": { "all": "All", "vip": "VIP", "loyal": "Loyal", "returning": "Returning", "new": "New", "dormant": "Dormant" },
-      "actions": { "retain": "Priority retention", "reward": "Loyalty reward", "convert": "Convert to loyal", "second_stay": "Drive second stay", "win_back": "Win-back campaign" }
+      "segments": {
+        "all": "All",
+        "vip": "VIP",
+        "loyal": "Loyal",
+        "returning": "Returning",
+        "new": "New",
+        "dormant": "Dormant"
+      },
+      "actions": {
+        "retain": "Priority retention",
+        "reward": "Loyalty reward",
+        "convert": "Convert to loyal",
+        "second_stay": "Drive second stay",
+        "win_back": "Win-back campaign"
+      }
     },
     "housekeepingProductivity": {
       "title": "Housekeeping Productivity & Turnaround",
@@ -5651,8 +5724,18 @@
       "queue": "Queue",
       "cleaning": "Cleaning",
       "date": "Date",
-      "types": { "checkout_clean": "Checkout clean", "stayover_clean": "Stayover clean", "deep_clean": "Deep clean", "inspection": "Inspection" },
-      "statuses": { "pending": "Pending", "in_progress": "In progress", "completed": "Completed", "inspected": "Inspected" }
+      "types": {
+        "checkout_clean": "Checkout clean",
+        "stayover_clean": "Stayover clean",
+        "deep_clean": "Deep clean",
+        "inspection": "Inspection"
+      },
+      "statuses": {
+        "pending": "Pending",
+        "in_progress": "In progress",
+        "completed": "Completed",
+        "inspected": "Inspected"
+      }
     },
     "departmentRevenue": {
       "title": "Revenue by Department",
@@ -5764,7 +5847,12 @@
       "hourly": "Hourly demand",
       "items": "items",
       "cost": "Est. cost",
-      "margin": "Margin"
+      "margin": "Margin",
+      "outletFilterLabel": "Outlet",
+      "outletFilterAll": "All outlets",
+      "byOutlet": "Turnover by outlet",
+      "byOutletHint": "Completed-order totals per sales outlet in the selected period; refunds are deducted from the outlet where the sale was made.",
+      "noOutlet": "No outlet"
     },
     "stockValuation": {
       "group": "Inventory & supply",
@@ -5904,7 +5992,11 @@
       "title": "Outstanding balances & Aging",
       "short": "Debt, overdue balances and collection priorities.",
       "category": "Finance & cash",
-      "status": { "confirmed": "Confirmed", "checked_in": "Inside", "checked_out": "Away" },
+      "status": {
+        "confirmed": "Confirmed",
+        "checked_in": "Inside",
+        "checked_out": "Away"
+      },
       "total": "Total to collect",
       "overdue": "Overdue value",
       "collectionRate": "Collection rate",
@@ -6532,7 +6624,33 @@
     "passwordPlaceholder": "Minimum 8 characters",
     "pinLabel": "Unique POS PIN",
     "cancel": "Cancel",
-    "createWaiter": "Create waiter"
+    "createWaiter": "Create waiter",
+    "outletsTitle": "Sales outlets",
+    "outletsHint": "Restaurant, Bar, Beach Bar — every order is stamped with the outlet it was created in, and reports filter by it.",
+    "addOutlet": "Add outlet",
+    "addFirstOutlet": "Add the first outlet",
+    "outletsEmpty": "No outlets configured — the POS works as a single outlet, exactly as it has until today. Add e.g. \"Restaurant\", \"Bar\", \"Beach Bar\" so orders, stock and reports split per outlet.",
+    "outletName": "Outlet name",
+    "outletNamePlaceholder": "e.g. Beach Bar",
+    "outletWarehouse": "Outlet warehouse",
+    "outletWarehouseAuto": "Automatic (as today)",
+    "outletWarehouseHint": "With a warehouse set, every order of this outlet deducts stock from it; without one, the category rule applies as today.",
+    "outletWarehouseLine": "Warehouse: {name}",
+    "outletWarehouseAutoLine": "Warehouse: automatic",
+    "outletActive": "Active",
+    "outletInactive": "Inactive",
+    "outletActiveLabel": "Outlet is active (visible in the POS)",
+    "outletEdit": "Edit",
+    "outletDelete": "Delete",
+    "outletEditTitle": "Outlet",
+    "outletSaved": "Outlet saved.",
+    "outletDeleted": "Outlet deleted.",
+    "outletDeleteConfirm": "Delete outlet \"{name}\"?",
+    "outletSave": "Save",
+    "outletCreate": "Create outlet",
+    "outletDeactivate": "Deactivate",
+    "outletDeactivateConfirm": "Deactivate outlet \"{name}\"? It disappears from the POS; history and reports remain.",
+    "outletDeactivated": "Outlet deactivated."
   },
   "pricingIndex": {
     "monthsShort": {
@@ -6763,7 +6881,9 @@
       "deleteCategoryConfirm": "Delete the category \"{name}\"?",
       "deleteItemConfirm": "Delete \"{name}\"?",
       "unavailable": "unavailable",
-      "available": "available"
+      "available": "available",
+      "visibleIn": "Visible in outlets",
+      "visibleInHint": "All checked = the category shows everywhere (including outlets added later). Uncheck to restrict."
     },
     "notifications": {
       "title": "Notifications",
@@ -6914,5 +7034,9 @@
     "step3": "Sign in with your Lora account and approve only the hotel shown.",
     "recentAiActivity": "Recent AI activity",
     "noAiActions": "No AI-executed actions yet."
+  },
+  "posOutlets": {
+    "label": "Sales outlet",
+    "switchConfirm": "The cart has unsaved items — switching outlet clears it. Continue?"
   }
 }

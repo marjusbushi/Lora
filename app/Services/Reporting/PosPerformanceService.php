@@ -12,10 +12,10 @@ final class PosPerformanceService
     public function __construct(private readonly KpiCalculator $kpiCalculator) {}
 
     /** @return array{current:array,previous_period:array,changes:array} */
-    public function withComparison(ReportingPeriod $period): array
+    public function withComparison(ReportingPeriod $period, ?int $outletId = null): array
     {
-        $current = $this->summary($period);
-        $previous = $this->summary($period->previousPeriod());
+        $current = $this->summary($period, $outletId);
+        $previous = $this->summary($period->previousPeriod(), $outletId);
 
         return [
             'current' => $current,
@@ -31,22 +31,27 @@ final class PosPerformanceService
         ];
     }
 
-    public function summary(ReportingPeriod $period): array
+    public function summary(ReportingPeriod $period, ?int $outletId = null): array
     {
+        // $outletId narrows every figure to one sales outlet; null = all
+        // orders, outlet-less legacy ones included — today's totals unchanged.
         $orders = $this->range(PosOrder::query(), $period)
             ->where('status', 'completed')
-            ->with(['items.menuItem.category'])
+            ->when($outletId, fn ($query) => $query->where('outlet_id', $outletId))
+            ->with(['items.menuItem.category', 'outlet:id,name'])
             ->get();
         $refunds = PosOrderPayment::query()
             ->where('direction', 'out')
             ->whereBetween('paid_at', [$period->from->startOfDay(), $period->to->endOfDay()])
-            ->with(['order.items.menuItem.category'])
+            ->when($outletId, fn ($query) => $query->whereHas('order', fn ($order) => $order->where('outlet_id', $outletId)))
+            ->with(['order.items.menuItem.category', 'order.outlet:id,name'])
             ->get();
         $legacyRefunds = PosOrder::query()
             ->whereNotNull('refunded_at')
             ->whereBetween('refunded_at', [$period->from->startOfDay(), $period->to->endOfDay()])
             ->whereDoesntHave('payments', fn ($query) => $query->where('direction', 'out'))
-            ->with(['items.menuItem.category'])
+            ->when($outletId, fn ($query) => $query->where('outlet_id', $outletId))
+            ->with(['items.menuItem.category', 'outlet:id,name'])
             ->get();
         $refundEvents = $refunds->map(fn (PosOrderPayment $refund) => [
             'order' => $refund->order,
@@ -60,12 +65,14 @@ final class PosPerformanceService
 
         $categories = collect();
         $items = collect();
+        $outlets = collect();
         $hours = collect(range(0, 23))->mapWithKeys(fn (int $hour) => [$hour => ['hour' => $hour, 'orders' => 0, 'revenue' => 0.0]]);
         $weekdays = collect(range(1, 7))->mapWithKeys(fn (int $day) => [$day => ['weekday' => $day, 'orders' => 0, 'revenue' => 0.0]]);
         $totalCost = 0.0;
 
         foreach ($orders as $order) {
             $revenue = (float) $order->total_amount;
+            $this->accumulateOutlet($outlets, $order, 1, $revenue);
             $when = CarbonImmutable::parse($order->paid_at ?? $order->created_at);
             $hour = $hours->get($when->hour);
             $hour['orders']++;
@@ -96,6 +103,7 @@ final class PosPerformanceService
             }
 
             $revenue = -$refund['amount'];
+            $this->accumulateOutlet($outlets, $order, 0, $revenue);
             $when = CarbonImmutable::parse($refund['paid_at']);
             $hour = $hours->get($when->hour);
             $hour['revenue'] += $revenue;
@@ -133,6 +141,10 @@ final class PosPerformanceService
                 'gross_profit' => $grossProfit,
                 'gross_margin' => $totalRevenue > 0 ? round($grossProfit / $totalRevenue * 100, 1) : 0.0,
             ],
+            'outlets' => $outlets->filter(fn (array $row) => $row['orders'] > 0 || abs($row['revenue']) > 0.009)
+                ->sortByDesc('revenue')
+                ->map(fn (array $row) => [...$row, 'revenue' => round($row['revenue'], 2)])
+                ->values()->all(),
             'categories' => $categories->filter(fn (array $row) => abs($row['revenue']) > 0.009 || abs($row['cost']) > 0.009)->sortByDesc('revenue')->values()->all(),
             'top_items' => $items->filter(fn (array $row) => abs($row['revenue']) > 0.009 || abs($row['cost']) > 0.009)->sortByDesc('revenue')->take(15)->values()->all(),
             'hours' => $hours->map(fn (array $row) => [...$row, 'revenue' => round($row['revenue'], 2)])->values()->all(),
@@ -150,6 +162,20 @@ final class PosPerformanceService
                 ->orWhere(fn ($legacy) => $legacy->whereNull('business_date')->whereBetween('paid_at', ["{$from} 00:00:00", "{$to} 23:59:59"]))
                 ->orWhere(fn ($legacy) => $legacy->whereNull('business_date')->whereNull('paid_at')->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"]));
         });
+    }
+
+    /** Per-outlet turnover; the null-outlet bucket (legacy orders) keys as 0 with a null name — the UI labels it. */
+    private function accumulateOutlet(Collection $rows, ?PosOrder $order, int $orderCount, float $revenue): void
+    {
+        if (! $order) {
+            return;
+        }
+
+        $key = $order->outlet_id ?? 0;
+        $row = $rows->get($key, ['outlet_id' => $order->outlet_id, 'name' => $order->outlet?->name, 'orders' => 0, 'revenue' => 0.0]);
+        $row['orders'] += $orderCount;
+        $row['revenue'] += $revenue;
+        $rows->put($key, $row);
     }
 
     private function accumulate(Collection $rows, string $key, float $quantity, float $revenue, float $cost, ?string $category = null, ?string $name = null): void
