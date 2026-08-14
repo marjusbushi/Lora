@@ -19,12 +19,28 @@ final class OutstandingBalanceService
         return ['count' => $summary['count'], 'total' => $summary['total']];
     }
 
-    /** @return array{as_of:string,summary:array,buckets:array,statuses:array,rows:array} */
-    public function analytics(?CarbonImmutable $asOf = null): array
+    /**
+     * @return array{as_of:string,summary:array,buckets:array,statuses:array,rows:array}
+     *
+     * A past $asOf reconstructs BALANCES faithfully (payments capped by
+     * created_at, charges by charge_date, bookings by booked_at) — but
+     * reservation STATUS is current-state only: a stay cancelled after the
+     * as-of date is absent from the past view because status history is not
+     * recorded.
+     */
+    public function analytics(?CarbonImmutable $asOf = null, ?string $arrivalFrom = null, ?string $arrivalTo = null): array
     {
         $asOf ??= CarbonImmutable::today();
+        // Today's live view keeps its exact historical behavior (future-dated
+        // folio charges included); only a PAST as-of applies the date caps.
+        $historical = $asOf->lessThan(CarbonImmutable::today());
         $stays = Reservation::query()
             ->whereIn('status', ['confirmed', 'checked_in', 'checked_out'])
+            ->when($historical, fn ($query) => $query->where(fn ($booked) => $booked
+                ->whereNull('booked_at')
+                ->orWhere('booked_at', '<=', $asOf->endOfDay())))
+            ->when($arrivalFrom, fn ($query) => $query->where('check_in_date', '>=', $arrivalFrom))
+            ->when($arrivalTo, fn ($query) => $query->where('check_in_date', '<=', $arrivalTo))
             ->with(['room:id,room_number', 'guest:id,first_name,last_name,phone'])
             ->get([
                 'id', 'room_id', 'guest_id', 'status', 'channel', 'check_in_date',
@@ -38,6 +54,7 @@ final class OutstandingBalanceService
         $ids = $stays->pluck('id')->all();
         $folio = FolioItem::query()
             ->whereIn('reservation_id', $ids)
+            ->when($historical, fn ($query) => $query->where('charge_date', '<=', $asOf->toDateString()))
             ->select(
                 'reservation_id',
                 DB::raw("SUM(CASE WHEN type NOT IN ('discount', 'room') THEN amount_base ELSE 0 END) as charges"),
@@ -49,6 +66,7 @@ final class OutstandingBalanceService
         $payments = Payment::query()
             ->whereIn('reservation_id', $ids)
             ->notVoided()
+            ->when($historical, fn ($query) => $query->where('created_at', '<=', $asOf->endOfDay()))
             ->select(
                 'reservation_id',
                 DB::raw("SUM(CASE WHEN COALESCE(type, 'payment') IN ('payment', 'deposit') THEN amount_base WHEN type = 'refund' THEN -ABS(amount_base) ELSE 0 END) as paid"),
@@ -69,8 +87,19 @@ final class OutstandingBalanceService
             $writtenOff = round((float) ($payments->get($reservation->id)?->written_off ?? 0), 2);
             $balance = round($gross - $paid - $writtenOff, 2);
             $dueDate = CarbonImmutable::parse($reservation->check_out_date);
+            $checkIn = CarbonImmutable::parse($reservation->check_in_date);
             $daysOverdue = $dueDate->lessThan($asOf) ? (int) $dueDate->diffInDays($asOf) : 0;
             $bucket = $this->bucketFor($daysOverdue);
+            // Honest states: only a stay that HAPPENED (guest here or gone) is
+            // real debt — a future OTA arrival is exposure, not collectible.
+            $state = match (true) {
+                $reservation->status === 'checked_out' => 'due',
+                $dueDate->lessThanOrEqualTo($asOf) => 'due',
+                $reservation->status === 'checked_in' => 'in_house',
+                $checkIn->greaterThan($asOf) => 'future_arrival',
+                $checkIn->equalTo($asOf) => 'arriving_today',
+                default => 'in_house',
+            };
 
             return [
                 'id' => $reservation->id,
@@ -84,6 +113,7 @@ final class OutstandingBalanceService
                 'due_date' => $dueDate->toDateString(),
                 'days_overdue' => $daysOverdue,
                 'bucket' => $bucket,
+                'state' => $state,
                 'gross' => $gross,
                 'paid' => $paid,
                 'written_off' => $writtenOff,
@@ -101,6 +131,8 @@ final class OutstandingBalanceService
         $critical = $openRows->where('days_overdue', '>', 30);
         $gross = round((float) $rows->sum('gross'), 2);
         $paid = round((float) $rows->sum('paid'), 2);
+        $real = $openRows->whereIn('state', ['in_house', 'due']);
+        $exposure = $openRows->whereIn('state', ['future_arrival', 'arriving_today']);
 
         return [
             'as_of' => $asOf->toDateString(),
@@ -117,6 +149,10 @@ final class OutstandingBalanceService
                 'critical_count' => $critical->count(),
                 'critical_total' => round((float) $critical->sum('balance'), 2),
                 'average_balance' => $openRows->isNotEmpty() ? round($total / $openRows->count(), 2) : 0.0,
+                'real_count' => $real->count(),
+                'real_total' => round((float) $real->sum('balance'), 2),
+                'exposure_count' => $exposure->count(),
+                'exposure_total' => round((float) $exposure->sum('balance'), 2),
             ],
             'buckets' => $this->bucketSummary($openRows, $total),
             'statuses' => $openRows->groupBy('status')->map(fn (Collection $statusRows, string $status) => [
@@ -171,6 +207,10 @@ final class OutstandingBalanceService
                 'critical_count' => 0,
                 'critical_total' => 0.0,
                 'average_balance' => 0.0,
+                'real_count' => 0,
+                'real_total' => 0.0,
+                'exposure_count' => 0,
+                'exposure_total' => 0.0,
             ],
             'buckets' => $this->bucketSummary(collect(), 0.0),
             'statuses' => [],

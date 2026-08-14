@@ -37,6 +37,18 @@ class GuestMovementsReportTest extends TestCase
             ->getJson(route('reports.guestMovements', ['from' => 'abc']))
             ->assertStatus(422)
             ->assertJsonValidationErrors(['from']);
+
+        // Malformed "to" used to reach Carbon::parse inside the window-cap
+        // closure and 500 — the guard must keep it a clean 422.
+        $this->actingAs($admin)
+            ->getJson(route('reports.guestMovements', ['to' => 'abc']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['to']);
+
+        $this->actingAs($admin)
+            ->getJson(route('reports.guestMovements', ['from' => 'abc', 'to' => today()->toDateString()]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['from']);
     }
 
     public function test_window_over_367_days_is_rejected(): void
