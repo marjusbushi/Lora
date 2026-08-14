@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import { Minus, Plus, ShoppingBasket } from 'lucide-vue-next';
@@ -16,6 +16,15 @@ const props = defineProps({
 });
 
 const cart = reactive({});
+
+// One category on screen at a time — the guest picks it from the pill bar;
+// the cart survives category switches (it keys on item ids).
+const activeCategoryId = ref(props.menu[0]?.id ?? null);
+const activeCategory = computed(() => props.menu.find((category) => category.id === activeCategoryId.value) || null);
+
+function cartCountFor(category) {
+    return category.items.reduce((sum, item) => sum + (cart[item.id]?.qty || 0), 0);
+}
 
 function add(item) {
     if (cart[item.id]) cart[item.id].qty = Math.min(20, cart[item.id].qty + 1);
@@ -86,40 +95,51 @@ const submitError = computed(() => form.errors.order || form.errors.inventory ||
                 </div>
             </div>
 
-            <div class="mx-auto mt-6 max-w-lg px-4 sm:px-6">
-                <div v-if="menu.length" class="space-y-7">
-                    <div v-for="category in menu" :key="category.id">
-                        <h2 class="mb-3 flex items-center gap-2 text-label font-semibold uppercase tracking-wide text-driftwood">
-                            <span class="h-px w-5 bg-driftwood/30" /> {{ category.name }}
-                        </h2>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div v-for="item in category.items" :key="item.id" class="overflow-hidden rounded-2xl border border-driftwood/10 bg-white shadow-sm">
-                                <!-- Fotoja ose emoji i madh -->
-                                <div class="relative aspect-square w-full">
-                                    <img v-if="item.image_path" :src="`/storage/${item.image_path}`" :alt="item.name" class="h-full w-full object-cover">
-                                    <div v-else class="grid h-full w-full place-items-center bg-gradient-to-br from-bone to-ionian/10 text-6xl">
-                                        {{ itemEmoji(item) }}
-                                    </div>
-                                    <span v-if="cart[item.id]" class="absolute left-2 top-2 grid h-7 min-w-7 place-items-center rounded-full bg-ionian px-2 text-body-sm font-bold text-bone shadow">
-                                        {{ cart[item.id].qty }}
-                                    </span>
-                                    <!-- Kontrolli i shportës mbi foto -->
-                                    <div class="absolute bottom-2 right-2">
-                                        <div v-if="cart[item.id]" class="flex items-center gap-1 rounded-full bg-white/95 p-1 shadow-md backdrop-blur">
-                                            <button type="button" class="grid h-9 w-9 place-items-center rounded-full text-ink active:bg-bone" :aria-label="$t('beach.order.removeOne', { name: item.name })" @click="remove(item)"><Minus class="h-4 w-4" /></button>
-                                            <button type="button" class="grid h-9 w-9 place-items-center rounded-full bg-ionian text-bone active:opacity-80" :aria-label="$t('beach.order.addOne', { name: item.name })" @click="add(item)"><Plus class="h-4 w-4" /></button>
-                                        </div>
-                                        <button v-else type="button" class="grid h-10 w-10 place-items-center rounded-full bg-ionian text-bone shadow-md active:opacity-80" :aria-label="$t('beach.order.addOne', { name: item.name })" @click="add(item)">
-                                            <Plus class="h-5 w-5" />
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="px-3 py-2.5">
-                                    <p class="truncate text-body-sm font-medium text-ink">{{ item.name }}</p>
-                                    <p class="text-body-sm font-semibold text-ionian">{{ money(item.price) }}</p>
-                                </div>
+            <!-- Zgjedhësi i kategorisë — gjithmonë i dukshëm, ngjitur nën hero -->
+            <!-- top-16: WebsiteLayout ka header fiks h-16 me z-50 — pa offset, shiriti fshihet nën të kur bën scroll -->
+            <div v-if="menu.length" class="sticky top-16 z-10 border-b border-driftwood/10 bg-bone/95 py-2.5 backdrop-blur">
+                <div class="mx-auto flex max-w-lg gap-2 overflow-x-auto px-4 sm:px-6 [scrollbar-width:none]">
+                    <button
+                        v-for="category in menu"
+                        :key="category.id"
+                        type="button"
+                        class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-body-sm font-semibold transition"
+                        :class="category.id === activeCategoryId
+                            ? 'bg-ionian text-bone shadow'
+                            : 'bg-white text-ink border border-driftwood/20 active:bg-bone'"
+                        :aria-pressed="category.id === activeCategoryId"
+                        @click="activeCategoryId = category.id"
+                    >
+                        {{ category.name }}
+                        <span v-if="cartCountFor(category)" class="grid h-5 min-w-5 place-items-center rounded-full px-1 text-tiny font-bold" :class="category.id === activeCategoryId ? 'bg-bone/25 text-bone' : 'bg-ionian text-bone'">
+                            {{ cartCountFor(category) }}
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="mx-auto mt-4 max-w-lg px-4 sm:px-6">
+                <!-- Lista e artikujve të kategorisë aktive -->
+                <div v-if="activeCategory" class="divide-y divide-driftwood/10 rounded-2xl border border-driftwood/10 bg-white shadow-sm">
+                    <div v-for="item in activeCategory.items" :key="item.id" class="flex items-center gap-3 p-3">
+                        <div class="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl">
+                            <img v-if="item.image_path" :src="`/storage/${item.image_path}`" :alt="item.name" class="h-full w-full object-cover">
+                            <div v-else class="grid h-full w-full place-items-center bg-gradient-to-br from-bone to-ionian/10 text-3xl">
+                                {{ itemEmoji(item) }}
                             </div>
                         </div>
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-body-sm font-medium text-ink">{{ item.name }}</p>
+                            <p class="text-body-sm font-semibold text-ionian">{{ money(item.price) }}</p>
+                        </div>
+                        <div v-if="cart[item.id]" class="flex shrink-0 items-center gap-1.5">
+                            <button type="button" class="grid h-10 w-10 place-items-center rounded-full border border-driftwood/25 text-ink active:bg-bone" :aria-label="$t('beach.order.removeOne', { name: item.name })" @click="remove(item)"><Minus class="h-4 w-4" /></button>
+                            <span class="w-6 text-center text-body-sm font-bold tabular-nums text-ink">{{ cart[item.id].qty }}</span>
+                            <button type="button" class="grid h-10 w-10 place-items-center rounded-full bg-ionian text-bone active:opacity-80" :aria-label="$t('beach.order.addOne', { name: item.name })" @click="add(item)"><Plus class="h-4 w-4" /></button>
+                        </div>
+                        <button v-else type="button" class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ionian text-bone shadow-sm active:opacity-80" :aria-label="$t('beach.order.addOne', { name: item.name })" @click="add(item)">
+                            <Plus class="h-5 w-5" />
+                        </button>
                     </div>
                 </div>
                 <div v-else class="mt-10 rounded-2xl border border-dashed border-driftwood/30 bg-white px-4 py-12 text-center">
