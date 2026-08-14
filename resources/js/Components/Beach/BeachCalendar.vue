@@ -339,6 +339,7 @@ const unpaidToday = computed(() =>
             :reservation="editingReservation"
             :units="allUnits"
             :has-open-shift="!!currentShift"
+            :currency="currency"
             @close="editingReservation = null"
         />
     </div>

@@ -13,6 +13,7 @@ const props = defineProps({
     reservation: { type: Object, default: null },
     units: { type: Array, default: () => [] },
     hasOpenShift: { type: Boolean, default: false },
+    currency: { type: String, default: '' },
 });
 
 const emit = defineEmits(['close']);
@@ -97,7 +98,7 @@ const methodLabel = computed(() => ({
                 <Badge variant="neutral" size="sm">
                     {{ reservation.source === 'website' ? $t('beach.calendar.sourceWebsite') : $t('beach.calendar.sourceReception') }}
                 </Badge>
-                <span class="ml-auto text-body-sm font-bold text-primary-900">{{ reservation.total_amount }}</span>
+                <span class="ml-auto text-body-sm font-bold text-primary-900">{{ currency }}{{ reservation.total_amount }}</span>
             </div>
 
             <!-- Pagesa -->
