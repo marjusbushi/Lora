@@ -14,7 +14,7 @@ use RuntimeException;
  */
 class GeminiClient
 {
-    /** Cap on gemini-2.5-flash "thinking" tokens so the forced function call is never starved. */
+    /** Cap on the flash models' "thinking" tokens so the forced function call is never starved (verified accepted by gemini-flash-latest). */
     private const THINKING_BUDGET = 512;
 
     public function key(): ?string

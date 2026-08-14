@@ -73,7 +73,11 @@ return [
     // (Setting 'ai.gemini_key') or via env (GEMINI_API_KEY / GOOGLE_API_KEY).
     'gemini' => [
         'key' => env('GEMINI_API_KEY', env('GOOGLE_API_KEY')),
-        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+        // Rolling alias, deliberately: Google RETIRES concrete model ids for
+        // new generateContent calls (gemini-2.5-flash died Aug 2026 with a 404
+        // while still appearing in ListModels) — the alias always tracks the
+        // current flash model, so pricing reports never break this way again.
+        'model' => env('GEMINI_MODEL', 'gemini-flash-latest'),
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
     ],
 
