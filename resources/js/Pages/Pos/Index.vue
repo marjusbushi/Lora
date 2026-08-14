@@ -408,6 +408,31 @@ function subtreeItemCount(nodeId) {
         .reduce((sum, group) => sum + (group.items || []).length, 0);
 }
 
+// Mockup-i i Marjusit: tabletat NUK zhduken kur hap një kategori fletë —
+// shfaqen motrat e saj me aktiven të mbushur navy; klik mbi tjetrën e
+// ndërron me NJË lëvizje, pa "Prapa". "Prapa" mbetet vetëm për nën-nivele.
+function tilesFor(parentId) {
+    const children = (props.menuTree || []).filter((node) => node.parent_id === parentId);
+    const tiles = children.map((node) => ({ key: node.id, name: node.name, count: subtreeItemCount(node.id) }));
+    if (parentId === null) {
+        for (const group of legacyGroups.value) {
+            tiles.push({ key: `legacy-${group.id}`, name: group.name, count: (group.items || []).length });
+        }
+    }
+    return tiles;
+}
+
+const parentOfCurrent = computed(() => {
+    if (currentNodeId.value === null) return null;
+    if (typeof currentNodeId.value === 'string') return null; // grupet legacy jetojnë në nivelin e sipërm
+    const byId = Object.fromEntries((props.menuTree || []).map((node) => [node.id, node]));
+    return byId[currentNodeId.value]?.parent_id ?? null;
+});
+
+const displayTiles = computed(() => (
+    currentTiles.value.length ? currentTiles.value : tilesFor(parentOfCurrent.value)
+));
+
 function enterTile(key) {
     showFrequent.value = false;
     currentNodeId.value = key;
@@ -780,6 +805,13 @@ onMounted(() => {
     if (action === 'pay' && order.status === 'open') openPay(order);
     if (action === 'receipt' && order.status === 'completed') openReceipt(order);
 });
+
+// Kategoria e parë hapet vetë — ekrani s'nis kurrë bosh (mockup-i i miratuar).
+onMounted(() => {
+    if (currentNodeId.value === null && currentTiles.value.length) {
+        currentNodeId.value = currentTiles.value[0].key;
+    }
+});
 </script>
 
 <template>
@@ -795,12 +827,11 @@ onMounted(() => {
             @open="showOpenShift = true"
             @close="openCloseModal"
         />
-        <div class="mb-5 flex flex-col gap-3" :class="immersiveMode && '!mb-0 shrink-0'">
-            <div>
-                <div class="flex items-center gap-3">
-                    <h1 class="text-h2 text-primary-900">{{ view === 'sale' ? (tableContext ? $t('posIndex.titleSaleTable', { name: tableContext.name }) : $t('posIndex.titleSale')) : view === 'orders' ? $t('posIndex.titleOrders') : view === 'receipts' ? $t('posIndex.titleReceipts') : $t('posIndex.titleShifts') }}</h1>
-                </div>
-                <p v-if="!touchMode || view !== 'sale'" class="mt-1 text-body-sm text-neutral-500">{{ view === 'sale' ? $t('posIndex.subtitleSale') : view === 'orders' ? $t('posIndex.subtitleOrders') : view === 'receipts' ? $t('posIndex.subtitleReceipts') : $t('posIndex.subtitleShifts') }}</p>
+        <div class="mb-4 flex flex-col gap-3" :class="immersiveMode && '!mb-3 shrink-0'">
+            <!-- Titulli hiqet në shitje (feedback i Marjusit) — toolbar-i ngjitet direkt sipër -->
+            <div v-if="view !== 'sale'">
+                <h1 class="text-h2 text-primary-900">{{ view === 'orders' ? $t('posIndex.titleOrders') : view === 'receipts' ? $t('posIndex.titleReceipts') : $t('posIndex.titleShifts') }}</h1>
+                <p class="mt-1 text-body-sm text-neutral-500">{{ view === 'orders' ? $t('posIndex.subtitleOrders') : view === 'receipts' ? $t('posIndex.subtitleReceipts') : $t('posIndex.subtitleShifts') }}</p>
             </div>
             <!-- Toolbar NJË-rresht (mockup-i i miratuar): kontrolle majtas, statistika të qeta + veprime djathtas -->
             <div v-if="view === 'sale'" class="flex flex-wrap items-center gap-2 rounded-2xl border border-neutral-200 bg-white p-2 shadow-card">
@@ -942,7 +973,7 @@ onMounted(() => {
                     </div>
                     <!-- Drill-down navigation: Niveli 1 → 2 → 3 → Artikujt -->
                     <div v-if="!showFrequent && !searchQuery.trim()" class="border-b border-neutral-200 px-4 py-3">
-                        <div v-if="currentNodeId !== null" class="mb-2 flex items-center gap-2">
+                        <div v-if="currentNodeId !== null && (typeof parentOfCurrent === 'number' || currentTiles.length)" class="mb-2 flex items-center gap-2">
                             <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-small font-semibold text-neutral-700 hover:bg-neutral-50 touch-manipulation" @click="goUp">
                                 <ArrowLeft class="h-4 w-4" /> {{ $t('posIndex.back') }}
                             </button>
@@ -958,17 +989,23 @@ onMounted(() => {
                                 </template>
                             </nav>
                         </div>
-                        <!-- Kategoritë si tableta pill (mockup): të qeta, aktive vetëm në hover -->
-                        <div v-if="currentTiles.length" class="flex flex-wrap gap-2">
+                        <!-- Kategoritë GJITHMONË të dukshme si tableta (mockup): aktivja navy, ndërrim me 1 klik -->
+                        <div v-if="displayTiles.length" class="flex flex-wrap gap-2">
                             <button
-                                v-for="tile in currentTiles"
+                                v-for="tile in displayTiles"
                                 :key="tile.key"
                                 type="button"
-                                class="inline-flex min-h-11 items-center gap-2 rounded-full bg-neutral-100 py-2 pl-4 pr-2 text-body-sm font-semibold text-primary-900 transition hover:bg-neutral-200 touch-manipulation"
+                                class="inline-flex min-h-11 items-center gap-2 rounded-full py-2 pl-4 pr-2 text-body-sm font-semibold transition touch-manipulation"
+                                :class="tile.key === currentNodeId
+                                    ? 'bg-primary-950 text-white'
+                                    : 'bg-neutral-100 text-primary-900 hover:bg-neutral-200'"
                                 @click="enterTile(tile.key)"
                             >
                                 <span class="min-w-0 truncate"><span class="mr-1">{{ categoryIcons[tile.name] || '📂' }}</span>{{ tile.name }}</span>
-                                <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-tiny font-semibold text-neutral-500 ring-1 ring-neutral-200">{{ tile.count }}</span>
+                                <span
+                                    class="shrink-0 rounded-full px-2 py-0.5 text-tiny font-semibold"
+                                    :class="tile.key === currentNodeId ? 'bg-white/20 text-white' : 'bg-white text-neutral-500 ring-1 ring-neutral-200'"
+                                >{{ tile.count }}</span>
                             </button>
                         </div>
                     </div>
@@ -1199,19 +1236,20 @@ onMounted(() => {
 
                     <!-- Cart items -->
                     <div class="max-h-[420px] flex-1 overflow-y-auto px-4 py-2 xl:max-h-none">
-                        <div v-if="cart.length" class="space-y-2">
-                            <div v-for="(item, i) in cart" :key="i" class="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 border-b border-neutral-100 py-3 last:border-0">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-neutral-50 text-xl">{{ item.emoji }}</span>
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-body-sm text-primary-900 font-medium truncate">{{ item.name }}</p>
-                                    <p class="text-small text-neutral-400">{{ $t('posIndex.pricePerUnit', { price: money(item.price) }) }}</p>
-                                    <div class="mt-1.5 flex items-center gap-1 shrink-0">
-                                        <button class="grid h-10 w-10 place-items-center rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 touch-manipulation" @click="updateQty(i, -1)"><Minus class="h-4 w-4" /></button>
-                                        <span class="w-7 text-center text-body-sm font-semibold text-primary-900">{{ item.qty }}</span>
-                                        <button class="grid h-10 w-10 place-items-center rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 touch-manipulation" @click="updateQty(i, 1)"><Plus class="h-4 w-4" /></button>
-                                    </div>
+                        <!-- Listë kompakte NJË-rresht (feedback i Marjusit — pa scroll të gjatë) -->
+                        <div v-if="cart.length" class="divide-y divide-neutral-100">
+                            <div v-for="(item, i) in cart" :key="i" class="flex items-center gap-2.5 py-2">
+                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-neutral-50 text-base">{{ item.emoji }}</span>
+                                <div class="min-w-0 flex-1 leading-tight">
+                                    <p class="truncate text-body-sm font-medium text-primary-900">{{ item.name }}</p>
+                                    <p class="text-tiny text-neutral-400">{{ $t('posIndex.pricePerUnit', { price: money(item.price) }) }}</p>
                                 </div>
-                                <p class="text-body-sm font-semibold text-primary-900">{{ money(item.price * item.qty) }}</p>
+                                <div class="flex shrink-0 items-center gap-0.5">
+                                    <button class="grid h-9 w-9 place-items-center rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 touch-manipulation" @click="updateQty(i, -1)"><Minus class="h-3.5 w-3.5" /></button>
+                                    <span class="w-6 text-center text-body-sm font-semibold text-primary-900 tabular-nums">{{ item.qty }}</span>
+                                    <button class="grid h-9 w-9 place-items-center rounded-lg border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 touch-manipulation" @click="updateQty(i, 1)"><Plus class="h-3.5 w-3.5" /></button>
+                                </div>
+                                <p class="w-14 shrink-0 text-right text-body-sm font-semibold text-primary-900 tabular-nums">{{ money(item.price * item.qty) }}</p>
                             </div>
                         </div>
 
