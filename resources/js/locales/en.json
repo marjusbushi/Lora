@@ -7063,6 +7063,34 @@
       "seasonHint": "Empty = the beach is open all year.",
       "save": "Save settings",
       "saved": "Beach settings saved."
+    },
+    "calendar": {
+      "title": "Sunbed calendar",
+      "today": "Today",
+      "sunbed": "Sunbed",
+      "pickSunbed": "Pick a sunbed…",
+      "zonePrice": "{price}/day",
+      "newReservation": "New reservation",
+      "editReservation": "Sunbed reservation",
+      "guestName": "Guest name",
+      "guestPhone": "Phone",
+      "guestEmail": "Email (optional)",
+      "startDate": "From date",
+      "endDate": "Until (inclusive)",
+      "status": "Status",
+      "statusPending": "Pending",
+      "statusConfirmed": "Confirmed",
+      "sourceWebsite": "From the website",
+      "sourceReception": "From reception",
+      "cancelReservation": "Cancel reservation",
+      "cancelConfirm": "Cancel {name}'s reservation? The sunbed frees up immediately.",
+      "totalHint": "{days} days × zone price = {total}",
+      "outOfSeason": "Out of season",
+      "noUnitsTitle": "No sunbeds to show yet",
+      "noUnitsHint": "Create zones and generate sunbeds in Map & Prices.",
+      "prevAria": "Previous",
+      "nextAria": "Next",
+      "daysShort": "{count}d"
     }
   }
 }

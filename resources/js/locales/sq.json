@@ -7063,6 +7063,34 @@
       "seasonHint": "Bosh = plazhi i hapur gjithë vitin.",
       "save": "Ruaj cilësimet",
       "saved": "Cilësimet e plazhit u ruajtën."
+    },
+    "calendar": {
+      "title": "Kalendari i çadrave",
+      "today": "Sot",
+      "sunbed": "Çadra",
+      "pickSunbed": "Zgjidh çadrën…",
+      "zonePrice": "{price}/ditë",
+      "newReservation": "Rezervim i ri",
+      "editReservation": "Rezervimi i çadrës",
+      "guestName": "Emri i klientit",
+      "guestPhone": "Telefoni",
+      "guestEmail": "Email (opsional)",
+      "startDate": "Nga data",
+      "endDate": "Deri më (përfshirë)",
+      "status": "Statusi",
+      "statusPending": "Në pritje",
+      "statusConfirmed": "I konfirmuar",
+      "sourceWebsite": "Nga webi",
+      "sourceReception": "Nga recepsioni",
+      "cancelReservation": "Anullo rezervimin",
+      "cancelConfirm": "Anullo rezervimin e {name}? Çadra lirohet menjëherë.",
+      "totalHint": "{days} ditë × çmimi i zonës = {total}",
+      "outOfSeason": "Jashtë sezonit",
+      "noUnitsTitle": "S'ka ende çadra për të shfaqur",
+      "noUnitsHint": "Krijo zonat dhe gjenero çadrat te Harta & Çmimet.",
+      "prevAria": "Prapa",
+      "nextAria": "Para",
+      "daysShort": "{count}d"
     }
   }
 }
