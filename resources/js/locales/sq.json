@@ -7127,7 +7127,29 @@
       "backHome": "Kthehu në faqen kryesore",
       "sea": "Deti",
       "downloadQr": "Shkarko QR-në si foto",
-      "keepLink": "Edhe linku i kësaj faqeje të ruan rezervimin — rihape kurdo."
+      "keepLink": "Edhe linku i kësaj faqeje të ruan rezervimin — rihape kurdo.",
+      "paidBadge": "E paguar online — {date}",
+      "payOnline": "Paguaj online me kartë"
+    },
+    "pay": {
+      "headTitle": "Pagesa e çadrës",
+      "title": "Paguaj çadrën online",
+      "subtitle": "Pagesë e sigurt me kartë përmes POK — rezervimi yt mbetet i vlefshëm edhe pa pagesë online.",
+      "summary": "Çadra {number} · {zone}",
+      "totalLabel": "Totali",
+      "start": "Vazhdo te pagesa",
+      "retry": "Provo përsëri",
+      "loadingForm": "Duke ngarkuar formën e kartës…",
+      "formAria": "Forma e kartës",
+      "confirming": "Duke konfirmuar pagesën…",
+      "confirmFailed": "Konfirmimi dështoi — provo përsëri.",
+      "formFailed": "Forma e pagesës s'u ngarkua.",
+      "sdkLoadFailed": "S'u ngarkua sistemi i pagesës.",
+      "verifying": "Po verifikojmë pagesën tënde — prit pak sekonda.",
+      "refresh": "Rifresko",
+      "optionalNote": "Nëse s'dëshiron të paguash online, thjesht kthehu — paguan në plazh.",
+      "testCardIntro": "Mjedis testimi — përdor kartën",
+      "backToConfirmation": "Kthehu te rezervimi"
     }
   }
 }

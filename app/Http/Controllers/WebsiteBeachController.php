@@ -7,6 +7,10 @@ use App\Models\BeachUnit;
 use App\Models\BeachZone;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\BeachPokPayments;
+use App\Services\PokClient;
+use App\Services\PokConfiguration;
+use App\Services\PricingCurrency;
 use App\Tenancy\TenantRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -133,9 +137,121 @@ class WebsiteBeachController extends Controller
                 'total_amount' => $reservation->total_amount,
                 'guest_name' => $reservation->guest_name,
                 'status' => $reservation->status,
+                'paid_at' => $reservation->paid_at?->toDateTimeString(),
                 'confirmation_url' => route('website.beach.confirmation', $token),
+                'pay_url' => route('website.beach.pay', $token),
+                // Pagesa online ofrohet vetëm kur POK është i konfiguruar dhe s'është paguar ende.
+                'pok_enabled' => app(PokClient::class)->configured()
+                    && $reservation->paid_at === null
+                    && $reservation->status !== BeachReservation::STATUS_CANCELLED
+                    && (float) $reservation->total_amount > 0,
             ],
         ]);
+    }
+
+    /**
+     * Faqja e pagesës POK (sandbox-ready). Ndryshe nga dhomat, pagesa e çadrës
+     * është OPSIONALE — rezervimi mbetet i vlefshëm "paguaj në plazh" edhe pa të,
+     * ndaj order-i POK krijohet vetëm kur klienti zgjedh "Paguaj online".
+     */
+    public function payment(string $token): Response|RedirectResponse
+    {
+        $reservation = BeachReservation::query()
+            ->where('confirmation_token', $token)
+            ->with('unit.zone')
+            ->firstOrFail();
+
+        $pok = app(PokClient::class);
+
+        if ($reservation->paid_at
+            || $reservation->status === BeachReservation::STATUS_CANCELLED
+            || ! $pok->configured()
+            || (float) $reservation->total_amount <= 0) {
+            return redirect()->route('website.beach.confirmation', $token);
+        }
+
+        if (! $reservation->pok_order_id) {
+            try {
+                // Shuma VETËM nga DB — klienti s'e dërgon kurrë.
+                $order = $pok->createOrder((float) $reservation->total_amount, PricingCurrency::code(), [
+                    'webhook' => route('website.pay.webhook'),
+                    'redirect' => route('website.beach.pay', $token),
+                    'fail' => route('website.beach.pay', $token),
+                    'expires' => 30,
+                ]);
+                $reservation->update(['pok_order_id' => $order['id']]);
+            } catch (\Throwable $e) {
+                report($e);
+
+                return redirect()->route('website.beach.confirmation', $token)
+                    ->with('error', "Nuk u lidh dot pagesa me kartë. Provo sërish pas pak — rezervimi yt mbetet i vlefshëm.");
+            }
+        }
+
+        // Klienti mund të ketë paguar tashmë (confirm i humbur / kthim mbrapa) —
+        // ri-verifiko PARA se t'i tregosh një formë karte live.
+        try {
+            if (app(BeachPokPayments::class)->settle($reservation)) {
+                return redirect()->route('website.beach.confirmation', $token);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+
+            return Inertia::render('Website/BookSunbedsPayment', array_merge(
+                $this->beachPaymentProps($reservation, $token),
+                ['openForPayment' => false],
+            ));
+        }
+
+        return Inertia::render('Website/BookSunbedsPayment', array_merge(
+            $this->beachPaymentProps($reservation, $token),
+            ['openForPayment' => true],
+        ));
+    }
+
+    /** Browser-i e thërret pas onSuccess të formës — verifikim server-side, kurrë besim te klienti. */
+    public function paymentConfirm(string $token): RedirectResponse
+    {
+        $reservation = BeachReservation::query()
+            ->where('confirmation_token', $token)
+            ->firstOrFail();
+
+        try {
+            app(BeachPokPayments::class)->settle($reservation);
+        } catch (\Throwable $e) {
+            report($e); // webhook-u është rrjeta e sigurisë — mos i jep 500 klientit
+        }
+
+        if ($reservation->fresh()->paid_at) {
+            return redirect()->route('website.beach.confirmation', $token);
+        }
+
+        return redirect()->route('website.beach.pay', $token)
+            ->with('error', "Pagesa s'u konfirmua ende. Nëse e paguat, prit pak sekonda dhe rifresko.");
+    }
+
+    /** @return array<string, mixed> */
+    private function beachPaymentProps(BeachReservation $reservation, string $token): array
+    {
+        return [
+            'orderId' => $reservation->pok_order_id,
+            'env' => app(PokConfiguration::class)->get('production', false) ? 'production' : 'staging',
+            'amount' => (float) $reservation->total_amount,
+            'currency' => PricingCurrency::symbol(),
+            'confirmUrl' => route('website.beach.pay.confirm', $token),
+            'confirmationUrl' => route('website.beach.confirmation', $token),
+            'payUrl' => rtrim(app(PokConfiguration::class)->payUrl(), '/').'/sdk-orders/'.$reservation->pok_order_id,
+            'initialState' => array_filter([
+                'holdersName' => $reservation->guest_name ?: null,
+                'email' => $reservation->guest_email ?: null,
+                'phoneNumber' => $reservation->guest_phone ?: null,
+            ], fn ($v) => $v !== null && $v !== ''),
+            'unitNumber' => $reservation->unit->number,
+            'zoneName' => $reservation->unit->zone->name,
+            'days' => $reservation->totalDays(),
+            'startDate' => $reservation->start_date->toDateString(),
+            'endDate' => $reservation->end_date->toDateString(),
+        ];
     }
 
     /** @return \Illuminate\Database\Eloquent\Collection<int, BeachZone> */

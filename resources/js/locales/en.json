@@ -7127,7 +7127,29 @@
       "backHome": "Back to the homepage",
       "sea": "The sea",
       "downloadQr": "Download QR as an image",
-      "keepLink": "This page link also keeps your booking — reopen it anytime."
+      "keepLink": "This page link also keeps your booking — reopen it anytime.",
+      "paidBadge": "Paid online — {date}",
+      "payOnline": "Pay online by card"
+    },
+    "pay": {
+      "headTitle": "Sunbed payment",
+      "title": "Pay for your sunbed online",
+      "subtitle": "Secure card payment via POK — your booking stays valid even without paying online.",
+      "summary": "Sunbed {number} · {zone}",
+      "totalLabel": "Total",
+      "start": "Continue to payment",
+      "retry": "Try again",
+      "loadingForm": "Loading the card form…",
+      "formAria": "Card form",
+      "confirming": "Confirming your payment…",
+      "confirmFailed": "Confirmation failed — try again.",
+      "formFailed": "The payment form did not load.",
+      "sdkLoadFailed": "The payment system did not load.",
+      "verifying": "We are verifying your payment — give it a few seconds.",
+      "refresh": "Refresh",
+      "optionalNote": "If you prefer not to pay online, just go back — pay at the beach.",
+      "testCardIntro": "Test environment — use card",
+      "backToConfirmation": "Back to your booking"
     }
   }
 }

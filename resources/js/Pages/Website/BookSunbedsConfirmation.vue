@@ -40,7 +40,17 @@ function downloadQr() {
                         {{ $t('beach.public.confirmedDates', { start: reservation.start_date, end: reservation.end_date, days: reservation.days }) }}
                     </p>
                     <p class="mt-1 text-xl font-bold text-ink">{{ reservation.total_amount }}</p>
-                    <p class="mt-1 text-body-sm text-driftwood">{{ $t('beach.public.payOnSite') }}</p>
+                    <p v-if="reservation.paid_at" class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-ionian/10 px-3 py-1 text-body-sm font-semibold text-ionian">
+                        {{ $t('beach.public.paidBadge', { date: reservation.paid_at }) }}
+                    </p>
+                    <p v-else class="mt-1 text-body-sm text-driftwood">{{ $t('beach.public.payOnSite') }}</p>
+                    <Link
+                        v-if="reservation.pok_enabled"
+                        :href="reservation.pay_url"
+                        class="mx-auto mt-4 block w-full rounded-xl bg-ionian px-6 py-3.5 text-body font-semibold text-bone transition hover:opacity-90"
+                    >
+                        {{ $t('beach.public.payOnline') }}
+                    </Link>
 
                     <div ref="qrWrap" class="mt-6 flex justify-center">
                         <QrCode :value="reservation.confirmation_url" :size="180" :alt="$t('beach.public.qrAlt')" />

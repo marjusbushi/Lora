@@ -122,6 +122,33 @@ class BeachPublicBookingTest extends TestCase
         ))->assertForbidden();
     }
 
+    public function test_payment_page_guards(): void
+    {
+        // Fik POK plotësisht → zero thirrje reale API nga testi: edhe fallback-un
+        // e testing-ut, edhe integrimin që migrimi tenant-core e mbush nga .env.
+        config(['services.pok.testing_legacy_fallback' => false]);
+        \App\Models\TenantIntegration::withoutGlobalScopes()->where('provider', 'pok')->update(['enabled' => false]);
+
+        $start = today()->addDay()->toDateString();
+        $this->post(route('website.beach.submit'), $this->payload($start, $start));
+        $reservation = BeachReservation::sole();
+
+        // Pa POK të konfiguruar (testing) → kthehet te konfirmimi, kurrë formë karte.
+        $this->get(route('website.beach.pay', $reservation->confirmation_token))
+            ->assertRedirect(route('website.beach.confirmation', $reservation->confirmation_token));
+
+        // Token i gabuar → 404.
+        $this->get(route('website.beach.pay', 'token-i-gabuar-000000000000000000000000000'))
+            ->assertNotFound();
+
+        // I paguar tashmë → guard ripagese: gjithmonë kthim te konfirmimi.
+        $reservation->update(['paid_at' => now(), 'pok_order_id' => 'ord-test']);
+        $this->get(route('website.beach.pay', $reservation->confirmation_token))
+            ->assertRedirect(route('website.beach.confirmation', $reservation->confirmation_token));
+        $this->post(route('website.beach.pay.confirm', $reservation->confirmation_token))
+            ->assertRedirect(route('website.beach.confirmation', $reservation->confirmation_token));
+    }
+
     public function test_inactive_unit_cannot_be_booked(): void
     {
         $this->unit->update(['is_active' => false]);
