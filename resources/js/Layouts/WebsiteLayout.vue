@@ -23,6 +23,7 @@ function closeMenu() {
 const page = usePage();
 const settings = computed(() => page.props.settings || {});
 const bookingEnabled = computed(() => page.props.modules?.booking_engine === true);
+const beachEnabled = computed(() => page.props.modules?.beach === true);
 const hotelName = computed(() => settings.value.hotel_name || 'Hotel');
 const logo = computed(() => settings.value.logo ? `/storage/${settings.value.logo}` : null);
 
@@ -55,10 +56,12 @@ const allNavLinks = [
     { key: 'home', href: '/' },
     { key: 'rooms', href: '/rooms' },
     { key: 'book', href: '/book' },
+    { key: 'sunbeds', href: '/book-sunbeds' },
     { key: 'about', href: '/about' },
     { key: 'contact', href: '/contact' },
 ];
-const navLinks = computed(() => allNavLinks.filter((link) => link.key !== 'book' || bookingEnabled.value));
+const navLinks = computed(() => allNavLinks.filter((link) =>
+    (link.key !== 'book' || bookingEnabled.value) && (link.key !== 'sunbeds' || beachEnabled.value)));
 
 function isActive(href) {
     if (href === '/') return page.url === '/';

@@ -5,7 +5,8 @@
     "book": "Rezervo",
     "about": "Rreth Nesh",
     "contact": "Kontakt",
-    "reserve": "Rezervo Tani"
+    "reserve": "Rezervo Tani",
+    "sunbeds": "Shezllonet"
   },
   "sidebar": {
     "open": "Hap",
@@ -7091,6 +7092,40 @@
       "prevAria": "Prapa",
       "nextAria": "Para",
       "daysShort": "{count}d"
+    },
+    "public": {
+      "headTitle": "Rezervo shezllonin",
+      "title": "Rezervo shezllonin",
+      "subtitle": "Zgjidh datat dhe çadrën tënde — rezervimi online lejohet deri {days} ditë përpara.",
+      "stepsLabel": "Hapat e rezervimit",
+      "stepDates": "Datat",
+      "stepSunbed": "Çadra",
+      "stepDetails": "Të dhënat",
+      "fromDate": "Nga data",
+      "toDate": "Deri më (përfshirë)",
+      "daysCount": "{days} ditë plazh",
+      "checking": "Duke kontrolluar…",
+      "seeFree": "Shiko çadrat e lira",
+      "pricePerDay": "{price} / ditë",
+      "pickHint": "Zgjidh një çadër të lirë nga harta.",
+      "selectionSummary": "Çadra {number} · {zone} · {days} ditë = {total}",
+      "continue": "Vazhdo",
+      "name": "Emri i plotë",
+      "phone": "Telefoni",
+      "email": "Email (opsional)",
+      "finalSummary": "Çadra {number} · {zone} · {start} → {end}",
+      "totalLine": "{days} ditë = {total}",
+      "payOnSite": "Paguhet në plazh — pa pagesë online.",
+      "booking": "Duke rezervuar…",
+      "bookNow": "Rezervo",
+      "confirmationHeadTitle": "Rezervimi u krye",
+      "confirmedTitle": "Rezervimi u krye!",
+      "confirmedHint": "Faleminderit, {name} — të presim në plazh.",
+      "confirmedDates": "{start} → {end} · {days} ditë",
+      "qrAlt": "QR i konfirmimit",
+      "showAtBeach": "Trego këtë QR stafit në plazh.",
+      "backHome": "Kthehu në faqen kryesore",
+      "sea": "Deti"
     }
   }
 }

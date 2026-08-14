@@ -84,8 +84,7 @@ class BeachTenantIsolationTest extends TestCase
         $this->get('https://beachb.test/book-sunbeds')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                // shouldExist=false: faqja Vue ndërtohet në task #273 — testi mbron props-at.
-                ->component('Website/BookSunbeds', false)
+                ->component('Website/BookSunbeds')
                 ->has('zones', 1)
                 ->where('zones.0.name', 'Zona B'));
     }

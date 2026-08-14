@@ -5,7 +5,8 @@
     "book": "Book",
     "about": "About",
     "contact": "Contact",
-    "reserve": "Book Now"
+    "reserve": "Book Now",
+    "sunbeds": "Sunbeds"
   },
   "sidebar": {
     "open": "Open",
@@ -7091,6 +7092,40 @@
       "prevAria": "Previous",
       "nextAria": "Next",
       "daysShort": "{count}d"
+    },
+    "public": {
+      "headTitle": "Book a sunbed",
+      "title": "Book a sunbed",
+      "subtitle": "Pick your dates and sunbed — online booking is open up to {days} days ahead.",
+      "stepsLabel": "Booking steps",
+      "stepDates": "Dates",
+      "stepSunbed": "Sunbed",
+      "stepDetails": "Details",
+      "fromDate": "From date",
+      "toDate": "Until (inclusive)",
+      "daysCount": "{days} beach days",
+      "checking": "Checking…",
+      "seeFree": "See free sunbeds",
+      "pricePerDay": "{price} / day",
+      "pickHint": "Pick a free sunbed from the map.",
+      "selectionSummary": "Sunbed {number} · {zone} · {days} days = {total}",
+      "continue": "Continue",
+      "name": "Full name",
+      "phone": "Phone",
+      "email": "Email (optional)",
+      "finalSummary": "Sunbed {number} · {zone} · {start} → {end}",
+      "totalLine": "{days} days = {total}",
+      "payOnSite": "Pay at the beach — no online payment.",
+      "booking": "Booking…",
+      "bookNow": "Book now",
+      "confirmationHeadTitle": "Booking confirmed",
+      "confirmedTitle": "Booking confirmed!",
+      "confirmedHint": "Thank you, {name} — see you at the beach.",
+      "confirmedDates": "{start} → {end} · {days} days",
+      "qrAlt": "Confirmation QR",
+      "showAtBeach": "Show this QR to the beach staff.",
+      "backHome": "Back to the homepage",
+      "sea": "The sea"
     }
   }
 }
