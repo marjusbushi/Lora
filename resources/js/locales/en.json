@@ -7125,7 +7125,9 @@
       "qrAlt": "Confirmation QR",
       "showAtBeach": "Show this QR to the beach staff.",
       "backHome": "Back to the homepage",
-      "sea": "The sea"
+      "sea": "The sea",
+      "downloadQr": "Download QR as an image",
+      "keepLink": "This page link also keeps your booking — reopen it anytime."
     }
   }
 }

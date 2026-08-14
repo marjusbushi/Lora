@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { CalendarDays, Umbrella, ShieldCheck } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
@@ -13,6 +13,15 @@ const props = defineProps({
 });
 
 const step = ref(1);
+const wizardTop = ref(null);
+
+// Sa herë ndërron hapi: fokusi + scroll-i kthehen në krye të wizard-it,
+// që klienti (sidomos në telefon) të mos mbetet i humbur poshtë faqes.
+watch(step, async () => {
+    await nextTick();
+    wizardTop.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    wizardTop.value?.focus({ preventScroll: true });
+});
 const busyUnitIds = ref([]);
 const selectedUnit = ref(null); // {id, number, zoneName, price}
 const loading = ref(false);
@@ -111,7 +120,7 @@ function submit() {
     <WebsiteLayout>
         <section class="bg-bone py-8 sm:py-12">
             <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-                <h1 class="mb-2 text-2xl sm:text-3xl font-semibold text-ink">{{ $t('beach.public.title') }}</h1>
+                <h1 ref="wizardTop" tabindex="-1" class="mb-2 text-2xl sm:text-3xl font-semibold text-ink outline-none">{{ $t('beach.public.title') }}</h1>
                 <p class="mb-8 text-body-sm text-driftwood">
                     {{ $t('beach.public.subtitle', { days: bookingWindowDays }) }}
                 </p>
@@ -208,47 +217,50 @@ function submit() {
                     </div>
                 </div>
 
-                <!-- Hapi 3: të dhënat + përmbledhja -->
-                <form v-else class="space-y-5" @submit.prevent="submit">
-                    <div class="rounded-2xl border border-driftwood/20 bg-white p-5 shadow-sm">
-                        <div class="grid gap-4 sm:grid-cols-2">
-                            <label class="sm:col-span-2">
-                                <span class="mb-2 block text-tiny font-semibold uppercase tracking-wider text-ink/45">{{ $t('beach.public.name') }}</span>
+                <!-- Hapi 3: kompakt — përmbledhja + të dhënat + Rezervo në NJË kartë -->
+                <form v-else class="mx-auto max-w-md" @submit.prevent="submit">
+                    <div class="rounded-2xl border border-driftwood/20 bg-white p-4 shadow-sm sm:p-5">
+                        <div v-if="selectedUnit" class="mb-4 rounded-xl bg-ionian/5 px-3 py-2.5 ring-1 ring-ionian/30">
+                            <p class="text-body-sm font-semibold text-ink">
+                                {{ $t('beach.public.finalSummary', { number: selectedUnit.number, zone: selectedUnit.zoneName, start: dates.start, end: dates.end }) }}
+                            </p>
+                            <p class="text-lg font-bold text-ink">{{ $t('beach.public.totalLine', { days, total }) }}</p>
+                        </div>
+
+                        <div class="space-y-3">
+                            <label class="block">
+                                <span class="mb-1.5 block text-tiny font-semibold uppercase tracking-wider text-ink/45">{{ $t('beach.public.name') }}</span>
                                 <input v-model="form.guest_name" type="text" required class="w-full rounded-xl border-driftwood/30 text-body text-ink focus:border-ionian focus:ring-ionian" />
                                 <p v-if="form.errors.guest_name" class="mt-1 text-body-sm text-error-600">{{ form.errors.guest_name }}</p>
                             </label>
-                            <label>
-                                <span class="mb-2 block text-tiny font-semibold uppercase tracking-wider text-ink/45">{{ $t('beach.public.phone') }}</span>
-                                <input v-model="form.guest_phone" type="tel" required class="w-full rounded-xl border-driftwood/30 text-body text-ink focus:border-ionian focus:ring-ionian" />
-                                <p v-if="form.errors.guest_phone" class="mt-1 text-body-sm text-error-600">{{ form.errors.guest_phone }}</p>
-                            </label>
-                            <label>
-                                <span class="mb-2 block text-tiny font-semibold uppercase tracking-wider text-ink/45">{{ $t('beach.public.email') }}</span>
-                                <input v-model="form.guest_email" type="email" class="w-full rounded-xl border-driftwood/30 text-body text-ink focus:border-ionian focus:ring-ionian" />
-                                <p v-if="form.errors.guest_email" class="mt-1 text-body-sm text-error-600">{{ form.errors.guest_email }}</p>
-                            </label>
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <label class="block">
+                                    <span class="mb-1.5 block text-tiny font-semibold uppercase tracking-wider text-ink/45">{{ $t('beach.public.phone') }}</span>
+                                    <input v-model="form.guest_phone" type="tel" required class="w-full rounded-xl border-driftwood/30 text-body text-ink focus:border-ionian focus:ring-ionian" />
+                                    <p v-if="form.errors.guest_phone" class="mt-1 text-body-sm text-error-600">{{ form.errors.guest_phone }}</p>
+                                </label>
+                                <label class="block">
+                                    <span class="mb-1.5 block text-tiny font-semibold uppercase tracking-wider text-ink/45">{{ $t('beach.public.email') }}</span>
+                                    <input v-model="form.guest_email" type="email" class="w-full rounded-xl border-driftwood/30 text-body text-ink focus:border-ionian focus:ring-ionian" />
+                                    <p v-if="form.errors.guest_email" class="mt-1 text-body-sm text-error-600">{{ form.errors.guest_email }}</p>
+                                </label>
+                            </div>
                         </div>
+
                         <!-- Honeypot i padukshëm kundër bot-eve -->
                         <input v-model="form.website" type="text" name="website" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true" />
                         <p v-if="form.errors.beach_unit_id" role="alert" class="mt-3 rounded-xl border border-error-200 bg-error-50 p-3 text-body-sm text-error-700">{{ form.errors.beach_unit_id }}</p>
                         <p v-if="form.errors.start_date || form.errors.end_date" role="alert" class="mt-3 rounded-xl border border-error-200 bg-error-50 p-3 text-body-sm text-error-700">{{ form.errors.start_date || form.errors.end_date }}</p>
-                    </div>
 
-                    <div v-if="selectedUnit" class="rounded-2xl border border-ionian/30 bg-ionian/5 p-5">
-                        <p class="text-body font-semibold text-ink">
-                            {{ $t('beach.public.finalSummary', { number: selectedUnit.number, zone: selectedUnit.zoneName, start: dates.start, end: dates.end }) }}
-                        </p>
-                        <p class="mt-1 text-xl font-bold text-ink">{{ $t('beach.public.totalLine', { days, total }) }}</p>
-                        <p class="mt-1 flex items-center gap-1.5 text-body-sm text-driftwood"><ShieldCheck class="h-4 w-4" />{{ $t('beach.public.payOnSite') }}</p>
+                        <p class="mt-3 flex items-center gap-1.5 text-body-sm text-driftwood"><ShieldCheck class="h-4 w-4" />{{ $t('beach.public.payOnSite') }}</p>
+                        <button
+                            type="submit"
+                            class="mt-3 w-full rounded-xl bg-ionian px-6 py-3.5 text-body font-semibold text-bone transition hover:opacity-90 disabled:opacity-50"
+                            :disabled="form.processing || !selectedUnit"
+                        >
+                            {{ form.processing ? $t('beach.public.booking') : $t('beach.public.bookNow') }}
+                        </button>
                     </div>
-
-                    <button
-                        type="submit"
-                        class="w-full rounded-xl bg-ionian px-6 py-4 text-body font-semibold text-bone transition hover:opacity-90 disabled:opacity-50"
-                        :disabled="form.processing || !selectedUnit"
-                    >
-                        {{ form.processing ? $t('beach.public.booking') : $t('beach.public.bookNow') }}
-                    </button>
                 </form>
             </div>
         </section>

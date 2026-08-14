@@ -7125,7 +7125,9 @@
       "qrAlt": "QR i konfirmimit",
       "showAtBeach": "Trego këtë QR stafit në plazh.",
       "backHome": "Kthehu në faqen kryesore",
-      "sea": "Deti"
+      "sea": "Deti",
+      "downloadQr": "Shkarko QR-në si foto",
+      "keepLink": "Edhe linku i kësaj faqeje të ruan rezervimin — rihape kurdo."
     }
   }
 }

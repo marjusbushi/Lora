@@ -1,12 +1,25 @@
 <script setup>
+import { ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { CircleCheck } from 'lucide-vue-next';
+import { CircleCheck, Download } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import QrCode from '@/Components/UI/QrCode.vue';
 
 const props = defineProps({
     reservation: { type: Object, required: true },
 });
+
+const qrWrap = ref(null);
+
+// QR-ja ruhet si foto në telefon — klienti s'e humb edhe pa internet në plazh.
+function downloadQr() {
+    const img = qrWrap.value?.querySelector('img');
+    if (!img?.src) return;
+    const link = document.createElement('a');
+    link.href = img.src;
+    link.download = `rezervimi-cadra-${props.reservation.unit_number}.png`;
+    link.click();
+}
 </script>
 
 <template>
@@ -29,10 +42,18 @@ const props = defineProps({
                     <p class="mt-1 text-xl font-bold text-ink">{{ reservation.total_amount }}</p>
                     <p class="mt-1 text-body-sm text-driftwood">{{ $t('beach.public.payOnSite') }}</p>
 
-                    <div class="mt-6 flex justify-center">
+                    <div ref="qrWrap" class="mt-6 flex justify-center">
                         <QrCode :value="reservation.confirmation_url" :size="180" :alt="$t('beach.public.qrAlt')" />
                     </div>
                     <p class="mt-3 text-body-sm text-driftwood">{{ $t('beach.public.showAtBeach') }}</p>
+                    <button
+                        type="button"
+                        class="mx-auto mt-4 flex items-center gap-2 rounded-xl border border-ionian px-5 py-2.5 text-body-sm font-semibold text-ionian transition hover:bg-ionian hover:text-bone"
+                        @click="downloadQr"
+                    >
+                        <Download class="h-4 w-4" />{{ $t('beach.public.downloadQr') }}
+                    </button>
+                    <p class="mt-3 text-body-sm text-driftwood">{{ $t('beach.public.keepLink') }}</p>
                 </div>
 
                 <Link href="/" class="mt-8 inline-block text-body-sm text-ionian underline underline-offset-4">
