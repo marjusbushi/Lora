@@ -137,6 +137,14 @@ class BeachReservationController extends Controller
             ]);
         }
 
+        // Flip-i bulk nuk ndez observer-at — sinkronizo ledger-in shprehimisht
+        // (best-effort: Financa s'guxon të bllokojë pagesën në plazh).
+        try {
+            app(\App\Services\FinanceLedger::class)->recordBeachPayment($beachReservation->fresh());
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return back()->with('success', 'Pagesa u shënua.');
     }
 

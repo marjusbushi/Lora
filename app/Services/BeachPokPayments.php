@@ -45,6 +45,15 @@ class BeachPokPayments
                 'payment_method' => 'online',
             ]);
 
+        if ($flipped === 1) {
+            // Flip-i bulk nuk ndez observer-at — sinkronizo Financën shprehimisht.
+            try {
+                app(FinanceLedger::class)->recordBeachPayment($reservation->fresh());
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
         return $flipped === 1;
     }
 }

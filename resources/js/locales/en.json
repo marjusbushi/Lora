@@ -7068,7 +7068,19 @@
       "paymentModeHint": "Cash = pay at the beach only · Online = the guest goes straight to card payment · Guest's choice = they decide.",
       "paymentCash": "At the beach only (cash/card there)",
       "paymentOnline": "Online by card only",
-      "paymentBoth": "Guest's choice — they decide"
+      "paymentBoth": "Guest's choice — they decide",
+      "moneyTitle": "Beach money — where it goes",
+      "moneyHint": "Same as the POS: new payments follow the choice immediately, history is untouched. The new account is auto-created on the first payment.",
+      "accountShared": "Together with the hotel",
+      "accountSharedText": "Beach cash and cards go to the general Arka/Banka.",
+      "accountSplitCash": "Separate beach cash drawer",
+      "accountSplitCashText": "Beach cash goes to \"Arka Plazh\"; cards to the general bank.",
+      "accountSplitBank": "Separate beach bank",
+      "accountSplitBankText": "Beach cards/online go to \"Banka Plazh\"; cash to the general drawer.",
+      "accountSplitAll": "Both separate",
+      "accountSplitAllText": "Cash to \"Arka Plazh\", cards/online to \"Banka Plazh\".",
+      "accountModeSaved": "Beach account mode saved.",
+      "accountModeNotSaved": "The mode was not saved — try again."
     },
     "calendar": {
       "title": "Sunbed calendar",

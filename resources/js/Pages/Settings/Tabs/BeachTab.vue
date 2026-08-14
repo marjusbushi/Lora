@@ -1,13 +1,31 @@
 <script setup>
+import { ref, watch } from 'vue';
 import { translate } from '@/i18n';
-import { useForm } from '@inertiajs/vue3';
+import { router, useForm } from '@inertiajs/vue3';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import Select from '@/Components/UI/Select.vue';
 
-const props = defineProps({ settings: Object, toasts: Object });
+const props = defineProps({ settings: Object, accountMode: { type: String, default: 'shared' }, toasts: Object });
+
+// Ku shkojnë paratë e plazhit — ruhet menjëherë, pavarësisht formës kryesore (si POS).
+const accountMode = ref(props.accountMode);
+watch(() => props.accountMode, (mode) => { accountMode.value = mode; });
+
+function saveAccountMode(mode) {
+    if (accountMode.value === mode) return;
+    accountMode.value = mode;
+    router.put(route('finance.accounts.beach-mode'), { mode }, {
+        preserveScroll: true,
+        onSuccess: () => props.toasts?.success(translate('beach.settings.accountModeSaved')),
+        onError: () => {
+            accountMode.value = props.accountMode;
+            props.toasts?.error(translate('beach.settings.accountModeNotSaved'));
+        },
+    });
+}
 
 const form = useForm({
     booking_window_days: Number(props.settings?.booking_window_days ?? 10),
@@ -70,5 +88,27 @@ function submit() {
                 </Button>
             </div>
         </form>
+
+        <section class="mt-6 border-t border-neutral-100 pt-5">
+            <h4 class="text-label text-primary-900">{{ $t('beach.settings.moneyTitle') }}</h4>
+            <p class="mt-1 text-small text-neutral-500">{{ $t('beach.settings.moneyHint') }}</p>
+            <div class="mt-3 grid gap-3 md:grid-cols-2">
+                <label
+                    v-for="option in [
+                        { value: 'shared', title: $t('beach.settings.accountShared'), text: $t('beach.settings.accountSharedText') },
+                        { value: 'split_cash', title: $t('beach.settings.accountSplitCash'), text: $t('beach.settings.accountSplitCashText') },
+                        { value: 'split_bank', title: $t('beach.settings.accountSplitBank'), text: $t('beach.settings.accountSplitBankText') },
+                        { value: 'split_all', title: $t('beach.settings.accountSplitAll'), text: $t('beach.settings.accountSplitAllText') },
+                    ]"
+                    :key="option.value"
+                    class="cursor-pointer rounded-xl border p-4"
+                    :class="accountMode === option.value ? 'border-accent-500 bg-accent-50 ring-2 ring-accent-500/10' : 'border-neutral-200'"
+                >
+                    <input :checked="accountMode === option.value" type="radio" name="beach-account-mode" :value="option.value" class="sr-only" @change="saveAccountMode(option.value)">
+                    <strong class="text-body-sm text-primary-900">{{ option.title }}</strong>
+                    <span class="mt-1 block text-tiny text-neutral-500">{{ option.text }}</span>
+                </label>
+            </div>
+        </section>
     </Card>
 </template>

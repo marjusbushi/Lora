@@ -140,6 +140,7 @@ class SettingsController extends Controller
             'integrations' => $integrationCatalog->forSettings($settings),
             'posStaff' => $posSalespeople->staff(),
             'posAccountMode' => FinanceLedger::posAccountMode(),
+            'beachAccountMode' => FinanceLedger::beachAccountMode(),
         ]);
     }
 

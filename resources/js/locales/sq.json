@@ -7068,7 +7068,19 @@
       "paymentModeHint": "Cash = paguhet vetëm në plazh · Online = klienti çohet direkt te pagesa me kartë · Me zgjedhje = klienti vendos vetë.",
       "paymentCash": "Vetëm në plazh (cash/kartë atje)",
       "paymentOnline": "Vetëm online me kartë",
-      "paymentBoth": "Me zgjedhje — klienti vendos"
+      "paymentBoth": "Me zgjedhje — klienti vendos",
+      "moneyTitle": "Arka e plazhit — ku shkojnë paratë",
+      "moneyHint": "Njësoj si POS-i: pagesat e reja ndjekin zgjedhjen menjëherë, historiku nuk preket. Llogaria e re krijohet vetë në pagesën e parë.",
+      "accountShared": "Bashkë me hotelin",
+      "accountSharedText": "Cash dhe kartat e plazhit hyjnë te Arka/Banka e përgjithshme.",
+      "accountSplitCash": "Arkë plazhi më vete",
+      "accountSplitCashText": "Cash-i i plazhit hyn te \"Arka Plazh\"; kartat te Banka e përgjithshme.",
+      "accountSplitBank": "Bankë plazhi më vete",
+      "accountSplitBankText": "Kartat/online të plazhit hyjnë te \"Banka Plazh\"; cash-i te Arka e përgjithshme.",
+      "accountSplitAll": "Të dyja më vete",
+      "accountSplitAllText": "Cash te \"Arka Plazh\", kartat/online te \"Banka Plazh\".",
+      "accountModeSaved": "Modaliteti i arkës së plazhit u ruajt.",
+      "accountModeNotSaved": "Modaliteti nuk u ruajt — provo përsëri."
     },
     "calendar": {
       "title": "Kalendari i çadrave",

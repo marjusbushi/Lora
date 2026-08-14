@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
+use App\Observers\BeachReservationObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+#[ObservedBy([BeachReservationObserver::class])]
 class BeachReservation extends TenantModel
 {
     public const STATUS_PENDING = 'pending';

@@ -47,7 +47,17 @@ class FinanceBackfill extends Command
             }
         });
 
-        $this->info("Ledger synced: {$payments} folio payment(s), {$shifts} shift close(s) — re-runs are no-ops.");
+        $beach = 0;
+        \App\Models\BeachReservation::whereNotNull('paid_at')
+            ->where('paid_at', '>=', $from)
+            ->orderBy('id')
+            ->each(function (\App\Models\BeachReservation $reservation) use ($ledger, &$beach) {
+                if ($ledger->recordBeachPayment($reservation)) {
+                    $beach++;
+                }
+            });
+
+        $this->info("Ledger synced: {$payments} folio payment(s), {$shifts} shift close(s), {$beach} beach payment(s) — re-runs are no-ops.");
 
         return self::SUCCESS;
     }

@@ -55,7 +55,17 @@ class FinanceLedger
             : self::POS_MODE_SHARED;
     }
 
-    public static function accountFor(string $method, ?string $currency = null, bool $pos = false): FinanceAccount
+    /** Plazhi ndjek të njëjtat modalitete si POS-i, me çelës settings-i të vetin. */
+    public static function beachAccountMode(): string
+    {
+        $mode = Setting::get('finance.beach_account_mode');
+
+        return in_array($mode, [self::POS_MODE_SPLIT_CASH, self::POS_MODE_SPLIT_BANK, self::POS_MODE_SPLIT_ALL], true)
+            ? $mode
+            : self::POS_MODE_SHARED;
+    }
+
+    public static function accountFor(string $method, ?string $currency = null, bool $pos = false, ?string $unit = null): FinanceAccount
     {
         FinanceAccount::ensureDefaults();
 
@@ -86,15 +96,16 @@ class FinanceLedger
         $type = $method === 'cash' ? 'cash' : 'bank';
         $currency = strtoupper($currency ?: BaseCurrency::code());
 
-        // POS money gets its own Bar/Restorant accounts only when the hotel
-        // opted in: cash in the split_cash/split_all modes, cards in the
-        // split_bank/split_all modes. Scope — not the (renamable) name — is
-        // the routing key.
-        $mode = self::posAccountMode();
-        $scope = $pos && ($type === 'cash'
+        // Paratë e një NJËSIE (POS ose Plazhi) marrin llogaritë e veta vetëm kur
+        // hoteli e ka zgjedhur: cash në split_cash/split_all, kartat në
+        // split_bank/split_all. Scope — jo emri (i riemërueshëm) — është çelësi
+        // i routimit. $unit gjeneralizon bool-in e vjetër $pos pa e prishur.
+        $unit ??= $pos ? 'pos' : null;
+        $mode = $unit === 'beach' ? self::beachAccountMode() : self::posAccountMode();
+        $scope = $unit !== null && ($type === 'cash'
                 ? in_array($mode, [self::POS_MODE_SPLIT_CASH, self::POS_MODE_SPLIT_ALL], true)
                 : in_array($mode, [self::POS_MODE_SPLIT_BANK, self::POS_MODE_SPLIT_ALL], true))
-            ? 'pos'
+            ? $unit
             : 'general';
 
         // Only SYSTEM accounts may absorb automatic money. A custom account a
@@ -134,7 +145,11 @@ class FinanceLedger
         // missing configuration.
         return FinanceAccount::create([
             'name' => ($type === 'cash' ? 'Arka' : 'Banka')
-                .($scope === 'pos' ? ' Bar/Restorant' : '')
+                .match ($scope) {
+                    'pos' => ' Bar/Restorant',
+                    'beach' => ' Plazh',
+                    default => '',
+                }
                 .($currency === BaseCurrency::code() ? '' : ' '.$currency),
             'type' => $type,
             'currency' => $currency,
@@ -241,6 +256,62 @@ class FinanceLedger
             'created_by' => $payment->created_by,
         ]);
         $ledger->withFrozenAmountBase((float) $payment->amount_base)->save();
+
+        return $ledger;
+    }
+
+    /**
+     * Pasqyron pagesën e një rezervimi çadre (cash/kartë në plazh ose online POK)
+     * në arkë/bankë — të përgjithshmen ose të Plazhit sipas beach_account_mode.
+     * Idempotente mbi sourceable; heqja e shënimit të pagesës e fshin rreshtin.
+     */
+    public function recordBeachPayment(\App\Models\BeachReservation $reservation): ?FinancePayment
+    {
+        if (! $reservation->paid_at
+            || $reservation->status === \App\Models\BeachReservation::STATUS_CANCELLED
+            || (float) $reservation->total_amount <= 0) {
+            $this->removeFor($reservation);
+
+            return null;
+        }
+
+        $baseCurrency = BaseCurrency::code();
+        // Çmimet e plazhit jetojnë në monedhën e shitjes së hotelit.
+        $currency = strtoupper(PricingCurrency::code());
+        $method = match ($reservation->payment_method) {
+            'cash' => 'cash',
+            'online' => 'pok',
+            default => 'card',
+        };
+
+        $fx = $currency === $baseCurrency ? null : $this->fxRate($currency);
+
+        $ledger = FinancePayment::firstOrNew([
+            'sourceable_type' => \App\Models\BeachReservation::class,
+            'sourceable_id' => $reservation->id,
+        ]);
+        $ledger->fill([
+            'direction' => 'in',
+            // Cash-i qëndron i routuar në bazë (një sirtar); karta/POK në monedhë
+            // të huaj shkon te banka e asaj monedhe — njësoj si folio.
+            'account_id' => self::accountFor(
+                $method,
+                $method !== 'cash' && $currency !== $baseCurrency ? $currency : null,
+                unit: 'beach',
+            )->id,
+            'amount' => $reservation->total_amount,
+            'currency' => $currency,
+            'fx_rate' => $fx ? round($fx, 6) : null,
+            'method' => $method,
+            'source' => 'auto',
+            'description' => 'Pagesë plazhi — çadra '.($reservation->unit?->number ?? '?')
+                .', rezervimi #'.$reservation->id,
+            'paid_at' => $reservation->paid_at,
+            'created_by' => $reservation->created_by,
+        ]);
+        $ledger->withFrozenAmountBase(
+            $fx ? round((float) $reservation->total_amount / $fx, 2) : (float) $reservation->total_amount,
+        )->save();
 
         return $ledger;
     }
