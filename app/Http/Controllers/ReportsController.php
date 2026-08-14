@@ -9,6 +9,8 @@ use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\Payment;
 use App\Models\PosOrder;
+use App\Models\PosOutlet;
+use App\Tenancy\TenantRule;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Setting;
@@ -310,18 +312,22 @@ class ReportsController extends Controller
         ]);
     }
 
-    /** POS performance: sales, margin, hourly demand, categories and top items. */
+    /** POS performance: sales, margin, hourly demand, categories and top items — filterable per sales outlet. */
     public function posSales(Request $request, PosPerformanceService $report): Response
     {
+        $request->validate(['outlet' => ['nullable', 'integer', TenantRule::exists('pos_outlets')]]);
+        $outletId = $request->integer('outlet') ?: null;
         [$from, $to] = $this->range($request);
-        $analytics = $report->withComparison(new ReportingPeriod($from, $to));
+        $analytics = $report->withComparison(new ReportingPeriod($from, $to), $outletId);
         $current = $analytics['current'];
 
         return Inertia::render('Reports/PosSales', [
-            'filters' => ['from' => $from, 'to' => $to],
+            'filters' => ['from' => $from, 'to' => $to, 'outlet' => $outletId],
             'analytics' => $analytics,
             'byCategory' => $current['categories'],
             'topItems' => $current['top_items'],
+            'byOutlet' => $current['outlets'],
+            'outlets' => PosOutlet::ordered()->get(['id', 'name']),
             'summary' => $current['summary'],
             'currency' => $this->currency(),
         ]);
@@ -771,8 +777,10 @@ class ReportsController extends Controller
     /** POS sales and refund events by hour-of-day and weekday. */
     public function posHourly(Request $request, PosPerformanceService $report): Response
     {
+        $request->validate(['outlet' => ['nullable', 'integer', TenantRule::exists('pos_outlets')]]);
+        $outletId = $request->integer('outlet') ?: null;
         [$from, $to, $days] = $this->range($request);
-        $analytics = $report->summary(new ReportingPeriod($from, $to));
+        $analytics = $report->summary(new ReportingPeriod($from, $to), $outletId);
         $weekdayLabels = [1 => 'Hën', 2 => 'Mar', 3 => 'Mër', 4 => 'Enj', 5 => 'Pre', 6 => 'Sht', 7 => 'Die'];
         $byHour = collect($analytics['hours'])->map(fn (array $row) => [
             'hour' => $row['hour'],
@@ -786,7 +794,7 @@ class ReportsController extends Controller
         ])->values();
 
         return Inertia::render('Reports/PosHourly', [
-            'filters' => ['from' => $from, 'to' => $to],
+            'filters' => ['from' => $from, 'to' => $to, 'outlet' => $outletId],
             'byHour' => $byHour,
             'byWeekday' => $byWeekday,
             'summary' => [

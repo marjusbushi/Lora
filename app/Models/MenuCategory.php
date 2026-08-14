@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
+
 class MenuCategory extends TenantModel
 {
     protected $fillable = ['name', 'inventory_category_id', 'sort_order', 'outlet', 'warehouse_id'];
@@ -9,6 +11,27 @@ class MenuCategory extends TenantModel
     public function items()
     {
         return $this->hasMany(MenuItem::class);
+    }
+
+    public function outlets()
+    {
+        return $this->belongsToMany(PosOutlet::class, 'menu_category_pos_outlet');
+    }
+
+    /**
+     * Visibility contract: a category with NO pivot rows is visible in every
+     * outlet; with rows, only in the linked ones. Null outlet = no filtering.
+     */
+    public function scopeVisibleForOutlet(Builder $query, ?int $outletId): Builder
+    {
+        if ($outletId === null) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $q) use ($outletId) {
+            $q->whereDoesntHave('outlets')
+                ->orWhereHas('outlets', fn (Builder $o) => $o->whereKey($outletId));
+        });
     }
 
     public function warehouse()

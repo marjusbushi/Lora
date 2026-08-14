@@ -12,6 +12,7 @@ use App\Models\PosFiscalDocument;
 use App\Models\PosOrder;
 use App\Models\PosOrderItem;
 use App\Models\PosOrderPayment;
+use App\Models\PosOutlet;
 use App\Models\PosShift;
 use App\Models\PosTable;
 use App\Models\Reservation;
@@ -57,6 +58,8 @@ class PosController extends Controller
             default => 'sale',
         };
         $posSettings = $this->posSalespeople->settings();
+        $outlets = PosOutlet::active()->ordered()->get(['id', 'name', 'warehouse_id']);
+        $currentOutlet = $this->resolveOutlet($request, $outlets);
         if ($view === 'sale' && ! $request->integer('table') && ! $request->boolean('direct')) {
             if ($posSettings['service_mode'] === 'tables'
                 || ($posSettings['service_mode'] === 'hybrid' && $posSettings['opening_view'] === 'tables')) {
@@ -199,6 +202,9 @@ class PosController extends Controller
 
         $warehouses = Warehouse::where('is_active', true)->get()->keyBy('id');
         $defaultWarehouse = $warehouses->firstWhere('is_default', true) ?? $warehouses->first();
+        // The active outlet's own warehouse wins the stock display, mirroring
+        // the deduction order in InventoryLedger::consumePosOrderItem.
+        $outletWarehouse = $currentOutlet?->warehouse_id ? $warehouses->get($currentOutlet->warehouse_id) : null;
         $warehouseStocks = InventoryMovement::query()
             ->selectRaw('warehouse_id, inventory_item_id, SUM(quantity) as quantity')
             ->groupBy('warehouse_id', 'inventory_item_id')->get()
@@ -206,14 +212,16 @@ class PosController extends Controller
 
         $menu = MenuCategory::with(['items' => fn ($query) => $query
             ->where('is_available', true)->with(['inventoryComponents', 'warehouse'])])
+            ->visibleForOutlet($currentOutlet?->id)
             ->orderBy('sort_order')
             ->get()
-            ->each(function (MenuCategory $category) use ($salesCounts, $warehouses, $defaultWarehouse, $warehouseStocks) {
-                $warehouse = $warehouses->get($category->warehouse_id)
+            ->each(function (MenuCategory $category) use ($salesCounts, $warehouses, $defaultWarehouse, $warehouseStocks, $outletWarehouse) {
+                $warehouse = $outletWarehouse
+                    ?? $warehouses->get($category->warehouse_id)
                     ?? $warehouses->firstWhere('type', $category->outlet)
                     ?? $defaultWarehouse;
-                $category->items->each(function (MenuItem $item) use ($salesCounts, $warehouse, $warehouseStocks) {
-                    $itemWarehouse = $item->warehouse?->is_active ? $item->warehouse : $warehouse;
+                $category->items->each(function (MenuItem $item) use ($salesCounts, $warehouse, $warehouseStocks, $outletWarehouse) {
+                    $itemWarehouse = $outletWarehouse ?? ($item->warehouse?->is_active ? $item->warehouse : $warehouse);
                     $components = $item->inventoryComponents;
                     $available = $components->isEmpty() || ! $itemWarehouse
                         ? null
@@ -289,6 +297,8 @@ class PosController extends Controller
             'currentSalesperson' => ($salesperson = $this->posSalespeople->current($request))->only(['id', 'name']),
             'salespeople' => $this->posSalespeople->staff()->where('enabled', true)->values(),
             'posSettings' => $posSettings,
+            'outlets' => $outlets->map(fn (PosOutlet $outlet) => ['id' => $outlet->id, 'name' => $outlet->name])->values(),
+            'currentOutletId' => $currentOutlet?->id,
             'stats' => [
                 'open' => PosOrder::where('status', 'open')->count(),
                 'today_completed' => PosOrder::where('status', 'completed')->whereNull('refunded_at')->where(function ($today) {
@@ -348,10 +358,34 @@ class PosController extends Controller
         return $flat;
     }
 
+    /**
+     * The device's active outlet: an explicit ?outlet= switch wins and is
+     * remembered in the session; otherwise the remembered one — both checked
+     * against the tenant's ACTIVE outlets on every request, so a stale or
+     * foreign id silently falls back. Null only when the property has no
+     * outlets at all (single-POS behaviour, unchanged).
+     */
+    private function resolveOutlet(Request $request, $activeOutlets): ?PosOutlet
+    {
+        if ($activeOutlets->isEmpty()) {
+            $request->session()->forget('pos.outlet_id');
+
+            return null;
+        }
+
+        $outlet = $request->integer('outlet') ? $activeOutlets->firstWhere('id', $request->integer('outlet')) : null;
+        $outlet ??= $activeOutlets->firstWhere('id', (int) $request->session()->get('pos.outlet_id'));
+        $outlet ??= $activeOutlets->first();
+        $request->session()->put('pos.outlet_id', $outlet->id);
+
+        return $outlet;
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
             'table_number' => ['nullable', 'string', 'max:10'],
+            'outlet_id' => ['nullable', 'integer', TenantRule::exists('pos_outlets')->where('is_active', true)],
             'reservation_id' => ['nullable', TenantRule::exists('reservations')],
             'items' => ['required', 'array', 'min:1'],
             'items.*.menu_item_id' => ['required', TenantRule::exists('menu_items')],
@@ -367,11 +401,19 @@ class PosController extends Controller
             return back()->with('error', 'Hap nje turn para se te krijosh porosi.');
         }
 
-        $order = DB::transaction(function () use ($request, $shift) {
+        // Stamp the order with the device's outlet: the validated request value
+        // first, else the session's remembered outlet (re-checked as active).
+        $outletId = $request->integer('outlet_id') ?: null;
+        if (! $outletId && ($remembered = (int) $request->session()->get('pos.outlet_id'))) {
+            $outletId = PosOutlet::active()->whereKey($remembered)->value('id');
+        }
+
+        $order = DB::transaction(function () use ($request, $shift, $outletId) {
             $order = PosOrder::create([
                 'table_number' => $request->table_number,
                 'reservation_id' => $request->reservation_id,
                 'pos_shift_id' => $shift->id,
+                'outlet_id' => $outletId,
                 'status' => 'open',
                 'created_by' => auth()->id(),
                 'salesperson_id' => $this->posSalespeople->current($request)->id,

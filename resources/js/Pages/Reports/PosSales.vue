@@ -6,7 +6,8 @@ import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import { computed } from 'vue';
 import { Banknote, ChartNoAxesCombined, ReceiptText, ShoppingBasket } from 'lucide-vue-next';
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
+import { MapPin } from 'lucide-vue-next';
 import { useReportDrilldown } from '@/composables/useReportDrilldown';
 
 const props = defineProps({
@@ -14,9 +15,24 @@ const props = defineProps({
     analytics: { type: Object, default: () => ({}) },
     byCategory: { type: Array, default: () => [] },
     topItems: { type: Array, default: () => [] },
+    byOutlet: { type: Array, default: () => [] },
+    outlets: { type: Array, default: () => [] },
     summary: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
 });
+
+// Outlet filter: null = every outlet (today's totals, legacy orders included).
+function setOutlet(outletId) {
+    router.get(route('reports.posSales'), {
+        from: props.filters?.from,
+        to: props.filters?.to,
+        ...(outletId ? { outlet: outletId } : {}),
+    }, { preserveScroll: true });
+}
+
+const outletName = (row) => row.name || translate('reports360.posPerformance.noOutlet');
+const outletTotalOrders = () => props.byOutlet.reduce((s, r) => s + Number(r.orders ?? 0), 0);
+const outletTotalRevenue = () => props.byOutlet.reduce((s, r) => s + Number(r.revenue ?? 0), 0);
 const { can, hasModule } = useReportDrilldown();
 const posHref = () => can('view_pos_orders') && hasModule('pos') ? route('pos.orders', { from: props.filters?.from, to: props.filters?.to }) : null;
 
@@ -52,7 +68,61 @@ const categoryBars = computed(() => props.byCategory.map((row) => ({
 
 <template>
     <ReportShell :title="$t('reports360.posPerformance.title')" route-name="reports.posSales" :filters="filters" :description="$t('reports360.posPerformance.short')" :category="$t('reports360.posPerformance.category')">
+        <div v-if="outlets.length" class="mb-4 flex flex-wrap items-center gap-2">
+            <span class="flex items-center gap-1 text-tiny font-semibold uppercase tracking-wide text-neutral-400">
+                <MapPin class="h-3.5 w-3.5" /> {{ $t('reports360.posPerformance.outletFilterLabel') }}
+            </span>
+            <button
+                type="button"
+                class="rounded-lg px-3 py-1.5 text-body-sm font-semibold transition"
+                :class="!filters?.outlet ? 'bg-accent-600 text-white shadow' : 'bg-white text-neutral-600 border border-neutral-200 hover:bg-accent-50 hover:text-accent-700'"
+                @click="setOutlet(null)"
+            >{{ $t('reports360.posPerformance.outletFilterAll') }}</button>
+            <button
+                v-for="outlet in outlets"
+                :key="outlet.id"
+                type="button"
+                class="rounded-lg px-3 py-1.5 text-body-sm font-semibold transition"
+                :class="filters?.outlet === outlet.id ? 'bg-accent-600 text-white shadow' : 'bg-white text-neutral-600 border border-neutral-200 hover:bg-accent-50 hover:text-accent-700'"
+                @click="setOutlet(outlet.id)"
+            >{{ outlet.name }}</button>
+        </div>
+
         <ReportKpiGrid :items="kpis" />
+
+        <!-- Turnover per outlet — only meaningful once outlets exist and no single-outlet filter hides the split -->
+        <Card v-if="outlets.length && !filters?.outlet && byOutlet.length" :padding="false" class="mt-4">
+            <div class="border-b border-neutral-200 px-5 py-4">
+                <h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.posPerformance.byOutlet') }}</h2>
+                <p class="mt-0.5 text-tiny text-neutral-400">{{ $t('reports360.posPerformance.byOutletHint') }}</p>
+            </div>
+            <table class="min-w-full divide-y divide-neutral-200">
+                <thead class="bg-neutral-50">
+                    <tr>
+                        <th class="px-5 py-3 text-left text-label text-neutral-600">{{ $t('reports360.posPerformance.outletFilterLabel') }}</th>
+                        <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('reports360.posPerformance.orders') }}</th>
+                        <th class="px-5 py-3 text-right text-label text-neutral-600">{{ $t('reports360.posPerformance.revenue') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-200">
+                    <tr v-for="row in byOutlet" :key="row.outlet_id ?? 'none'">
+                        <td class="px-5 py-3 text-body-sm">
+                            <button v-if="row.outlet_id" type="button" class="hover:underline" @click="setOutlet(row.outlet_id)">{{ outletName(row) }}</button>
+                            <span v-else class="text-neutral-500">{{ outletName(row) }}</span>
+                        </td>
+                        <td class="px-5 py-3 text-right text-body-sm tabular-nums">{{ qty(row.orders) }}</td>
+                        <td class="px-5 py-3 text-right text-body-sm font-medium tabular-nums">{{ money(row.revenue) }}</td>
+                    </tr>
+                </tbody>
+                <tfoot class="border-t-2 border-neutral-200 bg-neutral-50">
+                    <tr class="font-semibold">
+                        <td class="px-5 py-3 text-body-sm">{{ $t('admin.generated.k_797d3c41869c') }}</td>
+                        <td class="px-5 py-3 text-right text-body-sm tabular-nums">{{ qty(outletTotalOrders()) }}</td>
+                        <td class="px-5 py-3 text-right text-body-sm tabular-nums">{{ money(outletTotalRevenue()) }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </Card>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-2">
             <ReportBarList :title="$t('reports360.posPerformance.byCategory')" :rows="categoryBars" />

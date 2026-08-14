@@ -13,6 +13,7 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ShiftBanner from '@/Components/Pos/ShiftBanner.vue';
 import PosSalespersonSwitcher from '@/Components/Pos/PosSalespersonSwitcher.vue';
+import OutletSwitcher from '@/Components/Pos/OutletSwitcher.vue';
 import PosReceipt from '@/Components/Invoices/PosReceipt.vue';
 import { ArrowLeft, Banknote, Clock3, Maximize2, Minimize2, Minus, Pencil, Plus, Printer, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, X } from 'lucide-vue-next';
 
@@ -36,6 +37,8 @@ const props = defineProps({
     salespeople: { type: Array, default: () => [] },
     posSettings: { type: Object, default: () => ({}) },
     payCurrencies: { type: Array, default: () => [] },
+    outlets: { type: Array, default: () => [] },
+    currentOutletId: { type: Number, default: null },
 });
 
 const toasts = ref(null);
@@ -523,6 +526,7 @@ function submitOrder(payNow = false) {
     const form = useForm({
         table_number: serviceMode.value === 'table' ? tableNumber.value || null : null,
         reservation_id: serviceMode.value === 'room' ? selectedReservation.value || null : null,
+        outlet_id: props.currentOutletId,
         items: cart.value.map((c) => ({ menu_item_id: c.id, quantity: c.qty })),
         continue_to_payment: payNow,
     });
@@ -779,6 +783,7 @@ onMounted(() => {
                 <p v-if="!touchMode || view !== 'sale'" class="mt-1 text-body-sm text-neutral-500">{{ view === 'sale' ? $t('posIndex.subtitleSale') : view === 'orders' ? $t('posIndex.subtitleOrders') : view === 'receipts' ? $t('posIndex.subtitleReceipts') : $t('posIndex.subtitleShifts') }}</p>
             </div>
             <div v-if="view === 'sale'" class="flex flex-wrap items-center gap-2">
+                <OutletSwitcher v-if="!tableContext" :outlets="outlets" :current-outlet-id="currentOutletId" />
                 <PosSalespersonSwitcher v-if="posSettings.salesperson_enabled" :current="currentSalesperson" :salespeople="salespeople" />
                 <Button v-if="tableContext" variant="outline" class="h-[58px]" :href="route('pos.tables', { table: tableContext.id })"><ArrowLeft class="h-4 w-4" /> {{ $t('posIndex.tables') }}</Button>
                 <Button v-else-if="posSettings.service_mode === 'hybrid'" variant="outline" class="h-[58px]" :href="route('pos.tables')">{{ $t('posIndex.tables') }}</Button>

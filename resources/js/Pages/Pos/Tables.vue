@@ -9,6 +9,7 @@ import Card from '@/Components/UI/Card.vue';
 import Modal from '@/Components/UI/Modal.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import PosSalespersonSwitcher from '@/Components/Pos/PosSalespersonSwitcher.vue';
+import OutletSwitcher from '@/Components/Pos/OutletSwitcher.vue';
 import {
     ArrowRightLeft, Banknote, Check, FileText,
     Plus, Printer, ReceiptText,
@@ -28,6 +29,8 @@ const props = defineProps({
     salespeople: { type: Array, default: () => [] },
     posSettings: { type: Object, default: () => ({}) },
     payCurrencies: { type: Array, default: () => [] },
+    outlets: { type: Array, default: () => [] },
+    currentOutletId: { type: Number, default: null },
 });
 
 const toasts = ref(null);
@@ -264,6 +267,7 @@ onMounted(() => {
                     </div>
                 </div>
                 <div class="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-1 xl:justify-end xl:pb-0">
+                    <OutletSwitcher dense :outlets="outlets" :current-outlet-id="currentOutletId" />
                     <PosSalespersonSwitcher v-if="posSettings.salesperson_enabled" dense :current="currentSalesperson" :salespeople="salespeople" />
                     <div v-if="selectedTable" class="inline-flex h-12 shrink-0 items-center rounded-lg bg-neutral-100 px-3 text-body-sm font-bold whitespace-nowrap text-primary-900">
                         {{ selectedTable.name }} · {{ selectedOrder ? money(selectedOrder.total_amount) : $t('posTables.statusFree') }}

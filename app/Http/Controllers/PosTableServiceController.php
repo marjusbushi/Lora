@@ -7,6 +7,7 @@ use App\Models\MenuItem;
 use App\Models\PosOrder;
 use App\Models\PosOrderItem;
 use App\Models\PosOrderRound;
+use App\Models\PosOutlet;
 use App\Models\PosShift;
 use App\Models\PosTable;
 use App\Models\Reservation;
@@ -41,8 +42,25 @@ class PosTableServiceController extends Controller
 
         $this->ensureDefaultTables();
 
+        // Same device-outlet contract as PosController::resolveOutlet — the
+        // session key is shared so the waiter's pick follows them across the
+        // sale and tables screens.
+        $outlets = PosOutlet::active()->ordered()->get(['id', 'name']);
+        $currentOutlet = null;
+        if ($outlets->isNotEmpty()) {
+            $currentOutlet = ($request->integer('outlet') ? $outlets->firstWhere('id', $request->integer('outlet')) : null)
+                ?? $outlets->firstWhere('id', (int) $request->session()->get('pos.outlet_id'))
+                ?? $outlets->first();
+            $request->session()->put('pos.outlet_id', $currentOutlet->id);
+        } else {
+            $request->session()->forget('pos.outlet_id');
+        }
+
         $tables = PosTable::query()
             ->where('is_active', true)
+            ->when($currentOutlet, fn ($query) => $query->where(fn ($q) => $q
+                ->whereNull('outlet_id')
+                ->orWhere('outlet_id', $currentOutlet->id)))
             ->orderBy('area')
             ->orderBy('sort_order')
             ->orderBy('number')
@@ -87,6 +105,8 @@ class PosTableServiceController extends Controller
         return Inertia::render('Pos/Tables', [
             'tables' => $payload,
             'areas' => $tables->pluck('area')->unique()->values(),
+            'outlets' => $outlets->map(fn (PosOutlet $outlet) => ['id' => $outlet->id, 'name' => $outlet->name])->values(),
+            'currentOutletId' => $currentOutlet?->id,
             'activeReservations' => $activeReservations,
             'currentShift' => ($shift = PosShift::currentFor($request->user()->id)) ? [
                 'id' => $shift->id,
@@ -130,10 +150,16 @@ class PosTableServiceController extends Controller
             $order = PosOrder::query()->where('pos_table_id', $table->id)->where('status', 'open')->lockForUpdate()->first();
 
             if (! $order) {
+                // A table's own outlet is the truth for table service; a
+                // shared (outlet-less) table falls back to the device outlet.
+                $outletId = $table->outlet_id
+                    ?: PosOutlet::active()->whereKey((int) $request->session()->get('pos.outlet_id'))->value('id');
+
                 $order = PosOrder::create([
                     'pos_table_id' => $table->id,
                     'table_number' => $table->number,
                     'pos_shift_id' => $shift->id,
+                    'outlet_id' => $outletId,
                     'status' => 'open',
                     'service_status' => 'open',
                     'covers' => $data['covers'] ?? null,
