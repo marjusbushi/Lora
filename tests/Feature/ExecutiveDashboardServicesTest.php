@@ -105,14 +105,17 @@ class ExecutiveDashboardServicesTest extends TestCase
                 'children' => 0,
                 'channel' => $index % 2 === 0 ? 'direct' : 'booking.com',
             ]);
+            // The historical as-of below (2026-07-18) reconstructs the ledger:
+            // bookings and payments stamped "now" would vanish from the past view.
+            $this->backdate($reservation, '2026-04-01 10:00:00');
 
             if ($stay['paid'] > 0) {
-                Payment::create([
+                $this->backdate(Payment::create([
                     'reservation_id' => $reservation->id,
                     'amount' => $stay['paid'],
                     'method' => 'cash',
                     'created_by' => $user->id,
-                ]);
+                ]), '2026-07-15 12:00:00');
             }
         }
 
@@ -133,20 +136,21 @@ class ExecutiveDashboardServicesTest extends TestCase
             'adults' => 1,
             'channel' => 'direct',
         ]);
-        Payment::create([
+        $this->backdate($paidStay, '2026-04-01 10:00:00');
+        $this->backdate(Payment::create([
             'reservation_id' => $paidStay->id,
             'amount' => 100,
             'method' => 'cash',
             'created_by' => $user->id,
-        ]);
+        ]), '2026-07-15 12:00:00');
         $refundedStay = Reservation::whereHas('room', fn ($query) => $query->where('room_number', '202'))->firstOrFail();
-        Payment::create([
+        $this->backdate(Payment::create([
             'reservation_id' => $refundedStay->id,
             'amount' => 10,
             'method' => 'cash',
             'type' => 'refund',
             'created_by' => $user->id,
-        ]);
+        ]), '2026-07-15 12:30:00');
 
         $analytics = app(OutstandingBalanceService::class)->analytics(CarbonImmutable::parse('2026-07-18'));
         $buckets = collect($analytics['buckets'])->keyBy('key');
@@ -165,5 +169,15 @@ class ExecutiveDashboardServicesTest extends TestCase
         $this->assertSame(40.0, $buckets['61_plus']['amount']);
         $this->assertSame('61_plus', $analytics['rows'][0]['bucket']);
         $this->assertSame(10.0, collect($analytics['rows'])->firstWhere('room', '202')['paid']);
+    }
+
+    private function backdate(Reservation|Payment $model, string $timestamp): void
+    {
+        $model->timestamps = false;
+        $fill = ['created_at' => $timestamp, 'updated_at' => $timestamp];
+        if ($model instanceof Reservation) {
+            $fill['booked_at'] = $timestamp;
+        }
+        $model->forceFill($fill)->saveQuietly();
     }
 }
