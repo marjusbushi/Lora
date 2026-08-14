@@ -15,9 +15,13 @@ const props = defineProps({
     staff: { type: Array, default: () => [] },
     accountMode: { type: String, default: 'shared' },
     outlets: { type: Array, default: () => [] },
+    outletLimit: { type: Number, default: 1 },
     warehouses: { type: Array, default: () => [] },
     toasts: Object,
 });
+
+// Limiti i abonimit (pasqyrim i guard-it server-side te storePosOutlet).
+const outletLimitReached = computed(() => props.outlets.length >= props.outletLimit);
 
 // --- Sales outlets (Restorant / Bar / Beach Bar) ---
 const showOutletModal = ref(false);
@@ -187,8 +191,12 @@ function digitsOnly(event) {
                     <div>
                         <h4 class="text-label text-primary-900">{{ $t('settingsPos.outletsTitle') }}</h4>
                         <p class="mt-1 text-small text-neutral-500">{{ $t('settingsPos.outletsHint') }}</p>
+                        <p class="mt-1 text-small font-medium" :class="outletLimitReached ? 'text-amber-700' : 'text-neutral-500'">
+                            {{ $t('settingsPos.outletSubscription', { count: outlets.length, limit: outletLimit }) }}
+                            <template v-if="outletLimitReached"> · {{ $t('settingsPos.outletLimitReached') }}</template>
+                        </p>
                     </div>
-                    <Button v-if="outlets.length" type="button" size="sm" variant="outline" @click="openCreateOutlet">
+                    <Button v-if="outlets.length" type="button" size="sm" variant="outline" :disabled="outletLimitReached" @click="openCreateOutlet">
                         <Plus class="h-4 w-4" /> {{ $t('settingsPos.addOutlet') }}
                     </Button>
                 </div>

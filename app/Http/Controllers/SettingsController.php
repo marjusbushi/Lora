@@ -136,6 +136,9 @@ class SettingsController extends Controller
                 }),
             'posOutlets' => PosOutlet::ordered()->withCount('orders')
                 ->get(['id', 'name', 'warehouse_id', 'is_active', 'sort_order']),
+            // Sa pika mbulon abonimi (quantity e entitlement-it 'pos') — UI e pasqyron;
+            // kufiri real zbatohet server-side te storePosOutlet.
+            'posOutletLimit' => $this->posOutletLimit(),
             'inventoryCategoryTree' => InventoryCategory::flatTree(),
             'inventoryItems' => InventoryItem::where('is_active', true)->where('type', '!=', 'service')
                 ->orderBy('name')->get(['id', 'name', 'sku', 'unit']),
@@ -915,12 +918,32 @@ class SettingsController extends Controller
     }
 
     // --- POS Outlets (pikat e shitjes: Restorant / Bar / Beach Bar) ---
+
+    /** Sa pika shitjeje mbulon abonimi — quantity e entitlement-it 'pos' (min 1). */
+    private function posOutletLimit(): int
+    {
+        $tenant = app(\App\Tenancy\TenantContext::class)->tenant();
+
+        return max(1, (int) ($tenant?->moduleEntitlements()
+            ->where('module_code', 'pos')
+            ->value('quantity') ?? 1));
+    }
+
     public function storePosOutlet(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:80', TenantRule::unique('pos_outlets', 'name')],
             'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
         ]);
+
+        // Limiti i abonimit: hoteli hap vetëm aq pika sa ka paguar. Kufiri zbatohet
+        // KËTU (server-side) — butoni i fikur në UI është vetëm pasqyrim.
+        $limit = $this->posOutletLimit();
+        if (PosOutlet::count() >= $limit) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'name' => "Abonimi juaj mbulon {$limit} pika shitjeje — për një pikë të re kontaktoni Lora PMS.",
+            ]);
+        }
 
         PosOutlet::create([
             'name' => $data['name'],
