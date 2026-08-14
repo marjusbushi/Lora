@@ -42,8 +42,60 @@ class OutstandingReportPayloadTest extends TestCase
                 ->where('analytics.rows.0.balance', fn ($balance) => abs((float) $balance - 150.0) < 0.005)
                 ->has('pricingCurrency')
                 ->has('baseToPricingRate')
+                // v2 contract is additive: states + real/exposure split + filters echo.
+                ->where('analytics.rows.0.state', 'due')
+                ->has('analytics.summary.real_total')
+                ->has('analytics.summary.real_count')
+                ->has('analytics.summary.exposure_total')
+                ->has('analytics.summary.exposure_count')
+                ->has('analytics.buckets')
+                ->has('analytics.statuses')
+                ->where('filters.as_of', null)
                 // The migration-era duplicates are gone — analytics is the only source.
                 ->missing('rows')
                 ->missing('total'));
+    }
+
+    public function test_as_of_and_arrival_params_are_accepted_and_echoed(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $yesterday = today()->subDay()->toDateString();
+
+        $this->actingAs($admin)
+            ->get(route('reports.outstanding', ['as_of' => $yesterday, 'arrival_from' => $yesterday]))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Reports/Outstanding')
+                ->where('filters.as_of', $yesterday)
+                ->where('filters.arrival_from', $yesterday)
+                ->where('analytics.as_of', $yesterday));
+    }
+
+    public function test_invalid_filter_params_are_rejected(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)
+            ->get(route('reports.outstanding', ['as_of' => today()->addDay()->toDateString()]))
+            ->assertSessionHasErrors(['as_of']);
+
+        $this->actingAs($admin)
+            ->getJson(route('reports.outstanding', ['as_of' => today()->addDay()->toDateString()]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['as_of']);
+
+        $this->actingAs($admin)
+            ->getJson(route('reports.outstanding', ['as_of' => 'jo-datë']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['as_of']);
+
+        $this->actingAs($admin)
+            ->getJson(route('reports.outstanding', ['arrival_from' => '2026-08-10', 'arrival_to' => '2026-08-01']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['arrival_to']);
     }
 }

@@ -222,10 +222,42 @@ class ReportsController extends Controller
     /** Outstanding balances (debtors): every non-cancelled stay that still owes money. */
     public function outstanding(Request $request, OutstandingBalanceService $outstandingBalances): Response
     {
-        $analytics = $outstandingBalances->analytics();
+        $request->validate([
+            'as_of' => [
+                'nullable',
+                'date_format:Y-m-d',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    // date_format already rejects garbage — parsing it here would 500.
+                    if (\DateTime::createFromFormat('Y-m-d', (string) $value) === false) {
+                        return;
+                    }
+                    if (Carbon::parse($value)->isAfter(today())) {
+                        $fail(app()->getLocale() === 'sq'
+                            ? 'Data "deri më" nuk mund të jetë në të ardhmen.'
+                            : 'The as-of date cannot be in the future.');
+                    }
+                },
+            ],
+            'arrival_from' => ['nullable', 'date_format:Y-m-d'],
+            'arrival_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:arrival_from'],
+        ]);
+
+        $asOf = $request->filled('as_of')
+            ? \Carbon\CarbonImmutable::parse($request->input('as_of'))
+            : null;
+        $analytics = $outstandingBalances->analytics(
+            $asOf,
+            $request->input('arrival_from'),
+            $request->input('arrival_to'),
+        );
 
         return Inertia::render('Reports/Outstanding', [
             'analytics' => $analytics,
+            'filters' => [
+                'as_of' => $request->input('as_of'),
+                'arrival_from' => $request->input('arrival_from'),
+                'arrival_to' => $request->input('arrival_to'),
+            ],
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'currency' => $this->currency(),
             'pricingCurrency' => PricingCurrency::code(),
@@ -1015,6 +1047,11 @@ class ReportsController extends Controller
                     // to the start of the month, so a lone far-future "to"
                     // must not slip past the cap.
                     $effectiveFrom = $request->input('from', now()->startOfMonth()->toDateString());
+                    // Malformed dates are date_format's job — parsing them here would 500.
+                    if (\DateTime::createFromFormat('Y-m-d', (string) $value) === false
+                        || \DateTime::createFromFormat('Y-m-d', (string) $effectiveFrom) === false) {
+                        return;
+                    }
                     if (Carbon::parse($effectiveFrom)->diffInDays(Carbon::parse($value)) > 366) {
                         $fail(app()->getLocale() === 'sq'
                             ? 'Periudha e raportit nuk mund të kalojë 367 ditë.'
