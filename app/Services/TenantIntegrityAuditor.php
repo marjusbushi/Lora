@@ -11,6 +11,9 @@ final class TenantIntegrityAuditor
 {
     /** @var list<array{0:string,1:string,2:string}> */
     private const RELATIONS = [
+        ['beach_reservations', 'beach_unit_id', 'beach_units'],
+        ['beach_reservations', 'reservation_id', 'reservations'],
+        ['beach_units', 'beach_zone_id', 'beach_zones'],
         ['bill_items', 'bill_id', 'bills'],
         ['bill_items', 'inventory_item_id', 'inventory_items'],
         ['bill_items', 'warehouse_id', 'warehouses'],

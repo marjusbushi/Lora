@@ -26,6 +26,7 @@ class TenantRoleService
                 'view_maintenance', 'create_maintenance', 'update_maintenance', 'delete_maintenance',
                 'view_pos_orders', 'create_pos_orders', 'update_pos_orders', 'delete_pos_orders',
                 'open_pos_shift', 'close_pos_shift', 'close_any_pos_shift',
+                'view_beach', 'create_beach', 'update_beach',
                 'view_reports',
                 // Finance: everything operational EXCEPT bank visibility,
                 // finance settings and deleting records (owner-only).
@@ -40,6 +41,7 @@ class TenantRoleService
                 'view_maintenance', 'create_maintenance', 'update_maintenance',
                 'view_pos_orders', 'create_pos_orders', 'update_pos_orders',
                 'open_pos_shift', 'close_pos_shift',
+                'view_beach', 'create_beach', 'update_beach',
                 'view_reports',
                 // Finance: sees the arka and records incoming payments only.
                 'view_finance', 'create_payment',
@@ -83,6 +85,7 @@ class TenantRoleService
             'maintenance' => ['view', 'create', 'update', 'delete'],
             'pos_orders' => ['view', 'create', 'update', 'delete'],
             'pos_shift' => ['open', 'close', 'close_any'],
+            'beach' => ['view', 'create', 'update', 'delete'],
             'reports' => ['view'],
             'settings' => ['view', 'update'],
             'users' => ['view', 'create', 'update', 'delete'],

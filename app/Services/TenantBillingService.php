@@ -25,6 +25,8 @@ class TenantBillingService
 
     public const SMART_PRICING = 'smart_pricing';
 
+    public const BEACH = 'beach';
+
     public function catalog(): array
     {
         return config('lora_modules.modules', []);

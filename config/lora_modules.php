@@ -55,5 +55,12 @@ return [
             'unit_label' => 'muaj',
             'unit_price_cents' => 1900,
         ],
+        'beach' => [
+            'name' => 'Plazhi',
+            'description' => 'Rezervim shezllonesh online dhe porosi me QR nga çadra.',
+            'billing_model' => 'flat',
+            'unit_label' => 'muaj',
+            'unit_price_cents' => 1900,
+        ],
     ],
 ];
