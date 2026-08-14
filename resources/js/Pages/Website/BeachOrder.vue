@@ -96,7 +96,8 @@ const submitError = computed(() => form.errors.order || form.errors.inventory ||
             </div>
 
             <!-- Zgjedhësi i kategorisë — gjithmonë i dukshëm, ngjitur nën hero -->
-            <div v-if="menu.length" class="sticky top-0 z-10 border-b border-driftwood/10 bg-bone/95 py-2.5 backdrop-blur">
+            <!-- top-16: WebsiteLayout ka header fiks h-16 me z-50 — pa offset, shiriti fshihet nën të kur bën scroll -->
+            <div v-if="menu.length" class="sticky top-16 z-10 border-b border-driftwood/10 bg-bone/95 py-2.5 backdrop-blur">
                 <div class="mx-auto flex max-w-lg gap-2 overflow-x-auto px-4 sm:px-6 [scrollbar-width:none]">
                     <button
                         v-for="category in menu"
