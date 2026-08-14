@@ -5,8 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\BeachReservation;
 use App\Models\BeachUnit;
 use App\Models\BeachZone;
+use App\Models\MenuCategory;
+use App\Models\MenuItem;
+use App\Models\PosOrder;
+use App\Models\PosOrderItem;
+use App\Models\PosOutlet;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\InventoryLedger;
 use App\Services\BeachPokPayments;
 use App\Services\BeachPricing;
 use App\Services\PokClient;
@@ -127,14 +133,140 @@ class WebsiteBeachController extends Controller
     }
 
     /**
-     * QR-ja e printuar në çadër është E PËRJETSHME (/s/{token}). Në V1 çon te
-     * rezervimi; në V2 do të çojë te menuja e barit me çadrën e para-plotësuar.
+     * QR-ja e printuar në çadër është E PËRJETSHME (/s/{token}). Kur admini ka
+     * caktuar pikën POS të plazhit (beach.pos_outlet_id), QR-ja hap POROSINË
+     * nga çadra; pa të, ruhet sjellja V1 — redirect te rezervimi.
      */
-    public function qr(string $qrToken): RedirectResponse
+    public function qr(string $qrToken): Response|RedirectResponse
     {
-        BeachUnit::query()->where('qr_token', $qrToken)->firstOrFail();
+        $unit = BeachUnit::query()->where('qr_token', $qrToken)->with('zone')->firstOrFail();
+        $outlet = $this->orderingOutlet();
 
-        return redirect()->route('website.beach');
+        if (! $outlet) {
+            return redirect()->route('website.beach');
+        }
+
+        return Inertia::render('Website/BeachOrder', [
+            'unit' => ['number' => $unit->number, 'zone_name' => $unit->zone->name],
+            'qrToken' => $qrToken,
+            'outletName' => $outlet->name,
+            'menu' => $this->publicMenu($outlet),
+            'currency' => PricingCurrency::symbol(),
+            'reserveUrl' => route('website.beach'),
+        ]);
+    }
+
+    /** Porosia nga çadra: PosOrder normale, e vulosur me pikën + çadrën, pa login. */
+    public function order(Request $request, string $qrToken): RedirectResponse
+    {
+        $unit = BeachUnit::query()->where('qr_token', $qrToken)->firstOrFail();
+        $outlet = $this->orderingOutlet();
+
+        if (! $outlet) {
+            throw ValidationException::withMessages([
+                'order' => 'Porositë nga plazhi nuk janë aktive për momentin — drejtohu te bari.',
+            ]);
+        }
+
+        $request->validate([
+            'items' => ['required', 'array', 'min:1', 'max:30'],
+            'items.*.menu_item_id' => ['required', TenantRule::exists('menu_items')->where('is_available', true)],
+            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:20'],
+        ]);
+
+        // Attribution: the same self-healing system user as public room bookings
+        // (soft-delete guard included — the #30 outage lesson).
+        $creator = User::systemForCurrentTenant();
+
+        $order = DB::transaction(function () use ($request, $unit, $outlet, $creator) {
+            $order = PosOrder::create([
+                'outlet_id' => $outlet->id,
+                'beach_unit_id' => $unit->id,
+                // Staff-facing location; the column is 10 chars (typical unit
+                // numbers are 1-3 chars) — beach_unit_id carries full identity.
+                'table_number' => mb_substr('Çadra '.$unit->number, 0, 10),
+                'guest_token' => Str::random(40),
+                'status' => 'open',
+                'created_by' => $creator->id,
+                'total_amount' => 0,
+                'business_date' => today(),
+            ]);
+
+            foreach ($request->items as $line) {
+                $menuItem = MenuItem::findOrFail($line['menu_item_id']);
+                $orderItem = PosOrderItem::create([
+                    'pos_order_id' => $order->id,
+                    'menu_item_id' => $menuItem->id,
+                    'quantity' => $line['quantity'],
+                    'unit_price' => $menuItem->price,
+                    'total_price' => $menuItem->price * $line['quantity'],
+                ]);
+                // Stock reserves immediately, exactly like the staff POS — an
+                // out-of-stock item aborts the WHOLE order (transaction).
+                app(InventoryLedger::class)->consumePosOrderItem($orderItem, $creator->id);
+            }
+
+            $order->recalculateTotal();
+
+            return $order;
+        });
+
+        return redirect()->route('website.beach.order.status', $order->guest_token);
+    }
+
+    /** Statusi publik i porosisë me guest_token — "paguaj në dorëzim". */
+    public function orderStatus(string $guestToken): Response
+    {
+        $order = PosOrder::query()
+            ->where('guest_token', $guestToken)
+            ->with(['items.menuItem:id,name', 'beachUnit.zone'])
+            ->firstOrFail();
+
+        return Inertia::render('Website/BeachOrderStatus', [
+            'order' => [
+                'unit_number' => $order->beachUnit?->number,
+                'zone_name' => $order->beachUnit?->zone?->name,
+                'status' => $order->refunded_at ? 'refunded' : ($order->cancelled_at ? 'cancelled' : $order->status),
+                'total_amount' => (float) $order->total_amount,
+                'currency' => PricingCurrency::symbol(),
+                'created_at' => $order->created_at->format('H:i'),
+                'items' => $order->items->map(fn (PosOrderItem $item) => [
+                    'name' => $item->menuItem?->name ?? 'Artikull',
+                    'quantity' => (int) $item->quantity,
+                    'total_price' => (float) $item->total_price,
+                ])->values(),
+                'status_url' => route('website.beach.order.status', $guestToken),
+            ],
+        ]);
+    }
+
+    /** Pika POS ku rrugëtohen porositë e plazhit — e caktuar te Settings → Plazhi. */
+    private function orderingOutlet(): ?PosOutlet
+    {
+        $outletId = (int) Setting::get('beach.pos_outlet_id', 0);
+
+        return $outletId ? PosOutlet::active()->find($outletId) : null;
+    }
+
+    /** Menuja publike e pikës së plazhit — respekton dukshmërinë per pikë (#408). */
+    private function publicMenu(PosOutlet $outlet): array
+    {
+        return MenuCategory::query()
+            ->visibleForOutlet($outlet->id)
+            ->with(['items' => fn ($query) => $query->where('is_available', true)->orderBy('name')])
+            ->orderBy('sort_order')
+            ->get()
+            ->filter(fn (MenuCategory $category) => $category->items->isNotEmpty())
+            ->map(fn (MenuCategory $category) => [
+                'id' => $category->id,
+                'name' => $category->name,
+                'items' => $category->items->map(fn (MenuItem $item) => [
+                    'id' => $item->id,
+                    'name' => $item->name,
+                    'price' => (float) $item->price,
+                    'image_path' => $item->image_path,
+                ])->values(),
+            ])->values()->all();
     }
 
     public function confirmation(string $token): Response

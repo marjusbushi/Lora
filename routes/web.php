@@ -92,6 +92,8 @@ Route::post('/book-sunbeds', [WebsiteBeachController::class, 'submit'])->middlew
 Route::get('/book-sunbeds/confirmation/{token}', [WebsiteBeachController::class, 'confirmation'])->middleware('module:beach')->name('website.beach.confirmation');
 // QR i përjetshëm i çadrës (i printuar një herë): V1 → rezervimi; V2 → porosia te bari.
 Route::get('/s/{qrToken}', [WebsiteBeachController::class, 'qr'])->middleware(['module:beach', 'throttle:60,1'])->name('website.beach.qr');
+Route::post('/s/{qrToken}/order', [WebsiteBeachController::class, 'order'])->middleware(['module:beach', 'throttle:10,1'])->name('website.beach.order.submit');
+Route::get('/beach-order/{guestToken}', [WebsiteBeachController::class, 'orderStatus'])->middleware(['module:beach', 'throttle:60,1'])->name('website.beach.order.status');
 // Pagesa POK e çadrës (opsionale — rezervimi vlen edhe "paguaj në plazh").
 Route::get('/book-sunbeds/pay/{token}', [WebsiteBeachController::class, 'payment'])->middleware(['module:beach', 'throttle:30,1'])->name('website.beach.pay');
 Route::post('/book-sunbeds/pay/{token}', [WebsiteBeachController::class, 'paymentConfirm'])->middleware(['module:beach', 'throttle:20,1'])->name('website.beach.pay.confirm');
