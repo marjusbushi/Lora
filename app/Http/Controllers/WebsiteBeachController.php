@@ -170,9 +170,31 @@ class WebsiteBeachController extends Controller
 
         $request->validate([
             'items' => ['required', 'array', 'min:1', 'max:30'],
-            'items.*.menu_item_id' => ['required', TenantRule::exists('menu_items')->where('is_available', true)],
+            'items.*.menu_item_id' => ['required', 'distinct', TenantRule::exists('menu_items')->where('is_available', true)],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:20'],
         ]);
+
+        // The menu HIDES other outlets' items — the order must REFUSE them too
+        // (board finding: a crafted id would otherwise bypass visibility and
+        // draw the beach outlet's stock for a restaurant-only item).
+        $requestedIds = collect($request->items)->pluck('menu_item_id')->map(fn ($id) => (int) $id);
+        $visibleIds = MenuItem::query()
+            ->whereIn('id', $requestedIds)
+            ->whereHas('category', fn ($query) => $query->visibleForOutlet($outlet->id))
+            ->pluck('id');
+        if ($requestedIds->diff($visibleIds)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'items' => 'Disa artikuj nuk ofrohen nga kjo pikë — rifresko menunë.',
+            ]);
+        }
+
+        // A photographed QR is a forever-valid credential — cap the damage a
+        // bot can do: at most 3 OPEN orders per sunbed, whatever the IP count.
+        if (PosOrder::query()->where('beach_unit_id', $unit->id)->where('status', 'open')->count() >= 3) {
+            throw ValidationException::withMessages([
+                'order' => 'Keni tashmë porosi në pritje për këtë çadër — prit dorëzimin para se të porositësh sërish.',
+            ]);
+        }
 
         // Attribution: the same self-healing system user as public room bookings
         // (soft-delete guard included — the #30 outage lesson).

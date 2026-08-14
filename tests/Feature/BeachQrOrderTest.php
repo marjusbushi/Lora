@@ -182,6 +182,57 @@ class BeachQrOrderTest extends TestCase
         $this->get(route('website.beach.order.status', str_repeat('x', 40)))->assertNotFound();
     }
 
+    public function test_items_hidden_from_the_beach_outlet_cannot_be_ordered_by_id(): void
+    {
+        $restorant = PosOutlet::create(['name' => 'Restorant']);
+        $onlyRestorant = MenuCategory::create(['name' => 'Ushqim', 'sort_order' => 2]);
+        $pasta = MenuItem::create(['menu_category_id' => $onlyRestorant->id, 'name' => 'Pasta', 'price' => 9, 'is_available' => true]);
+        $onlyRestorant->outlets()->sync([$restorant->id]);
+
+        // The menu hides it — a crafted POST with its id must be refused too.
+        $this->postJson(route('website.beach.order.submit', $this->unit->qr_token), [
+            'items' => [['menu_item_id' => $pasta->id, 'quantity' => 1]],
+        ])->assertStatus(422);
+        $this->assertSame(0, PosOrder::count());
+    }
+
+    public function test_open_orders_per_sunbed_are_capped_at_three(): void
+    {
+        foreach (range(1, 3) as $i) {
+            $this->post(route('website.beach.order.submit', $this->unit->qr_token), $this->orderPayload([
+                'items' => [['menu_item_id' => $this->beer->id, 'quantity' => 1]],
+            ]))->assertRedirect();
+        }
+
+        // The 4th open order is refused — a photographed QR cannot flood the POS.
+        $this->postJson(route('website.beach.order.submit', $this->unit->qr_token), $this->orderPayload())
+            ->assertStatus(422);
+        $this->assertSame(3, PosOrder::count());
+
+        // Completing one frees a slot.
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        \App\Models\PosShift::create(['user_id' => $admin->id, 'status' => 'open', 'opening_float' => 0, 'opened_at' => now()]);
+        $this->actingAs($admin)->post(route('pos.complete', PosOrder::first()), ['payment_method' => 'cash'])->assertRedirect();
+
+        $this->post(route('website.beach.order.submit', $this->unit->qr_token), $this->orderPayload([
+            'items' => [['menu_item_id' => $this->beer->id, 'quantity' => 1]],
+        ]))->assertRedirect();
+        $this->assertSame(4, PosOrder::count());
+    }
+
+    public function test_duplicate_menu_item_lines_are_refused(): void
+    {
+        $this->postJson(route('website.beach.order.submit', $this->unit->qr_token), [
+            'items' => [
+                ['menu_item_id' => $this->beer->id, 'quantity' => 20],
+                ['menu_item_id' => $this->beer->id, 'quantity' => 20],
+            ],
+        ])->assertStatus(422);
+        $this->assertSame(0, PosOrder::count());
+    }
+
     public function test_the_order_appears_on_the_staff_pos_open_orders(): void
     {
         $this->post(route('website.beach.order.submit', $this->unit->qr_token), $this->orderPayload())->assertRedirect();
