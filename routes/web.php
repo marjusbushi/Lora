@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\BeachReservationController;
 use App\Http\Controllers\BeachSetupController;
 use App\Http\Controllers\ChannexController;
 use App\Http\Controllers\ChannexWebhookController;
@@ -448,8 +449,12 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::delete('/categories/{category}', [InventoryController::class, 'destroyCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.destroy');
     });
 
-    // Plazhi (Beach) — setup i zonave/çadrave; kalendari vjen me kontrollerin e rezervimeve
+    // Plazhi (Beach) — kalendari i çadrave + setup i zonave/çadrave
     Route::middleware(['module:beach', 'permission:view_beach'])->group(function () {
+        Route::get('/beach/calendar', [BeachReservationController::class, 'calendar'])->name('beach.calendar');
+        Route::post('/beach/reservations', [BeachReservationController::class, 'store'])->middleware('permission:create_beach')->name('beach.reservations.store');
+        Route::put('/beach/reservations/{beachReservation}', [BeachReservationController::class, 'update'])->middleware('permission:update_beach')->name('beach.reservations.update');
+        Route::post('/beach/reservations/{beachReservation}/cancel', [BeachReservationController::class, 'cancel'])->middleware('permission:update_beach')->name('beach.reservations.cancel');
         Route::get('/beach/setup', [BeachSetupController::class, 'index'])->name('beach.setup');
         Route::post('/beach/zones', [BeachSetupController::class, 'storeZone'])->middleware('permission:create_beach')->name('beach.zones.store');
         Route::put('/beach/zones/{zone}', [BeachSetupController::class, 'updateZone'])->middleware('permission:update_beach')->name('beach.zones.update');
