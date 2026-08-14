@@ -221,12 +221,37 @@ class TenantBillingTest extends TestCase
         $this->assertSame(1900, $summary['modules']['beach']['monthly_cents']);
 
         // Backfill-i i migrimit i sjell të gjithë te katalogu i ri — pa ri-ruajtje dorazi.
-        (require database_path('migrations/2026_08_14_210000_backfill_entitlement_pricing_snapshots.php'))->up();
+        $migration = require database_path('migrations/2026_08_14_210000_backfill_entitlement_pricing_snapshots.php');
+
+        // Rezerva nga ekzekutimi i parë (RefreshDatabase) fshihet që up() të
+        // fotografojë vlerat e vjetra që sapo simuluam — si në një server real.
+        $migration->down();
+        // down() riktheu vlerat e para të rezervës — rivendos simulimin e vjetër.
+        $tenant->moduleEntitlements()->where('module_code', 'beach')->update([
+            'pricing_snapshot' => json_encode(array_replace(
+                config('lora_modules.modules.beach'),
+                ['unit_price_cents' => 1900],
+            )),
+            'unit_price_cents' => 1900,
+        ]);
+        $migration->up();
 
         $tenant = Tenant::query()->sole()->fresh();
         $tenant->unsetRelation('moduleEntitlements');
         $summary = app(TenantBillingService::class)->summary($tenant);
         $this->assertSame(2900, $summary['modules']['beach']['monthly_cents']);
+
+        // Rollback-u EKZAKT (gate-i mysql-upgrade): down() rikthen vlerat e vjetra
+        // rresht për rresht dhe heq tabelën e rezervës.
+        $migration->down();
+        $tenant = Tenant::query()->sole()->fresh();
+        $tenant->unsetRelation('moduleEntitlements');
+        $summary = app(TenantBillingService::class)->summary($tenant);
+        $this->assertSame(1900, $summary['modules']['beach']['monthly_cents']);
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('entitlement_pricing_backup_20260814'));
+
+        // Ri-aplikimi përfundimtar — gjendja e synuar pas deploy-it.
+        $migration->up();
     }
 
     public function test_billing_update_without_contract_years_keeps_the_existing_value(): void
