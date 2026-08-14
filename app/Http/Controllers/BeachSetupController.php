@@ -44,6 +44,8 @@ class BeachSetupController extends Controller
     public function storeSeason(SaveBeachSeasonRequest $request): RedirectResponse
     {
         DB::transaction(function () use ($request) {
+            $this->assertNoSeasonOverlapLocked($request->input('start_date'), $request->input('end_date'));
+
             $season = BeachSeason::create($request->safe()->only(['name', 'start_date', 'end_date']));
             $this->syncSeasonPrices($season, $request->validated('prices') ?? []);
         });
@@ -54,11 +56,40 @@ class BeachSetupController extends Controller
     public function updateSeason(SaveBeachSeasonRequest $request, BeachSeason $season): RedirectResponse
     {
         DB::transaction(function () use ($request, $season) {
+            $this->assertNoSeasonOverlapLocked($request->input('start_date'), $request->input('end_date'), $season->id);
+
             $season->update($request->safe()->only(['name', 'start_date', 'end_date']));
             $this->syncSeasonPrices($season, $request->validated('prices') ?? []);
         });
 
         return back()->with('success', 'Sezoni i çmimeve u përditësua.');
+    }
+
+    /**
+     * Ri-verifikon mbivendosjen NËN kyçje: validimi i FormRequest-it vrapon PARA
+     * transaksionit, prandaj dy shkrime konkurruese mund ta kalonin të dy dhe të
+     * fusnin sezone të mbivendosura (indeksi i intervalit s'është unik). Kyçja
+     * mbi rreshtin e tenant-it i serializon mutacionet e sezoneve per tenant —
+     * funksionon edhe kur tabela e sezoneve është ende bosh.
+     */
+    private function assertNoSeasonOverlapLocked(string $start, string $end, ?int $excludeId = null): void
+    {
+        DB::table('tenants')
+            ->whereKey(app(\App\Tenancy\TenantContext::class)->tenant()->id)
+            ->lockForUpdate()
+            ->first();
+
+        $overlap = BeachSeason::query()
+            ->when($excludeId, fn ($query) => $query->whereKeyNot($excludeId))
+            ->where('start_date', '<=', $end)
+            ->where('end_date', '>=', $start)
+            ->first();
+
+        if ($overlap) {
+            throw ValidationException::withMessages([
+                'start_date' => "Datat mbivendosen me sezonin \"{$overlap->name}\" — çdo ditë i përket vetëm një sezoni.",
+            ]);
+        }
     }
 
     public function destroySeason(BeachSeason $season): RedirectResponse
@@ -115,7 +146,16 @@ class BeachSetupController extends Controller
      */
     private function syncSeasonPrices(BeachSeason $season, array $prices): void
     {
+        // Vetëm zona reale të KËTIJ tenanti: një id i vjetruar/i sajuar përndryshe
+        // përplaset me FK-në kompozite dhe rrëzon GJITHË ruajtjen me 500, në vend
+        // që të kapërcehet siç premton endpoint-i.
+        $knownZoneIds = BeachZone::query()->pluck('id')->flip();
+
         foreach ($prices as $zoneId => $price) {
+            if (! isset($knownZoneIds[(int) $zoneId])) {
+                continue;
+            }
+
             if ($price === null || $price === '') {
                 $season->prices()->where('beach_zone_id', (int) $zoneId)->delete();
 

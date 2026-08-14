@@ -172,6 +172,26 @@ class BeachSeasonPricingTest extends TestCase
         $this->assertDatabaseCount('beach_season_prices', 0);
     }
 
+    public function test_rates_save_skips_unknown_zone_ids_without_failing_the_batch(): void
+    {
+        $this->actingAsAdmin();
+        [$zone] = $this->zoneWithUnit(9);
+        $season = $this->season('Gusht', '2026-08-10', '2026-08-20', []);
+
+        // Një id zone i vjetruar/i sajuar (99999) NUK rrëzon gjithë ruajtjen —
+        // kapërcehet, ndërsa çmimi i zonës reale ruhet normalisht.
+        $this->post(route('beach.seasons.rates.save'), [
+            'rates' => [$season->id => [$zone->id => 14, 99999 => 20]],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('beach_season_prices', 1);
+        $this->assertEqualsWithDelta(
+            14.0,
+            (float) $season->prices()->where('beach_zone_id', $zone->id)->value('price_per_day'),
+            0.001,
+        );
+    }
+
     // ── Siguria ──────────────────────────────────────────────────────────
 
     public function test_public_submit_ignores_any_client_price_and_uses_seasonal_total(): void

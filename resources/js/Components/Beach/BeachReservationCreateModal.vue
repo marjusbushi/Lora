@@ -62,8 +62,10 @@ watch(
     () => {
         serverQuote.value = null;
         clearTimeout(quoteTimer);
-        if (!form.beach_unit_id || !form.start_date || !form.end_date || form.end_date < form.start_date) return;
+        // Çdo ndryshim inputi e vjetëron përgjigjen në fluturim — edhe kur inputet
+        // e reja janë të paplota (ndryshe një quote e vjetër kalonte seq-check-un).
         const seq = ++quoteSeq;
+        if (!form.beach_unit_id || !form.start_date || !form.end_date || form.end_date < form.start_date) return;
         quoteTimer = setTimeout(async () => {
             try {
                 const url = route('beach.reservations.quote', {
