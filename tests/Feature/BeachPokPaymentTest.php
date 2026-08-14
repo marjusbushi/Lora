@@ -104,6 +104,7 @@ class BeachPokPaymentTest extends TestCase
         $fresh = $reservation->fresh();
         $this->assertNotNull($fresh->paid_at);
         $this->assertSame(BeachReservation::STATUS_CONFIRMED, $fresh->status);
+        $this->assertSame('online', $fresh->payment_method);
 
         // Ripagesa/ri-confirm: flip-i atomik prek 0 rreshta — paid_at s'ndryshon.
         $paidAt = $fresh->paid_at->toDateTimeString();

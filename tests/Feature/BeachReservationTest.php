@@ -142,6 +142,34 @@ class BeachReservationTest extends TestCase
         $this->assertNotNull($reservation->fresh()->paid_at);
     }
 
+    public function test_calendar_props_carry_payment_state_and_routes_are_gated(): void
+    {
+        $d = fn (int $offset) => today()->addDays($offset)->toDateString();
+        $paid = $this->reserve(today()->toDateString(), $d(1));
+        $paid->update(['paid_at' => now(), 'payment_method' => 'cash']);
+
+        // Kalendari i jep UI-së gjendjen e pagesës (shenja € + numëruesi ndërtohen prej saj).
+        $this->actingAs($this->admin)
+            ->get(route('beach.calendar'))
+            ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+                ->component('Beach/Calendar')
+                ->where('reservations.0.payment_method', 'cash')
+                ->whereNot('reservations.0.paid_at', null));
+
+        // Rrugët e pagesës nën permission update_beach.
+        $routes = \Illuminate\Support\Facades\Route::getRoutes();
+        $this->assertContains('permission:update_beach', $routes->getByName('beach.reservations.mark-paid')->middleware());
+        $this->assertContains('permission:update_beach', $routes->getByName('beach.reservations.unmark-paid')->middleware());
+
+        // Pa leje beach → 403 edhe në mark-paid.
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $housekeeper = \App\Models\User::factory()->create();
+        $housekeeper->assignRole('housekeeping');
+        $this->actingAs($housekeeper)
+            ->post(route('beach.reservations.mark-paid', $paid), ['method' => 'cash'])
+            ->assertForbidden();
+    }
+
     public function test_reception_books_beyond_public_window(): void
     {
         $d = fn (int $offset) => today()->addDays($offset)->toDateString();
