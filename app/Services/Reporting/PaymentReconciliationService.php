@@ -191,19 +191,10 @@ final class PaymentReconciliationService
                 }
             }
 
-            if (abs((float) $shift->over_short) >= 0.01) {
-                $issues->push($this->issue(
-                    'cash_variance',
-                    'pos_shift',
-                    'SHIFT-'.$shift->id,
-                    $shift->closed_at?->toDateString(),
-                    (float) $shift->expected_cash,
-                    (float) $shift->counted_cash,
-                    abs((float) $shift->over_short) >= 5 ? 'error' : 'warning',
-                    'pos',
-                    null,
-                ));
-            }
+            // Drawer over/short is deliberately NOT an issue row here: counting
+            // variances belong to the Z-Report, which explains them (PMS cash,
+            // suspect-typo flag). This list stays payment-reconciliation only;
+            // the summary carries one aggregate line pointing there instead.
         }
 
         foreach ($legacyPosOrders as $order) {
@@ -271,6 +262,7 @@ final class PaymentReconciliationService
                 'issues_count' => $issues->count(),
                 'unposted_total' => round($unpostedTotal, 2),
                 'cash_variance' => round((float) $closedShifts->sum('over_short'), 2),
+                'cash_variance_count' => $closedShifts->filter(fn (PosShift $shift) => abs((float) $shift->over_short) >= 0.01)->count(),
             ],
             'methods' => $methods,
             'sources' => [
