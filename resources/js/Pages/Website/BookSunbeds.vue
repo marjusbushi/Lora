@@ -175,25 +175,39 @@ function submit() {
                     </button>
                 </div>
 
-                <!-- Hapi 2: harta e plazhit në një faqe — deti përpara, rreshtat me rrugicë mes tyre -->
+                <!-- Hapi 2: harta e plazhit në një faqe — deti me valë të gjalla, rreshtat me rrugicë mes tyre -->
                 <div v-else-if="step === 2" class="space-y-5">
-                    <div class="overflow-hidden rounded-2xl border border-driftwood/20 bg-[#faf3e3] shadow-sm">
-                        <!-- Deti -->
-                        <div class="relative flex h-16 items-end justify-center bg-gradient-to-b from-ionian to-ionian/50">
-                            <span class="mb-1.5 text-tiny font-semibold uppercase tracking-[0.3em] text-bone/90">{{ $t('beach.public.sea') }}</span>
-                            <svg class="absolute bottom-0 left-0 w-full text-[#faf3e3]" viewBox="0 0 1200 24" preserveAspectRatio="none" fill="currentColor" aria-hidden="true">
-                                <path d="M0 24 L0 14 Q 75 2 150 14 T 300 14 T 450 14 T 600 14 T 750 14 T 900 14 T 1050 14 T 1200 14 L1200 24 Z" />
-                            </svg>
+                    <div class="beach-card overflow-hidden rounded-2xl border border-driftwood/20 shadow-md">
+                        <!-- Deti: gradient thellësie + 4 shtresa valësh me parallax; vala e përparme puqet me rërën -->
+                        <div class="beach-sea relative h-24 sm:h-32">
+                            <span class="absolute left-1/2 top-[32%] -translate-x-1/2 -translate-y-1/2 text-tiny font-semibold uppercase tracking-[0.35em] text-bone/80">{{ $t('beach.public.sea') }}</span>
+                            <div class="wave wave-back" aria-hidden="true">
+                                <svg viewBox="0 0 2400 60" preserveAspectRatio="none"><path d="M0 30 Q100 14 200 30 T400 30 T600 30 T800 30 T1000 30 T1200 30 T1400 30 T1600 30 T1800 30 T2000 30 T2200 30 T2400 30 V60 H0 Z" /></svg>
+                            </div>
+                            <div class="wave wave-mid" aria-hidden="true">
+                                <svg viewBox="0 0 2400 60" preserveAspectRatio="none"><path d="M0 30 Q100 14 200 30 T400 30 T600 30 T800 30 T1000 30 T1200 30 T1400 30 T1600 30 T1800 30 T2000 30 T2200 30 T2400 30 V60 H0 Z" /></svg>
+                            </div>
+                            <div class="wave wave-foam" aria-hidden="true">
+                                <svg viewBox="0 0 2400 60" preserveAspectRatio="none"><path d="M0 30 Q75 8 150 30 T300 30 T450 30 T600 30 T750 30 T900 30 T1050 30 T1200 30 T1350 30 T1500 30 T1650 30 T1800 30 T1950 30 T2100 30 T2250 30 T2400 30 V60 H0 Z" /></svg>
+                            </div>
+                            <div class="wave wave-front" aria-hidden="true">
+                                <svg viewBox="0 0 2400 60" preserveAspectRatio="none"><path d="M0 30 Q75 8 150 30 T300 30 T450 30 T600 30 T750 30 T900 30 T1050 30 T1200 30 T1350 30 T1500 30 T1650 30 T1800 30 T1950 30 T2100 30 T2250 30 T2400 30 V60 H0 Z" /></svg>
+                            </div>
                         </div>
 
                         <!-- Rëra: rreshtat e çadrave, të parët më afër detit -->
-                        <div class="p-4 sm:p-6">
+                        <div class="beach-sand p-4 sm:p-6">
+                            <div class="mb-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-body-sm text-driftwood">
+                                <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-ionian" />{{ $t('beach.public.legendFree') }}</span>
+                                <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-driftwood/30" />{{ $t('beach.public.legendBusy') }}</span>
+                                <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-brass" />{{ $t('beach.public.legendSelected') }}</span>
+                            </div>
                             <template v-for="(zone, index) in zones" :key="zone.id">
                                 <!-- Rrugica e kalimit mes rreshtave -->
-                                <div v-if="index > 0" class="my-4 border-t-2 border-dashed border-driftwood/30" role="presentation" />
-                                <div class="mb-2 flex flex-wrap items-baseline gap-2">
-                                    <h2 class="font-semibold text-ink">{{ zone.name }}</h2>
-                                    <span class="text-body-sm text-driftwood">{{ $t('beach.public.pricePerDay', { price: currency + zone.price_per_day }) }}</span>
+                                <div v-if="index > 0" class="walkway my-5" role="presentation" />
+                                <div class="mb-3 flex flex-wrap items-center gap-2.5">
+                                    <h2 class="font-serif text-xl font-medium text-ink">{{ zone.name }}</h2>
+                                    <span class="rounded-full bg-white/80 px-3 py-0.5 text-body-sm font-semibold text-brass-dark ring-1 ring-brass/25">{{ $t('beach.public.pricePerDay', { price: currency + zone.price_per_day }) }}</span>
                                 </div>
                                 <div class="flex flex-wrap justify-center gap-1 sm:gap-2">
                                     <SunbedSpot
@@ -274,3 +288,74 @@ function submit() {
         </section>
     </WebsiteLayout>
 </template>
+
+<style scoped>
+/* Ngjyrat këtu janë nga paleta "Ionian Calm" (tailwind.config.js):
+   ionian #2E6E72 / dark #244F52 / light #3E8589 · bone #FAF7F1 · driftwood #8A8276 */
+
+.beach-card {
+    animation: beach-rise 0.45s ease-out both;
+}
+@keyframes beach-rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.beach-sea {
+    overflow: hidden;
+    background: linear-gradient(180deg, #1c4245 0%, #244f52 34%, #2e6e72 70%, #3e8589 100%);
+}
+/* Shkëlqimi i diellit mbi ujë */
+.beach-sea::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(120% 90% at 72% 0%, rgba(250, 247, 241, 0.18), transparent 55%);
+}
+
+.wave {
+    position: absolute;
+    left: 0;
+    width: 200%;
+    animation-name: wave-drift;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+}
+.wave svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+/* Shtresat: e pasmja shkëlqim i lehtë, e mesmja thellësi, shkuma e bardhë pak
+   mbi valën e përparme (me ritëm tjetër, që kreshta të marrë frymë), e përparmja
+   ka ngjyrën e rërës së lagur — deti derdhet në rërë pa vijë ndarëse. */
+.wave-back  { bottom: 16px; height: 30px; fill: rgba(250, 247, 241, 0.14); animation-duration: 19s; }
+.wave-mid   { bottom: 7px;  height: 26px; fill: rgba(62, 133, 137, 0.6);  animation-duration: 13s; animation-direction: reverse; }
+.wave-foam  { bottom: 2px;  height: 22px; fill: rgba(255, 255, 255, 0.7); animation-duration: 9.5s; }
+.wave-front { bottom: -1px; height: 20px; fill: #f3e9d2;                  animation-duration: 7.5s; }
+@keyframes wave-drift {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+
+.beach-sand {
+    /* Rërë e lagur afër detit → rërë e ngrohtë poshtë + teksturë kokrrizash */
+    background-color: #faf3e3;
+    background-image:
+        radial-gradient(rgba(138, 130, 118, 0.10) 1px, transparent 1.4px),
+        linear-gradient(180deg, #f3e9d2 0%, #faf3e3 26%, #fbf6ea 100%);
+    background-size: 13px 13px, 100% 100%;
+}
+
+/* Rrugica e kalimit mes rreshtave — dërrasa të pjerrëta, jo vijë e thyer */
+.walkway {
+    height: 10px;
+    border-radius: 9999px;
+    background: repeating-linear-gradient(-55deg, rgba(138, 130, 118, 0.16) 0 5px, transparent 5px 11px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .beach-card,
+    .wave { animation: none; }
+}
+</style>

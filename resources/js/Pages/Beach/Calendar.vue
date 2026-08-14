@@ -11,6 +11,8 @@ const props = defineProps({
     visibleDays: { type: Number, default: 14 },
     hotelToday: { type: String, required: true },
     season: { type: Object, default: () => ({ start: '', end: '' }) },
+    currentShift: { type: Object, default: null },
+    currency: { type: String, default: '' },
 });
 </script>
 
@@ -24,6 +26,8 @@ const props = defineProps({
             :visible-days="visibleDays"
             :hotel-today="hotelToday"
             :season="season"
+            :current-shift="currentShift"
+            :currency="currency"
         />
     </AppLayout>
 </template>

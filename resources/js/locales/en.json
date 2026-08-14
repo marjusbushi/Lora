@@ -4416,7 +4416,8 @@
     "cashAccountDescription": "Physical cash and cash collections",
     "bankAccountDescription": "Bank account and transfers",
     "disableAccount": "Deactivate account",
-    "enableAccount": "Activate account"
+    "enableAccount": "Activate account",
+    "beachBadge": "Beach"
   },
   "superAdmin": {
     "tenantShow": {
@@ -7136,6 +7137,9 @@
       "seeFree": "See free sunbeds",
       "pricePerDay": "{price} / day",
       "pickHint": "Pick a free sunbed from the map.",
+      "legendFree": "Free",
+      "legendBusy": "Taken",
+      "legendSelected": "Selected",
       "selectionSummary": "Sunbed {number} · {zone} · {days} days = {total}",
       "continue": "Continue",
       "name": "Full name",
@@ -7181,6 +7185,20 @@
       "optionalNote": "If you prefer not to pay online, just go back — pay at the beach.",
       "testCardIntro": "Test environment — use card",
       "backToConfirmation": "Back to your booking"
+    },
+    "shift": {
+      "openSince": "Beach shift open since {time}",
+      "expectedNow": "Expected in drawer: {amount}",
+      "closeShift": "Close shift",
+      "noShift": "You have no open beach shift.",
+      "noShiftHint": "Open the beach shift before recording payments.",
+      "openShift": "Open shift",
+      "openingFloat": "Opening float",
+      "openingFloatHint": "The cash the drawer starts with — e.g. coins for change.",
+      "countedCash": "Cash counted in drawer",
+      "overShort": "Difference: {amount}",
+      "closingNote": "Closing note (optional)",
+      "closeConfirm": "Close shift"
     }
   }
 }

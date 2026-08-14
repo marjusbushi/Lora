@@ -12,6 +12,7 @@ import Select from '@/Components/UI/Select.vue';
 const props = defineProps({
     reservation: { type: Object, default: null },
     units: { type: Array, default: () => [] },
+    hasOpenShift: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['close']);
@@ -117,9 +118,10 @@ const methodLabel = computed(() => ({
                 <div v-else class="flex flex-wrap items-center gap-2">
                     <span class="text-body-sm font-medium text-amber-800">{{ $t('beach.calendar.notPaidYet') }}</span>
                     <div class="ml-auto flex gap-1.5">
-                        <Button size="sm" variant="success" @click="markPaid('cash')">{{ $t('beach.calendar.markPaidCash') }}</Button>
-                        <Button size="sm" variant="secondary" @click="markPaid('card')">{{ $t('beach.calendar.markPaidCard') }}</Button>
+                        <Button size="sm" variant="success" :disabled="!hasOpenShift" @click="markPaid('cash')">{{ $t('beach.calendar.markPaidCash') }}</Button>
+                        <Button size="sm" variant="secondary" :disabled="!hasOpenShift" @click="markPaid('card')">{{ $t('beach.calendar.markPaidCard') }}</Button>
                     </div>
+                    <p v-if="!hasOpenShift" class="w-full text-small text-amber-700">{{ $t('beach.shift.noShiftHint') }}</p>
                 </div>
             </div>
             <FormGroup :label="$t('beach.calendar.sunbed')" :error="form.errors.beach_unit_id" required>

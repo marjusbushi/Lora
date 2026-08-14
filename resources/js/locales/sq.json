@@ -4416,7 +4416,8 @@
     "cashAccountDescription": "Para fizike dhe arkëtime cash",
     "bankAccountDescription": "Llogari bankare dhe transferta",
     "disableAccount": "Çaktivizo llogarinë",
-    "enableAccount": "Aktivizo llogarinë"
+    "enableAccount": "Aktivizo llogarinë",
+    "beachBadge": "Plazh"
   },
   "superAdmin": {
     "tenantShow": {
@@ -7136,6 +7137,9 @@
       "seeFree": "Shiko çadrat e lira",
       "pricePerDay": "{price} / ditë",
       "pickHint": "Zgjidh një çadër të lirë nga harta.",
+      "legendFree": "E lirë",
+      "legendBusy": "E zënë",
+      "legendSelected": "E zgjedhur",
       "selectionSummary": "Çadra {number} · {zone} · {days} ditë = {total}",
       "continue": "Vazhdo",
       "name": "Emri i plotë",
@@ -7181,6 +7185,20 @@
       "optionalNote": "Nëse s'dëshiron të paguash online, thjesht kthehu — paguan në plazh.",
       "testCardIntro": "Mjedis testimi — përdor kartën",
       "backToConfirmation": "Kthehu te rezervimi"
+    },
+    "shift": {
+      "openSince": "Turni i plazhit i hapur që nga {time}",
+      "expectedNow": "Në sirtar pritet: {amount}",
+      "closeShift": "Mbyll turnin",
+      "noShift": "Nuk ke turn të hapur plazhi.",
+      "noShiftHint": "Hap turnin e plazhit para se të shënosh pagesa.",
+      "openShift": "Hap turnin",
+      "openingFloat": "Kusuri fillestar (float)",
+      "openingFloatHint": "Cash-i me të cilin nis sirtari — p.sh. monedha për kusur.",
+      "countedCash": "Cash-i i numëruar në sirtar",
+      "overShort": "Diferenca: {amount}",
+      "closingNote": "Shënim mbylljeje (opsional)",
+      "closeConfirm": "Mbyll turnin"
     }
   }
 }

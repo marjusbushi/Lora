@@ -68,6 +68,7 @@ class BeachReservationController extends Controller
             ],
             // Turni i hapur i userit — UI e përdor për gating-un e pagesave + banner.
             'currentShift' => tap(\App\Models\BeachShift::currentFor((int) auth()->id()), fn ($shift) => $shift?->setAttribute('live_expected_cash', $shift->liveExpectedCash())),
+            'currency' => \App\Services\PricingCurrency::symbol(),
         ]);
     }
 

@@ -5,6 +5,7 @@ import { getIntlLocale } from '@/i18n';
 import Button from '@/Components/UI/Button.vue';
 import BeachReservationCreateModal from '@/Components/Beach/BeachReservationCreateModal.vue';
 import BeachReservationEditModal from '@/Components/Beach/BeachReservationEditModal.vue';
+import BeachShiftBanner from '@/Components/Beach/BeachShiftBanner.vue';
 
 const props = defineProps({
     zones: { type: Array, default: () => [] },
@@ -13,6 +14,8 @@ const props = defineProps({
     visibleDays: { type: Number, default: 14 },
     hotelToday: { type: String, required: true },
     season: { type: Object, default: () => ({ start: '', end: '' }) },
+    currentShift: { type: Object, default: null },
+    currency: { type: String, default: '' },
 });
 
 const page = usePage();
@@ -223,6 +226,14 @@ const unpaidToday = computed(() =>
             </div>
         </div>
 
+        <BeachShiftBanner
+            v-if="can('open_beach_shift') || can('close_beach_shift') || currentShift"
+            :shift="currentShift"
+            :can-open="can('open_beach_shift')"
+            :can-close="can('close_beach_shift')"
+            :currency="currency"
+        />
+
         <div v-if="!allUnits.length" class="rounded-xl border border-dashed border-neutral-300 bg-white py-16 text-center">
             <p class="text-h4 text-primary-900">{{ $t('beach.calendar.noUnitsTitle') }}</p>
             <p class="mt-1 text-body-sm text-neutral-500">{{ $t('beach.calendar.noUnitsHint') }}</p>
@@ -327,6 +338,7 @@ const unpaidToday = computed(() =>
         <BeachReservationEditModal
             :reservation="editingReservation"
             :units="allUnits"
+            :has-open-shift="!!currentShift"
             @close="editingReservation = null"
         />
     </div>
