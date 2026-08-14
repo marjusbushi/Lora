@@ -5372,7 +5372,9 @@
     "outstanding": "Pa arkëtuar",
     "highDemand": "Kërkesë e lartë",
     "amountsShownIn": "Të gjitha shumat shfaqen në {currency}",
-    "categoryTree": { "toggle": "Hap/mbyll nënkategoritë e" },
+    "categoryTree": {
+      "toggle": "Hap/mbyll nënkategoritë e"
+    },
     "moreRows": "+{n} rreshta të tjerë nuk shfaqen",
     "todayOps": "Operacionet e sotme",
     "opsArrivals": "Mbërritje sot",
@@ -6544,7 +6546,12 @@
     "cancellationNotRecorded": "Anulimi nuk u regjistrua.",
     "refundRecorded": "Rimbursimi dhe kthimi i stokut u regjistruan.",
     "refundNotRecorded": "Rimbursimi nuk u regjistrua.",
-    "statusRefunded": "Rimbursuar"
+    "statusRefunded": "Rimbursuar",
+    "roomShort": "Dhoma",
+    "splitShort": "Ndarë",
+    "customerGave": "Klienti dha",
+    "changeDue": "Kusuri",
+    "collect": "Arkëto"
   },
   "posTables": {
     "statusFree": "E lirë",

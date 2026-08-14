@@ -15,7 +15,7 @@ import ShiftBanner from '@/Components/Pos/ShiftBanner.vue';
 import PosSalespersonSwitcher from '@/Components/Pos/PosSalespersonSwitcher.vue';
 import OutletSwitcher from '@/Components/Pos/OutletSwitcher.vue';
 import PosReceipt from '@/Components/Invoices/PosReceipt.vue';
-import { ArrowLeft, Banknote, Clock3, Maximize2, Minimize2, Minus, Pencil, Plus, Printer, ReceiptText, RotateCcw, Search, ShoppingCart, Star, Trash2, X } from 'lucide-vue-next';
+import { ArrowLeft, Banknote, BedDouble, Clock3, CreditCard, Maximize2, Minimize2, Minus, Pencil, Plus, Printer, ReceiptText, RotateCcw, Search, ShoppingCart, Split, Star, Trash2, X } from 'lucide-vue-next';
 
 const props = defineProps({
     view: { type: String, default: 'sale' },
@@ -80,10 +80,12 @@ const reservationOptions = props.activeReservations.map((r) => ({
     label: translate('posIndex.roomOption', { room: r.room?.room_number, name: `${r.guest?.first_name} ${r.guest?.last_name}` }),
 }));
 
-const paymentOptions = [
-    { value: 'cash', label: translate('admin.generated.k_a378b744f8ce') },
-    { value: 'card', label: translate('admin.generated.k_94a332f07750') },
-    { value: 'room_charge', label: translate('admin.generated.k_31417756fe7f') },
+// Kontrolli i segmentuar i metodave (mockup-i i miratuar): etiketa të shkurtra + ikona Lucide.
+const segmentedOptions = [
+    { value: 'cash', short: translate('admin.generated.k_a378b744f8ce'), icon: Banknote },
+    { value: 'card', short: translate('admin.generated.k_94a332f07750'), icon: CreditCard },
+    { value: 'room_charge', short: translate('posIndex.roomShort'), icon: BedDouble },
+    { value: 'split', short: translate('posIndex.splitShort'), icon: Split },
 ];
 const paymentMethod = ref('');
 // Multi-currency tender: the totals stay in the base currency; the currency
@@ -125,9 +127,6 @@ const splitCashTendered = computed(() => (
         : null
 ));
 const selectedPayReservation = ref('');
-const discountType = ref('none');
-const discountValue = ref('');
-const discountReason = ref('');
 const splitCashAmount = ref('');
 const showCancelModal = ref(false);
 const showRefundModal = ref(false);
@@ -314,16 +313,26 @@ const cartCount = computed(() =>
 );
 
 const paymentSubtotal = computed(() => Number(selectedOrder.value?.subtotal_amount || selectedOrder.value?.total_amount || 0));
-const paymentDiscount = computed(() => {
-    if (discountType.value === 'complimentary') return paymentSubtotal.value;
-    const value = Math.max(0, Number(discountValue.value || 0));
-    if (discountType.value === 'percent') return Math.min(paymentSubtotal.value, paymentSubtotal.value * Math.min(value, 100) / 100);
-    if (discountType.value === 'fixed') return Math.min(paymentSubtotal.value, value);
-    return 0;
-});
-const paymentTotal = computed(() => Math.max(0, Math.round((paymentSubtotal.value - paymentDiscount.value) * 100) / 100));
+const paymentTotal = computed(() => Math.max(0, Math.round(paymentSubtotal.value * 100) / 100));
 const splitCash = computed(() => Math.min(paymentTotal.value, Math.max(0, Number(splitCashAmount.value || 0))));
 const splitCard = computed(() => Math.round((paymentTotal.value - splitCash.value) * 100) / 100);
+
+// ── Kusuri — ndihmë vizuale për arkëtarin, asgjë s'ruhet në server ──
+// Tabletat: shuma e saktë + kartëmonedhat mbi të; zgjedhja llogarit kusurin.
+const tenderGiven = ref(null);
+const tenderOptions = computed(() => {
+    const options = [paymentTotal.value];
+    [5, 10, 20, 50, 100].forEach((note) => {
+        if (note > paymentTotal.value && options.length < 5) options.push(note);
+    });
+    return options;
+});
+const changeDue = computed(() => (
+    tenderGiven.value === null
+        ? 0
+        : Math.max(0, Math.round((tenderGiven.value - paymentTotal.value) * 100) / 100)
+));
+watch(paymentMethod, () => { tenderGiven.value = null; });
 
 // Drill-down through the inventory category tree: Niveli 1 → 2 → 3 → Artikujt.
 // currentNodeId: null = top level, a tree node id, or 'legacy-<groupId>' for
@@ -600,9 +609,7 @@ function openPay(order) {
     paymentMethod.value = '';
     payCurrency.value = posBaseCurrency.value;
     splitCashCurrency.value = posBaseCurrency.value;
-    discountType.value = 'none';
-    discountValue.value = '';
-    discountReason.value = '';
+    tenderGiven.value = null;
     splitCashAmount.value = '';
     selectedPayReservation.value = order.reservation_id || '';
     checkoutStep.value = 'payment';
@@ -642,9 +649,6 @@ function submitPay() {
     router.post(route('pos.complete', selectedOrder.value.id), {
         payments,
         reservation_id: paymentMethod.value === 'room_charge' ? selectedPayReservation.value : null,
-        discount_amount: paymentDiscount.value,
-        discount_reason: paymentDiscount.value > 0 ? discountReason.value : null,
-        complimentary: discountType.value === 'complimentary',
     }, {
         preserveScroll: true,
         onSuccess: (page) => {
@@ -657,7 +661,7 @@ function submitPay() {
             else toasts.value?.success(translate('admin.generated.k_4d1af80f8706'));
         },
         onError: (errors) => {
-            toasts.value?.error(errors.inventory || errors.payments || errors.discount_reason || errors.reservation_id || Object.values(errors)[0] || translate('posIndex.paymentNotRecorded'));
+            toasts.value?.error(errors.inventory || errors.payments || errors.reservation_id || Object.values(errors)[0] || translate('posIndex.paymentNotRecorded'));
         },
     });
 }
@@ -1026,33 +1030,59 @@ onMounted(() => {
                             <span class="rounded-lg bg-success-50 px-3 py-1.5 text-small font-bold text-success-700">{{ $t('posIndex.readyToCollect') }}</span>
                         </div>
 
-                        <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
-                            <div class="rounded-2xl bg-primary-950 px-5 py-6 text-center text-white">
-                                <p class="text-small font-semibold uppercase tracking-widest text-neutral-300">{{ $t('posIndex.amountDue') }}</p>
-                                <p class="mt-1 text-4xl font-bold tracking-tight">{{ money(paymentTotal) }}</p>
-                                <p v-if="paymentDiscount > 0" class="mt-2 text-small text-success-300">{{ $t('posIndex.discountOff', { discount: money(paymentDiscount), subtotal: money(paymentSubtotal) }) }}</p>
+                        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+                            <!-- Heroi tipografik: totali si protagonist, pa kuti (mockup-i i miratuar) -->
+                            <div class="pt-5 text-center">
+                                <p class="text-tiny font-semibold uppercase tracking-[0.2em] text-neutral-400">{{ $t('posIndex.amountDue') }}</p>
+                                <p class="mt-1 text-5xl font-bold leading-none tracking-tight text-primary-950 tabular-nums">{{ money(paymentTotal) }}</p>
                             </div>
 
-                            <div>
-                                <p class="mb-2 text-label text-neutral-600">{{ $t('posIndex.discountSection') }}</p>
-                                <div class="grid grid-cols-2 gap-2">
-                                    <button v-for="option in [{ value: 'none', label: $t('posIndex.noDiscount') }, { value: 'percent', label: $t('posIndex.percent') }, { value: 'fixed', label: $t('posIndex.fixedAmount') }, { value: 'complimentary', label: $t('posIndex.complimentary') }]" :key="option.value" type="button" class="min-h-12 rounded-xl border px-3 py-2 text-small font-semibold touch-manipulation" :class="discountType === option.value ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-neutral-200 text-neutral-600'" @click="discountType = option.value">{{ option.label }}</button>
-                                </div>
-                                <TextInput v-if="discountType === 'percent' || discountType === 'fixed'" v-model="discountValue" class="mt-3" type="number" min="0" :max="discountType === 'percent' ? 100 : paymentSubtotal" step="0.01" :placeholder="discountType === 'percent' ? $t('posIndex.percentPlaceholder') : $t('posIndex.discountAmountPlaceholder')" />
-                                <TextInput v-if="paymentDiscount > 0" v-model="discountReason" class="mt-3" :placeholder="$t('posIndex.discountReasonPlaceholder')" />
+                            <!-- Fatura mini: ç'po arkëtohet, dy fjalë gri nën total -->
+                            <div v-if="selectedOrder.items?.length" class="mt-5 border-t border-neutral-100 pt-2.5">
+                                <p v-for="line in selectedOrder.items" :key="line.id" class="flex items-baseline justify-between py-1 text-body-sm">
+                                    <span class="text-neutral-500">{{ line.quantity }} × {{ line.menu_item?.name || $t('posIndex.fallbackItem') }}</span>
+                                    <span class="font-medium text-primary-900 tabular-nums">{{ money(Number(line.unit_price) * Number(line.quantity)) }}</span>
+                                </p>
                             </div>
 
-                            <div v-if="paymentTotal > 0">
-                                <p class="mb-2 text-label text-neutral-600">{{ $t('posIndex.paymentMethod') }}</p>
-                                <div class="grid grid-cols-2 gap-2">
-                                    <button v-for="opt in [...paymentOptions, { value: 'split', label: $t('posIndex.payCashCard') }]" :key="opt.value" type="button" class="min-h-20 rounded-xl border-2 p-3 text-center transition touch-manipulation" :class="paymentMethod === opt.value ? 'border-accent-500 bg-accent-50 text-accent-800' : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'" @click="paymentMethod = opt.value">
-                                        <span class="block text-2xl">{{ opt.value === 'cash' ? '💵' : opt.value === 'card' ? '💳' : opt.value === 'split' ? '💵＋💳' : '🏨' }}</span>
-                                        <span class="mt-1 block text-body-sm font-bold">{{ opt.label }}</span>
+                            <!-- Metodat: NJË kontroll i segmentuar, i zgjedhuri mbushet navy -->
+                            <div v-if="paymentTotal > 0" class="mt-6">
+                                <p class="mb-2.5 text-tiny font-semibold uppercase tracking-[0.16em] text-neutral-400">{{ $t('posIndex.paymentMethod') }}</p>
+                                <div class="grid grid-cols-4 divide-x divide-neutral-200 overflow-hidden rounded-2xl border border-neutral-200">
+                                    <button
+                                        v-for="opt in segmentedOptions"
+                                        :key="opt.value"
+                                        type="button"
+                                        class="flex min-h-[68px] flex-col items-center justify-center gap-1.5 px-1 py-3 transition touch-manipulation"
+                                        :class="paymentMethod === opt.value ? 'bg-primary-950 text-white' : 'bg-white text-neutral-500 hover:bg-neutral-50 hover:text-primary-900'"
+                                        @click="paymentMethod = opt.value"
+                                    >
+                                        <component :is="opt.icon" class="h-5 w-5" />
+                                        <span class="text-tiny font-semibold">{{ opt.short }}</span>
                                     </button>
                                 </div>
                             </div>
 
-                            <div v-if="multiCurrency && (paymentMethod === 'cash' || paymentMethod === 'card')" class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                            <!-- Kusuri: vetëm cash në monedhën bazë — tabletat + shifra jeshile -->
+                            <div v-if="paymentMethod === 'cash' && payTendered === null && paymentTotal > 0" class="mt-6">
+                                <p class="mb-2.5 text-tiny font-semibold uppercase tracking-[0.16em] text-neutral-400">{{ $t('posIndex.customerGave') }}</p>
+                                <div class="flex gap-2">
+                                    <button
+                                        v-for="opt in tenderOptions"
+                                        :key="opt"
+                                        type="button"
+                                        class="min-h-11 flex-1 rounded-xl text-body-sm font-semibold transition touch-manipulation tabular-nums"
+                                        :class="(tenderGiven ?? paymentTotal) === opt ? 'bg-primary-950 text-white' : 'bg-neutral-100 text-primary-900 hover:bg-neutral-200'"
+                                        @click="tenderGiven = opt"
+                                    >{{ money(opt) }}</button>
+                                </div>
+                                <div class="mt-3.5 flex items-baseline justify-between">
+                                    <span class="text-tiny font-semibold uppercase tracking-[0.16em] text-neutral-400">{{ $t('posIndex.changeDue') }}</span>
+                                    <span class="text-2xl font-bold text-success-700 tabular-nums">{{ money(changeDue) }}</span>
+                                </div>
+                            </div>
+
+                            <div v-if="multiCurrency && (paymentMethod === 'cash' || paymentMethod === 'card')" class="mt-6 rounded-2xl border border-neutral-200 p-4">
                                 <div class="flex items-center justify-between gap-3">
                                     <span class="text-label text-neutral-600">{{ $t('posIndex.paymentCurrency') }}</span>
                                     <select v-model="payCurrency" class="rounded-lg border-neutral-200 px-3 py-2 text-body-sm">
@@ -1076,7 +1106,7 @@ onMounted(() => {
                                 </template>
                             </div>
 
-                            <div v-if="paymentMethod === 'split'" class="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                            <div v-if="paymentMethod === 'split'" class="mt-6 rounded-2xl border border-neutral-200 p-4">
                                 <FormGroup :label="$t('posIndex.cashAmount')"><TextInput v-model="splitCashAmount" type="number" min="0" :max="paymentTotal" step="0.01" placeholder="0.00" /></FormGroup>
                                 <div v-if="multiCurrency" class="mt-3 flex items-center justify-between gap-3">
                                     <span class="text-label text-neutral-600">{{ $t('posIndex.cashCurrency') }}</span>
@@ -1099,16 +1129,19 @@ onMounted(() => {
                                 <div class="mt-3 flex items-center justify-between text-body-sm"><span class="text-neutral-500">{{ $t('posIndex.cardPortion') }}</span><strong>{{ money(splitCard) }}</strong></div>
                             </div>
 
-                            <div v-if="paymentMethod === 'room_charge'">
-                                <label class="mb-1.5 block text-label text-neutral-600">{{ $t('posIndex.roomGuest') }}</label>
+                            <div v-if="paymentMethod === 'room_charge'" class="mt-6">
+                                <p class="mb-2.5 text-tiny font-semibold uppercase tracking-[0.16em] text-neutral-400">{{ $t('posIndex.roomGuest') }}</p>
                                 <Select v-model="selectedPayReservation" :options="reservationOptions" :placeholder="$t('posIndex.selectActiveReservation')" />
                             </div>
-
-                            <p class="rounded-xl border border-info-200 bg-info-50 px-3 py-2.5 text-small text-info-800">{{ $t('posIndex.paymentRoutingNote') }}</p>
                         </div>
 
                         <div class="space-y-2 border-t border-neutral-200 bg-neutral-50 p-4">
-                            <Button variant="primary" size="lg" class="min-h-14 w-full text-lg" :disabled="(paymentTotal > 0 && !paymentMethod) || (paymentMethod === 'room_charge' && !selectedPayReservation) || (paymentDiscount > 0 && !discountReason.trim()) || (paymentMethod === 'split' && (splitCash <= 0 || splitCard <= 0))" @click="submitPay">{{ $t('posIndex.confirmPayment') }} · {{ money(paymentTotal) }}</Button>
+                            <button
+                                type="button"
+                                class="min-h-14 w-full rounded-2xl bg-success-600 text-lg font-bold text-white transition touch-manipulation hover:bg-success-700 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
+                                :disabled="(paymentTotal > 0 && !paymentMethod) || (paymentMethod === 'room_charge' && !selectedPayReservation) || (paymentMethod === 'split' && (splitCash <= 0 || splitCard <= 0))"
+                                @click="submitPay"
+                            >{{ $t('posIndex.collect') }} {{ money(paymentTotal) }}</button>
                             <button type="button" class="min-h-11 w-full rounded-lg text-body-sm font-semibold text-neutral-500 hover:bg-white" @click="closePayment">{{ $t('posIndex.backToOrder') }}</button>
                         </div>
                     </template>
