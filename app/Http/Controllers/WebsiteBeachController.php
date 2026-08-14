@@ -8,6 +8,7 @@ use App\Models\BeachZone;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\BeachPokPayments;
+use App\Services\BeachPricing;
 use App\Services\PokClient;
 use App\Services\PokConfiguration;
 use App\Services\PricingCurrency;
@@ -53,7 +54,16 @@ class WebsiteBeachController extends Controller
             ->unique()
             ->values();
 
-        return response()->json(['busy_unit_ids' => $busyUnitIds]);
+        return response()->json([
+            'busy_unit_ids' => $busyUnitIds,
+            // Per zonë: totali i intervalit + min/max ditor — UI-ja publike
+            // shfaq çmimin real të datave pa e llogaritur vetë.
+            'zone_pricing' => app(BeachPricing::class)->breakdown(
+                $this->activeZones(),
+                $request->start_date,
+                $request->end_date,
+            ),
+        ]);
     }
 
     public function submit(Request $request): RedirectResponse
@@ -96,13 +106,12 @@ class WebsiteBeachController extends Controller
                 ]);
             }
 
-            $days = Carbon::parse($data['start_date'])->diffInDays(Carbon::parse($data['end_date'])) + 1;
-
             return BeachReservation::create([
                 ...$data,
                 'status' => BeachReservation::STATUS_PENDING,
                 'source' => BeachReservation::SOURCE_WEBSITE,
-                'total_amount' => round($days * (float) $unit->zone->price_per_day, 2),
+                // Çmim sezonal ditë-për-ditë, VETËM server-side (BeachPricing).
+                'total_amount' => app(BeachPricing::class)->totalFor($unit, $data['start_date'], $data['end_date']),
                 'confirmation_token' => Str::random(40),
                 'created_by' => $creator->id,
             ]);
