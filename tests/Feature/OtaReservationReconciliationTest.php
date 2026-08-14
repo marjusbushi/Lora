@@ -189,6 +189,10 @@ class OtaReservationReconciliationTest extends TestCase
             'channel' => 'booking.com',
             'channel_ref' => null,
             'total_amount' => 100,
+            // The twin search only considers stays with check_out >= today —
+            // the helper's fixed 2026 dates became a time bomb once they passed.
+            'check_in_date' => today()->addDay()->toDateString(),
+            'check_out_date' => today()->addDays(3)->toDateString(),
         ]);
 
         app(OtaReservationReconciler::class)->reconcile([$this->booking([
