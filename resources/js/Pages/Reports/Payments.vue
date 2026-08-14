@@ -178,6 +178,16 @@ const issueHref = (issue) => {
                 </div>
             </div>
 
+            <div v-if="summary.cash_variance_count" class="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 px-5 py-3 text-body-sm text-neutral-600">
+                <span class="inline-flex items-center gap-1">
+                    {{ $t('reports360.paymentReconciliation.shiftVariances', { count: summary.cash_variance_count }) }}
+                    <b :class="Math.abs(summary.cash_variance) >= 0.01 ? 'text-primary-900' : 'text-neutral-500'">{{ money(summary.cash_variance) }}</b>
+                    <small v-if="showBase" class="text-neutral-400">({{ moneyBase(summary.cash_variance) }})</small>
+                    <InfoTip :text="$t('reports360.help.prShiftVariances')" :label="$t('reports360.paymentReconciliation.control')" />
+                </span>
+                <Link :href="route('reports.shifts')" class="text-tiny font-semibold text-accent-700 hover:underline">{{ $t('reports360.paymentReconciliation.seeShifts') }}</Link>
+            </div>
+
             <div v-if="issues.length" class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-neutral-200">
                     <thead class="bg-neutral-50 text-left text-label text-neutral-600">
