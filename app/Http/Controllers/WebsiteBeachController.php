@@ -105,6 +105,17 @@ class WebsiteBeachController extends Controller
         return redirect()->route('website.beach.confirmation', $reservation->confirmation_token);
     }
 
+    /**
+     * QR-ja e printuar në çadër është E PËRJETSHME (/s/{token}). Në V1 çon te
+     * rezervimi; në V2 do të çojë te menuja e barit me çadrën e para-plotësuar.
+     */
+    public function qr(string $qrToken): RedirectResponse
+    {
+        BeachUnit::query()->where('qr_token', $qrToken)->firstOrFail();
+
+        return redirect()->route('website.beach');
+    }
+
     public function confirmation(string $token): Response
     {
         $reservation = BeachReservation::query()

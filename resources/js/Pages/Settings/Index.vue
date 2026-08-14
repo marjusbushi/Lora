@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n';
 import AboutTab from './Tabs/AboutTab.vue';
 import AiTab from './Tabs/AiTab.vue';
 import AmenitiesTab from './Tabs/AmenitiesTab.vue';
+import BeachTab from './Tabs/BeachTab.vue';
 import BookingPoliciesTab from './Tabs/BookingPoliciesTab.vue';
 import CurrenciesTab from './Tabs/CurrenciesTab.vue';
 import FinancialTab from './Tabs/FinancialTab.vue';
@@ -168,6 +169,7 @@ function selectMobileTab(tabId) {
                     <PosTab v-else-if="activeTab === 'pos'" :settings="settings.pos || {}" :staff="posStaff" :account-mode="posAccountMode" :toasts="toasts" />
                     <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :tree="inventoryCategoryTree" :inventory-enabled="modules.finance === true" :toasts="toasts" />
                     <HousekeepingTab v-else-if="activeTab === 'housekeeping'" :settings="settings.housekeeping || {}" :checklist-defaults="checklistDefaults" :toasts="toasts" />
+                    <BeachTab v-else-if="activeTab === 'beach'" :settings="settings.beach || {}" :toasts="toasts" />
                     <FinancialTab v-else-if="activeTab === 'financial'" :settings="settings.financial || {}" :toasts="toasts" />
                     <CurrenciesTab v-else-if="activeTab === 'currencies'" :settings="settings.currencies || {}" :toasts="toasts" />
                     <PricingProgramsTab v-else-if="activeTab === 'pricing-programs'" :settings="settings.pricing_programs || {}" :financial="settings.financial || {}" :toasts="toasts" />

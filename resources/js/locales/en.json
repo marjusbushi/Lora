@@ -376,7 +376,8 @@
       "inventory": "Inventory",
       "inventoryOverview": "Overview",
       "inventoryItems": "Items",
-      "inventoryWarehouses": "Warehouses"
+      "inventoryWarehouses": "Warehouses",
+      "beach": "Beach"
     },
     "account": {
       "profile": "Profile",
@@ -4364,7 +4365,10 @@
     "active": "Active",
     "all": "All",
     "inactive": "Inactive",
-    "types": { "cash": "Cash", "bank": "Bank" },
+    "types": {
+      "cash": "Cash",
+      "bank": "Bank"
+    },
     "noAccounts": "No accounts found.",
     "balance": "Balance",
     "inToday": "In today",
@@ -4378,8 +4382,19 @@
     "folio": "Folio",
     "expense": "Expense",
     "manual": "Manual",
-    "sourceLabels": { "folio": "Folio", "pos": "POS", "expense": "Expense", "transfer": "Transfer", "manual": "Manual" },
-    "methods": { "Kartë": "Card", "Cash": "Cash", "Bankë": "Bank", "Transferim": "Transfer" },
+    "sourceLabels": {
+      "folio": "Folio",
+      "pos": "POS",
+      "expense": "Expense",
+      "transfer": "Transfer",
+      "manual": "Manual"
+    },
+    "methods": {
+      "Kartë": "Card",
+      "Cash": "Cash",
+      "Bankë": "Bank",
+      "Transferim": "Transfer"
+    },
     "export": "Export",
     "date": "Date",
     "movement": "Movement",
@@ -4918,7 +4933,6 @@
       "slug": "Identifier (slug)",
       "slugHelp": "Used in internal addresses; letters, numbers and hyphens only.",
       "primaryDomain": "Primary domain",
-      "optional": "optional",
       "localization": "Localization",
       "localizationHelp": "Sets the default time and currency across the PMS.",
       "timezone": "Timezone",
@@ -5459,8 +5473,19 @@
       "priority": "Priority",
       "responseTime": "Response time",
       "date": "Date",
-      "priorities": { "critical": "Critical", "high": "High", "medium": "Medium", "low": "Low" },
-      "sla": { "met": "Within SLA", "breached": "SLA breached", "overdue": "Overdue", "open": "Open", "not_set": "No SLA" }
+      "priorities": {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "sla": {
+        "met": "Within SLA",
+        "breached": "SLA breached",
+        "overdue": "Overdue",
+        "open": "Open",
+        "not_set": "No SLA"
+      }
     },
     "recurringMaintenance": {
       "title": "Recurring Maintenance Issues",
@@ -5510,8 +5535,23 @@
       "task": "Cleaning task",
       "unassignedRoom": "Room not assigned",
       "unassignedStaff": "Unassigned",
-      "tabs": { "all": "All rooms", "arrivals": "Arrivals", "attention": "Attention" },
-      "states": { "ready": "Ready for arrival", "available": "Available", "checked_in": "Checked in", "cleaning": "Cleaning", "cleaning_for_arrival": "Cleaning for arrival", "turnover": "Checkout + arrival", "departure_pending": "Departure pending", "maintenance": "Maintenance", "occupied": "Occupied / blocked", "unassigned": "Room not assigned" }
+      "tabs": {
+        "all": "All rooms",
+        "arrivals": "Arrivals",
+        "attention": "Attention"
+      },
+      "states": {
+        "ready": "Ready for arrival",
+        "available": "Available",
+        "checked_in": "Checked in",
+        "cleaning": "Cleaning",
+        "cleaning_for_arrival": "Cleaning for arrival",
+        "turnover": "Checkout + arrival",
+        "departure_pending": "Departure pending",
+        "maintenance": "Maintenance",
+        "occupied": "Occupied / blocked",
+        "unassigned": "Room not assigned"
+      }
     },
     "operationsExecutive": {
       "title": "Operations Executive Dashboard",
@@ -5568,15 +5608,32 @@
       "title": "Guest Movements",
       "short": "Arrivals, departures and in-house guests in one workspace.",
       "category": "Operations",
-      "tabs": { "arrivals": "Arrivals", "departures": "Departures", "in_house": "In-house live" },
-      "kpis": { "arrivals": "Arrivals", "departures": "Departures", "in_house": "In-house stays", "guests": "Guests", "nights": "Nights", "balance": "Outstanding", "openPos": "Open POS orders" },
+      "tabs": {
+        "arrivals": "Arrivals",
+        "departures": "Departures",
+        "in_house": "In-house live"
+      },
+      "kpis": {
+        "arrivals": "Arrivals",
+        "departures": "Departures",
+        "in_house": "In-house stays",
+        "guests": "Guests",
+        "nights": "Nights",
+        "balance": "Outstanding",
+        "openPos": "Open POS orders"
+      },
       "guest": "Guest",
       "room": "Room",
       "period": "Stay",
       "status": "Status",
       "pax": "Pax",
       "balance": "Balance",
-      "statuses": { "pending": "Pending", "confirmed": "Confirmed", "checked_in": "Checked in", "checked_out": "Checked out" }
+      "statuses": {
+        "pending": "Pending",
+        "confirmed": "Confirmed",
+        "checked_in": "Checked in",
+        "checked_out": "Checked out"
+      }
     },
     "guestLtv": {
       "title": "Repeat Guests & Lifetime Value",
@@ -5603,7 +5660,11 @@
       "avgStay": "Average stay",
       "lastVisit": "Last visit",
       "upcomingStay": "upcoming",
-      "segments": { "one_time": "One-time", "returning": "Returning", "loyal": "Loyal" }
+      "segments": {
+        "one_time": "One-time",
+        "returning": "Returning",
+        "loyal": "Loyal"
+      }
     },
     "guestSegments": {
       "title": "Guest Segments",
@@ -5625,8 +5686,21 @@
       "lastVisit": "Last visit",
       "action": "Recommended action",
       "days": "days",
-      "segments": { "all": "All", "vip": "VIP", "loyal": "Loyal", "returning": "Returning", "new": "New", "dormant": "Dormant" },
-      "actions": { "retain": "Priority retention", "reward": "Loyalty reward", "convert": "Convert to loyal", "second_stay": "Drive second stay", "win_back": "Win-back campaign" }
+      "segments": {
+        "all": "All",
+        "vip": "VIP",
+        "loyal": "Loyal",
+        "returning": "Returning",
+        "new": "New",
+        "dormant": "Dormant"
+      },
+      "actions": {
+        "retain": "Priority retention",
+        "reward": "Loyalty reward",
+        "convert": "Convert to loyal",
+        "second_stay": "Drive second stay",
+        "win_back": "Win-back campaign"
+      }
     },
     "housekeepingProductivity": {
       "title": "Housekeeping Productivity & Turnaround",
@@ -5651,8 +5725,18 @@
       "queue": "Queue",
       "cleaning": "Cleaning",
       "date": "Date",
-      "types": { "checkout_clean": "Checkout clean", "stayover_clean": "Stayover clean", "deep_clean": "Deep clean", "inspection": "Inspection" },
-      "statuses": { "pending": "Pending", "in_progress": "In progress", "completed": "Completed", "inspected": "Inspected" }
+      "types": {
+        "checkout_clean": "Checkout clean",
+        "stayover_clean": "Stayover clean",
+        "deep_clean": "Deep clean",
+        "inspection": "Inspection"
+      },
+      "statuses": {
+        "pending": "Pending",
+        "in_progress": "In progress",
+        "completed": "Completed",
+        "inspected": "Inspected"
+      }
     },
     "departmentRevenue": {
       "title": "Revenue by Department",
@@ -5904,7 +5988,11 @@
       "title": "Outstanding balances & Aging",
       "short": "Debt, overdue balances and collection priorities.",
       "category": "Finance & cash",
-      "status": { "confirmed": "Confirmed", "checked_in": "Inside", "checked_out": "Away" },
+      "status": {
+        "confirmed": "Confirmed",
+        "checked_in": "Inside",
+        "checked_out": "Away"
+      },
       "total": "Total to collect",
       "overdue": "Overdue value",
       "collectionRate": "Collection rate",
@@ -6689,7 +6777,8 @@
         "users": "Users & roles",
         "notifications": "Notifications",
         "security": "Security",
-        "history": "Audit"
+        "history": "Audit",
+        "beach": "Beach"
       },
       "groups": {
         "hotel": "Hotel",
@@ -6914,5 +7003,66 @@
     "step3": "Sign in with your Lora account and approve only the hotel shown.",
     "recentAiActivity": "Recent AI activity",
     "noAiActions": "No AI-executed actions yet."
+  },
+  "beach": {
+    "nav": {
+      "calendar": "Sunbed calendar",
+      "setup": "Map & Prices"
+    },
+    "setup": {
+      "title": "Beach · Map & Prices",
+      "subtitle": "Zones, numbered sunbeds and daily prices. Booking window and season live in",
+      "settingsLink": "Settings → Beach",
+      "addZone": "Add zone",
+      "editZone": "Edit zone",
+      "edit": "Edit",
+      "delete": "Delete",
+      "printQr": "Print QR codes",
+      "noZonesTitle": "No beach zones yet",
+      "noZonesHint": "Create the first zone (e.g. Front Row) and generate numbered sunbeds.",
+      "pricePerDayBadge": "{price} / day",
+      "active": "Active",
+      "inactive": "Inactive",
+      "unitsCount": "{count} sunbeds",
+      "generateUnits": "Generate sunbeds",
+      "noUnits": "This zone has no sunbeds yet — generate them in one click.",
+      "deleteZoneConfirm": "Delete zone \"{name}\" together with its sunbeds?",
+      "deleteUnitConfirm": "Delete sunbed {number}?",
+      "zoneName": "Zone name",
+      "zoneNamePlaceholder": "e.g. Front Row",
+      "pricePerDay": "Price / day",
+      "sortOrder": "Sort order",
+      "activeLabel": "Status",
+      "activeHint": "Zone is active",
+      "unitActiveHint": "Sunbed is in service",
+      "cancel": "Cancel",
+      "save": "Save",
+      "create": "Create",
+      "generateTitle": "Generate sunbeds — {zone}",
+      "count": "How many sunbeds?",
+      "startNumber": "Starting number (optional)",
+      "startNumberPlaceholder": "auto",
+      "startNumberHint": "Empty = continues from the highest existing number on the beach.",
+      "generate": "Generate",
+      "editUnit": "Click to edit",
+      "editUnitTitle": "Sunbed {number}",
+      "unitNumber": "Sunbed number",
+      "print": {
+        "title": "Sunbed QR codes — attach one to each sunbed",
+        "qrAlt": "QR for sunbed {number}",
+        "scanToBook": "Scan to book"
+      }
+    },
+    "settings": {
+      "title": "Beach",
+      "subtitle": "Online booking window and beach season.",
+      "windowLabel": "How many days ahead can guests book online?",
+      "windowHint": "E.g. 10 = guests book from today up to 10 days ahead. Reception has no limit.",
+      "seasonStart": "Season start",
+      "seasonEnd": "Season end",
+      "seasonHint": "Empty = the beach is open all year.",
+      "save": "Save settings",
+      "saved": "Beach settings saved."
+    }
   }
 }

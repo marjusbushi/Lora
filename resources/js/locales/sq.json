@@ -376,7 +376,8 @@
       "inventory": "Inventari",
       "inventoryOverview": "Përmbledhja",
       "inventoryItems": "Artikujt",
-      "inventoryWarehouses": "Magazinat"
+      "inventoryWarehouses": "Magazinat",
+      "beach": "Plazhi"
     },
     "account": {
       "profile": "Profili",
@@ -4364,7 +4365,10 @@
     "active": "Aktive",
     "all": "Të gjitha",
     "inactive": "Joaktive",
-    "types": { "cash": "Arkë", "bank": "Bankë" },
+    "types": {
+      "cash": "Arkë",
+      "bank": "Bankë"
+    },
     "noAccounts": "Nuk u gjet asnjë llogari.",
     "balance": "Bilanci",
     "inToday": "Hyrje sot",
@@ -4378,8 +4382,19 @@
     "folio": "Folio",
     "expense": "Shpenzim",
     "manual": "Manuale",
-    "sourceLabels": { "folio": "Folio", "pos": "POS", "expense": "Shpenzim", "transfer": "Transferim", "manual": "Manuale" },
-    "methods": { "Kartë": "Kartë", "Cash": "Cash", "Bankë": "Bankë", "Transferim": "Transferim" },
+    "sourceLabels": {
+      "folio": "Folio",
+      "pos": "POS",
+      "expense": "Shpenzim",
+      "transfer": "Transferim",
+      "manual": "Manuale"
+    },
+    "methods": {
+      "Kartë": "Kartë",
+      "Cash": "Cash",
+      "Bankë": "Bankë",
+      "Transferim": "Transferim"
+    },
     "export": "Eksporto",
     "date": "Data",
     "movement": "Lëvizja",
@@ -4918,7 +4933,6 @@
       "slug": "Identifikuesi (slug)",
       "slugHelp": "Përdoret në adresat e brendshme; vetëm shkronja, numra dhe viza.",
       "primaryDomain": "Domain primar",
-      "optional": "opsional",
       "localization": "Lokalizimi",
       "localizationHelp": "Përcakton orën dhe monedhën bazë në të gjithë PMS-në.",
       "timezone": "Zona kohore",
@@ -5459,8 +5473,19 @@
       "priority": "Prioriteti",
       "responseTime": "Koha e reagimit",
       "date": "Data",
-      "priorities": { "critical": "Kritik", "high": "I lartë", "medium": "Mesatar", "low": "I ulët" },
-      "sla": { "met": "Brenda SLA", "breached": "SLA e kaluar", "overdue": "Me vonesë", "open": "E hapur", "not_set": "Pa SLA" }
+      "priorities": {
+        "critical": "Kritik",
+        "high": "I lartë",
+        "medium": "Mesatar",
+        "low": "I ulët"
+      },
+      "sla": {
+        "met": "Brenda SLA",
+        "breached": "SLA e kaluar",
+        "overdue": "Me vonesë",
+        "open": "E hapur",
+        "not_set": "Pa SLA"
+      }
     },
     "recurringMaintenance": {
       "title": "Probleme të përsëritura",
@@ -5510,8 +5535,23 @@
       "task": "Detyra e pastrimit",
       "unassignedRoom": "Pa dhomë të caktuar",
       "unassignedStaff": "Pa staf",
-      "tabs": { "all": "Të gjitha", "arrivals": "Mbërritjet", "attention": "Vëmendje" },
-      "states": { "ready": "Gati për mbërritje", "available": "E lirë", "checked_in": "Check-in kryer", "cleaning": "Në pastrim", "cleaning_for_arrival": "Pastrim për mbërritje", "turnover": "Checkout + mbërritje", "departure_pending": "Nisje në pritje", "maintenance": "Mirëmbajtje", "occupied": "E zënë / bllokuar", "unassigned": "Pa dhomë" }
+      "tabs": {
+        "all": "Të gjitha",
+        "arrivals": "Mbërritjet",
+        "attention": "Vëmendje"
+      },
+      "states": {
+        "ready": "Gati për mbërritje",
+        "available": "E lirë",
+        "checked_in": "Check-in kryer",
+        "cleaning": "Në pastrim",
+        "cleaning_for_arrival": "Pastrim për mbërritje",
+        "turnover": "Checkout + mbërritje",
+        "departure_pending": "Nisje në pritje",
+        "maintenance": "Mirëmbajtje",
+        "occupied": "E zënë / bllokuar",
+        "unassigned": "Pa dhomë"
+      }
     },
     "operationsExecutive": {
       "title": "Dashboard Operacional",
@@ -5568,15 +5608,32 @@
       "title": "Lëvizjet e mysafirëve",
       "short": "Mbërritjet, nisjet dhe mysafirët in-house në një faqe.",
       "category": "Operacione",
-      "tabs": { "arrivals": "Mbërritjet", "departures": "Nisjet", "in_house": "In-house live" },
-      "kpis": { "arrivals": "Mbërritje", "departures": "Nisje", "in_house": "Qëndrime in-house", "guests": "Mysafirë", "nights": "Net", "balance": "Pa arkëtuar", "openPos": "Porosi POS të hapura" },
+      "tabs": {
+        "arrivals": "Mbërritjet",
+        "departures": "Nisjet",
+        "in_house": "In-house live"
+      },
+      "kpis": {
+        "arrivals": "Mbërritje",
+        "departures": "Nisje",
+        "in_house": "Qëndrime in-house",
+        "guests": "Mysafirë",
+        "nights": "Net",
+        "balance": "Pa arkëtuar",
+        "openPos": "Porosi POS të hapura"
+      },
       "guest": "Mysafiri",
       "room": "Dhoma",
       "period": "Qëndrimi",
       "status": "Statusi",
       "pax": "Persona",
       "balance": "Bilanci",
-      "statuses": { "pending": "Në pritje", "confirmed": "Konfirmuar", "checked_in": "Check-in", "checked_out": "Check-out" }
+      "statuses": {
+        "pending": "Në pritje",
+        "confirmed": "Konfirmuar",
+        "checked_in": "Check-in",
+        "checked_out": "Check-out"
+      }
     },
     "guestLtv": {
       "title": "Mysafirët Kthyes & Lifetime Value",
@@ -5603,7 +5660,11 @@
       "avgStay": "Mesatarja për qëndrim",
       "lastVisit": "Vizita e fundit",
       "upcomingStay": "e ardhshme",
-      "segments": { "one_time": "Një herë", "returning": "Kthyes", "loyal": "Besnik" }
+      "segments": {
+        "one_time": "Një herë",
+        "returning": "Kthyes",
+        "loyal": "Besnik"
+      }
     },
     "guestSegments": {
       "title": "Segmentet e Klientëve",
@@ -5625,8 +5686,21 @@
       "lastVisit": "Vizita e fundit",
       "action": "Veprimi i rekomanduar",
       "days": "ditë",
-      "segments": { "all": "Të gjithë", "vip": "VIP", "loyal": "Besnik", "returning": "Kthyes", "new": "I ri", "dormant": "Joaktiv" },
-      "actions": { "retain": "Mbajtje prioritare", "reward": "Shpërblim besnikërie", "convert": "Ktheje në besnik", "second_stay": "Nxit qëndrimin e dytë", "win_back": "Fushatë rikthimi" }
+      "segments": {
+        "all": "Të gjithë",
+        "vip": "VIP",
+        "loyal": "Besnik",
+        "returning": "Kthyes",
+        "new": "I ri",
+        "dormant": "Joaktiv"
+      },
+      "actions": {
+        "retain": "Mbajtje prioritare",
+        "reward": "Shpërblim besnikërie",
+        "convert": "Ktheje në besnik",
+        "second_stay": "Nxit qëndrimin e dytë",
+        "win_back": "Fushatë rikthimi"
+      }
     },
     "housekeepingProductivity": {
       "title": "Produktiviteti & Turnaround i Pastrimit",
@@ -5651,8 +5725,18 @@
       "queue": "Pritja",
       "cleaning": "Pastrimi",
       "date": "Data",
-      "types": { "checkout_clean": "Pastrim largimi", "stayover_clean": "Pastrim qëndrimi", "deep_clean": "Pastrim i thellë", "inspection": "Inspektim" },
-      "statuses": { "pending": "Në pritje", "in_progress": "Në proces", "completed": "Përfunduar", "inspected": "Inspektuar" }
+      "types": {
+        "checkout_clean": "Pastrim largimi",
+        "stayover_clean": "Pastrim qëndrimi",
+        "deep_clean": "Pastrim i thellë",
+        "inspection": "Inspektim"
+      },
+      "statuses": {
+        "pending": "Në pritje",
+        "in_progress": "Në proces",
+        "completed": "Përfunduar",
+        "inspected": "Inspektuar"
+      }
     },
     "departmentRevenue": {
       "title": "Të ardhurat sipas departamentit",
@@ -5904,7 +5988,11 @@
       "title": "Bilance të papaguara & Vjetërsia",
       "short": "Borxhet, vonesat dhe prioritetet e arkëtimit.",
       "category": "Financë & arka",
-      "status": { "confirmed": "Konfirmuar", "checked_in": "Brenda", "checked_out": "Larguar" },
+      "status": {
+        "confirmed": "Konfirmuar",
+        "checked_in": "Brenda",
+        "checked_out": "Larguar"
+      },
       "total": "Totali për arkëtim",
       "overdue": "Vlera e vonuar",
       "collectionRate": "Norma e arkëtimit",
@@ -6689,7 +6777,8 @@
         "users": "Përdoruesit & rolet",
         "notifications": "Njoftimet",
         "security": "Siguria",
-        "history": "Auditimi"
+        "history": "Auditimi",
+        "beach": "Plazhi"
       },
       "groups": {
         "hotel": "Hoteli",
@@ -6914,5 +7003,66 @@
     "step3": "Hyr me llogarinë Lora dhe aprovo vetëm hotelin e shfaqur.",
     "recentAiActivity": "Aktiviteti i fundit AI",
     "noAiActions": "Nuk ka ende veprime të ekzekutuara nga AI."
+  },
+  "beach": {
+    "nav": {
+      "calendar": "Kalendari i çadrave",
+      "setup": "Harta & Çmimet"
+    },
+    "setup": {
+      "title": "Plazhi · Harta & Çmimet",
+      "subtitle": "Zonat, çadrat me numra dhe çmimet ditore. Dritarja e rezervimit dhe sezoni caktohen te",
+      "settingsLink": "Cilësimet → Plazhi",
+      "addZone": "Shto zonë",
+      "editZone": "Ndrysho zonën",
+      "edit": "Ndrysho",
+      "delete": "Fshi",
+      "printQr": "Printo QR-të",
+      "noZonesTitle": "Plazhi s'ka ende zona",
+      "noZonesHint": "Krijo zonën e parë (p.sh. Rreshti 1) dhe gjenero çadrat me numra.",
+      "pricePerDayBadge": "{price} / ditë",
+      "active": "Aktive",
+      "inactive": "Joaktive",
+      "unitsCount": "{count} çadra",
+      "generateUnits": "Gjenero çadra",
+      "noUnits": "Kjo zonë s'ka ende çadra — gjeneroji me një klik.",
+      "deleteZoneConfirm": "Fshi zonën \"{name}\" bashkë me çadrat e saj?",
+      "deleteUnitConfirm": "Fshi çadrën {number}?",
+      "zoneName": "Emri i zonës",
+      "zoneNamePlaceholder": "p.sh. Rreshti 1",
+      "pricePerDay": "Çmimi / ditë",
+      "sortOrder": "Renditja",
+      "activeLabel": "Statusi",
+      "activeHint": "Zona është aktive",
+      "unitActiveHint": "Çadra është në shërbim",
+      "cancel": "Anullo",
+      "save": "Ruaj",
+      "create": "Krijo",
+      "generateTitle": "Gjenero çadra — {zone}",
+      "count": "Sa çadra?",
+      "startNumber": "Numri fillestar (opsional)",
+      "startNumberPlaceholder": "auto",
+      "startNumberHint": "Bosh = vazhdon nga numri më i lartë ekzistues i plazhit.",
+      "generate": "Gjenero",
+      "editUnit": "Kliko për ta ndryshuar",
+      "editUnitTitle": "Çadra {number}",
+      "unitNumber": "Numri i çadrës",
+      "print": {
+        "title": "QR-të e çadrave — ngjitini në çdo çadër",
+        "qrAlt": "QR i çadrës {number}",
+        "scanToBook": "Skano për të rezervuar"
+      }
+    },
+    "settings": {
+      "title": "Plazhi",
+      "subtitle": "Dritarja e rezervimit online dhe sezoni i plazhit.",
+      "windowLabel": "Sa ditë përpara lejohet rezervimi online?",
+      "windowHint": "P.sh. 10 = klienti rezervon nga sot deri 10 ditë përpara. Recepsioni s'ka kufi.",
+      "seasonStart": "Fillimi i sezonit",
+      "seasonEnd": "Mbyllja e sezonit",
+      "seasonHint": "Bosh = plazhi i hapur gjithë vitin.",
+      "save": "Ruaj cilësimet",
+      "saved": "Cilësimet e plazhit u ruajtën."
+    }
   }
 }

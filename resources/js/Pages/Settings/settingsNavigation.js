@@ -13,6 +13,7 @@ export const settingsTabs = [
     { id: 'pos', labelKey: 'settingsTabs.navigation.tabs.pos', group: 'operations', module: 'pos' },
     { id: 'menu', labelKey: 'settingsTabs.navigation.tabs.menu', group: 'operations', module: 'pos' },
     { id: 'housekeeping', labelKey: 'settingsTabs.navigation.tabs.housekeeping', group: 'operations', module: 'housekeeping' },
+    { id: 'beach', labelKey: 'settingsTabs.navigation.tabs.beach', group: 'operations', module: 'beach' },
     { id: 'financial', labelKey: 'settingsTabs.navigation.tabs.financial', group: 'operations' },
     { id: 'currencies', labelKey: 'settingsTabs.navigation.tabs.currencies', group: 'operations', module: 'finance' },
     { id: 'integrations', labelKey: 'settingsTabs.navigation.tabs.integrations', group: 'automation' },

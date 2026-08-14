@@ -89,6 +89,8 @@ Route::get('/book-sunbeds', [WebsiteBeachController::class, 'index'])->middlewar
 Route::get('/book-sunbeds/availability', [WebsiteBeachController::class, 'availability'])->middleware(['module:beach', 'throttle:60,1'])->name('website.beach.availability');
 Route::post('/book-sunbeds', [WebsiteBeachController::class, 'submit'])->middleware(['module:beach', 'throttle:10,1'])->name('website.beach.submit');
 Route::get('/book-sunbeds/confirmation/{token}', [WebsiteBeachController::class, 'confirmation'])->middleware('module:beach')->name('website.beach.confirmation');
+// QR i përjetshëm i çadrës (i printuar një herë): V1 → rezervimi; V2 → porosia te bari.
+Route::get('/s/{qrToken}', [WebsiteBeachController::class, 'qr'])->middleware(['module:beach', 'throttle:60,1'])->name('website.beach.qr');
 
 Route::get('/about', [WebsiteController::class, 'about'])->name('website.about');
 Route::get('/contact', [WebsiteController::class, 'contact'])->name('website.contact');
