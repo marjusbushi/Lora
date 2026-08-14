@@ -945,8 +945,10 @@ class SettingsController extends Controller
         // rreshtin e tenant-it e bën numërim+krijim atomik: dy kërkesa të njëkohshme
         // me një vend të lirë s'e kalojnë dot të dyja tavanin.
         DB::transaction(function () use ($data) {
+            // KUJDES: where('id', …) — whereKey te query-builder-i bazë bëhet WHERE `key`
+            // (kolonë inekzistente → 500 në MySQL; sqlite e fsheh si string-literal).
             DB::table('tenants')
-                ->whereKey(app(\App\Tenancy\TenantContext::class)->tenant()->id)
+                ->where('id', app(\App\Tenancy\TenantContext::class)->tenant()->id)
                 ->lockForUpdate()
                 ->first();
 
