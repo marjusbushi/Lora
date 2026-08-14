@@ -69,6 +69,14 @@ const statusColors = {
 
 const trackWidth = computed(() => `${props.visibleDays * 76}px`);
 
+// Koka e datave rri JASHTË kontejnerit të scroll-it horizontal (sticky ndaj faqes,
+// si kalendari i dhomave) — sinkronizohet majtas-djathtas me translateX nga scroll-i i trupit.
+const dateHeaderTrack = ref(null);
+
+function syncDateHeader(event) {
+    if (dateHeaderTrack.value) dateHeaderTrack.value.style.transform = `translateX(-${event.currentTarget.scrollLeft}px)`;
+}
+
 function reservationsFor(unitId) {
     return props.reservations.filter((r) => r.beach_unit_id === unitId);
 }
@@ -242,29 +250,31 @@ const unpaidToday = computed(() =>
             </Link>
         </div>
 
-        <div v-else class="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-            <!-- Scroll-i horizontal qëndron BRENDA këtij kontejneri, jo në faqe -->
-            <div class="overflow-x-auto overscroll-x-contain">
-                <div :style="{ minWidth: `calc(8rem + ${trackWidth})` }">
-                    <!-- Header i datave -->
-                    <div class="flex border-b border-neutral-300">
-                        <div class="sticky left-0 z-30 flex w-32 shrink-0 items-center border-r border-neutral-200 bg-white px-3 py-2 text-tiny font-bold uppercase tracking-wider text-neutral-500">
-                            {{ $t('beach.calendar.sunbed') }}
-                        </div>
-                        <div class="grid flex-1" :style="{ minWidth: trackWidth, gridTemplateColumns: `repeat(${visibleDays}, minmax(76px, 1fr))` }">
-                            <div
-                                v-for="day in days"
-                                :key="day.date"
-                                class="border-r border-neutral-200 px-1 py-1.5 text-center"
-                                :class="day.isToday ? 'bg-accent-50' : !day.inSeason ? 'bg-neutral-200/60' : day.isWeekend ? 'bg-neutral-100/80' : ''"
-                            >
-                                <p class="text-[10px] font-bold uppercase tracking-wide text-neutral-400">{{ day.weekday }}</p>
-                                <p class="mx-auto mt-0.5 grid h-6 w-6 place-items-center rounded-full text-body-sm font-bold" :class="day.isToday ? 'bg-accent-600 text-white' : 'text-neutral-700'">{{ day.day }}</p>
-                                <p class="text-[10px] text-neutral-400">{{ day.month }}</p>
-                            </div>
+        <div v-else class="rounded-xl border border-neutral-200 bg-white">
+            <!-- Header i datave — sticky ndaj faqes (edhe me scroll vertikal), si kalendari i dhomave -->
+            <div class="sticky top-16 z-40 flex rounded-t-xl border-b border-neutral-300 bg-white shadow-[0_6px_14px_-10px_rgba(15,23,42,0.45)]">
+                <div class="z-50 flex w-32 shrink-0 items-center border-r border-neutral-200 bg-white px-3 py-2 text-tiny font-bold uppercase tracking-wider text-neutral-500">
+                    {{ $t('beach.calendar.sunbed') }}
+                </div>
+                <div class="min-w-0 flex-1 overflow-hidden">
+                    <div ref="dateHeaderTrack" class="grid will-change-transform" :style="{ minWidth: trackWidth, width: trackWidth, gridTemplateColumns: `repeat(${visibleDays}, minmax(76px, 1fr))` }">
+                        <div
+                            v-for="day in days"
+                            :key="day.date"
+                            class="border-r border-neutral-200 px-1 py-1.5 text-center"
+                            :class="day.isToday ? 'bg-accent-50' : !day.inSeason ? 'bg-neutral-200/60' : day.isWeekend ? 'bg-neutral-100/80' : ''"
+                        >
+                            <p class="text-[10px] font-bold uppercase tracking-wide text-neutral-400">{{ day.weekday }}</p>
+                            <p class="mx-auto mt-0.5 grid h-6 w-6 place-items-center rounded-full text-body-sm font-bold" :class="day.isToday ? 'bg-accent-600 text-white' : 'text-neutral-700'">{{ day.day }}</p>
+                            <p class="text-[10px] text-neutral-400">{{ day.month }}</p>
                         </div>
                     </div>
+                </div>
+            </div>
 
+            <!-- Scroll-i horizontal qëndron BRENDA këtij kontejneri, jo në faqe -->
+            <div class="overflow-x-auto overscroll-x-contain" @scroll.passive="syncDateHeader">
+                <div :style="{ minWidth: `calc(8rem + ${trackWidth})` }">
                     <!-- Zonat + çadrat -->
                     <template v-for="zone in zones" :key="zone.id">
                         <div class="sticky left-0 z-20 flex h-8 items-center gap-2 border-b border-neutral-200 bg-primary-50 px-3 text-tiny font-bold uppercase tracking-wider text-primary-700">
