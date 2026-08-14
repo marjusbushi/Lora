@@ -198,4 +198,74 @@ class BeachReservationTest extends TestCase
 
         $this->assertSame(1, BeachReservation::count());
     }
+
+    public function test_paid_reservation_price_is_frozen_but_same_price_moves_allowed(): void
+    {
+        $d = fn (int $offset) => today()->addDays($offset)->toDateString();
+        $reservation = $this->reserve($d(1), $d(2)); // 2 ditë × 800
+        $reservation->update(['total_amount' => 1600]);
+        $this->openShiftFor($this->admin);
+        $this->actingAs($this->admin)
+            ->post(route('beach.reservations.mark-paid', $reservation), ['method' => 'cash'])
+            ->assertSessionHasNoErrors();
+
+        // Zgjatja e datave ndryshon çmimin → refuzohet; shuma e kapur mbetet e ngrirë.
+        $this->actingAs($this->admin)->putJson(route('beach.reservations.update', $reservation), [
+            'end_date' => $d(4),
+        ])->assertStatus(422);
+        $fresh = $reservation->fresh();
+        $this->assertSame('1600.00', $fresh->total_amount);
+        $this->assertSame($d(2), $fresh->end_date->toDateString());
+
+        // Lëvizja te çadër e së njëjtës zonë (çmim identik) lejohet — shuma s'ndryshon.
+        $other = BeachUnit::create(['beach_zone_id' => $this->unit->beach_zone_id, 'number' => '15']);
+        $this->actingAs($this->admin)->put(route('beach.reservations.update', $reservation), [
+            'beach_unit_id' => $other->id,
+        ])->assertSessionHasNoErrors();
+        $fresh = $reservation->fresh();
+        $this->assertSame($other->id, $fresh->beach_unit_id);
+        $this->assertSame('1600.00', $fresh->total_amount);
+    }
+
+    public function test_cancel_paid_reservation_is_refused_until_unmarked(): void
+    {
+        $d = fn (int $offset) => today()->addDays($offset)->toDateString();
+        $reservation = $this->reserve($d(1), $d(2));
+        $reservation->update(['total_amount' => 1600]);
+        $this->openShiftFor($this->admin);
+        $this->actingAs($this->admin)
+            ->post(route('beach.reservations.mark-paid', $reservation), ['method' => 'cash'])
+            ->assertSessionHasNoErrors();
+
+        // I paguar → anullimi refuzohet: e ardhura s'fshihet pa u hequr pagesa.
+        $this->actingAs($this->admin)
+            ->postJson(route('beach.reservations.cancel', $reservation))
+            ->assertStatus(422);
+        $this->assertSame(BeachReservation::STATUS_CONFIRMED, $reservation->fresh()->status);
+
+        // Pas heqjes së shënimit → anullohet normalisht.
+        $this->actingAs($this->admin)
+            ->post(route('beach.reservations.unmark-paid', $reservation))
+            ->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)
+            ->post(route('beach.reservations.cancel', $reservation))
+            ->assertSessionHasNoErrors();
+        $this->assertSame(BeachReservation::STATUS_CANCELLED, $reservation->fresh()->status);
+    }
+
+    public function test_cancel_online_paid_reservation_is_always_refused(): void
+    {
+        $d = fn (int $offset) => today()->addDays($offset)->toDateString();
+        $reservation = $this->reserve($d(1), $d(2));
+        $reservation->update([
+            'total_amount' => 1600, 'paid_at' => now(), 'payment_method' => 'online',
+        ]);
+
+        // Online (POK) → as anullim, as heqje shënimi nga kalendari — duhet refund real.
+        $this->actingAs($this->admin)
+            ->postJson(route('beach.reservations.cancel', $reservation))
+            ->assertStatus(422);
+        $this->assertSame(BeachReservation::STATUS_CONFIRMED, $reservation->fresh()->status);
+        $this->assertNotNull($reservation->fresh()->paid_at);
+    }
 }

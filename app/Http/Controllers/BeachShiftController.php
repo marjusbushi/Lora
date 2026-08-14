@@ -54,23 +54,37 @@ class BeachShiftController extends Controller
             abort(403);
         }
 
-        if ($beachShift->status !== 'open') {
-            return back()->with('error', 'Ky turn është tashmë i mbyllur.');
-        }
-
         $data = $request->validate([
             'counted_cash' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
             'closing_note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $beachShift->computeTotals();
-        $beachShift->counted_cash = round((float) $data['counted_cash'], 2);
-        $beachShift->over_short = round((float) $beachShift->counted_cash - (float) $beachShift->expected_cash, 2);
-        $beachShift->closing_note = $data['closing_note'] ?? null;
-        $beachShift->status = 'closed';
-        $beachShift->closed_at = now();
-        $beachShift->closed_by = auth()->id();
-        $beachShift->save();
+        // Kyçja mbi rreshtin e turnit e serializon mbylljen me markPaid — asnjë pagesë
+        // s'futet dot MES llogaritjes së totaleve dhe ngrirjes së Z-raportit.
+        $closed = DB::transaction(function () use ($beachShift, $data) {
+            $shift = BeachShift::whereKey($beachShift->id)->lockForUpdate()->first();
+
+            if ($shift->status !== 'open') {
+                return null;
+            }
+
+            $shift->computeTotals();
+            $shift->counted_cash = round((float) $data['counted_cash'], 2);
+            $shift->over_short = round((float) $shift->counted_cash - (float) $shift->expected_cash, 2);
+            $shift->closing_note = $data['closing_note'] ?? null;
+            $shift->status = 'closed';
+            $shift->closed_at = now();
+            $shift->closed_by = auth()->id();
+            $shift->save();
+
+            return $shift;
+        });
+
+        if (! $closed) {
+            return back()->with('error', 'Ky turn është tashmë i mbyllur.');
+        }
+
+        $beachShift = $closed;
 
         AuditLog::record('beach.shift.close', $beachShift, [
             'expected_cash' => (float) $beachShift->expected_cash,

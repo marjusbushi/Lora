@@ -15,13 +15,14 @@ class EnsureTenantModuleEnabled
         private readonly TenantBillingService $billing,
     ) {}
 
-    public function handle(Request $request, Closure $next, string $module): Response
+    /** Kalon nëse TENANT-i ka të aktivizuar TË PAKTËN NJËRIN nga modulet e dhëna (any-of). */
+    public function handle(Request $request, Closure $next, string ...$modules): Response
     {
         $tenant = $this->context->tenant();
 
         abort_unless($tenant, 404, 'Hotel not found.');
         abort_unless(
-            $this->billing->enabled($module, $tenant),
+            collect($modules)->contains(fn (string $module) => $this->billing->enabled($module, $tenant)),
             403,
             'Ky modul nuk është aktiv për këtë hotel.',
         );

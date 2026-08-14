@@ -105,10 +105,21 @@ class BeachReservationController extends Controller
 
             $this->assertAvailable($unit->id, $start, $end, $beachReservation->id);
 
+            $newTotal = $this->totalFor($unit, $start, $end);
+
+            // Shuma e një rezervimi të PAGUAR është e ngrirë — ajo përputhet me çfarë
+            // ka kapur POK-u ose me Z-raportin e turnit. Lëvizje me total të njëjtë
+            // (p.sh. çadër tjetër me të njëjtin çmim) lejohet; ndryshim çmimi jo.
+            if ($beachReservation->paid_at && abs($newTotal - (float) $beachReservation->total_amount) > 0.005) {
+                throw ValidationException::withMessages([
+                    'beach_unit_id' => 'Rezervimi është i paguar — çmimi s\'ndryshohet. Hiq shënimin e pagesës më parë.',
+                ]);
+            }
+
             $beachReservation->update([
                 ...$data,
                 'beach_unit_id' => $unit->id,
-                'total_amount' => $this->totalFor($unit, $start, $end),
+                'total_amount' => $newTotal,
             ]);
         });
 
@@ -117,6 +128,16 @@ class BeachReservationController extends Controller
 
     public function cancel(BeachReservation $beachReservation): RedirectResponse
     {
+        // Rezervimi i PAGUAR s'anullohet drejtpërdrejt — përndryshe e ardhura fshihet
+        // nga Financa pa asnjë rimbursim real dhe turni mban një shitje fantazmë.
+        if ($beachReservation->paid_at) {
+            throw ValidationException::withMessages([
+                'status' => $beachReservation->payment_method === 'online'
+                    ? "Rezervim i paguar online — anullimi kërkon rimbursim në POK dhe s'bëhet nga kalendari."
+                    : 'Hiq shënimin e pagesës para se ta anullosh rezervimin.',
+            ]);
+        }
+
         $beachReservation->update(['status' => BeachReservation::STATUS_CANCELLED]);
 
         return back()->with('success', 'Rezervimi u anullua — çadra u lirua.');
@@ -129,25 +150,33 @@ class BeachReservationController extends Controller
 
         // Si POS-i: paraja e plazhit hyn gjithmonë në një turn të hapur të userit,
         // që sirtari të mbyllet me numërim dhe diferenca të shkojë në Financë.
-        $shift = \App\Models\BeachShift::currentFor((int) auth()->id());
-        if (! $shift) {
-            throw ValidationException::withMessages([
-                'method' => 'Hap turnin e plazhit para se të shënosh pagesa.',
-            ]);
-        }
+        // Kyçja mbi rreshtin e turnit e serializon shënimin me MBYLLJEN e turnit —
+        // pagesa ose hyn para snapshot-it të Z-raportit, ose refuzohet (turn i mbyllur).
+        DB::transaction(function () use ($beachReservation, $data) {
+            $shift = \App\Models\BeachShift::where('user_id', (int) auth()->id())
+                ->where('status', 'open')
+                ->lockForUpdate()
+                ->first();
 
-        // Flip atomik: vetëm një rezervim ende i papaguar dhe jo i anulluar shënohet —
-        // dy klikime të njëkohshme s'e shënojnë dot dy herë.
-        $flipped = BeachReservation::whereKey($beachReservation->id)
-            ->whereNull('paid_at')
-            ->where('status', '!=', BeachReservation::STATUS_CANCELLED)
-            ->update(['paid_at' => now(), 'payment_method' => $data['method'], 'beach_shift_id' => $shift->id]);
+            if (! $shift) {
+                throw ValidationException::withMessages([
+                    'method' => 'Hap turnin e plazhit para se të shënosh pagesa.',
+                ]);
+            }
 
-        if ($flipped !== 1) {
-            throw ValidationException::withMessages([
-                'method' => 'Ky rezervim është shënuar tashmë i paguar ose është i anulluar.',
-            ]);
-        }
+            // Flip atomik: vetëm një rezervim ende i papaguar dhe jo i anulluar shënohet —
+            // dy klikime të njëkohshme s'e shënojnë dot dy herë.
+            $flipped = BeachReservation::whereKey($beachReservation->id)
+                ->whereNull('paid_at')
+                ->where('status', '!=', BeachReservation::STATUS_CANCELLED)
+                ->update(['paid_at' => now(), 'payment_method' => $data['method'], 'beach_shift_id' => $shift->id]);
+
+            if ($flipped !== 1) {
+                throw ValidationException::withMessages([
+                    'method' => 'Ky rezervim është shënuar tashmë i paguar ose është i anulluar.',
+                ]);
+            }
+        });
 
         // Flip-i bulk nuk ndez observer-at — sinkronizo ledger-in shprehimisht
         // (best-effort: Financa s'guxon të bllokojë pagesën në plazh).

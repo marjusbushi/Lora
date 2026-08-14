@@ -82,7 +82,8 @@ Route::get('/book/confirmation/{token}', [WebsiteController::class, 'bookingConf
 Route::get('/book/pay/{token}', [WebsiteController::class, 'bookingPayment'])->middleware('module:booking_engine')->name('website.pay.show');
 Route::post('/book/pay/{token}', [WebsiteController::class, 'confirmPayment'])->middleware(['module:booking_engine', 'throttle:20,1'])->name('website.pay.confirm');
 // POK server-to-server webhook (CSRF-excluded in bootstrap/app.php; verifies via getOrder, never trusts the body).
-Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware(['module:booking_engine', 'throttle:120,1'])->name('website.pay.webhook');
+// Rruga është e përbashkët për dhomat DHE çadrat — mjafton njëri modul (tenant vetëm-beach s'duhet të marrë 403).
+Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware(['module:booking_engine,beach', 'throttle:120,1'])->name('website.pay.webhook');
 
 // Plazhi — Book Sunbeds publik (host-resolved si çdo website.*; moduli 'beach' per-tenant)
 Route::get('/book-sunbeds', [WebsiteBeachController::class, 'index'])->middleware('module:beach')->name('website.beach');

@@ -136,6 +136,36 @@ class BeachShiftTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_double_close_is_refused_and_frozen_snapshot_survives(): void
+    {
+        $this->actingAs($this->admin)->post(route('beach.shifts.open'), ['opening_float' => 100]);
+        $shift = BeachShift::currentFor($this->admin->id);
+
+        $this->actingAs($this->admin)->post(route('beach.shifts.close', $shift), ['counted_cash' => 100])
+            ->assertSessionHasNoErrors();
+
+        // Mbyllja e dytë (dy tab-e / klikim i dyfishtë) → refuzohet, Z-raporti i ngrirë s'preket.
+        $this->actingAs($this->admin)->post(route('beach.shifts.close', $shift), ['counted_cash' => 999])
+            ->assertSessionHas('error');
+        $this->assertSame('100.00', $shift->fresh()->counted_cash);
+
+        // Pas mbylljes s'ka turn të hapur → mark-paid refuzohet (serializimi me lock e garanton
+        // edhe në MySQL kur të dyja ndodhin njëkohësisht — pagesa ose hyn para snapshot-it, ose 422).
+        $zone = BeachZone::create(['name' => 'Zona Pas Mbylljes', 'price_per_day' => 100]);
+        $unit = $zone->units()->create(['number' => '88888']);
+        $reservation = BeachReservation::create([
+            'beach_unit_id' => $unit->id,
+            'guest_name' => 'Pas Mbylljes', 'guest_phone' => '069',
+            'start_date' => today()->toDateString(), 'end_date' => today()->toDateString(),
+            'status' => BeachReservation::STATUS_CONFIRMED,
+            'source' => BeachReservation::SOURCE_RECEPTION,
+            'total_amount' => 100,
+        ]);
+        $this->actingAs($this->admin)
+            ->postJson(route('beach.reservations.mark-paid', $reservation), ['method' => 'cash'])
+            ->assertStatus(422);
+    }
+
     public function test_online_payment_never_enters_expected_cash(): void
     {
         $this->actingAs($this->admin)->post(route('beach.shifts.open'), ['opening_float' => 100]);

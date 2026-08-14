@@ -178,4 +178,25 @@ class BeachPokPaymentTest extends TestCase
         $this->assertContains('module:beach', Route::getRoutes()->getByName('website.beach.pay.confirm')->middleware());
         $this->assertContains('throttle:20,1', Route::getRoutes()->getByName('website.beach.pay.confirm')->middleware());
     }
+
+    public function test_webhook_reachable_for_beach_only_tenant(): void
+    {
+        // Zero thirrje reale API: fik edhe fallback-un e testing-ut, edhe integrimin e seeduar.
+        config(['services.pok.testing_legacy_fallback' => false]);
+        \App\Models\TenantIntegration::withoutGlobalScopes()->where('provider', 'pok')->update(['enabled' => false]);
+
+        $tenant = \App\Models\Tenant::query()->sole();
+        $metadata = $tenant->metadata;
+        $metadata['billing_access']['modules']['booking_engine'] = false;
+        $tenant->update(['metadata' => $metadata]);
+
+        // Tenant VETËM me beach (pa booking_engine): webhook-u i përbashkët POK duhet
+        // të përgjigjet 200 — një 403 do linte pagesën e kapur pa u shënuar në PMS.
+        $this->post(route('website.pay.webhook'), ['id' => 'ord-i-panjohur'])->assertOk();
+
+        // Pa asnjërin modul → gate-i mbetet 403.
+        $metadata['billing_access']['modules']['beach'] = false;
+        $tenant->update(['metadata' => $metadata]);
+        $this->post(route('website.pay.webhook'), ['id' => 'ord-i-panjohur'])->assertForbidden();
+    }
 }
