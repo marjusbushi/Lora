@@ -6551,7 +6551,9 @@
     "splitShort": "Split",
     "customerGave": "Customer gave",
     "changeDue": "Change",
-    "collect": "Collect"
+    "collect": "Collect",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Exit full screen"
   },
   "posTables": {
     "statusFree": "Free",

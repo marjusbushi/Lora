@@ -15,7 +15,7 @@ import ShiftBanner from '@/Components/Pos/ShiftBanner.vue';
 import PosSalespersonSwitcher from '@/Components/Pos/PosSalespersonSwitcher.vue';
 import OutletSwitcher from '@/Components/Pos/OutletSwitcher.vue';
 import PosReceipt from '@/Components/Invoices/PosReceipt.vue';
-import { ArrowLeft, Banknote, BedDouble, Clock3, CreditCard, Maximize2, Minimize2, Minus, Pencil, Plus, Printer, ReceiptText, RotateCcw, Search, ShoppingCart, Split, Star, Trash2, X } from 'lucide-vue-next';
+import { ArrowLeft, Banknote, BedDouble, Clock3, CreditCard, Expand, Maximize2, Minimize2, Minus, Pencil, Plus, Printer, ReceiptText, RotateCcw, Search, ShoppingCart, Shrink, Split, Star, Trash2, X } from 'lucide-vue-next';
 
 const props = defineProps({
     view: { type: String, default: 'sale' },
@@ -68,6 +68,22 @@ const serviceMode = ref('table');
 const checkoutStep = ref('cart');
 const touchMode = ref(Boolean(props.tableContext));
 const orderSaving = ref(false);
+
+// FULL SCREEN (kërkesa e Marjusit): POS-i mbulon gjithë ekranin si kiosk —
+// immersive i AppLayout (pa sidebar/topbar) + fullscreen native i browserit
+// kur ai e lejon; preferohet per-pajisje (bari e do gjithmonë të plotë).
+const posFullscreen = ref((() => {
+    try { return localStorage.getItem('pos.fullscreen') === '1'; } catch { return false; }
+})());
+const immersiveMode = computed(() => (touchMode.value || posFullscreen.value) && props.view === 'sale');
+function toggleFullscreen() {
+    posFullscreen.value = !posFullscreen.value;
+    try { localStorage.setItem('pos.fullscreen', posFullscreen.value ? '1' : '0'); } catch { /* private mode */ }
+    try {
+        if (posFullscreen.value) document.documentElement.requestFullscreen?.();
+        else if (document.fullscreenElement) document.exitFullscreen?.();
+    } catch { /* pa fullscreen native mbetet immersive — funksioni s'humbet */ }
+}
 
 // Cart
 const cart = ref([]);
@@ -767,8 +783,8 @@ onMounted(() => {
 </script>
 
 <template>
-    <AppLayout :immersive="touchMode && view === 'sale'">
-        <div :class="touchMode && view === 'sale' ? 'flex h-full min-h-0 flex-col gap-3 bg-neutral-100 p-3' : ''">
+    <AppLayout :immersive="immersiveMode">
+        <div :class="immersiveMode ? 'flex h-full min-h-0 flex-col gap-3 bg-neutral-100 p-3' : ''">
         <ShiftBanner
             v-if="view === 'shifts'"
             :shift="currentShift"
@@ -779,54 +795,53 @@ onMounted(() => {
             @open="showOpenShift = true"
             @close="openCloseModal"
         />
-        <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between" :class="touchMode && view === 'sale' && '!mb-0 shrink-0'">
+        <div class="mb-5 flex flex-col gap-3" :class="immersiveMode && '!mb-0 shrink-0'">
             <div>
                 <div class="flex items-center gap-3">
                     <h1 class="text-h2 text-primary-900">{{ view === 'sale' ? (tableContext ? $t('posIndex.titleSaleTable', { name: tableContext.name }) : $t('posIndex.titleSale')) : view === 'orders' ? $t('posIndex.titleOrders') : view === 'receipts' ? $t('posIndex.titleReceipts') : $t('posIndex.titleShifts') }}</h1>
                 </div>
                 <p v-if="!touchMode || view !== 'sale'" class="mt-1 text-body-sm text-neutral-500">{{ view === 'sale' ? $t('posIndex.subtitleSale') : view === 'orders' ? $t('posIndex.subtitleOrders') : view === 'receipts' ? $t('posIndex.subtitleReceipts') : $t('posIndex.subtitleShifts') }}</p>
             </div>
-            <div v-if="view === 'sale'" class="flex flex-wrap items-center gap-2">
-                <OutletSwitcher v-if="!tableContext" :outlets="outlets" :current-outlet-id="currentOutletId" :confirm-before-switch="cart.length ? $t('posOutlets.switchConfirm') : ''" />
-                <PosSalespersonSwitcher v-if="posSettings.salesperson_enabled" :current="currentSalesperson" :salespeople="salespeople" />
-                <Button v-if="tableContext" variant="outline" class="h-[58px]" :href="route('pos.tables', { table: tableContext.id })"><ArrowLeft class="h-4 w-4" /> {{ $t('posIndex.tables') }}</Button>
-                <Button v-else-if="posSettings.service_mode === 'hybrid'" variant="outline" class="h-[58px]" :href="route('pos.tables')">{{ $t('posIndex.tables') }}</Button>
+            <!-- Toolbar NJË-rresht (mockup-i i miratuar): kontrolle majtas, statistika të qeta + veprime djathtas -->
+            <div v-if="view === 'sale'" class="flex flex-wrap items-center gap-2 rounded-2xl border border-neutral-200 bg-white p-2 shadow-card">
+                <OutletSwitcher v-if="!tableContext" dense :outlets="outlets" :current-outlet-id="currentOutletId" :confirm-before-switch="cart.length ? $t('posOutlets.switchConfirm') : ''" />
+                <PosSalespersonSwitcher v-if="posSettings.salesperson_enabled" dense :current="currentSalesperson" :salespeople="salespeople" />
+                <Button v-if="tableContext" variant="outline" class="h-12" :href="route('pos.tables', { table: tableContext.id })"><ArrowLeft class="h-4 w-4" /> {{ $t('posIndex.tables') }}</Button>
+                <Button v-else-if="posSettings.service_mode === 'hybrid'" variant="outline" class="h-12" :href="route('pos.tables')">{{ $t('posIndex.tables') }}</Button>
+                <span class="min-w-2 flex-1" />
+                <span class="hidden items-baseline gap-1.5 whitespace-nowrap text-body-sm text-neutral-500 md:inline-flex">
+                    {{ $t('posIndex.statSalesToday') }} <b class="font-bold text-primary-900 tabular-nums">{{ money(stats.today_revenue) }}</b>
+                </span>
+                <span class="hidden h-4 w-px bg-neutral-200 md:block" />
+                <span class="hidden items-baseline gap-1.5 whitespace-nowrap text-body-sm text-neutral-500 md:inline-flex">
+                    {{ $t('posIndex.statCompletedToday') }} <b class="font-bold text-primary-900 tabular-nums">{{ stats.today_completed }}</b>
+                </span>
+                <button type="button" class="inline-flex h-12 items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 text-body-sm font-semibold text-primary-900 transition hover:border-neutral-300 touch-manipulation" @click="openOrdersPanel">
+                    <ReceiptText class="h-4 w-4 text-neutral-400" /> {{ $t('posIndex.openOrders') }}
+                    <span class="rounded-full bg-warning-50 px-2 py-0.5 text-tiny font-bold text-warning-700 ring-1 ring-warning-200">{{ stats.open }}</span>
+                </button>
                 <button
                     v-if="!tableContext"
                     type="button"
-                    class="group h-14 min-w-32 rounded-xl border border-neutral-200 bg-white px-4 py-2 text-left shadow-card transition hover:border-accent-300 hover:bg-accent-50 focus:outline-none focus:ring-2 focus:ring-accent-500/30"
+                    class="grid h-12 w-12 place-items-center rounded-xl border border-neutral-200 text-neutral-500 transition hover:border-neutral-300 hover:text-primary-900 touch-manipulation"
+                    :title="touchMode ? $t('posIndex.switchToStandard') : $t('posIndex.switchToTouch')"
                     :aria-label="touchMode ? $t('posIndex.switchToStandard') : $t('posIndex.switchToTouch')"
                     @click="toggleTouchMode"
                 >
-                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">{{ $t('posIndex.mode') }}</p>
-                    <p class="mt-0.5 flex items-center gap-2 text-h4 text-primary-900">
-                        <Minimize2 v-if="touchMode" class="h-4 w-4" />
-                        <Maximize2 v-else class="h-4 w-4" />
-                        {{ touchMode ? 'Standard' : 'Touch' }}
-                    </p>
+                    <Minimize2 v-if="touchMode" class="h-5 w-5" />
+                    <Maximize2 v-else class="h-5 w-5" />
                 </button>
-                <div v-else class="h-14 min-w-32 rounded-xl border border-accent-200 bg-accent-50 px-4 py-2 shadow-card">
-                    <p class="text-tiny font-semibold uppercase tracking-wide text-accent-600">{{ $t('posIndex.mode') }}</p>
-                    <p class="mt-0.5 flex items-center gap-2 text-h4 text-accent-800">
-                        <Maximize2 class="h-4 w-4" /> Touch
-                    </p>
-                </div>
-                <div class="rounded-xl border border-neutral-200 bg-white px-4 py-2 shadow-card">
-                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">{{ $t('posIndex.statOpen') }}</p>
-                    <p class="text-h4 text-warning-700">{{ stats.open }}</p>
-                </div>
-                <div class="rounded-xl border border-neutral-200 bg-white px-4 py-2 shadow-card">
-                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">{{ $t('posIndex.statCompletedToday') }}</p>
-                    <p class="text-h4 text-success-700">{{ stats.today_completed }}</p>
-                </div>
-                <div class="rounded-xl border border-neutral-200 bg-white px-4 py-2 shadow-card">
-                    <p class="text-tiny font-semibold uppercase tracking-wide text-neutral-400">{{ $t('posIndex.statSalesToday') }}</p>
-                    <p class="text-h4 text-accent-700">{{ money(stats.today_revenue) }}</p>
-                </div>
-                <Button variant="outline" class="h-[58px]" @click="openOrdersPanel">
-                    <ReceiptText class="h-4 w-4" /> {{ $t('posIndex.openOrders') }}
-                    <span class="rounded-md bg-warning-50 px-1.5 py-0.5 text-tiny font-semibold text-warning-700">{{ stats.open }}</span>
-                </Button>
+                <button
+                    type="button"
+                    class="grid h-12 w-12 place-items-center rounded-xl transition touch-manipulation"
+                    :class="posFullscreen ? 'bg-primary-950 text-white' : 'border border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-primary-900'"
+                    :title="posFullscreen ? $t('posIndex.exitFullscreen') : $t('posIndex.fullscreen')"
+                    :aria-label="posFullscreen ? $t('posIndex.exitFullscreen') : $t('posIndex.fullscreen')"
+                    @click="toggleFullscreen"
+                >
+                    <Shrink v-if="posFullscreen" class="h-5 w-5" />
+                    <Expand v-else class="h-5 w-5" />
+                </button>
             </div>
             <div v-else class="flex items-center gap-2">
                 <Button variant="primary" :href="route('pos.index')"><ShoppingCart class="h-4 w-4" /> {{ $t('posIndex.openSale') }}</Button>
@@ -943,15 +958,16 @@ onMounted(() => {
                                 </template>
                             </nav>
                         </div>
-                        <div v-if="currentTiles.length" class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4" :class="touchMode ? 'xl:grid-cols-6' : '2xl:grid-cols-6'">
+                        <!-- Kategoritë si tableta pill (mockup): të qeta, aktive vetëm në hover -->
+                        <div v-if="currentTiles.length" class="flex flex-wrap gap-2">
                             <button
                                 v-for="tile in currentTiles"
                                 :key="tile.key"
                                 type="button"
-                                class="flex min-h-16 items-center justify-between gap-2 rounded-xl border-2 border-neutral-200 bg-neutral-50 px-4 py-3 text-left font-bold text-primary-900 transition hover:-translate-y-0.5 hover:border-accent-300 hover:shadow-card touch-manipulation"
+                                class="inline-flex min-h-11 items-center gap-2 rounded-full bg-neutral-100 py-2 pl-4 pr-2 text-body-sm font-semibold text-primary-900 transition hover:bg-neutral-200 touch-manipulation"
                                 @click="enterTile(tile.key)"
                             >
-                                <span class="min-w-0 truncate"><span class="mr-1.5">{{ categoryIcons[tile.name] || '📂' }}</span>{{ tile.name }}</span>
+                                <span class="min-w-0 truncate"><span class="mr-1">{{ categoryIcons[tile.name] || '📂' }}</span>{{ tile.name }}</span>
                                 <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-tiny font-semibold text-neutral-500 ring-1 ring-neutral-200">{{ tile.count }}</span>
                             </button>
                         </div>
@@ -977,7 +993,7 @@ onMounted(() => {
                         <button
                             v-for="item in activeMenuItems"
                             :key="item.id"
-                            class="group relative overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-accent-300 hover:shadow-lg touch-manipulation"
+                            class="group relative overflow-hidden rounded-xl border border-neutral-200 bg-white text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-primary-900/30 hover:shadow-lg touch-manipulation"
                             :class="(!item.is_available || (item.inventory_tracked && item.available_portions !== null && item.available_portions <= 0)) && 'pointer-events-none opacity-60'"
                             @click="addToCart(item)"
                         >
@@ -995,13 +1011,13 @@ onMounted(() => {
                             <div class="p-2.5">
                                 <p class="truncate text-body-sm font-semibold leading-tight text-primary-900">{{ item.name }}</p>
                                 <div class="mt-1.5 flex items-center justify-between gap-1.5">
-                                    <p class="shrink-0 text-label text-accent-700">{{ money(item.price) }}</p>
+                                    <p class="shrink-0 text-label font-bold text-primary-900 tabular-nums">{{ money(item.price) }}</p>
                                     <span v-if="item.inventory_tracked" class="min-w-0 truncate text-right text-tiny font-semibold" :class="item.available_portions === null ? 'text-warning-600' : item.available_portions > 0 ? 'text-neutral-400' : 'text-error-600'">{{ item.available_portions === null ? $t('inventory.pos.stockUnknown') : item.available_portions > 0 ? item.available_portions + ' ' + $t('inventory.pos.available') : $t('inventory.pos.outOfStock') }}</span>
                                     <span v-else-if="item.sales_count" class="min-w-0 truncate text-right text-tiny text-neutral-400">{{ $t('admin.pos.salesCount', { count: item.sales_count }) }}</span>
                                 </div>
                             </div>
                             <!-- Hover add indicator -->
-                            <div class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-accent-700 text-white opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100">
+                            <div class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-primary-950 text-white opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100">
                                 <Plus class="h-4 w-4" />
                             </div>
                             <!-- Not available overlay -->

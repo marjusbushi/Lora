@@ -6551,7 +6551,9 @@
     "splitShort": "Ndarë",
     "customerGave": "Klienti dha",
     "changeDue": "Kusuri",
-    "collect": "Arkëto"
+    "collect": "Arkëto",
+    "fullscreen": "Ekran i plotë",
+    "exitFullscreen": "Dil nga ekrani i plotë"
   },
   "posTables": {
     "statusFree": "E lirë",
