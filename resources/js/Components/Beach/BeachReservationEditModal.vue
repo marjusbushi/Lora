@@ -62,6 +62,28 @@ function cancelReservation() {
         onSuccess: () => emit('close'),
     });
 }
+
+// Pagesa e marrë në plazh — një klik, pa dalë nga modali i rezervimit.
+function markPaid(method) {
+    router.post(route('beach.reservations.mark-paid', props.reservation.id), { method }, {
+        preserveScroll: true,
+        onSuccess: () => emit('close'),
+    });
+}
+
+function unmarkPaid() {
+    if (!confirm(translate('beach.calendar.unmarkConfirm'))) return;
+    router.post(route('beach.reservations.unmark-paid', props.reservation.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => emit('close'),
+    });
+}
+
+const methodLabel = computed(() => ({
+    cash: translate('beach.calendar.methodCash'),
+    card: translate('beach.calendar.methodCard'),
+    online: translate('beach.calendar.methodOnline'),
+}[props.reservation?.payment_method] ?? ''));
 </script>
 
 <template>
@@ -75,6 +97,30 @@ function cancelReservation() {
                     {{ reservation.source === 'website' ? $t('beach.calendar.sourceWebsite') : $t('beach.calendar.sourceReception') }}
                 </Badge>
                 <span class="ml-auto text-body-sm font-bold text-primary-900">{{ reservation.total_amount }}</span>
+            </div>
+
+            <!-- Pagesa -->
+            <div class="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                <div v-if="reservation.paid_at" class="flex flex-wrap items-center gap-2">
+                    <span class="grid h-5 w-5 place-items-center rounded-full bg-emerald-500 text-[11px] font-black text-white">€</span>
+                    <span class="text-body-sm font-semibold text-emerald-800">
+                        {{ $t('beach.calendar.paidLine', { method: methodLabel, date: reservation.paid_at }) }}
+                    </span>
+                    <Button
+                        v-if="reservation.payment_method !== 'online'"
+                        size="sm"
+                        variant="ghost"
+                        class="ml-auto text-error-600"
+                        @click="unmarkPaid"
+                    >{{ $t('beach.calendar.unmarkPaid') }}</Button>
+                </div>
+                <div v-else class="flex flex-wrap items-center gap-2">
+                    <span class="text-body-sm font-medium text-amber-800">{{ $t('beach.calendar.notPaidYet') }}</span>
+                    <div class="ml-auto flex gap-1.5">
+                        <Button size="sm" variant="success" @click="markPaid('cash')">{{ $t('beach.calendar.markPaidCash') }}</Button>
+                        <Button size="sm" variant="secondary" @click="markPaid('card')">{{ $t('beach.calendar.markPaidCard') }}</Button>
+                    </div>
+                </div>
             </div>
             <FormGroup :label="$t('beach.calendar.sunbed')" :error="form.errors.beach_unit_id" required>
                 <Select v-model="form.beach_unit_id" :options="units" :error="form.errors.beach_unit_id" />

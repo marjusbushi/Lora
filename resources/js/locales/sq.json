@@ -7096,7 +7096,18 @@
       "noUnitsHint": "Krijo zonat dhe gjenero çadrat te Harta & Çmimet.",
       "prevAria": "Prapa",
       "nextAria": "Para",
-      "daysShort": "{count}d"
+      "daysShort": "{count}d",
+      "unpaidToday": "{count} pa paguar sot",
+      "legendPaid": "e paguar",
+      "notPaidYet": "Pa paguar ende",
+      "markPaidCash": "U pagua cash",
+      "markPaidCard": "U pagua me kartë",
+      "unmarkPaid": "Hiq shënimin",
+      "unmarkConfirm": "Hiq shënimin e pagesës? (vetëm për gabim shënimi)",
+      "paidLine": "E paguar ({method}) — {date}",
+      "methodCash": "cash",
+      "methodCard": "kartë në plazh",
+      "methodOnline": "online"
     },
     "public": {
       "headTitle": "Rezervo shezllonin",

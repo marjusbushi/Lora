@@ -39,7 +39,11 @@ class BeachPokPayments
         $flipped = BeachReservation::whereKey($reservation->id)
             ->whereNull('paid_at')
             ->where('status', '!=', BeachReservation::STATUS_CANCELLED)
-            ->update(['status' => BeachReservation::STATUS_CONFIRMED, 'paid_at' => now()]);
+            ->update([
+                'status' => BeachReservation::STATUS_CONFIRMED,
+                'paid_at' => now(),
+                'payment_method' => 'online',
+            ]);
 
         return $flipped === 1;
     }

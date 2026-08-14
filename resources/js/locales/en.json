@@ -7096,7 +7096,18 @@
       "noUnitsHint": "Create zones and generate sunbeds in Map & Prices.",
       "prevAria": "Previous",
       "nextAria": "Next",
-      "daysShort": "{count}d"
+      "daysShort": "{count}d",
+      "unpaidToday": "{count} unpaid today",
+      "legendPaid": "paid",
+      "notPaidYet": "Not paid yet",
+      "markPaidCash": "Paid in cash",
+      "markPaidCard": "Paid by card",
+      "unmarkPaid": "Remove mark",
+      "unmarkConfirm": "Remove the payment mark? (only for mistakes)",
+      "paidLine": "Paid ({method}) — {date}",
+      "methodCash": "cash",
+      "methodCard": "card at the beach",
+      "methodOnline": "online"
     },
     "public": {
       "headTitle": "Book a sunbed",

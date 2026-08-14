@@ -25,7 +25,7 @@ class BeachReservation extends TenantModel
     protected $fillable = [
         'beach_unit_id', 'reservation_id', 'guest_name', 'guest_phone', 'guest_email',
         'start_date', 'end_date', 'status', 'source', 'total_amount',
-        'confirmation_token', 'paid_at', 'pok_order_id', 'created_by',
+        'confirmation_token', 'paid_at', 'payment_method', 'pok_order_id', 'created_by',
     ];
 
     protected function casts(): array

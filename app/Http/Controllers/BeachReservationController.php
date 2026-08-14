@@ -47,6 +47,8 @@ class BeachReservationController extends Controller
                 'status' => $reservation->status,
                 'source' => $reservation->source,
                 'total_amount' => $reservation->total_amount,
+                'paid_at' => $reservation->paid_at?->toDateTimeString(),
+                'payment_method' => $reservation->payment_method,
             ]);
 
         return Inertia::render('Beach/Calendar', [
@@ -115,6 +117,41 @@ class BeachReservationController extends Controller
         $beachReservation->update(['status' => BeachReservation::STATUS_CANCELLED]);
 
         return back()->with('success', 'Rezervimi u anullua — çadra u lirua.');
+    }
+
+    /** Shënon pagesën e marrë NË PLAZH (cash/kartë atje) — vetëm një herë. */
+    public function markPaid(Request $request, BeachReservation $beachReservation): RedirectResponse
+    {
+        $data = $request->validate(['method' => ['required', 'in:cash,card']]);
+
+        // Flip atomik: vetëm një rezervim ende i papaguar dhe jo i anulluar shënohet —
+        // dy klikime të njëkohshme s'e shënojnë dot dy herë.
+        $flipped = BeachReservation::whereKey($beachReservation->id)
+            ->whereNull('paid_at')
+            ->where('status', '!=', BeachReservation::STATUS_CANCELLED)
+            ->update(['paid_at' => now(), 'payment_method' => $data['method']]);
+
+        if ($flipped !== 1) {
+            throw ValidationException::withMessages([
+                'method' => 'Ky rezervim është shënuar tashmë i paguar ose është i anulluar.',
+            ]);
+        }
+
+        return back()->with('success', 'Pagesa u shënua.');
+    }
+
+    /** Heq shënimin e gabuar të pagesës në plazh — kurrë pagesat online (POK). */
+    public function unmarkPaid(BeachReservation $beachReservation): RedirectResponse
+    {
+        if ($beachReservation->payment_method === 'online') {
+            throw ValidationException::withMessages([
+                'method' => "Pagesa online me kartë nuk hiqet nga këtu.",
+            ]);
+        }
+
+        $beachReservation->update(['paid_at' => null, 'payment_method' => null]);
+
+        return back()->with('success', 'Shënimi i pagesës u hoq.');
     }
 
     private function lockUnit(int $unitId): BeachUnit

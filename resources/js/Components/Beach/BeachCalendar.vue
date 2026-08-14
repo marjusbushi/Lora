@@ -180,12 +180,25 @@ const allUnits = computed(() =>
         price: Number(zone.price_per_day),
     }))),
 );
+
+// Rezervimet aktive që mbulojnë ditën e sotme dhe s'kanë pagesë të shënuar —
+// recepsionisti e sheh me një shikim kush s'ka paguar ende.
+const unpaidToday = computed(() =>
+    props.reservations.filter((r) => r.status !== 'cancelled'
+        && !r.paid_at
+        && r.start_date <= props.hotelToday
+        && r.end_date >= props.hotelToday).length,
+);
 </script>
 
 <template>
     <div class="flex flex-col gap-4">
         <div class="flex flex-wrap items-center gap-3">
             <h1 class="text-h3 text-primary-900">{{ $t('beach.calendar.title') }}</h1>
+            <span
+                v-if="unpaidToday > 0"
+                class="rounded-full bg-amber-100 px-3 py-1 text-body-sm font-semibold text-amber-900"
+            >{{ $t('beach.calendar.unpaidToday', { count: unpaidToday }) }}</span>
             <div class="ml-auto flex flex-wrap items-center gap-2">
                 <div class="inline-flex items-center rounded-lg border border-neutral-200 bg-white">
                     <button type="button" class="grid h-9 w-9 place-items-center text-lg text-neutral-500 hover:bg-neutral-100 rounded-l-lg" :aria-label="$t('beach.calendar.prevAria')" @click="navigate(-1)">‹</button>
@@ -282,8 +295,13 @@ const allUnits = computed(() =>
                                     :style="reservationStyle(reservation)"
                                     @click="openEdit(reservation)"
                                 >
-                                    <span class="block truncate text-[11px] font-extrabold leading-tight">{{ reservation.guest_name }}</span>
-                                    <span class="block truncate text-[10px] leading-tight opacity-70">{{ reservation.guest_phone }}</span>
+                                    <span class="block truncate pr-4 text-[11px] font-extrabold leading-tight">{{ reservation.guest_name }}</span>
+                                    <span class="block truncate pr-4 text-[10px] leading-tight opacity-70">{{ reservation.guest_phone }}</span>
+                                    <span
+                                        v-if="reservation.paid_at"
+                                        class="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-emerald-500 text-[10px] font-black text-white"
+                                        :title="$t('beach.calendar.legendPaid')"
+                                    >€</span>
                                 </button>
                             </div>
                         </div>
@@ -296,6 +314,7 @@ const allUnits = computed(() =>
                 <span class="inline-flex items-center gap-1.5"><span class="h-3 w-3 rounded border border-sky-300 bg-sky-100" /> {{ $t('beach.calendar.statusConfirmed') }}</span>
                 <span class="inline-flex items-center gap-1.5"><span class="h-3 w-3 rounded border border-amber-300 bg-amber-100" /> {{ $t('beach.calendar.statusPending') }}</span>
                 <span class="inline-flex items-center gap-1.5"><span class="h-3 w-3 rounded bg-neutral-200" /> {{ $t('beach.calendar.outOfSeason') }}</span>
+                <span class="inline-flex items-center gap-1.5"><span class="grid h-3.5 w-3.5 place-items-center rounded-full bg-emerald-500 text-[9px] font-black text-white">€</span> {{ $t('beach.calendar.legendPaid') }}</span>
             </div>
         </div>
 

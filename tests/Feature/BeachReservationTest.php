@@ -109,6 +109,39 @@ class BeachReservationTest extends TestCase
         $this->assertSame('4000.00', BeachReservation::sole()->total_amount);
     }
 
+    public function test_mark_paid_guards(): void
+    {
+        $d = fn (int $offset) => today()->addDays($offset)->toDateString();
+        $reservation = $this->reserve($d(1), $d(2));
+
+        // Shënohet një herë…
+        $this->actingAs($this->admin)
+            ->post(route('beach.reservations.mark-paid', $reservation), ['method' => 'cash'])
+            ->assertSessionHasNoErrors();
+        $fresh = $reservation->fresh();
+        $this->assertNotNull($fresh->paid_at);
+        $this->assertSame('cash', $fresh->payment_method);
+
+        // …dy herë jo (flip atomik 0 rreshta → 422).
+        $this->actingAs($this->admin)
+            ->postJson(route('beach.reservations.mark-paid', $reservation), ['method' => 'card'])
+            ->assertStatus(422);
+        $this->assertSame('cash', $reservation->fresh()->payment_method);
+
+        // Heqja lejohet për cash/kartë…
+        $this->actingAs($this->admin)
+            ->post(route('beach.reservations.unmark-paid', $reservation))
+            ->assertSessionHasNoErrors();
+        $this->assertNull($reservation->fresh()->paid_at);
+
+        // …por kurrë për pagesën online (POK).
+        $reservation->update(['paid_at' => now(), 'payment_method' => 'online']);
+        $this->actingAs($this->admin)
+            ->postJson(route('beach.reservations.unmark-paid', $reservation))
+            ->assertStatus(422);
+        $this->assertNotNull($reservation->fresh()->paid_at);
+    }
+
     public function test_reception_books_beyond_public_window(): void
     {
         $d = fn (int $offset) => today()->addDays($offset)->toDateString();
