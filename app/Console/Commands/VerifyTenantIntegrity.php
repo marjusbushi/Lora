@@ -191,6 +191,17 @@ class VerifyTenantIntegrity extends Command
                 continue;
             }
 
+            // A migration shipping a NEW module grants its entitlement to the
+            // existing tenants, so per-tenant entitlement counts may only ever
+            // GROW under an approved additive migration.
+            if ($allowAdditiveSchema && str_starts_with($path, 'tenant_counts.tenant_module_entitlements.')) {
+                if (! is_int($expected) || ! is_int($actual) || $actual < $expected) {
+                    $changes[] = $path;
+                }
+
+                continue;
+            }
+
             if ($allowAdditiveSettings
                 && str_starts_with($path, 'tenant_counts.settings.')
                 && is_int($expected)

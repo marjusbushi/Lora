@@ -180,6 +180,16 @@ const allNavItems = computed(() => [
         ],
     },
     {
+        label: t('admin.sidebar.beach'),
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="M12 2v20"/><path d="M4.5 10.5c0-4.14 3.36-7.5 7.5-7.5s7.5 3.36 7.5 7.5"/><path d="M4.5 10.5c1.5-1.2 3.5-1.2 5 0 1.5-1.2 3.5-1.2 5 0 1.5-1.2 3.5-1.2 5 0"/><path d="M6 22h12"/></svg>',
+        permission: 'view_beach',
+        module: 'beach',
+        children: [
+            { label: t('beach.nav.calendar'), href: '/pms/beach/calendar' },
+            { label: t('beach.nav.setup'), href: '/pms/beach/setup' },
+        ],
+    },
+    {
         label: t('admin.sidebar.finance'),
         icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="M20 7V6a2 2 0 0 0-2-2H5a3 3 0 0 0 0 6h15v8a2 2 0 0 1-2 2H5a3 3 0 0 1-3-3V7"/><path d="M16 14h4"/></svg>',
         permission: 'view_finance',

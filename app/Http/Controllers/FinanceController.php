@@ -450,6 +450,23 @@ class FinanceController extends Controller
         return back()->with('success', 'Modaliteti i llogarive POS u ruajt — pagesat e reja ndjekin routimin e ri, historiku nuk preket.');
     }
 
+    /** Njësoj si POS-i: ku shkojnë paratë e plazhit — bashkë me hotelin apo në arkën/bankën e vet. */
+    public function updateBeachAccountMode(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'mode' => ['required', Rule::in([
+                FinanceLedger::POS_MODE_SHARED,
+                FinanceLedger::POS_MODE_SPLIT_CASH,
+                FinanceLedger::POS_MODE_SPLIT_BANK,
+                FinanceLedger::POS_MODE_SPLIT_ALL,
+            ])],
+        ]);
+
+        Setting::set('finance.beach_account_mode', $data['mode']);
+
+        return back()->with('success', 'Modaliteti i llogarive të plazhit u ruajt — pagesat e reja ndjekin routimin e ri, historiku nuk preket.');
+    }
+
     /** New cash box or bank account (owner-only via manage_finance_settings). */
     public function storeAccount(Request $request): RedirectResponse
     {

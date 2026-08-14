@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\BeachReservationController;
+use App\Http\Controllers\BeachSetupController;
 use App\Http\Controllers\ChannexController;
 use App\Http\Controllers\ChannexWebhookController;
 use App\Http\Controllers\CleaningTaskController;
@@ -42,6 +44,7 @@ use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantControll
 use App\Http\Controllers\TenantHandoffController;
 use App\Http\Controllers\TenantUserInvitationController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WebsiteBeachController;
 use App\Http\Controllers\WebsiteController;
 use App\Http\Middleware\AuthenticateSignedTenantInvitation;
 use App\Models\Setting;
@@ -79,7 +82,19 @@ Route::get('/book/confirmation/{token}', [WebsiteController::class, 'bookingConf
 Route::get('/book/pay/{token}', [WebsiteController::class, 'bookingPayment'])->middleware('module:booking_engine')->name('website.pay.show');
 Route::post('/book/pay/{token}', [WebsiteController::class, 'confirmPayment'])->middleware(['module:booking_engine', 'throttle:20,1'])->name('website.pay.confirm');
 // POK server-to-server webhook (CSRF-excluded in bootstrap/app.php; verifies via getOrder, never trusts the body).
-Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware(['module:booking_engine', 'throttle:120,1'])->name('website.pay.webhook');
+// Rruga është e përbashkët për dhomat DHE çadrat — mjafton njëri modul (tenant vetëm-beach s'duhet të marrë 403).
+Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware(['module:booking_engine,beach', 'throttle:120,1'])->name('website.pay.webhook');
+
+// Plazhi — Book Sunbeds publik (host-resolved si çdo website.*; moduli 'beach' per-tenant)
+Route::get('/book-sunbeds', [WebsiteBeachController::class, 'index'])->middleware('module:beach')->name('website.beach');
+Route::get('/book-sunbeds/availability', [WebsiteBeachController::class, 'availability'])->middleware(['module:beach', 'throttle:60,1'])->name('website.beach.availability');
+Route::post('/book-sunbeds', [WebsiteBeachController::class, 'submit'])->middleware(['module:beach', 'throttle:10,1'])->name('website.beach.submit');
+Route::get('/book-sunbeds/confirmation/{token}', [WebsiteBeachController::class, 'confirmation'])->middleware('module:beach')->name('website.beach.confirmation');
+// QR i përjetshëm i çadrës (i printuar një herë): V1 → rezervimi; V2 → porosia te bari.
+Route::get('/s/{qrToken}', [WebsiteBeachController::class, 'qr'])->middleware(['module:beach', 'throttle:60,1'])->name('website.beach.qr');
+// Pagesa POK e çadrës (opsionale — rezervimi vlen edhe "paguaj në plazh").
+Route::get('/book-sunbeds/pay/{token}', [WebsiteBeachController::class, 'payment'])->middleware(['module:beach', 'throttle:30,1'])->name('website.beach.pay');
+Route::post('/book-sunbeds/pay/{token}', [WebsiteBeachController::class, 'paymentConfirm'])->middleware(['module:beach', 'throttle:20,1'])->name('website.beach.pay.confirm');
 
 Route::get('/about', [WebsiteController::class, 'about'])->name('website.about');
 Route::get('/contact', [WebsiteController::class, 'contact'])->name('website.contact');
@@ -405,6 +420,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/accounts', [FinanceController::class, 'storeAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.store');
         Route::put('/accounts/{account}/toggle', [FinanceController::class, 'toggleAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.toggle');
         Route::put('/accounts/pos-mode', [FinanceController::class, 'updatePosAccountMode'])->middleware('permission:manage_finance_settings')->name('finance.accounts.pos-mode');
+        Route::put('/accounts/beach-mode', [FinanceController::class, 'updateBeachAccountMode'])->middleware(['permission:manage_finance_settings', 'module:beach'])->name('finance.accounts.beach-mode');
         Route::get('/payments', [FinanceController::class, 'payments'])->name('finance.payments');
         Route::get('/payments/export', [FinanceController::class, 'exportPayments'])->name('finance.payments.export');
         Route::post('/payments', [FinanceController::class, 'storePayment'])->middleware('permission:create_payment')->name('finance.payments.store');
@@ -445,6 +461,25 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/categories', [InventoryController::class, 'storeCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.store');
         Route::put('/categories/{category}', [InventoryController::class, 'updateCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.update');
         Route::delete('/categories/{category}', [InventoryController::class, 'destroyCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.destroy');
+    });
+
+    // Plazhi (Beach) — kalendari i çadrave + setup i zonave/çadrave
+    Route::middleware(['module:beach', 'permission:view_beach'])->group(function () {
+        Route::get('/beach/calendar', [BeachReservationController::class, 'calendar'])->name('beach.calendar');
+        Route::post('/beach/reservations', [BeachReservationController::class, 'store'])->middleware('permission:create_beach')->name('beach.reservations.store');
+        Route::put('/beach/reservations/{beachReservation}', [BeachReservationController::class, 'update'])->middleware('permission:update_beach')->name('beach.reservations.update');
+        Route::post('/beach/reservations/{beachReservation}/cancel', [BeachReservationController::class, 'cancel'])->middleware('permission:update_beach')->name('beach.reservations.cancel');
+        Route::post('/beach/reservations/{beachReservation}/mark-paid', [BeachReservationController::class, 'markPaid'])->middleware('permission:update_beach')->name('beach.reservations.mark-paid');
+        Route::post('/beach/reservations/{beachReservation}/unmark-paid', [BeachReservationController::class, 'unmarkPaid'])->middleware('permission:update_beach')->name('beach.reservations.unmark-paid');
+        Route::post('/beach/shifts/open', [\App\Http\Controllers\BeachShiftController::class, 'open'])->middleware('permission:open_beach_shift')->name('beach.shifts.open');
+        Route::post('/beach/shifts/{beachShift}/close', [\App\Http\Controllers\BeachShiftController::class, 'close'])->middleware('permission:close_beach_shift')->name('beach.shifts.close');
+        Route::get('/beach/setup', [BeachSetupController::class, 'index'])->name('beach.setup');
+        Route::post('/beach/zones', [BeachSetupController::class, 'storeZone'])->middleware('permission:create_beach')->name('beach.zones.store');
+        Route::put('/beach/zones/{zone}', [BeachSetupController::class, 'updateZone'])->middleware('permission:update_beach')->name('beach.zones.update');
+        Route::delete('/beach/zones/{zone}', [BeachSetupController::class, 'destroyZone'])->middleware('permission:delete_beach')->name('beach.zones.destroy');
+        Route::post('/beach/zones/{zone}/units', [BeachSetupController::class, 'generateUnits'])->middleware('permission:create_beach')->name('beach.units.generate');
+        Route::put('/beach/units/{unit}', [BeachSetupController::class, 'updateUnit'])->middleware('permission:update_beach')->name('beach.units.update');
+        Route::delete('/beach/units/{unit}', [BeachSetupController::class, 'destroyUnit'])->middleware('permission:delete_beach')->name('beach.units.destroy');
     });
 
     // Admin-only: User Management + Settings
@@ -515,6 +550,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/settings/pricing-programs', [SettingsController::class, 'updatePricingPrograms'])->name('settings.pricing-programs');
         Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->middleware('module:housekeeping')->name('settings.housekeeping');
         Route::put('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai');
+        Route::put('/settings/beach', [SettingsController::class, 'updateBeach'])->middleware('module:beach')->name('settings.beach');
         Route::post('/settings/integrations/{provider}/test', [SettingsController::class, 'testIntegration'])
             ->whereIn('provider', ['fature_al'])->middleware('throttle:10,1')->name('settings.integrations.test');
 
