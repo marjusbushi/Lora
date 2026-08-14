@@ -399,6 +399,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/reports/pos-voids', [ReportsController::class, 'posVoids'])->middleware('module:pos')->name('reports.posVoids');
         Route::get('/reports/stock-valuation', [ReportsController::class, 'stockValuation'])->middleware('module:finance')->name('reports.stockValuation');
         Route::get('/reports/supplier-performance', [ReportsController::class, 'supplierPerformance'])->middleware('module:finance')->name('reports.supplierPerformance');
+        Route::get('/reports/purchases-by-category', [ReportsController::class, 'purchasesByCategory'])->middleware('module:finance')->name('reports.purchasesByCategory');
         Route::get('/reports/room-status', [ReportsController::class, 'roomStatus'])->name('reports.roomStatus');
         Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->middleware('module:housekeeping')->name('reports.housekeepingReport');
         Route::get('/reports/maintenance-sla', [ReportsController::class, 'maintenanceSla'])->name('reports.maintenanceSla');

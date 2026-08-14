@@ -22,6 +22,7 @@ import {
     FileBarChart,
     HandCoins,
     Landmark,
+    Layers,
     Percent,
     ReceiptText,
     Repeat2,
@@ -139,6 +140,7 @@ const groups = [
         reports: [
             { name: translate('reports360.stockValuation.title'), desc: translate('reports360.stockValuation.short'), to: 'reports.stockValuation', icon: Warehouse, module: 'finance' },
             { name: translate('reports360.supplierPerformance.title'), desc: translate('reports360.supplierPerformance.short'), to: 'reports.supplierPerformance', icon: Truck, module: 'finance' },
+            { name: translate('reports360.purchasesByCategory.title'), desc: translate('reports360.purchasesByCategory.short'), to: 'reports.purchasesByCategory', icon: Layers, module: 'finance' },
         ],
     },
 ];
