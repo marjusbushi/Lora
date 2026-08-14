@@ -56,6 +56,18 @@ class PosTableServiceController extends Controller
             $request->session()->forget('pos.outlet_id');
         }
 
+        // A deep-linked table (edit/pay redirects from the sale screen) wins
+        // over the remembered outlet — otherwise a table from another outlet
+        // stays filtered out and its payment modal can never open (mirror of
+        // PosController::index()'s table-context rule).
+        if ($outlets->isNotEmpty() && $request->integer('table')) {
+            $requestedTable = PosTable::query()->find($request->integer('table'));
+            if ($requestedTable?->outlet_id && ($tableOutlet = $outlets->firstWhere('id', $requestedTable->outlet_id))) {
+                $currentOutlet = $tableOutlet;
+                $request->session()->put('pos.outlet_id', $tableOutlet->id);
+            }
+        }
+
         $tables = PosTable::query()
             ->where('is_active', true)
             ->when($currentOutlet, fn ($query) => $query->where(fn ($q) => $q
@@ -66,9 +78,12 @@ class PosTableServiceController extends Controller
             ->orderBy('number')
             ->get();
 
+        // Only the displayed tables' accounts — the occupied counts AND the
+        // open_total legend must describe the outlet on screen, not the tenant.
         $openOrders = PosOrder::query()
             ->where('status', 'open')
             ->whereNotNull('pos_table_id')
+            ->whereIn('pos_table_id', $tables->pluck('id'))
             ->with([
                 'createdBy:id,name',
                 'salesperson:id,name',

@@ -947,11 +947,17 @@ class SettingsController extends Controller
         }
 
         // Tell the admin what the delete quietly un-scopes: cascade removes the
-        // visibility rows (restricted categories go everywhere) and nullOnDelete
-        // makes the outlet's tables shared.
+        // visibility rows (restricted categories go everywhere) and the tables
+        // become shared. Tables are detached EXPLICITLY before the delete —
+        // the composite same-tenant FK is RESTRICT (a composite SET NULL would
+        // try to null tenant_id too), so relying on the single-column
+        // nullOnDelete alone would make this delete fail on MySQL.
         $affectedCategories = $posOutlet->menuCategories()->count();
         $affectedTables = $posOutlet->tables()->count();
-        $posOutlet->delete();
+        DB::transaction(function () use ($posOutlet) {
+            $posOutlet->tables()->update(['outlet_id' => null]);
+            $posOutlet->delete();
+        });
 
         $message = 'Pika u fshi.';
         if ($affectedCategories > 0) {

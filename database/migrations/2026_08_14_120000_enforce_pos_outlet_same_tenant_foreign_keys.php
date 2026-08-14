@@ -37,14 +37,16 @@ return new class extends Migration
                 ->references(['tenant_id', 'id'])->on('pos_outlets');
         });
 
+        // Both composites stay RESTRICT (a composite SET NULL would try to
+        // null tenant_id too): pos_orders can never hit it (an outlet with
+        // orders is refused deletion and deactivated instead), and
+        // destroyPosOutlet() detaches tables explicitly before deleting.
+        // NO composite on pos_outlets.warehouse_id: warehouse deletion is a
+        // legacy inventory flow outside this feature — its single-column
+        // nullOnDelete must keep working; app-layer TenantRule guards it.
         Schema::table('pos_tables', function (Blueprint $table) {
             $table->foreign(['tenant_id', 'outlet_id'])
                 ->references(['tenant_id', 'id'])->on('pos_outlets');
-        });
-
-        Schema::table('pos_outlets', function (Blueprint $table) {
-            $table->foreign(['tenant_id', 'warehouse_id'])
-                ->references(['tenant_id', 'id'])->on('warehouses');
         });
     }
 
@@ -54,9 +56,6 @@ return new class extends Migration
             return;
         }
 
-        Schema::table('pos_outlets', function (Blueprint $table) {
-            $table->dropForeign(['tenant_id', 'warehouse_id']);
-        });
         Schema::table('pos_tables', function (Blueprint $table) {
             $table->dropForeign(['tenant_id', 'outlet_id']);
         });
@@ -67,7 +66,6 @@ return new class extends Migration
         // MySQL keeps the implicit supporting indexes after the FK drop —
         // remove exactly what this migration introduced.
         foreach ([
-            ['pos_outlets', 'pos_outlets_tenant_id_warehouse_id_foreign'],
             ['pos_tables', 'pos_tables_tenant_id_outlet_id_foreign'],
             ['pos_orders', 'pos_orders_tenant_id_outlet_id_foreign'],
         ] as [$tableName, $indexName]) {

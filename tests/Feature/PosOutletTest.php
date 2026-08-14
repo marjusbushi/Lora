@@ -383,9 +383,13 @@ class PosOutletTest extends TestCase
                 ->where('byOutlet.0.name', 'Beach Bar')
                 ->where('byOutlet.0.revenue', 3.5));
 
-        // Unused outlet deletes cleanly.
+        // Unused outlet deletes cleanly EVEN with tables assigned — they are
+        // detached explicitly (the composite same-tenant FK is RESTRICT, so
+        // the single-column nullOnDelete alone would not save this on MySQL).
+        $table = \App\Models\PosTable::create(['number' => 'B1', 'name' => 'Beach 1', 'area' => 'Plazh', 'outlet_id' => $unused->id]);
         $this->actingAs($admin)->delete(route('settings.pos.outlets.destroy', $unused))
             ->assertRedirect()->assertSessionHas('success');
         $this->assertDatabaseMissing('pos_outlets', ['id' => $unused->id]);
+        $this->assertNull($table->fresh()->outlet_id);
     }
 }
