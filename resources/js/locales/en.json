@@ -5372,7 +5372,9 @@
     "outstanding": "Outstanding",
     "highDemand": "High demand",
     "amountsShownIn": "All amounts shown in {currency}",
-    "categoryTree": { "toggle": "Toggle sub-categories of" },
+    "categoryTree": {
+      "toggle": "Toggle sub-categories of"
+    },
     "moreRows": "+{n} more rows not shown",
     "todayOps": "Today's operations",
     "opsArrivals": "Arrivals today",
@@ -6544,7 +6546,14 @@
     "cancellationNotRecorded": "The cancellation was not recorded.",
     "refundRecorded": "The refund and stock return were recorded.",
     "refundNotRecorded": "The refund was not recorded.",
-    "statusRefunded": "Refunded"
+    "statusRefunded": "Refunded",
+    "roomShort": "Room",
+    "splitShort": "Split",
+    "customerGave": "Customer gave",
+    "changeDue": "Change",
+    "collect": "Collect",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Exit full screen"
   },
   "posTables": {
     "statusFree": "Free",
