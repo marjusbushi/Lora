@@ -6865,7 +6865,8 @@
     },
     "guests": {
       "inHouseDetail": "persona · në {rooms} dhoma · {profiles} profile",
-      "activeProfiles": "profile aktive"
+      "activeProfiles": "profile aktive",
+      "companion": "Shokë udhëtimi"
     },
     "financePayments": {
       "reservationOnly": "Po shfaqen vetëm lëvizjet e lidhura me rezervimin",

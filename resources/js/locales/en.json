@@ -6865,7 +6865,8 @@
     },
     "guests": {
       "inHouseDetail": "people · in {rooms} rooms · {profiles} profiles",
-      "activeProfiles": "active profiles"
+      "activeProfiles": "active profiles",
+      "companion": "Travel companion"
     },
     "financePayments": {
       "reservationOnly": "Showing only the movements linked to reservation",
