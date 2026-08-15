@@ -51,7 +51,10 @@ class GuestDirectoryTest extends TestCase
         $rows = collect($props['guests']['data'])->keyBy('id');
 
         $this->assertSame(7, $props['stats']['total']);
-        $this->assertSame(1, $props['stats']['in_house']);
+        // in_house counts PEOPLE (adults + children), not profiles.
+        $this->assertSame(2, $props['stats']['in_house']);
+        $this->assertSame(1, $props['stats']['in_house_rooms']);
+        $this->assertSame(1, $props['stats']['in_house_profiles']);
         $this->assertSame(2, $props['stats']['arriving_7_days']);
         $this->assertSame(1, $props['stats']['incomplete']);
         $this->assertSame(2, $props['stats']['duplicate_profiles']);
@@ -79,6 +82,27 @@ class GuestDirectoryTest extends TestCase
             [$past->id, $duplicate->id],
             collect($duplicateProps['guests']['data'])->pluck('id')->all(),
         );
+    }
+
+    public function test_inside_counts_people_not_profiles(): void
+    {
+        $admin = $this->user('admin');
+        $rooms = $this->rooms(3);
+        $group = $this->guest('Group', 'Booker', 'group@example.test', '+355690002001', 'POL');
+        $solo = $this->guest('Solo', 'Guest', 'solo@example.test', '+355690002002', 'ALB');
+
+        $this->reservation($rooms[0], $group, $admin, 'checked_in', '2026-07-09', '2026-07-12');
+        $second = $this->reservation($rooms[1], $group, $admin, 'checked_in', '2026-07-09', '2026-07-12');
+        $second->forceFill(['adults' => 2, 'children' => 1])->saveQuietly();
+        $this->reservation($rooms[2], $solo, $admin, 'checked_in', '2026-07-10', '2026-07-13');
+
+        $props = $this->props($this->actingAs($admin)->get(route('guests.index'))->assertOk());
+
+        // One group booker with two rooms (2 + 3 people) and one solo pair:
+        // 7 people, 3 rooms, but only 2 named profiles.
+        $this->assertSame(7, $props['stats']['in_house']);
+        $this->assertSame(3, $props['stats']['in_house_rooms']);
+        $this->assertSame(2, $props['stats']['in_house_profiles']);
     }
 
     public function test_multi_room_booking_group_counts_as_one_completed_stay(): void

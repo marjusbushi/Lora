@@ -5341,7 +5341,11 @@
       "pcCategories": "Sa nyje të pemës (kategori e nënkategori) morën shpenzim në periudhë.",
       "pcUncategorized": "Shpenzim që s'arriti te asnjë kategori: rreshta me artikuj pa kategori, ose fatura pa rreshta me kategori dokumenti të panjohur. Zero = çdo lek i klasifikuar.",
       "pcTree": "Çdo rresht fature kreditohet te kategoria e artikullit DHE te çdo prind i saj — Verë numërohet edhe te Alkoolike edhe te Pije. Ndryshimi krahasohet me periudhën paraardhëse; rritja e shpenzimit shfaqet me të kuqe.",
-      "pcTopItems": "Artikujt me shpenzimin më të madh të periudhës, nga rreshtat e faturave."
+      "pcTopItems": "Artikujt me shpenzimin më të madh të periudhës, nga rreshtat e faturave.",
+      "gdTotal": "Profile mysafirësh të regjistruar në sistem — çdo person numërohet një herë, pavarësisht sa herë ka qëndruar.",
+      "gdInside": "PERSONA realisht brenda tani: të rritur + fëmijë të qëndrimeve me check-in. Nëntitulli tregon në sa dhoma dhe nën sa profile të emërtuar — një rezervim grupi është shumë veta nën një profil të vetëm.",
+      "gdArriving": "Profile me mbërritje të konfirmuar në 7 ditët e ardhshme. Rreshti i vogël: sa prej tyre janë klientë të kthyer.",
+      "gdIncomplete": "Profile pa asnjë kontakt (email/telefon) ose pa shtetësi — plotësoji që komunikimi dhe statistikat e kombësive të punojnë."
     },
     "executiveDashboard": "Dashboard Ekzekutiv",
     "executiveShort": "Performanca dhe sinjalet kryesore.",
@@ -6997,6 +7001,10 @@
     "dashboard": {
       "allRooms": "Të gjitha ({count})",
       "cleaningAge": "{today} të sotme · {older} të vjetra"
+    },
+    "guests": {
+      "inHouseDetail": "persona · në {rooms} dhoma · {profiles} profile",
+      "activeProfiles": "profile aktive"
     },
     "financePayments": {
       "reservationOnly": "Po shfaqen vetëm lëvizjet e lidhura me rezervimin",
