@@ -430,9 +430,9 @@ const parentOfCurrent = computed(() => {
     return byId[currentNodeId.value]?.parent_id ?? null;
 });
 
-const displayTiles = computed(() => (
-    currentTiles.value.length ? currentTiles.value : tilesFor(parentOfCurrent.value)
-));
+// Codex P2: shiriti i motrave rri GJITHMONË (aktivja navy) — fëmijët e
+// kategorisë së hapur shfaqen si rresht i dytë, jo në vend të motrave.
+const siblingTiles = computed(() => tilesFor(parentOfCurrent.value));
 
 function enterTile(key) {
     showFrequent.value = false;
@@ -920,7 +920,7 @@ onMounted(() => {
             </div>
         </div>
 
-        <div v-if="view === 'sale'" class="flex min-h-0 flex-col gap-5 xl:flex-row" :class="touchMode && 'flex-1 gap-3 overflow-hidden'">
+        <div v-if="view === 'sale'" class="flex min-h-0 flex-col gap-5 xl:flex-row" :class="immersiveMode && 'flex-1 gap-3 overflow-hidden'">
             <!-- LEFT: Menu area -->
             <div class="flex-1 min-w-0">
                 <!-- Orders Panel (toggle) -->
@@ -992,7 +992,7 @@ onMounted(() => {
                 </Teleport>
 
                 <!-- Menu Cards -->
-                <div class="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card" :class="touchMode && 'flex h-full min-h-0 flex-col'">
+                <div class="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card" :class="immersiveMode && 'flex h-full min-h-0 flex-col'">
                     <div class="flex flex-col gap-3 border-b border-neutral-200 p-4 sm:flex-row sm:items-center">
                         <div class="relative flex-1">
                             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
@@ -1014,7 +1014,7 @@ onMounted(() => {
                     </div>
                     <!-- Drill-down navigation: Niveli 1 → 2 → 3 → Artikujt -->
                     <div v-if="!showFrequent && !searchQuery.trim()" class="border-b border-neutral-200 px-4 py-3">
-                        <div v-if="currentNodeId !== null && (typeof parentOfCurrent === 'number' || currentTiles.length)" class="mb-2 flex items-center gap-2">
+                        <div v-if="typeof parentOfCurrent === 'number'" class="mb-2 flex items-center gap-2">
                             <button type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-small font-semibold text-neutral-700 hover:bg-neutral-50 touch-manipulation" @click="goUp">
                                 <ArrowLeft class="h-4 w-4" /> {{ $t('posIndex.back') }}
                             </button>
@@ -1031,9 +1031,9 @@ onMounted(() => {
                             </nav>
                         </div>
                         <!-- Kategoritë GJITHMONË të dukshme si tableta (mockup): aktivja navy, ndërrim me 1 klik -->
-                        <div v-if="displayTiles.length" class="flex flex-wrap gap-2">
+                        <div v-if="siblingTiles.length" class="flex flex-wrap gap-2">
                             <button
-                                v-for="tile in displayTiles"
+                                v-for="tile in siblingTiles"
                                 :key="tile.key"
                                 type="button"
                                 class="inline-flex min-h-11 items-center gap-2 rounded-full py-2 pl-4 pr-2 text-body-sm font-semibold transition touch-manipulation"
@@ -1047,6 +1047,19 @@ onMounted(() => {
                                     class="shrink-0 rounded-full px-2 py-0.5 text-tiny font-semibold"
                                     :class="tile.key === currentNodeId ? 'bg-white/20 text-white' : 'bg-white text-neutral-500 ring-1 ring-neutral-200'"
                                 >{{ tile.count }}</span>
+                            </button>
+                        </div>
+                        <!-- Nën-kategoritë e kategorisë së hapur (vetëm te menutë me thellim) — rresht i dytë, outline -->
+                        <div v-if="currentTiles.length" class="mt-2 flex flex-wrap gap-2">
+                            <button
+                                v-for="tile in currentTiles"
+                                :key="tile.key"
+                                type="button"
+                                class="inline-flex min-h-10 items-center gap-2 rounded-full border border-neutral-200 bg-white py-1.5 pl-3.5 pr-2 text-body-sm font-semibold text-neutral-600 transition hover:border-primary-900/40 hover:text-primary-900 touch-manipulation"
+                                @click="enterTile(tile.key)"
+                            >
+                                <span class="min-w-0 truncate">{{ tile.name }}</span>
+                                <span class="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-tiny font-semibold text-neutral-500">{{ tile.count }}</span>
                             </button>
                         </div>
                     </div>
@@ -1064,7 +1077,8 @@ onMounted(() => {
                     <div
                         class="grid grid-cols-2 gap-2 overflow-y-auto p-3 sm:grid-cols-3 lg:grid-cols-4"
                         :class="[
-                            touchMode ? 'min-h-0 flex-1 content-start xl:grid-cols-6' : '2xl:grid-cols-6',
+                            immersiveMode && 'min-h-0 flex-1 content-start',
+                            touchMode ? 'xl:grid-cols-6' : '2xl:grid-cols-6',
                             { 'opacity-50 pointer-events-none': !hasOpenShift },
                         ]"
                     >
@@ -1114,7 +1128,7 @@ onMounted(() => {
 
             <!-- RIGHT: Cart sidebar -->
             <div class="shrink-0" :class="touchMode ? 'xl:w-[430px]' : 'xl:w-[390px]'">
-                <div class="flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card" :class="touchMode ? 'h-full min-h-0' : 'xl:sticky xl:top-20 xl:h-[calc(100vh-7rem)] xl:min-h-[560px]'">
+                <div class="flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-card" :class="immersiveMode ? 'h-full min-h-0' : 'xl:sticky xl:top-20 xl:h-[calc(100vh-7rem)] xl:min-h-[560px]'">
                     <template v-if="checkoutStep === 'payment' && selectedOrder">
                         <div class="flex items-center justify-between border-b border-neutral-200 px-4 py-4">
                             <div class="flex items-center gap-3">
