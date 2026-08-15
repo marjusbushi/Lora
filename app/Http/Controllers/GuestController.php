@@ -259,10 +259,19 @@ class GuestController extends Controller
             ];
         });
 
+        // "Inside" counts PEOPLE (adults + children of checked-in stays) — a
+        // group booking is many rooms and many people under ONE profile, so a
+        // profile count reads far too low (Saturn: 11 people, 4 profiles).
+        $inHouse = Reservation::query()
+            ->where('status', 'checked_in')
+            ->selectRaw('COUNT(*) as rooms, COALESCE(SUM(adults + children), 0) as people, COUNT(DISTINCT guest_id) as profiles')
+            ->first();
+
         $stats = [
             'total' => Guest::count(),
-            'in_house' => Guest::whereHas('reservations', fn (Builder $reservation) => $reservation
-                ->where('status', 'checked_in'))->count(),
+            'in_house' => (int) $inHouse->people,
+            'in_house_rooms' => (int) $inHouse->rooms,
+            'in_house_profiles' => (int) $inHouse->profiles,
             'arriving_7_days' => Guest::whereHas('reservations', fn (Builder $reservation) => $reservation
                 ->where('status', 'confirmed')
                 ->whereNull('no_show_at')
