@@ -553,6 +553,7 @@ function profileBarClass(guest) {
                                         <div class="mt-1 flex items-center gap-1.5 text-tiny text-neutral-400">
                                             <span>{{ guest.nationality_label || (guest.nationality ? countryName(guest.nationality) : $t('admin.generated.k_4e076dab2210')) }}</span>
                                             <Badge v-if="guest.is_duplicate" variant="warning" size="sm">{{ $t('admin.generated.k_3fb8721c9958') }}</Badge>
+                                            <Badge v-else-if="guest.is_companion" variant="info" size="sm">{{ $t('shared.guests.companion') }}</Badge>
                                         </div>
                                     </div>
                                 </div>
@@ -622,6 +623,7 @@ function profileBarClass(guest) {
                                     <span>{{ guest.nationality_label || (guest.nationality ? countryName(guest.nationality) : $t('admin.generated.k_4e076dab2210')) }}</span>
                                     <Badge v-if="guest.completed_stays >= 2" variant="accent" size="sm">{{ $t('admin.generated.k_09dacc1c522c') }}</Badge>
                                     <Badge v-if="guest.is_duplicate" variant="warning" size="sm">{{ $t('admin.generated.k_3fb8721c9958') }}</Badge>
+                                    <Badge v-else-if="guest.is_companion" variant="info" size="sm">{{ $t('shared.guests.companion') }}</Badge>
                                 </div>
                             </div>
                         </div>
