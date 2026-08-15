@@ -1,6 +1,6 @@
 <script setup>
 import { getIntlLocale, i18n, translate } from '@/i18n';
-import { ref, computed, nextTick, onMounted, watch } from 'vue';
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useForm, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -39,6 +39,7 @@ const props = defineProps({
     payCurrencies: { type: Array, default: () => [] },
     outlets: { type: Array, default: () => [] },
     currentOutletId: { type: Number, default: null },
+    outletCounts: { type: Object, default: () => ({ all: 0, byOutlet: {} }) },
 });
 
 const toasts = ref(null);
@@ -747,11 +748,49 @@ function formatDateTime(d) {
     return new Date(d).toLocaleString(getIntlLocale(), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+// Theksimi i listës së porosive: e sapoardhur (<5 min) vs e harruar (ditë hapur).
+// Orë reaktive (gjetje Codex): me vlerë statike "E RE" nuk skadonte kurrë
+// dhe ditët s'ecnin sa kohë faqja rrinte hapur.
+const listClock = ref(Date.now());
+let listClockTimer = null;
+function isNewOrder(order) {
+    return order.status === 'open' && listClock.value - new Date(order.created_at).getTime() < 5 * 60000;
+}
+function orderDaysOld(order) {
+    if (order.status !== 'open') return 0;
+    const anchor = order.business_date ? new Date(`${order.business_date}T00:00:00`) : new Date(order.created_at);
+    const days = Math.floor((listClock.value - anchor.getTime()) / 86400000);
+    return days > 0 ? days : 0;
+}
+function orderRowClass(order) {
+    if (orderDaysOld(order)) return 'bg-error-50/60';
+    if (isNewOrder(order)) return 'bg-success-50/60';
+    return '';
+}
+
+// Preview i detajuar në klik të rreshtit — veprimet delegohen te rrjedhat
+// ekzistuese (openPay/editOrder/openCancel/openReceipt), zero logjikë e re pagese.
+const previewOrder = ref(null);
+function openOrderPreview(order) {
+    previewOrder.value = order;
+}
+function previewAction(action) {
+    const order = previewOrder.value;
+    previewOrder.value = null;
+    if (order) action(order);
+}
+
+function filterByOutlet(outletId) {
+    router.get(route('pos.orders'), outletId ? { outlet: outletId } : {}, { preserveScroll: true });
+}
+
 function toggleTouchMode() {
     touchMode.value = !touchMode.value;
 }
 
 onMounted(() => {
+    listClockTimer = setInterval(() => { listClock.value = Date.now(); }, 30000);
+
     if (props.view !== 'sale' || !props.filters?.order_id) return;
     const order = props.orders?.data?.find((item) => Number(item.id) === Number(props.filters.order_id));
     if (!order) return;
@@ -760,6 +799,8 @@ onMounted(() => {
     if (action === 'pay' && order.status === 'open') openPay(order);
     if (action === 'receipt' && order.status === 'completed') openReceipt(order);
 });
+
+onBeforeUnmount(() => clearInterval(listClockTimer));
 </script>
 
 <template>
@@ -1203,6 +1244,28 @@ onMounted(() => {
                     <h2 class="text-h4 text-primary-900">{{ view === 'orders' ? $t('posIndex.openOrders') : $t('posIndex.receiptsRegister') }}</h2>
                     <p class="mt-1 text-small text-neutral-500">{{ view === 'orders' ? $t('posIndex.ordersListHint') : $t('posIndex.receiptsListHint') }}</p>
                 </div>
+                <div v-if="view === 'orders' && outlets.length" class="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-body-sm font-semibold transition"
+                        :class="!filters?.outlet ? 'bg-primary-900 text-white' : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'"
+                        @click="filterByOutlet(null)"
+                    >
+                        {{ $t('posIndex.filterAll') }}
+                        <span class="grid h-5 min-w-5 place-items-center rounded-full px-1 text-tiny font-bold" :class="!filters?.outlet ? 'bg-white/20' : 'bg-neutral-100 text-neutral-500'">{{ outletCounts.all }}</span>
+                    </button>
+                    <button
+                        v-for="outlet in outlets"
+                        :key="outlet.id"
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-body-sm font-semibold transition"
+                        :class="Number(filters?.outlet) === outlet.id ? 'bg-primary-900 text-white' : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'"
+                        @click="filterByOutlet(outlet.id)"
+                    >
+                        {{ outlet.name }}
+                        <span class="grid h-5 min-w-5 place-items-center rounded-full px-1 text-tiny font-bold" :class="Number(filters?.outlet) === outlet.id ? 'bg-white/20' : 'bg-neutral-100 text-neutral-500'">{{ outletCounts.byOutlet[String(outlet.id)] || 0 }}</span>
+                    </button>
+                </div>
                 <div v-if="view === 'receipts'" class="flex flex-wrap gap-2">
                     <Button variant="outline" size="sm" :href="route('pos.receipts')">{{ $t('posIndex.filterAll') }}</Button>
                     <Button variant="outline" size="sm" :href="route('pos.receipts', { status: 'completed' })">{{ $t('posIndex.filterPaid') }}</Button>
@@ -1225,24 +1288,34 @@ onMounted(() => {
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100 bg-white">
-                        <tr v-for="order in orders.data" :key="order.id" class="hover:bg-neutral-50">
-                            <td class="px-5 py-3.5 text-body-sm font-bold text-primary-900">#{{ order.id }}</td>
+                        <tr v-for="order in orders.data" :key="order.id" class="cursor-pointer hover:bg-neutral-50" :class="orderRowClass(order)" @click="openOrderPreview(order)">
+                            <td class="whitespace-nowrap px-5 py-3.5 text-body-sm font-bold text-primary-900">
+                                #{{ order.id }}
+                                <span v-if="isNewOrder(order)" class="ml-1 rounded-full bg-success-600 px-2 py-0.5 text-tiny font-extrabold text-white">{{ $t('posBeach.newChip') }}</span>
+                                <span v-else-if="orderDaysOld(order)" class="ml-1 rounded-full bg-error-50 px-2 py-0.5 text-tiny font-extrabold text-error-700">⏱ {{ $t('posBeach.daysOpen', { count: orderDaysOld(order) }) }}</span>
+                            </td>
                             <td class="whitespace-nowrap px-5 py-3.5 text-body-sm text-neutral-500">{{ formatDateTime(order.paid_at || order.created_at) }}</td>
-                            <td class="px-5 py-3.5 text-body-sm text-neutral-600">{{ order.reservation_id ? $t('posIndex.roomReservationRef', { id: order.reservation_id }) : order.table_number ? $t('posIndex.tableRef', { number: order.table_number }) : $t('posIndex.counter') }}</td>
+                            <td class="px-5 py-3.5 text-body-sm text-neutral-600">
+                                <template v-if="order.beach_unit">
+                                    <span class="font-semibold text-neutral-800">⛱️ {{ $t('posBeach.unit', { number: order.beach_unit.number }) }}</span>
+                                    <span v-if="order.beach_unit.zone_name" class="block text-tiny text-neutral-400">{{ order.beach_unit.zone_name }}</span>
+                                </template>
+                                <template v-else>{{ order.reservation_id ? $t('posIndex.roomReservationRef', { id: order.reservation_id }) : order.table_number ? $t('posIndex.tableRef', { number: order.table_number }) : $t('posIndex.counter') }}</template>
+                            </td>
                             <td class="max-w-64 px-5 py-3.5 text-body-sm text-neutral-600"><span class="line-clamp-2">{{ order.items?.map(i => `${i.quantity}× ${i.menu_item?.name}`).join(', ') || '—' }}</span></td>
                             <td class="px-5 py-3.5"><Badge :variant="statusBadge[order.effective_status]?.variant" dot size="sm">{{ statusBadge[order.effective_status]?.label }}</Badge></td>
                             <td class="px-5 py-3.5"><Badge variant="neutral" size="sm">{{ orderPaymentLabel(order) }}</Badge></td>
                             <td class="whitespace-nowrap px-5 py-3.5 text-right text-body-sm font-bold text-primary-900">{{ money(order.total_amount) }}</td>
                             <td class="px-5 py-3.5 text-right">
                                 <div v-if="order.status === 'open'" class="flex justify-end gap-2">
-                                    <Button size="sm" variant="outline" @click="editOrder(order)"><Pencil class="h-3.5 w-3.5" /> {{ $t('posIndex.edit') }}</Button>
-                                    <Button size="sm" variant="primary" @click="openPay(order)">{{ $t('posIndex.pay') }}</Button>
-                                    <Button size="sm" variant="ghost" class="text-error-600" @click="openCancel(order)">{{ $t('posIndex.cancel') }}</Button>
+                                    <Button size="sm" variant="outline" @click.stop="editOrder(order)"><Pencil class="h-3.5 w-3.5" /> {{ $t('posIndex.edit') }}</Button>
+                                    <Button size="sm" variant="primary" @click.stop="openPay(order)">{{ $t('posIndex.pay') }}</Button>
+                                    <Button size="sm" variant="ghost" class="text-error-600" @click.stop="openCancel(order)">{{ $t('posIndex.cancel') }}</Button>
                                 </div>
                                 <div v-else class="flex flex-wrap justify-end gap-2">
-                                    <Button v-if="canFiscalize(order)" size="sm" variant="outline" :loading="fiscalizingOrder === order.id" @click="fiscalizeReceipt(order)">{{ $t('posIndex.fiscalize') }}</Button>
-                                    <Button size="sm" variant="outline" @click="openReceipt(order)"><ReceiptText class="h-3.5 w-3.5" /> {{ $t('posIndex.receipt') }}</Button>
-                                    <Button v-if="order.status === 'completed' && !order.refunded_at" size="sm" variant="ghost" class="text-error-600" :disabled="!hasOpenShift" @click="openRefund(order)"><RotateCcw class="h-3.5 w-3.5" /> {{ $t('posIndex.refund') }}</Button>
+                                    <Button v-if="canFiscalize(order)" size="sm" variant="outline" :loading="fiscalizingOrder === order.id" @click.stop="fiscalizeReceipt(order)">{{ $t('posIndex.fiscalize') }}</Button>
+                                    <Button size="sm" variant="outline" @click.stop="openReceipt(order)"><ReceiptText class="h-3.5 w-3.5" /> {{ $t('posIndex.receipt') }}</Button>
+                                    <Button v-if="order.status === 'completed' && !order.refunded_at" size="sm" variant="ghost" class="text-error-600" :disabled="!hasOpenShift" @click.stop="openRefund(order)"><RotateCcw class="h-3.5 w-3.5" /> {{ $t('posIndex.refund') }}</Button>
                                 </div>
                             </td>
                         </tr>
@@ -1291,6 +1364,63 @@ onMounted(() => {
             </Card>
         </div>
         </div>
+
+        <!-- Preview i porosisë: Teleport i thjeshtë (jo UI/Modal — shih shënimin te MHQ #310):
+             brenda UI/Modal ky preview nuk mbyllej dot në disa rrjedha; pattern-i i BeachPanel funksionon. -->
+        <Teleport to="body">
+            <div v-if="previewOrder" class="fixed inset-0 z-[90] flex items-end justify-center bg-neutral-900/50 sm:items-center" @click.self="previewOrder = null">
+                <div class="max-h-[88vh] w-full overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:max-w-md sm:rounded-2xl">
+                    <div class="sticky top-0 flex items-center justify-between border-b border-neutral-100 bg-white px-5 py-4">
+                        <h3 class="text-h4 text-neutral-900">{{ $t('posBeach.previewTitle', { id: previewOrder.id }) }}</h3>
+                        <button type="button" class="rounded-full p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600" :aria-label="$t('posBeach.close')" @click="previewOrder = null">✕</button>
+                    </div>
+                    <div class="space-y-4 px-5 py-4">
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <div class="rounded-xl bg-neutral-50 px-3 py-2.5">
+                        <p class="text-tiny uppercase tracking-wide text-neutral-400">{{ $t('posBeach.previewPlace') }}</p>
+                        <p class="mt-0.5 text-body-sm font-bold text-neutral-800">
+                            <template v-if="previewOrder.beach_unit">⛱️ {{ $t('posBeach.unit', { number: previewOrder.beach_unit.number }) }}<span v-if="previewOrder.beach_unit.zone_name" class="block text-tiny font-medium text-neutral-400">{{ previewOrder.beach_unit.zone_name }}</span></template>
+                            <template v-else>{{ previewOrder.reservation_id ? $t('posIndex.roomReservationRef', { id: previewOrder.reservation_id }) : previewOrder.table_number ? $t('posIndex.tableRef', { number: previewOrder.table_number }) : $t('posIndex.counter') }}</template>
+                        </p>
+                    </div>
+                    <div class="rounded-xl bg-neutral-50 px-3 py-2.5">
+                        <p class="text-tiny uppercase tracking-wide text-neutral-400">{{ $t('posBeach.previewTime') }}</p>
+                        <p class="mt-0.5 text-body-sm font-bold text-neutral-800">{{ formatDateTime(previewOrder.created_at) }}</p>
+                    </div>
+                    <div class="rounded-xl bg-neutral-50 px-3 py-2.5">
+                        <p class="text-tiny uppercase tracking-wide text-neutral-400">{{ $t('posIndex.colStatus') }}</p>
+                        <p class="mt-0.5"><Badge :variant="statusBadge[previewOrder.effective_status]?.variant" dot size="sm">{{ statusBadge[previewOrder.effective_status]?.label }}</Badge></p>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-tiny font-extrabold uppercase tracking-widest text-neutral-400">{{ $t('posBeach.itemsTitle') }}</h4>
+                    <div class="mt-1.5 divide-y divide-neutral-100 rounded-xl border border-neutral-100">
+                        <div v-for="item in previewOrder.items" :key="item.id" class="flex items-center justify-between px-3.5 py-2.5 text-body-sm">
+                            <span class="text-neutral-800"><span class="font-semibold text-neutral-500">{{ item.quantity }}×</span> {{ item.menu_item?.name }}</span>
+                            <span class="tabular-nums text-neutral-600">{{ money(item.total_price) }}</span>
+                        </div>
+                    </div>
+                    <div v-if="Number(previewOrder.discount_amount)" class="mt-2 flex items-center justify-between text-body-sm text-neutral-500">
+                        <span>{{ $t('posBeach.discountLabel') }}<template v-if="previewOrder.discount_reason"> · {{ previewOrder.discount_reason }}</template></span>
+                        <span class="tabular-nums">−{{ money(previewOrder.discount_amount) }}</span>
+                    </div>
+                    <div class="mt-2 flex items-center justify-between text-base font-extrabold text-primary-900">
+                        <span>{{ $t('posBeach.totalLabel') }}</span>
+                        <span class="tabular-nums">{{ money(previewOrder.total_amount) }}</span>
+                    </div>
+                </div>
+                <div v-if="previewOrder.status === 'open'" class="flex flex-wrap justify-end gap-2 border-t border-neutral-100 pt-3">
+                    <Button variant="outline" @click="previewAction(editOrder)"><Pencil class="h-3.5 w-3.5" /> {{ $t('posIndex.edit') }}</Button>
+                    <Button variant="ghost" class="text-error-600" @click="previewAction(openCancel)">{{ $t('posIndex.cancel') }}</Button>
+                    <Button variant="primary" @click="previewAction(openPay)">{{ $t('posIndex.pay') }}</Button>
+                </div>
+                <div v-else class="flex flex-wrap justify-end gap-2 border-t border-neutral-100 pt-3">
+                    <Button variant="outline" @click="previewAction(openReceipt)"><ReceiptText class="h-3.5 w-3.5" /> {{ $t('posIndex.receipt') }}</Button>
+                </div>
+                    </div>
+                </div>
+            </div>
+        </Teleport>
 
         <Modal :show="showCancelModal" :title="$t('posIndex.cancelOrderTitle')" max-width="sm" @close="showCancelModal = false">
             <div class="space-y-3">

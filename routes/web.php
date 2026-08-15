@@ -373,6 +373,12 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         // Cash-drawer shifts (hapje/mbyllje turni)
         Route::post('/pos/shift/open', [PosShiftController::class, 'open'])->middleware('permission:open_pos_shift')->name('pos.shift.open');
         Route::post('/pos/shift/{posShift}/close', [PosShiftController::class, 'close'])->middleware('permission:close_pos_shift')->name('pos.shift.close');
+
+        // Paneli i plazhit — porositë e çadrave live (kërkon edhe modulin beach)
+        Route::middleware('module:beach')->group(function () {
+            Route::get('/pos/beach', [PosController::class, 'beachPanel'])->name('pos.beach');
+            Route::post('/pos/beach/{posOrder}/deliver', [PosController::class, 'beachDeliver'])->middleware('permission:update_pos_orders')->name('pos.beach.deliver');
+        });
     });
 
     // Reports

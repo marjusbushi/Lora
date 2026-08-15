@@ -175,6 +175,8 @@ const allNavItems = computed(() => [
         children: [
             { label: t('shared.appLayout.posSales'), href: '/pms/pos/tables' },
             { label: t('shared.appLayout.posOrders'), href: '/pms/pos/orders' },
+            // Paneli i plazhit jeton te POS-i, po ka kuptim vetëm me modulin beach aktiv.
+            ...(hasModule('beach') ? [{ label: t('shared.appLayout.posBeach'), href: '/pms/pos/beach' }] : []),
             { label: t('shared.appLayout.posReceipts'), href: '/pms/pos/receipts' },
             { label: t('shared.appLayout.posShifts'), href: '/pms/pos/shifts' },
         ],
