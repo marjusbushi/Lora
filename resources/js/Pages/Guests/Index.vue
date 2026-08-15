@@ -107,7 +107,7 @@ const stateMeta = {
 
 const segmentOptions = computed(() => [
     { value: 'all', label: translate('admin.generated.k_c74e497a03cb'), count: number(props.stats.total) },
-    { value: 'in_house', label: translate('admin.generated.k_17e41bcc53f0'), count: number(props.stats.in_house) },
+    { value: 'in_house', label: translate('admin.generated.k_17e41bcc53f0'), count: number(props.stats.in_house_profiles) },
     { value: 'arriving_7_days', label: translate('admin.generated.k_47415767fa47'), count: number(props.stats.arriving_7_days) },
     { value: 'returning', label: translate('admin.generated.k_9d14592446ea'), count: number(props.stats.returning) },
     { value: 'incomplete', label: translate('admin.generated.k_0a2615079eb7'), count: number(props.stats.incomplete) },
@@ -128,7 +128,10 @@ const metrics = computed(() => [
         key: 'in_house',
         label: translate('admin.generated.k_f63cf80f1ba5'),
         value: number(props.stats.in_house),
-        help: translate('admin.generated.k_4be32d4f6673'),
+        help: translate('shared.guests.inHouseDetail', {
+            rooms: number(props.stats.in_house_rooms),
+            profiles: number(props.stats.in_house_profiles),
+        }),
         icon: BedDouble,
         iconClass: 'bg-info-50 text-info-700',
         segment: 'in_house',

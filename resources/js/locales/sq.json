@@ -6988,6 +6988,9 @@
       "allRooms": "Të gjitha ({count})",
       "cleaningAge": "{today} të sotme · {older} të vjetra"
     },
+    "guests": {
+      "inHouseDetail": "persona · në {rooms} dhoma · {profiles} profile"
+    },
     "financePayments": {
       "reservationOnly": "Po shfaqen vetëm lëvizjet e lidhura me rezervimin",
       "openReservation": "Hap rezervimin"

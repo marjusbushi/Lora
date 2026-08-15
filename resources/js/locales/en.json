@@ -6988,6 +6988,9 @@
       "allRooms": "All ({count})",
       "cleaningAge": "{today} from today · {older} older"
     },
+    "guests": {
+      "inHouseDetail": "people · in {rooms} rooms · {profiles} profiles"
+    },
     "financePayments": {
       "reservationOnly": "Showing only the movements linked to reservation",
       "openReservation": "Open the reservation"
