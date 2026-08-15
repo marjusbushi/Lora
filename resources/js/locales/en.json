@@ -5322,7 +5322,11 @@
       "pcCategories": "How many tree nodes (categories and sub-categories) received spend in the period.",
       "pcUncategorized": "Spend that reached no category: lines with uncategorized items, or bills without lines whose document category is unknown. Zero = every lek classified.",
       "pcTree": "Every bill line credits its item's category AND each of its parents — Verë counts toward Alkoolike and Pije too. Change compares against the previous period; rising spend shows red.",
-      "pcTopItems": "The period's highest-spend items, from bill lines."
+      "pcTopItems": "The period's highest-spend items, from bill lines.",
+      "gdTotal": "Guest profiles registered in the system — each person counts once, no matter how many stays they've had.",
+      "gdInside": "PEOPLE actually inside now: adults + children of checked-in stays. The subtitle shows how many rooms and how many named profiles — a group booking is many people under a single profile.",
+      "gdArriving": "Profiles with a confirmed arrival in the next 7 days. The small line: how many of them are returning customers.",
+      "gdIncomplete": "Profiles with no contact (email/phone) or no nationality — complete them so messaging and nationality statistics work."
     },
     "executiveDashboard": "Executive Dashboard",
     "executiveShort": "Key performance and alerts.",
@@ -6858,6 +6862,10 @@
     "dashboard": {
       "allRooms": "All ({count})",
       "cleaningAge": "{today} from today · {older} older"
+    },
+    "guests": {
+      "inHouseDetail": "people · in {rooms} rooms · {profiles} profiles",
+      "activeProfiles": "active profiles"
     },
     "financePayments": {
       "reservationOnly": "Showing only the movements linked to reservation",
