@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import Modal from '@/Components/UI/Modal.vue';
@@ -119,7 +120,8 @@ const metrics = computed(() => [
         key: 'total',
         label: translate('admin.generated.k_16e8b6cf9ffb'),
         value: number(props.stats.total),
-        help: 'profile aktive',
+        help: translate('shared.guests.activeProfiles'),
+        tip: translate('reports360.help.gdTotal'),
         icon: Users,
         iconClass: 'bg-accent-50 text-accent-700',
         segment: 'all',
@@ -132,6 +134,7 @@ const metrics = computed(() => [
             rooms: number(props.stats.in_house_rooms),
             profiles: number(props.stats.in_house_profiles),
         }),
+        tip: translate('reports360.help.gdInside'),
         icon: BedDouble,
         iconClass: 'bg-info-50 text-info-700',
         segment: 'in_house',
@@ -141,6 +144,7 @@ const metrics = computed(() => [
         label: translate('admin.generated.k_cfbfcfa4b6f4'),
         value: number(props.stats.arriving_7_days),
         help: translate('admin.generated.k_724cd811a715', { p0: number(props.stats.arriving_returning) }),
+        tip: translate('reports360.help.gdArriving'),
         icon: CalendarDays,
         iconClass: 'bg-primary-50 text-primary-700',
         segment: 'arriving_7_days',
@@ -150,6 +154,7 @@ const metrics = computed(() => [
         label: translate('admin.generated.k_0f218be47b55'),
         value: number(props.stats.incomplete),
         help: translate('admin.generated.k_d0c1bb2ce171'),
+        tip: translate('reports360.help.gdIncomplete'),
         icon: CircleAlert,
         iconClass: 'bg-warning-50 text-warning-700',
         segment: 'incomplete',
@@ -408,23 +413,28 @@ function profileBarClass(guest) {
 {{ $t('admin.generated.k_873a4442a8af') }} </p>
 
         <section class="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-4" :aria-label="$t('admin.generated.k_da4e5132ece6')">
-            <button
-                v-for="metric in metrics"
-                :key="metric.key"
-                type="button"
-                class="relative min-h-28 rounded-lg border bg-white px-4 py-4 text-left shadow-card transition hover:-translate-y-0.5 hover:border-accent-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent-500/30 sm:px-5"
-                :class="segment === metric.segment ? 'border-accent-300 ring-1 ring-accent-100' : 'border-neutral-200'"
-                :aria-label="`${metric.label}: ${metric.value}. ${metric.help}`"
-                :aria-pressed="segment === metric.segment"
-                @click="selectSegment(metric.segment)"
-            >
-                <span :class="['absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg sm:right-4 sm:top-4', metric.iconClass]">
-                    <component :is="metric.icon" class="h-4 w-4" :stroke-width="1.8" />
+            <!-- The card itself is a button (segment filter), so the InfoTip is a
+                 positioned SIBLING — interactive elements must never nest. -->
+            <div v-for="metric in metrics" :key="metric.key" class="relative">
+                <button
+                    type="button"
+                    class="relative min-h-28 w-full rounded-lg border bg-white px-4 py-4 text-left shadow-card transition hover:-translate-y-0.5 hover:border-accent-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent-500/30 sm:px-5"
+                    :class="segment === metric.segment ? 'border-accent-300 ring-1 ring-accent-100' : 'border-neutral-200'"
+                    :aria-label="`${metric.label}: ${metric.value}. ${metric.help}`"
+                    :aria-pressed="segment === metric.segment"
+                    @click="selectSegment(metric.segment)"
+                >
+                    <span :class="['absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg sm:right-4 sm:top-4', metric.iconClass]">
+                        <component :is="metric.icon" class="h-4 w-4" :stroke-width="1.8" />
+                    </span>
+                    <p class="max-w-[75%] text-tiny font-semibold uppercase tracking-wider text-neutral-500">{{ metric.label }}</p>
+                    <p class="mt-2 text-h2 font-semibold leading-none text-primary-900">{{ metric.value }}</p>
+                    <p class="mt-2 text-tiny leading-snug text-neutral-500">{{ metric.help }}</p>
+                </button>
+                <span v-if="metric.tip" class="absolute bottom-3 right-3 sm:bottom-4 sm:right-4">
+                    <InfoTip :text="metric.tip" :label="metric.label" />
                 </span>
-                <p class="max-w-[75%] text-tiny font-semibold uppercase tracking-wider text-neutral-500">{{ metric.label }}</p>
-                <p class="mt-2 text-h2 font-semibold leading-none text-primary-900">{{ metric.value }}</p>
-                <p class="mt-2 text-tiny leading-snug text-neutral-500">{{ metric.help }}</p>
-            </button>
+            </div>
         </section>
 
         <section
