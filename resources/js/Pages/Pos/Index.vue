@@ -1,6 +1,6 @@
 <script setup>
 import { getIntlLocale, i18n, translate } from '@/i18n';
-import { ref, computed, nextTick, onMounted, watch } from 'vue';
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useForm, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -749,14 +749,17 @@ function formatDateTime(d) {
 }
 
 // Theksimi i listës së porosive: e sapoardhur (<5 min) vs e harruar (ditë hapur).
-const listLoadedAt = Date.now();
+// Orë reaktive (gjetje Codex): me vlerë statike "E RE" nuk skadonte kurrë
+// dhe ditët s'ecnin sa kohë faqja rrinte hapur.
+const listClock = ref(Date.now());
+let listClockTimer = null;
 function isNewOrder(order) {
-    return order.status === 'open' && listLoadedAt - new Date(order.created_at).getTime() < 5 * 60000;
+    return order.status === 'open' && listClock.value - new Date(order.created_at).getTime() < 5 * 60000;
 }
 function orderDaysOld(order) {
     if (order.status !== 'open') return 0;
     const anchor = order.business_date ? new Date(`${order.business_date}T00:00:00`) : new Date(order.created_at);
-    const days = Math.floor((listLoadedAt - anchor.getTime()) / 86400000);
+    const days = Math.floor((listClock.value - anchor.getTime()) / 86400000);
     return days > 0 ? days : 0;
 }
 function orderRowClass(order) {
@@ -786,6 +789,8 @@ function toggleTouchMode() {
 }
 
 onMounted(() => {
+    listClockTimer = setInterval(() => { listClock.value = Date.now(); }, 30000);
+
     if (props.view !== 'sale' || !props.filters?.order_id) return;
     const order = props.orders?.data?.find((item) => Number(item.id) === Number(props.filters.order_id));
     if (!order) return;
@@ -794,6 +799,8 @@ onMounted(() => {
     if (action === 'pay' && order.status === 'open') openPay(order);
     if (action === 'receipt' && order.status === 'completed') openReceipt(order);
 });
+
+onBeforeUnmount(() => clearInterval(listClockTimer));
 </script>
 
 <template>
