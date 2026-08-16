@@ -85,7 +85,7 @@ class ChannexMessageImporter
 
             $duplicate = $messageId !== '' && Message::where('channex_message_id', $messageId)->exists();
             if (! $duplicate) {
-                $thread->messages()->create([
+                $message = $thread->messages()->create([
                     'channex_message_id' => $messageId ?: null,
                     'sender' => $sender,
                     'body' => $body,
@@ -102,6 +102,16 @@ class ChannexMessageImporter
                     if ($thread->status === 'closed') {
                         $thread->status = 'open';
                     }
+
+                    // Pyetje e re = drafti i vjetër i AI-t s'vlen më — pastrohet
+                    // që stafi të mos dërgojë përgjigje të mesazhit të kaluar
+                    // edhe kur job-i i ri nuk prodhon dot (gjetje Codex).
+                    $thread->ai_suggestion = null;
+                    $thread->ai_suggested_at = null;
+
+                    // Lora AI Chat — VETËM nga webhook-u (koha reale); pull-i i
+                    // historikut s'duhet t'i përgjigjet kurrë mesazheve të vjetra.
+                    \App\Jobs\GenerateAiGuestReply::dispatch($thread->id, $message->id)->afterCommit();
                 }
                 $thread->save();
             }

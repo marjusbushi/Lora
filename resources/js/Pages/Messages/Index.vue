@@ -14,6 +14,14 @@ const props = defineProps({
 });
 
 const replyForm = useForm({ body: '' });
+
+// Drafti i Lora AI: 'Përdore' e parapërgatit kutinë (stafi editon e dërgon);
+// hedhja poshtë është lokale — dërgimi i stafit e pastron edhe në server.
+const aiDraftDismissed = ref(false);
+watch(() => props.selected?.id, () => { aiDraftDismissed.value = false; });
+function useAiSuggestion() {
+    replyForm.body = props.selected?.ai_suggestion || '';
+}
 const filter = ref('all'); // all | unread | booking.com | airbnb
 
 // Sound alert on/off (read by AppLayout's poll via localStorage).
@@ -294,6 +302,7 @@ function statusLabel(s) {
                                         :class="row.sender === 'host' ? 'rounded-br-md bg-[#15855c] text-white shadow-[0_4px_12px_-4px_rgba(21,133,92,0.5)]' : 'rounded-bl-md border border-neutral-200 bg-white text-neutral-800'">
                                         <p class="whitespace-pre-wrap break-words">{{ row.body }}</p>
                                         <p class="mt-1 flex items-center gap-1 text-[9.5px]" :class="row.sender === 'host' ? 'justify-end text-emerald-100' : 'text-neutral-400'">
+                                            <span v-if="row.sent_by_ai" class="font-bold">✨ Lora AI ·</span>
                                             {{ clock(row.sent_at) }}
                                             <svg v-if="row.sender === 'host'" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.2a.75.75 0 01.1 1.05l-8 10.5a.75.75 0 01-1.13.07l-4.5-4.5a.75.75 0 011.06-1.06l3.9 3.9 7.48-9.82a.75.75 0 011.05-.14z" clip-rule="evenodd" /></svg>
                                         </p>
@@ -308,6 +317,20 @@ function statusLabel(s) {
                                 class="rounded-lg bg-[#15855c] px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-[#0c5a3e]">{{ $t('admin.generated.k_08ec770c051b') }}</button>
                         </div>
                         <template v-else-if="selected.can_reply">
+                            <!-- Drafti i Lora AI — kur s'ishte e sigurt të dërgonte vetë -->
+                            <div v-if="selected?.ai_suggestion && !aiDraftDismissed" class="border-t border-[#dcd2f2] bg-[#f7f4fd] px-3 py-2.5">
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-[#6d4fc1]">✨ {{ $t('messagesAi.suggestionTitle') }}</p>
+                                <p class="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-neutral-700">{{ selected.ai_suggestion }}</p>
+                                <div class="mt-2 flex gap-2">
+                                    <button type="button" class="rounded-lg bg-[#6d4fc1] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#59409e]" @click="useAiSuggestion">
+                                        {{ $t('messagesAi.useSuggestion') }}
+                                    </button>
+                                    <button type="button" class="rounded-lg border border-neutral-200 px-3 py-1.5 text-[11px] font-semibold text-neutral-600 hover:bg-neutral-50" @click="aiDraftDismissed = true">
+                                        {{ $t('messagesAi.dismiss') }}
+                                    </button>
+                                </div>
+                            </div>
+
                             <form class="relative flex items-end gap-2 border-t border-neutral-200 bg-white p-2.5" @submit.prevent="sendReply">
                                 <!-- Quick-reply picker (WhatsApp-style, above the composer) -->
                                 <div v-if="quickOpen" class="fixed inset-0 z-10" @click="quickOpen = false" />

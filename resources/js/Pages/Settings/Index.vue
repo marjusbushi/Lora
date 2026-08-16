@@ -25,6 +25,7 @@ import MenuTab from './Tabs/MenuTab.vue';
 import NotificationsTab from './Tabs/NotificationsTab.vue';
 import PricingProgramsTab from './Tabs/PricingProgramsTab.vue';
 import PosTab from './Tabs/PosTab.vue';
+import FaqTab from './Tabs/FaqTab.vue';
 import RoomTypesTab from './Tabs/RoomTypesTab.vue';
 import SecurityTab from './Tabs/SecurityTab.vue';
 import WebsiteTab from './Tabs/WebsiteTab.vue';
@@ -48,6 +49,7 @@ const props = defineProps({
     posOutlets: { type: Array, default: () => [] },
     posOutletLimit: { type: Number, default: 1 },
     inventoryCategoryTree: { type: Array, default: () => [] },
+    faqs: { type: Array, default: () => [] },
 });
 
 const toasts = ref(null);
@@ -180,6 +182,7 @@ function selectMobileTab(tabId) {
                     <IntegrationsTab v-else-if="activeTab === 'integrations'" :integrations="generalIntegrations" :toasts="toasts" @select-tab="selectTab" />
                     <AiTab v-else-if="activeTab === 'ai'" :settings="settings.ai || {}" :toasts="toasts" />
                     <IntegrationsTab v-else-if="activeTab === 'channel-manager'" :integrations="channelManagerIntegrations" :toasts="toasts" @select-tab="selectTab" />
+                    <FaqTab v-else-if="activeTab === 'faqs'" :faqs="faqs" :toasts="toasts" />
                     <UsersPage v-else-if="activeTab === 'users'" v-bind="userManagement" embedded />
                     <NotificationsTab v-else-if="activeTab === 'notifications'" :settings="settings.notifications || {}" :hotel-email="settings.hotel?.email || ''" :toasts="toasts" />
                     <SecurityTab v-else-if="activeTab === 'security'" />
