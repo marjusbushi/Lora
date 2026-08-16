@@ -46,12 +46,18 @@ class WhatsAppMessageImporter
                 ? now()->setTimestamp((int) $payload['timestamp'])
                 : now();
 
-            $thread->messages()->create([
-                'whatsapp_message_id' => $messageId,
-                'sender' => Message::SENDER_GUEST,
-                'body' => mb_substr($body, 0, 4000),
-                'sent_at' => $sentAt,
-            ]);
+            try {
+                $thread->messages()->create([
+                    'whatsapp_message_id' => $messageId,
+                    'sender' => Message::SENDER_GUEST,
+                    'body' => mb_substr($body, 0, 4000),
+                    'sent_at' => $sentAt,
+                ]);
+            } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                // Dy dorëzime paralele kaluan exists() njëkohësisht — indeksi
+                // unik (message_thread_id, whatsapp_message_id) e ndal të dytin.
+                return ['status' => 'duplicate', 'thread_id' => $thread->id];
+            }
 
             $thread->unread_count++;
             if ($thread->status === 'closed') {

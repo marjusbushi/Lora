@@ -28,13 +28,18 @@ return new class extends Migration
 
         Schema::table('messages', function (Blueprint $table) {
             // Dedup i mesazheve hyrëse (dhe echo-ve pas dërgimit, pjesa 2).
+            // UNIK në nivel DB — dy dorëzime paralele të së njëjtës ngjarje
+            // s'mund të fusin dy rreshta (rreshtat me NULL përjashtohen, pra
+            // mesazhet Channex/host të paprekura). Gjetje Codex PR #435.
             $table->string('whatsapp_message_id', 100)->nullable()->after('channex_message_id');
+            $table->unique(['message_thread_id', 'whatsapp_message_id'], 'messages_thread_wa_unique');
         });
     }
 
     public function down(): void
     {
         Schema::table('messages', function (Blueprint $table) {
+            $table->dropUnique('messages_thread_wa_unique');
             $table->dropColumn('whatsapp_message_id');
         });
 

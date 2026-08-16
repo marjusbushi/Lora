@@ -273,6 +273,23 @@ class WhatsAppBridgeTest extends TestCase
         $this->assertNull($thread->refresh()->ai_unanswered_question);
     }
 
+    public function test_db_unique_index_blocks_duplicate_whatsapp_message_even_past_the_exists_check(): void
+    {
+        // Gara e dy dorëzimeve paralele s'simulohet dot në një proces — provohet
+        // shtresa e fundit e mbrojtjes: vetë indeksi unik i DB-së.
+        $thread = $this->makeWhatsAppThread();
+        $attrs = [
+            'whatsapp_message_id' => 'WA-DUP-1',
+            'sender' => \App\Models\Message::SENDER_GUEST,
+            'body' => 'Provë',
+            'sent_at' => now(),
+        ];
+        $thread->messages()->create($attrs);
+
+        $this->expectException(\Illuminate\Database\UniqueConstraintViolationException::class);
+        $thread->messages()->create($attrs);
+    }
+
     public function test_user_without_settings_permission_cannot_connect(): void
     {
         $this->seed(RolePermissionSeeder::class);

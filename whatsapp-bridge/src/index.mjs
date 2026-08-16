@@ -14,7 +14,7 @@
 // paralajmërim në UI.
 
 import { createServer } from 'node:http';
-import { mkdirSync, readdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
@@ -49,25 +49,81 @@ function loadMeta(tenantId) {
     }
 }
 
-async function postEvent(tenantId, type, payload) {
-    const session = sessions.get(tenantId);
-    const eventUrl = session?.eventUrl || loadMeta(tenantId)?.eventUrl;
-    if (!eventUrl) return;
+// ---- Outbox i qëndrueshëm ------------------------------------------------
+// Mesazhet e mysafirëve s'kanë rrugë tjetër drejt PMS-it — një dështim kalimtar
+// i Laravel-it (deploy, 5xx, rrjeti) NUK guxon t'i humbasë (gjetje Codex PR
+// #435). Çdo ngjarje shkruhet së pari në disk (outbox.jsonl per-tenant, e
+// mbijeton restart-in e daemon-it) dhe fshihet vetëm pas një 2xx; dështimet
+// riprovohen me backoff duke ruajtur radhën.
+
+const outboxPath = (tenantId) => join(SESSIONS_DIR, `tenant-${tenantId}`, 'outbox.jsonl');
+const flushing = new Map(); // tenantId → true | timer
+
+function postEvent(tenantId, type, payload) {
+    mkdirSync(join(SESSIONS_DIR, `tenant-${tenantId}`), { recursive: true });
+    appendFileSync(outboxPath(tenantId), JSON.stringify({ tenant_id: tenantId, type, payload }) + '\n', 'utf8');
+    flushOutbox(tenantId);
+}
+
+async function flushOutbox(tenantId, attempt = 0) {
+    if (flushing.get(tenantId) === true) return;
+    flushing.set(tenantId, true);
 
     try {
-        const res = await fetch(eventUrl, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json',
-                authorization: `Bearer ${TOKEN}`,
-            },
-            body: JSON.stringify({ tenant_id: tenantId, type, payload }),
-        });
-        if (!res.ok) logger.warn({ tenantId, type, status: res.status }, 'Laravel e refuzoi ngjarjen');
-    } catch (err) {
-        logger.warn({ tenantId, type, err: String(err) }, 'S\'u dërgua dot ngjarja te Laravel');
+        const eventUrl = sessions.get(tenantId)?.eventUrl || loadMeta(tenantId)?.eventUrl;
+        const path = outboxPath(tenantId);
+        if (!eventUrl || !existsSync(path)) return;
+
+        while (true) {
+            const lines = readFileSync(path, 'utf8').split('\n').filter(Boolean);
+            if (!lines.length) return;
+
+            let res;
+            try {
+                res = await fetch(eventUrl, {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+                    body: lines[0],
+                });
+            } catch (err) {
+                logger.warn({ tenantId, err: String(err) }, 'Laravel i paarritshëm — riprovoj me backoff');
+                return scheduleRetry(tenantId, attempt);
+            }
+
+            // 4xx = ngjarje e refuzuar përgjithmonë (token/tenant i gabuar) —
+            // hidhet që radha të mos bllokohet; 5xx/429 = kalimtare, riprovohet.
+            if (!res.ok && (res.status >= 500 || res.status === 429)) {
+                logger.warn({ tenantId, status: res.status }, 'Laravel ktheu gabim kalimtar — riprovoj');
+                return scheduleRetry(tenantId, attempt);
+            }
+            if (!res.ok) logger.error({ tenantId, status: res.status }, 'Ngjarje e refuzuar përgjithmonë — u hodh');
+
+            writeFileSync(path, lines.slice(1).join('\n') + (lines.length > 1 ? '\n' : ''), 'utf8');
+            attempt = 0;
+        }
+    } finally {
+        if (flushing.get(tenantId) === true) flushing.delete(tenantId);
     }
 }
+
+function scheduleRetry(tenantId, attempt) {
+    const delay = Math.min(60_000, 5_000 * 2 ** attempt); // 5s→10s→20s→40s→60s tavan
+    const timer = setTimeout(() => {
+        flushing.delete(tenantId);
+        flushOutbox(tenantId, attempt + 1);
+    }, delay);
+    flushing.set(tenantId, timer);
+}
+
+// Zbraz outbox-et e mbetura periodikisht (p.sh. pas restart-i të daemon-it).
+setInterval(() => {
+    for (const entry of readdirSync(SESSIONS_DIR, { withFileTypes: true })) {
+        const match = entry.isDirectory() && entry.name.match(/^tenant-(\d+)$/);
+        if (match && existsSync(join(SESSIONS_DIR, entry.name, 'outbox.jsonl'))) {
+            flushOutbox(Number(match[1]));
+        }
+    }
+}, 60_000).unref();
 
 async function startSession(tenantId, eventUrl) {
     const existing = sessions.get(tenantId);
@@ -134,8 +190,12 @@ async function startSession(tenantId, eventUrl) {
                 logger.info({ tenantId, loggedOut }, 'Sesioni u mbyll');
             } else {
                 // Rilidhje automatike — sesionet bien shpesh (natyra e QR-lite).
-                session.status = 'pairing';
-                logger.warn({ tenantId, code }, 'Lidhja ra — rilidhem');
+                // Socket-i i vjetër është i vdekur: HIQE nga mapa që startSession
+                // të ndërtojë një të ri (ndryshe early-return-i e kthen të vdekurin
+                // dhe rilidhja s'ndodh kurrë — gjetje Codex PR #435). event_url
+                // mbijeton në bridge-meta.json.
+                sessions.delete(tenantId);
+                logger.warn({ tenantId, code }, 'Lidhja ra — rilidhem me socket të ri');
                 setTimeout(() => startSession(tenantId).catch((err) =>
                     logger.error({ tenantId, err: String(err) }, 'Rilidhja dështoi')), 3000);
             }
