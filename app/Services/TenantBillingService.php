@@ -15,6 +15,10 @@ class TenantBillingService
 
     public const CHANNEL_MANAGER = 'channel_manager';
 
+    public const MESSAGES = 'messages';
+
+    public const MAINTENANCE = 'maintenance';
+
     public const BOOKING_ENGINE = 'booking_engine';
 
     public const HOUSEKEEPING = 'housekeeping';

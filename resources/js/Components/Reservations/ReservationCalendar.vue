@@ -63,9 +63,9 @@ const conflictingReservationIds = computed(() => new Set(activeConflicts.value.f
 const perms = usePage().props.auth.user?.permissions || [];
 const currencyCode = usePage().props.tenant?.currency || 'EUR';
 
-// Guest chat lives behind the Channel Manager module — without it there is
+// Guest chat lives behind the Messages module — without it there is
 // no Messages page to deep-link into, so the bar icon stays hidden.
-const canOpenGuestChat = (usePage().props.modules || {}).channel_manager === true;
+const canOpenGuestChat = (usePage().props.modules || {}).messages === true;
 
 function openGuestChat(reservation) {
     router.visit(route('messages.index', { thread: reservation.message_thread_id }));

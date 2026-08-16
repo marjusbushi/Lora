@@ -44,7 +44,7 @@ class ExecuteApprovedActionTool extends LoraTool
             abort_unless($this->enabled('price_apply_enabled') && $this->moduleEnabled(TenantBillingService::SMART_PRICING), 403);
         } else {
             $this->user($request, 'view_reservations');
-            abort_unless($this->enabled('guest_reply_enabled') && $this->moduleEnabled(TenantBillingService::CHANNEL_MANAGER), 403);
+            abort_unless($this->enabled('guest_reply_enabled') && $this->moduleEnabled(TenantBillingService::MESSAGES), 403);
         }
 
         try {
