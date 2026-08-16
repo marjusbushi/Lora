@@ -53,6 +53,14 @@ const otaTooltip = (program) => {
 // setup me Airbnb të vetëm të mos mbetej i padukshëm.
 const hasOtaPrograms = computed(() => Object.keys(props.otaPrograms || {}).length > 0);
 
+// title= nuk hapet me prekje dhe s'arrihet me tastierë, ndaj chip-i është BUTON:
+// klikimi (ose Enter) e shfaq detajin si tekst i dukshëm nën rresht. Tooltip-i
+// mbetet vetëm si shtesë për miun.
+const openOta = ref(null);
+const toggleOta = (key) => {
+    openOta.value = openOta.value === key ? null : key;
+};
+
 const toasts = ref(null);
 const typeId = computed(() => props.selectedTypeId);
 const typeLoading = ref(false);
@@ -605,18 +613,27 @@ function syncLabel(ts) {
                         </span>
                     </template>
 
-                    <div v-if="hasOtaPrograms" class="ml-auto flex flex-wrap items-center gap-1.5">
-                        <span
+                    <div v-if="hasOtaPrograms" class="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+                        <button
                             v-for="(program, key) in otaPrograms"
                             :key="key"
-                            class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-tiny font-semibold text-neutral-600"
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-full border bg-neutral-50 px-2.5 py-1.5 text-tiny font-semibold text-neutral-600 transition hover:border-ionian hover:text-primary-900"
+                            :class="openOta === key ? 'border-ionian text-primary-900' : 'border-neutral-200'"
                             :title="otaTooltip(program)"
+                            :aria-expanded="openOta === key"
+                            @click="toggleOta(key)"
                         >
                             {{ otaLabel(key) }}
                             <b class="tabular-nums" :class="program.required_modifier_pct > 0 ? 'text-info-700' : 'text-neutral-400'">
                                 {{ $t('admin.generated.k_d532868eb668') }}{{ program.required_modifier_pct }}%
                             </b>
-                        </span>
+                        </button>
+
+                        <!-- Detaji i dukshëm: e vetmja rrugë që funksionon edhe me prekje edhe me tastierë. -->
+                        <p v-if="openOta && otaPrograms[openOta]" class="w-full text-right text-tiny text-neutral-500">
+                            <b class="text-neutral-600">{{ otaLabel(openOta) }}</b> · {{ otaTooltip(otaPrograms[openOta]) }}
+                        </p>
                     </div>
                 </div>
 
