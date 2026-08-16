@@ -63,9 +63,11 @@ class MessagesController extends Controller
                         'adults' => $r->adults,
                         'total' => (float) $r->total_amount,
                     ] : null,
+                    'ai_suggestion' => $thread->ai_suggestion,
                     'messages' => $thread->messages->map(fn (Message $m) => [
                         'id' => $m->id,
                         'sender' => $m->sender,
+                        'sent_by_ai' => (bool) $m->sent_by_ai,
                         'body' => $m->body,
                         'sent_at' => $m->sent_at?->toIso8601String(),
                     ]),
@@ -182,6 +184,9 @@ class MessagesController extends Controller
         $thread->forceFill([
             'last_message_preview' => mb_substr($data['body'], 0, 280),
             'last_message_at' => now(),
+            // Stafi foli — drafti i AI-t (nëse kishte) s'ka më vlerë.
+            'ai_suggestion' => null,
+            'ai_suggested_at' => null,
         ])->save();
 
         return back()->with('success', 'Mesazhi u dërgua.');

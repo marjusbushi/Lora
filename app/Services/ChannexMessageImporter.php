@@ -85,7 +85,7 @@ class ChannexMessageImporter
 
             $duplicate = $messageId !== '' && Message::where('channex_message_id', $messageId)->exists();
             if (! $duplicate) {
-                $thread->messages()->create([
+                $message = $thread->messages()->create([
                     'channex_message_id' => $messageId ?: null,
                     'sender' => $sender,
                     'body' => $body,
@@ -102,6 +102,10 @@ class ChannexMessageImporter
                     if ($thread->status === 'closed') {
                         $thread->status = 'open';
                     }
+
+                    // Lora AI Chat — VETËM nga webhook-u (koha reale); pull-i i
+                    // historikut s'duhet t'i përgjigjet kurrë mesazheve të vjetra.
+                    \App\Jobs\GenerateAiGuestReply::dispatch($thread->id, $message->id)->afterCommit();
                 }
                 $thread->save();
             }

@@ -14,6 +14,7 @@ use App\Http\Controllers\GuestMergeController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LoraAiController;
 use App\Http\Controllers\MaintenanceController;
+use App\Http\Controllers\HotelFaqController;
 use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OtaReconciliationController;
@@ -318,6 +319,13 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/messages/quick-replies', [MessagesController::class, 'saveQuickReplies'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.quick-replies');
         Route::post('/messages/{thread}/close', [MessagesController::class, 'close'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.close');
         Route::post('/messages/{thread}/reopen', [MessagesController::class, 'reopen'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.reopen');
+
+        // FAQ e hotelit — njohuritë e Lora AI Chat (moduli messages).
+        Route::middleware(['permission:view_settings', 'module:messages'])->group(function () {
+            Route::post('/settings/faqs', [HotelFaqController::class, 'store'])->name('settings.faqs.store');
+            Route::put('/settings/faqs/{faq}', [HotelFaqController::class, 'update'])->name('settings.faqs.update');
+            Route::delete('/settings/faqs/{faq}', [HotelFaqController::class, 'destroy'])->name('settings.faqs.destroy');
+        });
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         Route::get('/reservations/calendar-design', fn () => Inertia::render('Reservations/CalendarDesign'))->name('reservations.calendar-design');
         Route::get('/reservations/reconciliation', [OtaReconciliationController::class, 'index'])
