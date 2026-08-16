@@ -29,7 +29,7 @@ class TenantBillingService
 
     public function catalog(): array
     {
-        return config('lora_modules.modules', []);
+        return ModuleCatalog::modules();
     }
 
     public function enabled(string $module, ?Tenant $tenant): bool

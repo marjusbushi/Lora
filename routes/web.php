@@ -34,6 +34,7 @@ use App\Http\Controllers\SmartPricingController;
 use App\Http\Controllers\SuperAdmin\BillingInvoiceController as SuperAdminBillingInvoiceController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentAttemptController as SuperAdminBillingPaymentAttemptController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentController as SuperAdminBillingPaymentController;
+use App\Http\Controllers\SuperAdmin\CatalogController as SuperAdminCatalogController;
 use App\Http\Controllers\SuperAdmin\CurrencyController as SuperAdminCurrencyController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Http\Controllers\SuperAdmin\FatureAlOnboardingController as SuperAdminFatureAlOnboardingController;
@@ -58,10 +59,10 @@ use Inertia\Inertia;
 // subdomain goes to the back-office, and hotel domains keep their booking site.
 Route::get('/', function (Request $request) {
     if (in_array(strtolower($request->getHost()), config('lora.marketing_hosts', []), true)) {
-        // Çmimet publike = pasqyrë e drejtpërdrejtë e katalogut real — marketingu
-        // nuk mban kurrë çmime të ngulitura (vendim i Marjusit, 2026-08-16).
+        // Çmimet publike = pasqyrë e drejtpërdrejtë e katalogut real (config +
+        // override nga paneli Lora) — kurrë çmime të ngulitura (vendim 2026-08-16).
         return Inertia::render('Marketing/Home', [
-            'catalog' => collect(config('lora_modules.modules', []))->map(fn ($module) => [
+            'catalog' => collect(\App\Services\ModuleCatalog::modules())->map(fn ($module) => [
                 'billing_model' => $module['billing_model'] ?? 'flat',
                 'unit_price_cents' => $module['unit_price_cents'] ?? null,
                 'first_unit_price_cents' => $module['first_unit_price_cents'] ?? null,
@@ -173,6 +174,8 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
     ->group(function () {
         Route::get('/', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/activity', [SuperAdminDashboardController::class, 'activity'])->name('activity');
+        Route::get('/catalog', [SuperAdminCatalogController::class, 'index'])->name('catalog.index');
+        Route::put('/catalog', [SuperAdminCatalogController::class, 'update'])->name('catalog.update');
         Route::get('/onboarding', [SuperAdminOnboardingController::class, 'index'])->name('onboarding.index');
         Route::get('/onboarding/{tenant}', [SuperAdminOnboardingController::class, 'show'])->name('onboarding.show');
         Route::get('/onboarding/{tenant}/fiscalization', [SuperAdminFatureAlOnboardingController::class, 'show'])->name('onboarding.fiscalization.show');
