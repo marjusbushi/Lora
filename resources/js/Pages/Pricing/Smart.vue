@@ -30,6 +30,37 @@ const props = defineProps({
     otaPrograms: { type: Object, default: () => ({}) },
 });
 
+// Emri i vërtetë i çdo kanali. OtaPricingPrograms::settings() kthen TRE çelësa
+// (booking, expedia, airbnb) — një tërnar 'booking ? : Expedia' e etiketonte
+// Airbnb-në si Expedia, pra shfaqte një çmim të kanalit të gabuar.
+const OTA_LABELS = { booking: 'Booking.com', expedia: 'Expedia', airbnb: 'Airbnb' };
+const otaLabel = (key) => OTA_LABELS[key] ?? key;
+
+// Detajet e promocioneve nuk humbin kur karta bëhet chip — kalojnë në tooltip.
+const otaTooltip = (program) => {
+    const parts = program.discounts?.length
+        ? program.discounts.map((d) => `${d.label} ${d.pct}%`)
+        : [translate('admin.generated.k_890e525639bb')];
+
+    if (program.preferred_partner) {
+        parts.push(translate('admin.generated.k_64defed5a672'));
+    }
+
+    return parts.join(' · ');
+};
+
+// Çdo kanal i konfiguruar e shfaq bllokun — jo vetëm booking/expedia, që një
+// setup me Airbnb të vetëm të mos mbetej i padukshëm.
+const hasOtaPrograms = computed(() => Object.keys(props.otaPrograms || {}).length > 0);
+
+// title= nuk hapet me prekje dhe s'arrihet me tastierë, ndaj chip-i është BUTON:
+// klikimi (ose Enter) e shfaq detajin si tekst i dukshëm nën rresht. Tooltip-i
+// mbetet vetëm si shtesë për miun.
+const openOta = ref(null);
+const toggleOta = (key) => {
+    openOta.value = openOta.value === key ? null : key;
+};
+
 const toasts = ref(null);
 const typeId = computed(() => props.selectedTypeId);
 const typeLoading = ref(false);
@@ -500,50 +531,39 @@ function syncLabel(ts) {
 
         <div class="mt-6">
             <Card :class="typeLoading ? 'pointer-events-none opacity-60' : ''">
-                <!-- toolbar: type · bounds · month nav -->
-                <div class="flex flex-wrap items-center justify-between gap-4 mb-5">
-                    <div class="flex flex-wrap items-center gap-3">
-                        <div class="flex items-center gap-2.5">
-                            <label class="text-label text-neutral-600">{{ $t('admin.generated.k_ed81100d62cc') }}</label>
-                            <select
-                                :value="typeId"
-                                :disabled="typeLoading || navigationLocked"
-                                class="rounded-xl border border-neutral-200 px-3.5 py-2.5 text-body-sm font-medium text-primary-900 focus:border-ionian focus:ring-2 focus:ring-ionian/30 min-w-[200px]"
-                                @change="changeType"
-                            >
-                                <option v-for="t in roomTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
-                            </select>
-                        </div>
+                <!--
+                    RRESHTI 1 — shiriti i kontrollit, STICKY nën header-in e app-it (h-16, z-30).
+                    Kontrollet e vërteta rrinë gjithmonë në ekran ndërsa kalendari rrëshqet:
+                    hapësira fitohet duke i ngjeshur, kurrë duke i fshehur.
+                -->
+                <div class="sticky top-16 z-20 -mx-5 -mt-4 mb-3 rounded-t-lg border-b border-neutral-200 bg-white px-5 pt-4 pb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <select
+                        :value="typeId"
+                        :disabled="typeLoading || navigationLocked"
+                        :aria-label="$t('admin.generated.k_ed81100d62cc')"
+                        :title="$t('admin.generated.k_ed81100d62cc')"
+                        class="rounded-xl border border-neutral-200 px-3.5 py-2 text-body-sm font-medium text-primary-900 focus:border-ionian focus:ring-2 focus:ring-ionian/30 min-w-[180px]"
+                        @change="changeType"
+                    >
+                        <option v-for="t in roomTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
+                    </select>
 
-                        <button
-                            class="inline-flex items-center gap-1.5 text-tiny font-semibold text-neutral-600 border border-neutral-200 rounded-xl px-3 py-2.5 hover:border-ionian hover:text-primary-900 transition"
-                            :disabled="navigationLocked"
-                            :class="navigationLocked ? 'opacity-50 cursor-not-allowed' : ''"
-                            :title="$t('admin.generated.k_68a72459f378')"
-                            @click="openBounds"
-                        >
-{{ $t('admin.generated.k_e17832ba8bce') }} {{ boundsLabel }}
-                        </button>
-                    </div>
+                    <button
+                        class="inline-flex items-center gap-1.5 text-tiny font-semibold text-neutral-600 border border-neutral-200 rounded-xl px-3 py-2 hover:border-ionian hover:text-primary-900 transition"
+                        :disabled="navigationLocked"
+                        :class="navigationLocked ? 'opacity-50 cursor-not-allowed' : ''"
+                        :title="$t('admin.generated.k_68a72459f378')"
+                        @click="openBounds"
+                    >
+                        {{ $t('admin.generated.k_e17832ba8bce') }} {{ boundsLabel }}
+                    </button>
 
-                    <div class="flex items-center gap-3">
-                        <span class="text-body font-semibold text-primary-900 capitalize min-w-[130px] text-center">{{ monthLabel }}</span>
-                        <div class="flex gap-1.5">
-                            <Button size="sm" variant="outline" :disabled="navigationLocked" @click="go(prevMonth)">‹</Button>
-                            <Button size="sm" variant="outline" :disabled="navigationLocked" @click="go(nextMonth)">›</Button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- strategy slider: the ONE tuning knob -->
-                <div class="flex flex-wrap items-center gap-3 mb-5">
-                    <span class="text-label text-neutral-600">{{ $t('admin.generated.k_0938c2966a3a') }}</span>
-                    <div class="inline-flex rounded-xl border border-neutral-200 p-1 bg-neutral-50">
+                    <div class="inline-flex rounded-xl border border-neutral-200 p-1 bg-neutral-50" role="group" :aria-label="$t('admin.generated.k_0938c2966a3a')">
                         <button
                             v-for="s in strategies"
                             :key="s.key"
                             :class="[
-                                'px-3.5 py-1.5 rounded-lg text-small font-semibold transition',
+                                'px-3 py-1.5 rounded-lg text-small font-semibold transition',
                                 strategy === s.key ? 'bg-white shadow text-primary-900 border border-neutral-200' : 'text-neutral-500 hover:text-primary-900',
                                 navigationLocked ? 'opacity-50 cursor-not-allowed' : '',
                             ]"
@@ -555,40 +575,64 @@ function syncLabel(ts) {
                             {{ s.label }}
                         </button>
                     </div>
+
                     <span class="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-tiny text-neutral-500" :title="$t('smartPricing.rounding.tooltip')">
                         <span aria-hidden="true">≈</span>
                         {{ roundingPolicyLabel }}
                     </span>
-                </div>
 
-                <!-- month KPIs: the value of the month at one glance -->
-                <div v-if="kpis" class="flex flex-wrap items-center gap-2 mb-5">
-                    <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
-                        <i class="w-2 h-2 rounded-full" :class="kpis.occ >= 90 ? 'bg-error-400' : kpis.occ >= 65 ? 'bg-warning-400' : 'bg-success-400'" />
-                        {{ $t('smartCal.monthOccupancy') }} <b class="text-primary-900 tabular-nums">{{ kpis.occ }}%</b>
-                    </span>
-                    <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
-                        {{ $t('smartCal.avgPrice') }} <b class="text-primary-900 tabular-nums">{{ currency }}{{ kpis.avg }}</b>
-                    </span>
-                    <span v-if="marketEnabled && kpis.mkt" class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
-                        ⌂ {{ $t('smartCal.marketAvg') }} <b class="text-primary-900 tabular-nums">{{ currency }}{{ kpis.mkt }}</b>
-                    </span>
-                    <span v-if="actionableCount" class="inline-flex items-center gap-2 rounded-full border border-success-300 bg-success-50 px-3 py-1 text-tiny font-semibold text-success-700">
+                    <!-- Sugjerimet mbeten këtu sepse mbajnë një VEPRIM, jo thjesht një numër. -->
+                    <span v-if="kpis && actionableCount" class="inline-flex items-center gap-2 rounded-full border border-success-300 bg-success-50 px-3 py-1 text-tiny font-semibold text-success-700">
                         {{ $t('smartCal.suggestionsCount', { count: actionableCount }) }}<template v-if="kpis.gain > 0"> → <b class="tabular-nums">+{{ currency }}{{ kpis.gain }}</b></template>
                         <Button size="sm" variant="outline" :disabled="navigationLocked" @click="askBulkMonth">{{ $t('admin.generated.k_47b01d6519f6') }}</Button>
                     </span>
+
+                    <div class="ml-auto flex items-center gap-2">
+                        <span class="text-body font-semibold text-primary-900 capitalize text-center">{{ monthLabel }}</span>
+                        <Button size="sm" variant="outline" :disabled="navigationLocked" @click="go(prevMonth)">‹</Button>
+                        <Button size="sm" variant="outline" :disabled="navigationLocked" @click="go(nextMonth)">›</Button>
+                    </div>
                 </div>
 
-                <div v-if="otaPrograms.booking || otaPrograms.expedia" class="grid sm:grid-cols-2 gap-3 mb-5">
-                    <div v-for="(program, key) in otaPrograms" :key="key" class="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
-                        <div class="flex items-center justify-between gap-2">
-                            <span class="text-body-sm font-bold text-primary-900">{{ key === 'booking' ? $t('admin.generated.k_16c93c3b7fc4') : $t('admin.generated.k_d47b7f97166a') }}</span>
-                            <span class="text-tiny font-bold text-info-700">{{ $t('admin.generated.k_d532868eb668') }}{{ program.required_modifier_pct }}%</span>
-                        </div>
-                        <p class="text-tiny text-neutral-500 mt-1">
-                            <template v-if="program.discounts.length">{{ program.discounts.map((d) => d.label + ' ' + d.pct + '%').join(' · ') }}</template>
-                            <template v-else>{{ $t('admin.generated.k_890e525639bb') }}</template>
-                            <template v-if="program.preferred_partner"> {{ $t('admin.generated.k_64defed5a672') }}</template>
+                <!--
+                    RRESHTI 2 — numrat pasivë + modifikuesit e OTA-ve si chips.
+                    Lexohen një herë kur hap muajin, ndaj rrëshqasin bashkë me faqen.
+                    Detajet e promocioneve jetojnë në tooltip — asgjë nuk humbet.
+                -->
+                <div v-if="kpis || hasOtaPrograms" class="flex flex-wrap items-center gap-2 mb-4">
+                    <template v-if="kpis">
+                        <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
+                            <i class="w-2 h-2 rounded-full" :class="kpis.occ >= 90 ? 'bg-error-400' : kpis.occ >= 65 ? 'bg-warning-400' : 'bg-success-400'" />
+                            {{ $t('smartCal.monthOccupancy') }} <b class="text-primary-900 tabular-nums">{{ kpis.occ }}%</b>
+                        </span>
+                        <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
+                            {{ $t('smartCal.avgPrice') }} <b class="text-primary-900 tabular-nums">{{ currency }}{{ kpis.avg }}</b>
+                        </span>
+                        <span v-if="marketEnabled && kpis.mkt" class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
+                            ⌂ {{ $t('smartCal.marketAvg') }} <b class="text-primary-900 tabular-nums">{{ currency }}{{ kpis.mkt }}</b>
+                        </span>
+                    </template>
+
+                    <div v-if="hasOtaPrograms" class="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+                        <button
+                            v-for="(program, key) in otaPrograms"
+                            :key="key"
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-full border bg-neutral-50 px-2.5 py-1.5 text-tiny font-semibold text-neutral-600 transition hover:border-ionian hover:text-primary-900"
+                            :class="openOta === key ? 'border-ionian text-primary-900' : 'border-neutral-200'"
+                            :title="otaTooltip(program)"
+                            :aria-expanded="openOta === key"
+                            @click="toggleOta(key)"
+                        >
+                            {{ otaLabel(key) }}
+                            <b class="tabular-nums" :class="program.required_modifier_pct > 0 ? 'text-info-700' : 'text-neutral-400'">
+                                {{ $t('admin.generated.k_d532868eb668') }}{{ program.required_modifier_pct }}%
+                            </b>
+                        </button>
+
+                        <!-- Detaji i dukshëm: e vetmja rrugë që funksionon edhe me prekje edhe me tastierë. -->
+                        <p v-if="openOta && otaPrograms[openOta]" class="w-full text-right text-tiny text-neutral-500">
+                            <b class="text-neutral-600">{{ otaLabel(openOta) }}</b> · {{ otaTooltip(otaPrograms[openOta]) }}
                         </p>
                     </div>
                 </div>
