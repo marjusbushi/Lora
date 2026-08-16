@@ -202,7 +202,7 @@
       "channel": {
         "title": "Channel Manager",
         "unit": "/ dhomë",
-        "note": "30 të parat · pastaj €5/dhomë"
+        "note": "{limit} të parat · pastaj {excess}/dhomë"
       },
       "booking": {
         "title": "Booking Online",
@@ -217,7 +217,7 @@
       "pos": {
         "title": "POS",
         "unit": "/ pikë shitjeje",
-        "note": "Pika e parë — pastaj €19/pikë · fiskalizimi brenda, pa limit përdoruesish"
+        "note": "Pika e parë — pastaj {extra}/pikë · fiskalizimi brenda, pa limit përdoruesish"
       },
       "smart": {
         "title": "Çmimet Inteligjente",

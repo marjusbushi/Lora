@@ -32,19 +32,22 @@ import { useI18n } from 'vue-i18n';
 
 const { t, tm, locale } = useI18n();
 
+// Çmimet vijnë GJITHMONË nga katalogu real (config/lora_modules.php) — kurrë të ngulitura këtu.
+const props = defineProps({
+    catalog: { type: Object, default: () => ({}) },
+    contractDiscounts: { type: Object, default: () => ({}) },
+});
+
+const catalogPrice = (code, field = 'unit_price_cents') => (Number(props.catalog?.[code]?.[field]) || 0) / 100;
+
 const demoMail = computed(() => `mailto:hello@lorapms.com?subject=${encodeURIComponent(`${t('marketing.common.bookDemo')} — Lora PMS`)}`);
 
 const mobileOpen = ref(false);
-const annualBilling = ref(false);
-// Shkalla e kontratave — e njëjta me config/lora_modules.php (contract_discounts).
-const CONTRACT_OPTIONS = [
-    { years: 1, percent: 10 },
-    { years: 2, percent: 15 },
-    { years: 3, percent: 20 },
-    { years: 5, percent: 30 },
-];
+const contractOptions = computed(() => Object.entries(props.contractDiscounts || {})
+    .map(([years, percent]) => ({ years: Number(years), percent: Number(percent) }))
+    .sort((a, b) => a.years - b.years));
 const contractYears = ref(1);
-const contractDiscount = computed(() => CONTRACT_OPTIONS.find((option) => option.years === contractYears.value)?.percent ?? 10);
+const contractDiscount = computed(() => contractOptions.value.find((option) => option.years === contractYears.value)?.percent ?? contractOptions.value[0]?.percent ?? 0);
 const rooms = ref(10);
 const posPoints = ref(1);
 const carouselReverse = ref(false);
@@ -58,6 +61,7 @@ const modules = ref({
     pos: true,
     smartPricing: true,
     finance: true,
+    beach: false,
 });
 
 const navigation = computed(() => [
@@ -93,16 +97,22 @@ const featureGroups = computed(() => {
 
 const pricingCards = computed(() => {
     const cards = tm('marketing.pricing.cards');
-    // Çmimet = pasqyrim 1:1 i katalogut real (config/lora_modules.php).
+    const channelNote = t('marketing.pricing.cards.channel.note', {
+        limit: props.catalog?.channel_manager?.tier_limit ?? 0,
+        excess: money(catalogPrice('channel_manager', 'excess_unit_price_cents')),
+    });
+    const posNote = t('marketing.pricing.cards.pos.note', {
+        extra: money(catalogPrice('pos')),
+    });
     return [
-        { ...cards.core, monthlyPrice: 29, icon: ShieldCheck },
-        { ...cards.channel, monthlyPrice: 7, icon: Zap },
-        { ...cards.booking, displayPrice: '1%', icon: Globe2 },
-        { ...cards.housekeeping, monthlyPrice: 9, icon: UsersRound },
-        { ...cards.pos, monthlyPrice: 49, icon: Store },
-        { ...cards.smart, monthlyPrice: 49, icon: Sparkles },
-        { ...cards.finance, monthlyPrice: 29, icon: WalletCards },
-        { ...cards.beach, monthlyPrice: 29, icon: Umbrella },
+        { ...cards.core, monthlyPrice: catalogPrice('core'), icon: ShieldCheck },
+        { ...cards.channel, note: channelNote, monthlyPrice: catalogPrice('channel_manager'), icon: Zap },
+        { ...cards.booking, displayPrice: `${(Number(props.catalog?.booking_engine?.percentage_bps) || 0) / 100}%`, icon: Globe2 },
+        { ...cards.housekeeping, monthlyPrice: catalogPrice('housekeeping'), icon: UsersRound },
+        { ...cards.pos, note: posNote, monthlyPrice: catalogPrice('pos', 'first_unit_price_cents'), icon: Store },
+        { ...cards.smart, monthlyPrice: catalogPrice('smart_pricing'), icon: Sparkles },
+        { ...cards.finance, monthlyPrice: catalogPrice('finance'), icon: WalletCards },
+        { ...cards.beach, monthlyPrice: catalogPrice('beach'), icon: Umbrella },
     ];
 });
 
@@ -156,6 +166,7 @@ const calculatorModules = computed(() => [
     { key: 'pos', label: 'POS' },
     { key: 'smartPricing', label: t('marketing.pricing.smartPricing') },
     { key: 'finance', label: t('marketing.pricing.finance') },
+    { key: 'beach', label: t('marketing.pricing.cards.beach.title') },
 ]);
 
 const normalizedRooms = computed(() => Math.min(300, Math.max(1, Number(rooms.value) || 1)));
@@ -164,31 +175,34 @@ const normalizedPosPoints = computed(() => Math.min(30, Math.max(0, Number(posPo
 const channelCost = computed(() => {
     if (!modules.value.channel) return 0;
 
-    // €7/dhomë deri në 30; vetëm dhomat mbi 30 me €5 — si katalogu real.
+    // Deri në tier_limit me çmimin bazë; vetëm dhomat MBI limitin me çmimin excess.
     const count = normalizedRooms.value;
-    return Math.min(count, 30) * 7 + Math.max(count - 30, 0) * 5;
+    const limit = props.catalog?.channel_manager?.tier_limit ?? Infinity;
+    return Math.min(count, limit) * catalogPrice('channel_manager')
+        + Math.max(count - limit, 0) * catalogPrice('channel_manager', 'excess_unit_price_cents');
 });
 
-// Pika e parë POS €49 (fiskalizimi brenda, pa limit përdoruesish), çdo shtesë €19.
+// Pika e parë me first_unit_price (fiskalizimi brenda), çdo pikë shtesë me unit_price.
 const posCost = computed(() => {
     if (!modules.value.pos || normalizedPosPoints.value < 1) return 0;
 
-    return 49 + (normalizedPosPoints.value - 1) * 19;
+    return catalogPrice('pos', 'first_unit_price_cents') + (normalizedPosPoints.value - 1) * catalogPrice('pos');
 });
 
 const monthlyFixed = computed(() => {
-    return 29
+    return catalogPrice('core')
         + channelCost.value
-        + (modules.value.housekeeping ? 9 : 0)
+        + (modules.value.housekeeping ? catalogPrice('housekeeping') : 0)
         + posCost.value
-        + (modules.value.smartPricing ? 49 : 0)
-        + (modules.value.finance ? 29 : 0);
+        + (modules.value.smartPricing ? catalogPrice('smart_pricing') : 0)
+        + (modules.value.finance ? catalogPrice('finance') : 0)
+        + (modules.value.beach ? catalogPrice('beach') : 0);
 });
 
 const annualMonthly = computed(() => monthlyFixed.value * ((100 - contractDiscount.value) / 100));
 const annualInvoice = computed(() => annualMonthly.value * 12);
 const annualSavings = computed(() => monthlyFixed.value * 12 * (contractDiscount.value / 100));
-const displayedMonthly = computed(() => annualBilling.value ? annualMonthly.value : monthlyFixed.value);
+const displayedMonthly = computed(() => monthlyFixed.value);
 
 const money = (value) => new Intl.NumberFormat('en-IE', {
     style: 'currency',
@@ -197,12 +211,9 @@ const money = (value) => new Intl.NumberFormat('en-IE', {
     maximumFractionDigits: 2,
 }).format(value);
 
-const cardPrice = (card) => card.displayPrice
-    ?? money(card.monthlyPrice * (annualBilling.value ? (100 - contractDiscount.value) / 100 : 1));
+const cardPrice = (card) => card.displayPrice ?? money(card.monthlyPrice);
 
-const cardNote = (card) => annualBilling.value && card.annualNote
-    ? card.annualNote
-    : card.note;
+const cardNote = (card) => card.note;
 
 const adjust = (target, amount) => {
     if (target === 'rooms') rooms.value = Math.min(300, Math.max(1, normalizedRooms.value + amount));
@@ -501,21 +512,15 @@ const adjust = (target, amount) => {
                             <h2 class="font-display mt-4 text-4xl font-medium tracking-[-0.04em] text-[#123d32] sm:text-5xl">{{ t('marketing.pricing.title') }}</h2>
                             <p class="mt-5 text-base leading-7 text-[#68736e]">{{ t('marketing.pricing.body') }}</p>
                         </div>
-                        <div class="inline-flex rounded-xl border border-[#123d32]/10 bg-white p-1.5 shadow-sm" role="group" :aria-label="t('marketing.pricing.billingPeriod')">
-                            <button type="button" class="rounded-lg px-4 py-2.5 text-sm font-semibold transition" :class="!annualBilling ? 'bg-[#123d32] text-white' : 'text-[#66716d]'" @click="annualBilling = false">{{ t('marketing.pricing.monthly') }}</button>
-                            <button type="button" class="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition" :class="annualBilling ? 'bg-[#123d32] text-white' : 'text-[#66716d]'" @click="annualBilling = true">{{ t('marketing.pricing.annual') }} <span class="rounded-full bg-[#dff4e8] px-2 py-0.5 text-[10px] font-bold text-[#16875d]">−{{ contractDiscount }}%</span></button>
-                        </div>
                     </div>
 
                     <div class="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         <article v-for="card in pricingCards" :key="card.title" class="flex min-h-[13.5rem] flex-col rounded-2xl border border-[#123d32]/10 bg-white p-5 shadow-[0_15px_40px_-38px_rgba(18,61,50,.5)]">
                             <div class="flex items-start justify-between gap-2">
                                 <span class="grid h-10 w-10 place-items-center rounded-xl bg-[#edf7f1] text-[#16875d]"><component :is="card.icon" class="h-5 w-5" /></span>
-                                <span v-if="annualBilling && card.monthlyPrice" class="rounded-full bg-[#dff4e8] px-2 py-1 text-[10px] font-bold text-[#16875d]">−{{ contractDiscount }}%</span>
                             </div>
                             <h3 class="mt-5 min-h-[2.5rem] text-sm font-semibold leading-5 text-[#33403b]">{{ card.title }}</h3>
                             <div class="mt-3 flex items-baseline gap-1"><strong class="text-3xl font-semibold tracking-[-0.04em] text-[#14221c]">{{ cardPrice(card) }}</strong><span class="text-[10px] font-medium text-[#77827d]">{{ card.unit }}</span></div>
-                            <p v-if="annualBilling && card.monthlyPrice" class="mt-1 text-[10px] text-[#8a948f]"><span class="line-through">{{ money(card.monthlyPrice) }}</span> {{ t('marketing.common.monthlyPayment') }}</p>
                             <p class="mt-auto pt-4 text-[10px] leading-4 text-[#7b8581]">{{ cardNote(card) }}</p>
                         </article>
                     </div>
@@ -565,7 +570,7 @@ const adjust = (target, amount) => {
                             <div class="relative flex flex-col justify-center overflow-hidden border-t border-[#123d32]/8 bg-[#f6f2e8] p-7 sm:p-10 lg:border-l lg:border-t-0">
                                 <div class="absolute -bottom-20 -right-16 h-64 w-64 rounded-full border-[2rem] border-white/60" />
                                 <div class="relative">
-                                    <p class="text-xs font-bold uppercase tracking-[0.18em] text-[#74807a]">{{ annualBilling ? t('marketing.pricing.totalAnnual') : t('marketing.pricing.totalMonthly') }}</p>
+                                    <p class="text-xs font-bold uppercase tracking-[0.18em] text-[#74807a]">{{ t('marketing.pricing.totalMonthly') }}</p>
                                     <div class="mt-4 flex flex-wrap items-baseline gap-2">
                                         <strong class="text-5xl font-semibold tracking-[-0.055em] text-[#123d32] sm:text-6xl">{{ money(displayedMonthly) }}</strong>
                                         <span class="text-base font-semibold text-[#46524d]">{{ t('marketing.common.month') }}</span>
@@ -579,7 +584,7 @@ const adjust = (target, amount) => {
                                         </div>
                                         <div class="mt-3 grid grid-cols-4 gap-1.5" role="group" :aria-label="t('marketing.pricing.contractLength')">
                                             <button
-                                                v-for="option in CONTRACT_OPTIONS"
+                                                v-for="option in contractOptions"
                                                 :key="option.years"
                                                 type="button"
                                                 class="rounded-lg border px-1 py-2 text-center transition"

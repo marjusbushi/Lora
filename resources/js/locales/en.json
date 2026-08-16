@@ -4420,6 +4420,14 @@
     "beachBadge": "Beach"
   },
   "superAdmin": {
+    "moduleList": {
+      "priceFlat": "{price} / mo",
+      "pricePerUnit": "{price} / {unit}",
+      "pricePos": "{first} first outlet · then {extra}/outlet",
+      "priceTiered": "{price}/{unit} up to {limit} · then {excess}",
+      "pricePercentage": "{percent}% / {unit}",
+      "nowPaying": "now: {price} / mo"
+    },
     "tenantShow": {
       "actionCreated": "The hotel was created",
       "actionUpdated": "The hotel details were updated",

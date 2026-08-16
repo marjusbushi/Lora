@@ -58,7 +58,19 @@ use Inertia\Inertia;
 // subdomain goes to the back-office, and hotel domains keep their booking site.
 Route::get('/', function (Request $request) {
     if (in_array(strtolower($request->getHost()), config('lora.marketing_hosts', []), true)) {
-        return Inertia::render('Marketing/Home');
+        // Çmimet publike = pasqyrë e drejtpërdrejtë e katalogut real — marketingu
+        // nuk mban kurrë çmime të ngulitura (vendim i Marjusit, 2026-08-16).
+        return Inertia::render('Marketing/Home', [
+            'catalog' => collect(config('lora_modules.modules', []))->map(fn ($module) => [
+                'billing_model' => $module['billing_model'] ?? 'flat',
+                'unit_price_cents' => $module['unit_price_cents'] ?? null,
+                'first_unit_price_cents' => $module['first_unit_price_cents'] ?? null,
+                'tier_limit' => $module['tier_limit'] ?? null,
+                'excess_unit_price_cents' => $module['excess_unit_price_cents'] ?? null,
+                'percentage_bps' => $module['percentage_bps'] ?? null,
+            ])->all(),
+            'contractDiscounts' => config('lora_modules.contract_discounts', []),
+        ]);
     }
 
     if (in_array(strtolower($request->getHost()), config('lora.dedicated_control_panel_hosts', []), true)) {
