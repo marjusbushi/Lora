@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\HotelFaqSuggestion;
 use App\Models\Message;
 use App\Models\MessageThread;
 use App\Models\Setting;
@@ -64,6 +65,14 @@ class MessagesController extends Controller
                         'total' => (float) $r->total_amount,
                     ] : null,
                     'ai_suggestion' => $thread->ai_suggestion,
+                    // Cikli i mësimit: sugjerimi pending i kësaj bisede — vetëm
+                    // për userat që kanë të drejtë ta ruajnë te FAQ (view_settings).
+                    'faq_suggestion' => $request->user()->can('view_settings')
+                        ? HotelFaqSuggestion::query()->pending()
+                            ->where('message_thread_id', $thread->id)
+                            ->latest('id')
+                            ->first(['id', 'question', 'suggested_answer'])
+                        : null,
                     'messages' => $thread->messages->map(fn (Message $m) => [
                         'id' => $m->id,
                         'sender' => $m->sender,
@@ -181,12 +190,27 @@ class MessagesController extends Controller
             'body' => $data['body'],
             'sent_at' => now(),
         ]);
+
+        // Cikli i mësimit (task #334): Lora s'e dinte këtë pyetje dhe stafi
+        // sapo dha përgjigjen — kapet çifti si sugjerim FAQ (pa dublikata
+        // pending me të njëjtën pyetje), që pronari ta ruajë me një klik.
+        if ($thread->ai_unanswered_question) {
+            HotelFaqSuggestion::query()->pending()->firstOrCreate(
+                ['question' => $thread->ai_unanswered_question],
+                [
+                    'message_thread_id' => $thread->id,
+                    'suggested_answer' => mb_substr($data['body'], 0, 2000),
+                ],
+            );
+        }
+
         $thread->forceFill([
             'last_message_preview' => mb_substr($data['body'], 0, 280),
             'last_message_at' => now(),
             // Stafi foli — drafti i AI-t (nëse kishte) s'ka më vlerë.
             'ai_suggestion' => null,
             'ai_suggested_at' => null,
+            'ai_unanswered_question' => null,
         ])->save();
 
         return back()->with('success', 'Mesazhi u dërgua.');

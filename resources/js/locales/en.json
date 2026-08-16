@@ -6762,7 +6762,11 @@
   "messagesAi": {
     "suggestionTitle": "Lora AI suggestion",
     "useSuggestion": "Use in the reply box",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "learnTitle": "Lora didn't know this one",
+    "learnBody": "Save your answer to Questions & Answers so Lora can reply on her own next time.",
+    "learnSave": "Save to FAQ",
+    "learnDismiss": "Dismiss"
   },
   "faqTab": {
     "title": "Questions & Answers for Lora AI",
@@ -6784,11 +6788,35 @@
     "updated": "Question updated.",
     "deleted": "Question deleted.",
     "confirmDelete": "Delete this question? Lora will no longer use it.",
-    "noneYet": "No questions yet."
+    "noneYet": "No questions yet.",
+    "suggestions": {
+      "title": "Questions Lora couldn't answer",
+      "subtitle": "From real conversations — the staff reply is pre-filled. Edit if you like, then save or dismiss.",
+      "save": "Save to FAQ",
+      "dismiss": "Dismiss",
+      "saved": "Added to the FAQ — Lora has learned this answer.",
+      "dismissed": "Suggestion dismissed."
+    }
   },
   "smartCal": {
-    "dows": { "0": "Mo", "1": "Tu", "2": "We", "3": "Th", "4": "Fr", "5": "Sa", "6": "Su" },
-    "dowsShort": { "0": "Mon", "1": "Tue", "2": "Wed", "3": "Thu", "4": "Fri", "5": "Sat", "6": "Sun" },
+    "dows": {
+      "0": "Mo",
+      "1": "Tu",
+      "2": "We",
+      "3": "Th",
+      "4": "Fr",
+      "5": "Sa",
+      "6": "Su"
+    },
+    "dowsShort": {
+      "0": "Mon",
+      "1": "Tue",
+      "2": "Wed",
+      "3": "Thu",
+      "4": "Fri",
+      "5": "Sat",
+      "6": "Sun"
+    },
     "monthOccupancy": "Month occupancy",
     "avgPrice": "Average price",
     "marketAvg": "Market average",

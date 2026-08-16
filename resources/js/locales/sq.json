@@ -6762,7 +6762,11 @@
   "messagesAi": {
     "suggestionTitle": "Sugjerimi i Lora AI",
     "useSuggestion": "Përdore në kutinë e përgjigjes",
-    "dismiss": "Hidhe poshtë"
+    "dismiss": "Hidhe poshtë",
+    "learnTitle": "Lora s'e dinte këtë pyetje",
+    "learnBody": "Ruaje përgjigjen tënde te Pyetje & Përgjigje që herës tjetër Lora t'i përgjigjet vetë.",
+    "learnSave": "Ruaje te FAQ",
+    "learnDismiss": "Hidhe"
   },
   "faqTab": {
     "title": "Pyetje & Përgjigje për Lora AI",
@@ -6784,11 +6788,35 @@
     "updated": "Pyetja u përditësua.",
     "deleted": "Pyetja u fshi.",
     "confirmDelete": "Ta fshij këtë pyetje? Lora s'do ta përdorë më.",
-    "noneYet": "Ende asnjë pyetje."
+    "noneYet": "Ende asnjë pyetje.",
+    "suggestions": {
+      "title": "Pyetje që Lora s'i dinte",
+      "subtitle": "Nga bisedat reale — përgjigjja e stafit është parambushur. Redakto po deshe, pastaj ruaje ose hidhe.",
+      "save": "Ruaje te FAQ",
+      "dismiss": "Hidhe",
+      "saved": "U shtua te FAQ — Lora e mësoi këtë përgjigje.",
+      "dismissed": "Sugjerimi u hodh."
+    }
   },
   "smartCal": {
-    "dows": { "0": "Hë", "1": "Ma", "2": "Më", "3": "En", "4": "Pr", "5": "Sh", "6": "Di" },
-    "dowsShort": { "0": "Hën", "1": "Mar", "2": "Mër", "3": "Enj", "4": "Pre", "5": "Sht", "6": "Die" },
+    "dows": {
+      "0": "Hë",
+      "1": "Ma",
+      "2": "Më",
+      "3": "En",
+      "4": "Pr",
+      "5": "Sh",
+      "6": "Di"
+    },
+    "dowsShort": {
+      "0": "Hën",
+      "1": "Mar",
+      "2": "Mër",
+      "3": "Enj",
+      "4": "Pre",
+      "5": "Sht",
+      "6": "Die"
+    },
     "monthOccupancy": "Zënia e muajit",
     "avgPrice": "Çmimi mesatar",
     "marketAvg": "Tregu mesatar",

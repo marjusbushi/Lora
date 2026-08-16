@@ -1,7 +1,7 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
 import { ref, computed, watch } from 'vue';
-import { Head, Link, useForm, router } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
 import { useCurrency } from '@/composables/useCurrency';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -21,6 +21,30 @@ const aiDraftDismissed = ref(false);
 watch(() => props.selected?.id, () => { aiDraftDismissed.value = false; });
 function useAiSuggestion() {
     replyForm.body = props.selected?.ai_suggestion || '';
+}
+
+// Cikli i mësimit: kur Lora s'e dinte pyetjen dhe stafi u përgjigj, serveri
+// dërgon çiftin si sugjerim FAQ — kutia shfaqet vetëm për userat me
+// view_settings (payload-i vjen null për të tjerët, rrugët janë të mbrojtura).
+const canManageFaqs = computed(() =>
+    (usePage().props.auth?.user?.permissions || []).includes('view_settings'));
+const faqSuggestProcessing = ref(false);
+function saveFaqSuggestion() {
+    const s = props.selected?.faq_suggestion;
+    if (!s) return;
+    faqSuggestProcessing.value = true;
+    router.post(route('settings.faqs.suggestions.accept', s.id), {
+        question: s.question,
+        answer: s.suggested_answer,
+    }, {
+        preserveScroll: true,
+        onFinish: () => (faqSuggestProcessing.value = false),
+    });
+}
+function dismissFaqSuggestion() {
+    const s = props.selected?.faq_suggestion;
+    if (!s) return;
+    router.post(route('settings.faqs.suggestions.dismiss', s.id), {}, { preserveScroll: true });
 }
 const filter = ref('all'); // all | unread | booking.com | airbnb
 
@@ -317,6 +341,26 @@ function statusLabel(s) {
                                 class="rounded-lg bg-[#15855c] px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-[#0c5a3e]">{{ $t('admin.generated.k_08ec770c051b') }}</button>
                         </div>
                         <template v-else-if="selected.can_reply">
+                            <!-- Cikli i mësimit: stafi u përgjigj vetë — ruaje çiftin te FAQ -->
+                            <div v-if="selected?.faq_suggestion && canManageFaqs" class="border-t border-[#dcd2f2] bg-[#f7f4fd] px-3 py-2.5">
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-[#6d4fc1]">✨ {{ $t('messagesAi.learnTitle') }}</p>
+                                <p class="mt-1 text-[12.5px] leading-relaxed text-neutral-700">
+                                    <b>{{ selected.faq_suggestion.question }}</b>
+                                    <span class="mx-1 text-neutral-400">→</span>{{ selected.faq_suggestion.suggested_answer }}
+                                </p>
+                                <p class="mt-0.5 text-[11px] text-neutral-500">{{ $t('messagesAi.learnBody') }}</p>
+                                <div class="mt-2 flex gap-2">
+                                    <button type="button" :disabled="faqSuggestProcessing"
+                                        class="rounded-lg bg-[#6d4fc1] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#59409e] disabled:opacity-50"
+                                        @click="saveFaqSuggestion">
+                                        {{ $t('messagesAi.learnSave') }}
+                                    </button>
+                                    <button type="button" class="rounded-lg border border-neutral-200 px-3 py-1.5 text-[11px] font-semibold text-neutral-600 hover:bg-neutral-50" @click="dismissFaqSuggestion">
+                                        {{ $t('messagesAi.learnDismiss') }}
+                                    </button>
+                                </div>
+                            </div>
+
                             <!-- Drafti i Lora AI — kur s'ishte e sigurt të dërgonte vetë -->
                             <div v-if="selected?.ai_suggestion && !aiDraftDismissed" class="border-t border-[#dcd2f2] bg-[#f7f4fd] px-3 py-2.5">
                                 <p class="text-[10px] font-bold uppercase tracking-wide text-[#6d4fc1]">✨ {{ $t('messagesAi.suggestionTitle') }}</p>
