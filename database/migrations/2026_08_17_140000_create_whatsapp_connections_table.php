@@ -32,7 +32,12 @@ return new class extends Migration
             // s'mund të fusin dy rreshta (rreshtat me NULL përjashtohen, pra
             // mesazhet Channex/host të paprekura). Gjetje Codex PR #435.
             $table->string('whatsapp_message_id', 100)->nullable()->after('channex_message_id');
-            $table->unique(['message_thread_id', 'whatsapp_message_id'], 'messages_thread_wa_unique');
+            // KUJDES radhën e kolonave: me message_thread_id të parën, MySQL e
+            // adopton këtë indeks për FK-në (duke fshirë të vetin) dhe rollback-u
+            // dështon me 1553 "cannot drop index needed in a foreign key".
+            // whatsapp_message_id i pari s'i shërben dot FK-së — MySQL e mban
+            // indeksin e vet dhe drop-i bëhet i pastër. (CI mysql-upgrade e kapi.)
+            $table->unique(['whatsapp_message_id', 'message_thread_id'], 'messages_thread_wa_unique');
         });
     }
 
