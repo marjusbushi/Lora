@@ -11,7 +11,7 @@ const props = defineProps({
     canUpdate: { type: Boolean, default: false },
     hotelToday: { type: String, default: '' },
 });
-const emit = defineEmits(['close', 'edit', 'check-in', 'check-out', 'early-departure', 'stay-extension']);
+const emit = defineEmits(['close', 'edit', 'confirm', 'check-in', 'check-out', 'early-departure', 'stay-extension']);
 const currencyCode = usePage().props.tenant?.currency || 'EUR';
 
 const statusMeta = {
@@ -136,6 +136,7 @@ onBeforeUnmount(() => {
                     <div class="flex flex-wrap justify-end gap-2">
                         <Button variant="outline" @click="emit('close')">{{ $t('reservationDrawer.close') }}</Button>
                         <Button v-if="canUpdate" variant="secondary" @click="emit('edit', reservation)">{{ $t('reservationDrawer.edit') }}</Button>
+                        <Button v-if="canUpdate && reservation.status === 'pending'" variant="primary" @click="emit('confirm', reservation)">{{ $t('reservationDrawer.confirm') }}</Button>
                         <Button v-if="canUpdate && reservation.status === 'confirmed'" variant="primary" @click="emit('check-in', reservation)">{{ $t('reservationDrawer.checkIn') }}</Button>
                         <Button v-if="canUpdate && reservation.status === 'checked_in' && !earlyDeparturePlanned" variant="outline" @click="emit('stay-extension', reservation)"><CalendarPlus class="h-4 w-4" />{{ $t('reservationDrawer.extendStay') }}</Button>
                         <Button v-if="canUpdate && canDepartEarly" variant="outline" @click="emit('early-departure', reservation)"><CalendarMinus class="h-4 w-4" />{{ earlyDeparturePlanned ? $t('reservationDrawer.manageDeparture') : $t('reservationDrawer.earlyDeparture') }}</Button>

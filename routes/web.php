@@ -333,6 +333,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/reservations/store-multi', [ReservationController::class, 'storeMulti'])->middleware('permission:create_reservations')->name('reservations.store-multi');
         Route::put('/reservations/{reservation}', [ReservationController::class, 'update'])->middleware('permission:update_reservations')->name('reservations.update');
         Route::delete('/reservations/{reservation}', [ReservationController::class, 'destroy'])->middleware('permission:delete_reservations')->name('reservations.destroy');
+        Route::post('/reservations/{reservation}/confirm', [ReservationController::class, 'confirm'])->middleware('permission:update_reservations')->name('reservations.confirm');
         Route::post('/reservations/{reservation}/check-in', [ReservationController::class, 'checkIn'])->middleware('permission:update_reservations')->name('reservations.check-in');
         Route::post('/reservations/{reservation}/check-out', [ReservationController::class, 'checkOut'])->middleware('permission:update_reservations')->name('reservations.check-out');
         Route::post('/reservations/{reservation}/early-departure', [ReservationController::class, 'earlyDeparture'])->middleware('permission:update_reservations')->name('reservations.early-departure');

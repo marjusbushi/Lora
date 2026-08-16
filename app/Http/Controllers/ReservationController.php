@@ -751,13 +751,26 @@ class ReservationController extends Controller
                 ]);
             }
 
-            return $lockedReservation->payments()->create([
+            $created = $lockedReservation->payments()->create([
                 'amount' => $data['amount'],
                 'method' => $data['method'],
                 'currency' => ReservationMoney::currency($lockedReservation),
                 'exchange_rate' => ReservationMoney::exchangeRate($lockedReservation),
                 'created_by' => auth()->id(),
             ]);
+
+            // PAGESA E KONFIRMON REZERVIMIN — e njëjta gjendje si te pagesa online
+            // (PokPayments::settle). Pa këtë, një rezervim i paguar në sportel mbetej
+            // përgjithmonë "Në pritje" dhe Check-in nuk shfaqej kurrë.
+            // Edhe një KAPAR i pjesshëm konfirmon: kapari është shenja që rezervimi
+            // është i vërtetë; mbetja mblidhet në check-out (vendim i Marjusit).
+            // Update i kushtëzuar, jo read-then-write: sqlite e injoron lockForUpdate
+            // (mësimi #78), ndaj kushti mbi status është vetë roja.
+            Reservation::whereKey($lockedReservation->id)
+                ->where('status', 'pending')
+                ->update(['status' => 'confirmed']);
+
+            return $created;
         });
 
         AuditLog::record('payment.record', $reservation, ['amount' => $data['amount'], 'method' => $data['method']]);
@@ -1016,6 +1029,30 @@ class ReservationController extends Controller
         $pct = isset($fees[$channel]) && is_numeric($fees[$channel]) ? (float) $fees[$channel] : 0.0;
 
         return round($total * $pct / 100, 2);
+    }
+
+    /**
+     * Konfirmim me dorë i një rezervimi "Në pritje" — për rastet ku paraja s'ka hyrë
+     * ende por rezervimi është i sigurt: telefonatë, grup, agjenci. Pagesa e bën vetë
+     * këtë (recordPayment); ky është rruga kur pagesa vjen më vonë.
+     */
+    public function confirm(Reservation $reservation): RedirectResponse
+    {
+        // Update i kushtëzuar: vetëm 'pending' kalon. Një i anulluar nuk ringjallet,
+        // dhe një i konfirmuar/check-in-uar nuk zbret kurrë prapa.
+        $confirmed = Reservation::whereKey($reservation->id)
+            ->where('status', 'pending')
+            ->update(['status' => 'confirmed']);
+
+        if ($confirmed !== 1) {
+            throw ValidationException::withMessages([
+                'confirm' => 'Vetëm rezervimet në pritje mund të konfirmohen.',
+            ]);
+        }
+
+        AuditLog::record('reservation.confirm', $reservation);
+
+        return back()->with('success', 'Rezervimi u konfirmua.');
     }
 
     public function checkIn(Reservation $reservation): RedirectResponse
