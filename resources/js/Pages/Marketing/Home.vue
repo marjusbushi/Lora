@@ -25,9 +25,11 @@ import {
     UtensilsCrossed,
     WalletCards,
     X,
+    MessageCircle,
+    Wrench,
     Zap,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t, tm, locale } = useI18n();
@@ -56,8 +58,10 @@ const openFaq = ref(0);
 
 const modules = ref({
     channel: true,
+    messages: true,
     booking: true,
     housekeeping: true,
+    maintenance: true,
     pos: true,
     smartPricing: true,
     finance: true,
@@ -107,8 +111,10 @@ const pricingCards = computed(() => {
     return [
         { ...cards.core, monthlyPrice: catalogPrice('core'), icon: ShieldCheck },
         { ...cards.channel, note: channelNote, monthlyPrice: catalogPrice('channel_manager'), icon: Zap },
+        { ...cards.messages, monthlyPrice: catalogPrice('messages'), icon: MessageCircle },
         { ...cards.booking, displayPrice: `${(Number(props.catalog?.booking_engine?.percentage_bps) || 0) / 100}%`, icon: Globe2 },
         { ...cards.housekeeping, monthlyPrice: catalogPrice('housekeeping'), icon: UsersRound },
+        { ...cards.maintenance, monthlyPrice: catalogPrice('maintenance'), icon: Wrench },
         { ...cards.pos, note: posNote, monthlyPrice: catalogPrice('pos', 'first_unit_price_cents'), icon: Store },
         { ...cards.smart, monthlyPrice: catalogPrice('smart_pricing'), icon: Sparkles },
         { ...cards.finance, monthlyPrice: catalogPrice('finance'), icon: WalletCards },
@@ -159,10 +165,18 @@ const onboardingSteps = computed(() => {
     const icons = [Building2, Zap, CheckCircle2];
     return tm('marketing.onboarding.steps').map((step, index) => ({ ...step, icon: icons[index] }));
 });
+// Mesazhet punojnë vetëm përmes Channel Manager-it — kalkulatori e zbaton
+// të njëjtën varësi si faturimi, që totali të jetë gjithmonë i blerdhëm.
+watch(() => modules.value.channel, (on) => {
+    if (!on) modules.value.messages = false;
+});
+
 const calculatorModules = computed(() => [
     { key: 'channel', label: 'Channel Manager' },
+    { key: 'messages', label: t('marketing.pricing.cards.messages.title'), requires: 'channel' },
     { key: 'booking', label: 'Booking Online' },
     { key: 'housekeeping', label: 'Housekeeping' },
+    { key: 'maintenance', label: t('marketing.pricing.cards.maintenance.title') },
     { key: 'pos', label: 'POS' },
     { key: 'smartPricing', label: t('marketing.pricing.smartPricing') },
     { key: 'finance', label: t('marketing.pricing.finance') },
@@ -192,7 +206,9 @@ const posCost = computed(() => {
 const monthlyFixed = computed(() => {
     return catalogPrice('core')
         + channelCost.value
+        + (modules.value.messages ? catalogPrice('messages') : 0)
         + (modules.value.housekeeping ? catalogPrice('housekeeping') : 0)
+        + (modules.value.maintenance ? catalogPrice('maintenance') : 0)
         + posCost.value
         + (modules.value.smartPricing ? catalogPrice('smart_pricing') : 0)
         + (modules.value.finance ? catalogPrice('finance') : 0)
@@ -539,9 +555,9 @@ const adjust = (target, amount) => {
                                             <span class="text-sm font-semibold text-[#34413c]">Lora Core</span>
                                             <span class="relative h-6 w-11 rounded-full bg-[#16875d] opacity-80" :aria-label="t('marketing.pricing.coreAlwaysActive')"><span class="absolute right-1 top-1 h-4 w-4 rounded-full bg-white shadow" /></span>
                                         </div>
-                                        <label v-for="module in calculatorModules" :key="module.key" class="flex cursor-pointer items-center justify-between rounded-xl bg-[#f7f8f5] px-4 py-3">
+                                        <label v-for="module in calculatorModules" :key="module.key" class="flex items-center justify-between rounded-xl bg-[#f7f8f5] px-4 py-3" :class="module.requires && !modules[module.requires] ? 'cursor-not-allowed opacity-45' : 'cursor-pointer'">
                                             <span class="text-sm font-medium text-[#4a5651]">{{ module.label }}</span>
-                                            <input v-model="modules[module.key]" type="checkbox" class="peer sr-only" />
+                                            <input v-model="modules[module.key]" type="checkbox" class="peer sr-only" :disabled="module.requires && !modules[module.requires]" />
                                             <span class="relative h-6 w-11 rounded-full bg-[#dfe4e1] transition peer-checked:bg-[#16875d] peer-focus-visible:ring-2 peer-focus-visible:ring-[#16875d]/30"><span class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow transition" :class="modules[module.key] ? 'translate-x-5' : ''" /></span>
                                         </label>
                                     </div>

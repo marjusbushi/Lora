@@ -260,7 +260,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
 
     Route::redirect('/maintenance-design', '/pms/maintenance')->name('maintenance.design');
 
-    Route::middleware('permission:view_maintenance')->group(function () {
+    Route::middleware(['permission:view_maintenance', 'module:maintenance'])->group(function () {
         Route::get('/maintenance', [MaintenanceController::class, 'index'])->name('maintenance.index');
         Route::get('/maintenance/attachments/{attachment}', [MaintenanceController::class, 'previewAttachment'])->name('maintenance.attachments.show');
         Route::post('/maintenance', [MaintenanceController::class, 'store'])->middleware('permission:create_maintenance')->name('maintenance.store');
@@ -311,12 +311,12 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/reservations', [ReservationController::class, 'index'])->name('reservations.index');
 
         // Guest messaging (Channex Messages) — front desk replies to OTA guests.
-        Route::get('/messages', [MessagesController::class, 'index'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.index');
-        Route::get('/messages/unread', [MessagesController::class, 'unread'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.unread');
-        Route::post('/messages/{thread}/reply', [MessagesController::class, 'reply'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.reply');
-        Route::post('/messages/quick-replies', [MessagesController::class, 'saveQuickReplies'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.quick-replies');
-        Route::post('/messages/{thread}/close', [MessagesController::class, 'close'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.close');
-        Route::post('/messages/{thread}/reopen', [MessagesController::class, 'reopen'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.reopen');
+        Route::get('/messages', [MessagesController::class, 'index'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.index');
+        Route::get('/messages/unread', [MessagesController::class, 'unread'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.unread');
+        Route::post('/messages/{thread}/reply', [MessagesController::class, 'reply'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.reply');
+        Route::post('/messages/quick-replies', [MessagesController::class, 'saveQuickReplies'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.quick-replies');
+        Route::post('/messages/{thread}/close', [MessagesController::class, 'close'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.close');
+        Route::post('/messages/{thread}/reopen', [MessagesController::class, 'reopen'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.reopen');
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         Route::get('/reservations/calendar-design', fn () => Inertia::render('Reservations/CalendarDesign'))->name('reservations.calendar-design');
         Route::get('/reservations/reconciliation', [OtaReconciliationController::class, 'index'])
@@ -428,8 +428,8 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/reports/purchases-by-category', [ReportsController::class, 'purchasesByCategory'])->middleware('module:finance')->name('reports.purchasesByCategory');
         Route::get('/reports/room-status', [ReportsController::class, 'roomStatus'])->name('reports.roomStatus');
         Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->middleware('module:housekeeping')->name('reports.housekeepingReport');
-        Route::get('/reports/maintenance-sla', [ReportsController::class, 'maintenanceSla'])->name('reports.maintenanceSla');
-        Route::get('/reports/recurring-maintenance', [ReportsController::class, 'recurringMaintenance'])->name('reports.recurringMaintenance');
+        Route::get('/reports/maintenance-sla', [ReportsController::class, 'maintenanceSla'])->middleware('module:maintenance')->name('reports.maintenanceSla');
+        Route::get('/reports/recurring-maintenance', [ReportsController::class, 'recurringMaintenance'])->middleware('module:maintenance')->name('reports.recurringMaintenance');
         Route::get('/reports/room-readiness', [ReportsController::class, 'roomReadiness'])->name('reports.roomReadiness');
         Route::get('/reports/operations-executive', [ReportsController::class, 'operationsExecutive'])->name('reports.operationsExecutive');
         Route::get('/reports/guest-movements', [ReportsController::class, 'guestMovements'])->name('reports.guestMovements');

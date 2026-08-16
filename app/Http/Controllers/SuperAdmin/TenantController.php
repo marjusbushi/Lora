@@ -524,6 +524,15 @@ class TenantController extends Controller
         }
 
         $data = $request->validate($rules);
+
+        // Mesazhet punojnë vetëm përmes kanaleve OTA — s'ka kuptim pa Channel Manager.
+        if (($data['modules']['messages']['enabled'] ?? false)
+            && ! ($data['modules']['channel_manager']['enabled'] ?? false)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'modules.messages.enabled' => 'Mesazhet kërkojnë Channel Manager aktiv — inbox-i punon përmes kanaleve OTA.',
+            ]);
+        }
+
         $before = $billing->summary($tenant);
         $billing->update($tenant, $data);
         $tenant->unsetRelation('subscription')->unsetRelation('moduleEntitlements');

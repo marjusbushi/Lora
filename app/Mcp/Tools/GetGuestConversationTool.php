@@ -28,7 +28,7 @@ class GetGuestConversationTool extends LoraTool
     public function handle(Request $request): Response|ResponseFactory
     {
         $this->user($request, 'view_reservations');
-        abort_unless($this->enabled('messages_enabled') && $this->moduleEnabled(TenantBillingService::CHANNEL_MANAGER), 403);
+        abort_unless($this->enabled('messages_enabled') && $this->moduleEnabled(TenantBillingService::MESSAGES), 403);
         $data = $request->validate([
             'thread_id' => ['required', 'integer', 'min:1'],
             'limit' => ['nullable', 'integer', 'between:1,50'],
