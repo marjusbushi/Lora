@@ -10,12 +10,13 @@ class Message extends TenantModel
     public const SENDER_HOST = 'host';
 
     protected $fillable = [
-        'message_thread_id', 'channex_message_id', 'sender', 'body', 'has_attachment', 'sent_at',
+        'message_thread_id', 'channex_message_id', 'sender', 'sent_by_ai', 'body', 'has_attachment', 'sent_at',
     ];
 
     protected function casts(): array
     {
         return [
+            'sent_by_ai' => 'boolean',
             'has_attachment' => 'boolean',
             'sent_at' => 'datetime',
         ];
