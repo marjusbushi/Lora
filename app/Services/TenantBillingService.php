@@ -132,19 +132,28 @@ class TenantBillingService
             }
             $subscription->save();
 
+            $existing = $tenant->moduleEntitlements()->get()->keyBy('module_code');
+
             foreach ($this->catalog() as $code => $module) {
                 $input = Arr::get($data, "modules.{$code}", []);
                 $enabled = $code === self::CORE || (bool) ($input['enabled'] ?? false);
                 $quantity = max(1, (int) ($input['quantity'] ?? 1));
+
+                // Çmimi i klientit NGRIHET në aktivizim: një modul tashmë aktiv
+                // mban snapshot-in e vet edhe kur katalogu ndryshon — katalogu i
+                // freskët hyn VETËM kur moduli aktivizohet rishtas (gjetje Codex,
+                // PR #428; rregulli i ratifikuar i çmimeve të kontratës).
+                $current = $existing->get($code);
+                $keepFrozen = $current && $current->enabled && $enabled;
 
                 $tenant->moduleEntitlements()->updateOrCreate(
                     ['module_code' => $code],
                     [
                         'enabled' => $enabled,
                         'quantity' => $quantity,
-                        'unit_price_cents' => $module['unit_price_cents'] ?? null,
-                        'percentage_bps' => $module['percentage_bps'] ?? null,
-                        'pricing_snapshot' => $module,
+                        'unit_price_cents' => $keepFrozen ? $current->unit_price_cents : ($module['unit_price_cents'] ?? null),
+                        'percentage_bps' => $keepFrozen ? $current->percentage_bps : ($module['percentage_bps'] ?? null),
+                        'pricing_snapshot' => $keepFrozen ? ($current->pricing_snapshot ?? $module) : $module,
                     ],
                 );
             }

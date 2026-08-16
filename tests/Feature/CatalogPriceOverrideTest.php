@@ -90,6 +90,67 @@ class CatalogPriceOverrideTest extends TestCase
         $this->assertSame(5900, ModuleCatalog::modules()['smart_pricing']['unit_price_cents']);
     }
 
+    public function test_enabled_entitlement_keeps_frozen_snapshot_after_catalog_change(): void
+    {
+        $tenant = Tenant::factory()->create();
+        $billing = app(TenantBillingService::class);
+
+        // Aktivizimi i parë ngrin çmimin e sotëm të katalogut.
+        $billing->update($tenant, [
+            'status' => 'active', 'billing_cycle' => 'monthly',
+            'modules' => ['smart_pricing' => ['enabled' => true, 'quantity' => 1]],
+        ]);
+        $frozen = $tenant->moduleEntitlements()->where('module_code', 'smart_pricing')->first();
+        $originalPrice = $frozen->unit_price_cents;
+
+        // Katalogu ndryshon PAS aktivizimit.
+        CatalogPriceOverride::create(['module_code' => 'smart_pricing', 'unit_price_cents' => 9900]);
+        ModuleCatalog::flush();
+
+        // Një edit i palidhur i abonimit (sasi housekeeping) NUK e ripreson klientin.
+        $billing->update($tenant->fresh(), [
+            'status' => 'active', 'billing_cycle' => 'monthly',
+            'modules' => [
+                'smart_pricing' => ['enabled' => true, 'quantity' => 1],
+                'housekeeping' => ['enabled' => true, 'quantity' => 2],
+            ],
+        ]);
+
+        $smart = $tenant->moduleEntitlements()->where('module_code', 'smart_pricing')->first();
+        $this->assertSame($originalPrice, $smart->unit_price_cents, 'Snapshot-i i ngrirë u mbishkrua nga katalogu i ri');
+
+        // Ndërsa aktivizimi i RI (housekeeping) merr çmimin aktual të katalogut.
+        $housekeeping = $tenant->moduleEntitlements()->where('module_code', 'housekeeping')->first();
+        $this->assertSame(
+            config('lora_modules.modules.housekeeping.unit_price_cents'),
+            $housekeeping->unit_price_cents,
+        );
+    }
+
+    public function test_reenabled_module_gets_the_current_catalog_price(): void
+    {
+        $tenant = Tenant::factory()->create();
+        $billing = app(TenantBillingService::class);
+
+        $billing->update($tenant, [
+            'status' => 'active', 'billing_cycle' => 'monthly',
+            'modules' => ['smart_pricing' => ['enabled' => true, 'quantity' => 1]],
+        ]);
+
+        CatalogPriceOverride::create(['module_code' => 'smart_pricing', 'unit_price_cents' => 9900]);
+        ModuleCatalog::flush();
+
+        // Çaktivizim → riaktivizim = aktivizim i ri → çmimi i ri i katalogut.
+        $billing->update($tenant->fresh(), ['status' => 'active', 'billing_cycle' => 'monthly', 'modules' => []]);
+        $billing->update($tenant->fresh(), [
+            'status' => 'active', 'billing_cycle' => 'monthly',
+            'modules' => ['smart_pricing' => ['enabled' => true, 'quantity' => 1]],
+        ]);
+
+        $smart = $tenant->moduleEntitlements()->where('module_code', 'smart_pricing')->first();
+        $this->assertSame(9900, $smart->unit_price_cents);
+    }
+
     public function test_non_super_admin_is_refused(): void
     {
         $tenant = Tenant::factory()->create();

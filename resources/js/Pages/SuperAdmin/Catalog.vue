@@ -1,5 +1,5 @@
 <script setup>
-import { reactive } from 'vue';
+import { reactive, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import BillingPageHeader from '@/Components/SuperAdmin/BillingPageHeader.vue';
@@ -12,7 +12,7 @@ const props = defineProps({ modules: { type: Array, default: () => [] } });
 const toEuro = (cents) => (cents === null || cents === undefined ? null : cents / 100);
 const toCents = (euro) => (euro === null || euro === undefined || euro === '' ? null : Math.round(Number(euro) * 100));
 
-const rows = reactive(props.modules.map((module) => ({
+const buildRows = (modules) => modules.map((module) => ({
     code: module.code,
     name: module.name,
     description: module.description,
@@ -27,7 +27,16 @@ const rows = reactive(props.modules.map((module) => ({
     excess_unit_price: toEuro(module.active.excess_unit_price_cents),
     tier_limit: module.active.tier_limit,
     percentage: module.active.percentage_bps === null ? null : module.active.percentage_bps / 100,
-})));
+}));
+
+const rows = reactive(buildRows(props.modules));
+
+// Pas ruajtjes Inertia sjell props të freskëta por e ruan gjendjen e
+// komponentit — pa këtë resync, "Ndryshuar nga…" dhe "Rikthe në bazë"
+// mbeteshin të vjetra deri në rifreskim të plotë (gjetje Codex, PR #428).
+watch(() => props.modules, (modules) => {
+    rows.splice(0, rows.length, ...buildRows(modules));
+});
 
 const form = useForm({ modules: [] });
 
