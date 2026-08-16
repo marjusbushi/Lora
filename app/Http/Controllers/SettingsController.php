@@ -124,6 +124,9 @@ class SettingsController extends Controller
             'settings' => $settings,
             // FAQ e Lora AI Chat (skeda 'Pyetje & Përgjigje', moduli messages).
             'faqs' => \App\Models\HotelFaq::query()->ordered()->get(['id', 'question', 'answer', 'is_active', 'sort_order']),
+            // Cikli i mësimit: pyetjet që Lora s'i dinte, në pritje të pronarit.
+            'faqSuggestions' => \App\Models\HotelFaqSuggestion::query()->pending()
+                ->latest('id')->limit(20)->get(['id', 'question', 'suggested_answer']),
             'checklistDefaults' => CleaningTask::DEFAULT_CHECKLISTS,
             'roomTypes' => RoomType::withCount('rooms')->with('images')->orderBy('name')->get(),
             'menuCategories' => MenuCategory::with([

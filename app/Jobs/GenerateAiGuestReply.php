@@ -111,6 +111,11 @@ class GenerateAiGuestReply implements ShouldQueue
         $thread->forceFill([
             'ai_suggestion' => mb_substr($reply, 0, 2000),
             'ai_suggested_at' => now(),
+            // Cikli i mësimit (task #334): "s'e dinte" = jo e sigurt OSE pa FAQ.
+            // Kur ishte e sigurt por auto-off, njohuria ekziston — s'ka ç'mësohet.
+            ...(! $confident || $faqs->isEmpty()
+                ? ['ai_unanswered_question' => mb_substr($latest->body, 0, 500)]
+                : []),
         ])->save();
     }
 
@@ -213,6 +218,8 @@ PROMPT;
             'last_message_at' => now(),
             'ai_suggestion' => null,
             'ai_suggested_at' => null,
+            // Lora u përgjigj vetë — s'mbeti pyetje pa mbuluar.
+            'ai_unanswered_question' => null,
         ])->save();
 
         Cache::add($rateKey, 0, now()->addHour());

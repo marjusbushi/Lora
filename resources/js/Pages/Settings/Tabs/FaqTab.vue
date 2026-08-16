@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import { translate } from '@/i18n';
 import Card from '@/Components/UI/Card.vue';
@@ -10,8 +10,46 @@ import TextInput from '@/Components/UI/TextInput.vue';
 // FAQ e hotelit — njohuritë nga të cilat Lora AI u përgjigjet mysafirëve.
 const props = defineProps({
     faqs: { type: Array, default: () => [] },
+    // Cikli i mësimit: pyetje që Lora s'i dinte + përgjigjja e stafit, në pritje.
+    suggestions: { type: Array, default: () => [] },
     toasts: { type: Object, default: null },
 });
+
+// Çdo sugjerim redaktohet lokalisht para ruajtjes; rilidhet kur serveri
+// rifreskon listën (pas accept/dismiss vjen payload i ri nga Inertia).
+const suggestionDrafts = reactive({});
+watch(
+    () => props.suggestions,
+    (list) => {
+        (list || []).forEach((s) => {
+            if (!suggestionDrafts[s.id]) {
+                suggestionDrafts[s.id] = { question: s.question, answer: s.suggested_answer, processing: false };
+            }
+        });
+    },
+    { immediate: true },
+);
+
+function acceptSuggestion(s) {
+    const draft = suggestionDrafts[s.id];
+    if (!draft || !draft.question.trim() || !draft.answer.trim()) return;
+    draft.processing = true;
+    router.post(route('settings.faqs.suggestions.accept', s.id), {
+        question: draft.question,
+        answer: draft.answer,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => props.toasts?.success(translate('faqTab.suggestions.saved')),
+        onFinish: () => { if (suggestionDrafts[s.id]) suggestionDrafts[s.id].processing = false; },
+    });
+}
+
+function dismissSuggestion(s) {
+    router.post(route('settings.faqs.suggestions.dismiss', s.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => props.toasts?.success(translate('faqTab.suggestions.dismissed')),
+    });
+}
 
 const createForm = useForm({ question: '', answer: '' });
 const editingId = ref(null);
@@ -70,6 +108,31 @@ function destroy(faq) {
         >
             <b>{{ $t('faqTab.emptyTitle') }}</b> {{ $t('faqTab.emptyBody') }}
         </div>
+
+        <!-- Cikli i mësimit: pyetje nga biseda reale që Lora s'i dinte -->
+        <Card v-if="suggestions.length" class="border-[#dcd2f2]">
+            <template #header>
+                <div>
+                    <h3 class="text-h4 text-[#59409e]">✨ {{ $t('faqTab.suggestions.title') }}</h3>
+                    <p class="text-small text-neutral-500 mt-0.5">{{ $t('faqTab.suggestions.subtitle') }}</p>
+                </div>
+            </template>
+
+            <div class="divide-y divide-neutral-100">
+                <div v-for="s in suggestions" :key="s.id" class="grid gap-2 py-3 sm:grid-cols-[1fr_1.4fr_auto]">
+                    <TextInput v-if="suggestionDrafts[s.id]" v-model="suggestionDrafts[s.id].question" maxlength="300" />
+                    <TextInput v-if="suggestionDrafts[s.id]" v-model="suggestionDrafts[s.id].answer" maxlength="2000" />
+                    <div class="flex items-center gap-2">
+                        <Button size="sm" variant="primary" :loading="suggestionDrafts[s.id]?.processing" @click="acceptSuggestion(s)">
+                            {{ $t('faqTab.suggestions.save') }}
+                        </Button>
+                        <Button size="sm" variant="ghost" class="text-neutral-500" @click="dismissSuggestion(s)">
+                            {{ $t('faqTab.suggestions.dismiss') }}
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        </Card>
 
         <Card>
             <template #header>

@@ -50,6 +50,7 @@ const props = defineProps({
     posOutletLimit: { type: Number, default: 1 },
     inventoryCategoryTree: { type: Array, default: () => [] },
     faqs: { type: Array, default: () => [] },
+    faqSuggestions: { type: Array, default: () => [] },
 });
 
 const toasts = ref(null);
@@ -182,7 +183,7 @@ function selectMobileTab(tabId) {
                     <IntegrationsTab v-else-if="activeTab === 'integrations'" :integrations="generalIntegrations" :toasts="toasts" @select-tab="selectTab" />
                     <AiTab v-else-if="activeTab === 'ai'" :settings="settings.ai || {}" :toasts="toasts" />
                     <IntegrationsTab v-else-if="activeTab === 'channel-manager'" :integrations="channelManagerIntegrations" :toasts="toasts" @select-tab="selectTab" />
-                    <FaqTab v-else-if="activeTab === 'faqs'" :faqs="faqs" :toasts="toasts" />
+                    <FaqTab v-else-if="activeTab === 'faqs'" :faqs="faqs" :suggestions="faqSuggestions" :toasts="toasts" />
                     <UsersPage v-else-if="activeTab === 'users'" v-bind="userManagement" embedded />
                     <NotificationsTab v-else-if="activeTab === 'notifications'" :settings="settings.notifications || {}" :hotel-email="settings.hotel?.email || ''" :toasts="toasts" />
                     <SecurityTab v-else-if="activeTab === 'security'" />

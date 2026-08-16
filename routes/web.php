@@ -325,6 +325,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
             Route::post('/settings/faqs', [HotelFaqController::class, 'store'])->name('settings.faqs.store');
             Route::put('/settings/faqs/{faq}', [HotelFaqController::class, 'update'])->name('settings.faqs.update');
             Route::delete('/settings/faqs/{faq}', [HotelFaqController::class, 'destroy'])->name('settings.faqs.destroy');
+            // Cikli i mësimit: prano/hidh sugjerimet "Lora s'e dinte" (task #334).
+            Route::post('/settings/faqs/suggestions/{suggestion}/accept', [HotelFaqController::class, 'acceptSuggestion'])->name('settings.faqs.suggestions.accept');
+            Route::post('/settings/faqs/suggestions/{suggestion}/dismiss', [HotelFaqController::class, 'dismissSuggestion'])->name('settings.faqs.suggestions.dismiss');
         });
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         Route::get('/reservations/calendar-design', fn () => Inertia::render('Reservations/CalendarDesign'))->name('reservations.calendar-design');
