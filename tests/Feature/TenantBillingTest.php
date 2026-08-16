@@ -114,7 +114,9 @@ class TenantBillingTest extends TestCase
             'modules' => [
                 'core' => ['enabled' => false, 'quantity' => 1],
                 'channel_manager' => ['enabled' => true, 'quantity' => 60],
+                'messages' => ['enabled' => false, 'quantity' => 1],
                 'booking_engine' => ['enabled' => true, 'quantity' => 1],
+                'maintenance' => ['enabled' => false, 'quantity' => 1],
                 'housekeeping' => ['enabled' => true, 'quantity' => 2],
                 'pos' => ['enabled' => true, 'quantity' => 3],
                 'finance' => ['enabled' => true, 'quantity' => 1],

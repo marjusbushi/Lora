@@ -29,6 +29,13 @@ return [
             'tier_limit' => 30,
             'excess_unit_price_cents' => 500,
         ],
+        'messages' => [
+            'name' => 'Mesazhet',
+            'description' => 'Inbox i unifikuar i mysafirëve nga OTA-t (Booking, Expedia…).',
+            'billing_model' => 'flat',
+            'unit_label' => 'muaj',
+            'unit_price_cents' => 1900,
+        ],
         'booking_engine' => [
             'name' => 'Booking Online',
             'description' => 'Booking engine direkt dhe pagesa online.',
@@ -41,6 +48,13 @@ return [
             'description' => 'Pastrimi, checklistat dhe raportimi i problemeve.',
             'billing_model' => 'per_user',
             'unit_label' => 'përdorues',
+            'unit_price_cents' => 900,
+        ],
+        'maintenance' => [
+            'name' => 'Mirëmbajtja',
+            'description' => 'Raportim defektesh, ndërhyrje dhe historiku i mirëmbajtjes.',
+            'billing_model' => 'flat',
+            'unit_label' => 'muaj',
             'unit_price_cents' => 900,
         ],
         'pos' => [
