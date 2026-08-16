@@ -6714,6 +6714,33 @@
     "outletSubscription": "{count} nga {limit} pika të abonimit",
     "outletLimitReached": "Limiti u arrit — për një pikë të re kontaktoni Lora PMS"
   },
+  "pricingTabs": {
+    "ariaLabel": "Navigimi i çmimeve",
+    "calendar": "Kalendari",
+    "seasons": "Sezonet",
+    "lockedPrice": "{price} €/muaj",
+    "lockedTitle": "Çmime Inteligjente — {price} €/muaj · kontakto Lora për aktivizim",
+    "lockedTitleNoPrice": "Çmime Inteligjente — kontakto Lora për aktivizim"
+  },
+  "smartCal": {
+    "dows": { "0": "Hë", "1": "Ma", "2": "Më", "3": "En", "4": "Pr", "5": "Sh", "6": "Di" },
+    "dowsShort": { "0": "Hën", "1": "Mar", "2": "Mër", "3": "Enj", "4": "Pre", "5": "Sht", "6": "Die" },
+    "monthOccupancy": "Zënia e muajit",
+    "avgPrice": "Çmimi mesatar",
+    "marketAvg": "Tregu mesatar",
+    "suggestionsCount": "{count} sugjerime",
+    "today": "SOT",
+    "now": "Tani",
+    "clampedTitle": "I ndalur te kufiri {bound}",
+    "acceptTitle": "Prano {price}",
+    "legendSuggestion": "= sugjerimi (numri i madh) · Tani = çmimi live",
+    "legendOccBar": "Vija poshtë = zënia:",
+    "legendOccCalm": "qetë",
+    "legendOccFilling": "po mbushet",
+    "legendOccHot": "nxehtë",
+    "strategyChanged": "Strategjia u ndryshua — sugjerimet u rifreskuan.",
+    "strategySaveFailed": "Strategjia nuk u ruajt."
+  },
   "pricingIndex": {
     "monthsShort": {
       "0": "Jan",
