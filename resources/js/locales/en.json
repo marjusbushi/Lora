@@ -6261,7 +6261,11 @@
     "toastUpdated": "Reservation updated.",
     "toastRoomMoved": "Room changed.",
     "toastDeparturePlanUpdated": "The departure plan was updated.",
-    "toastStayExtended": "Stay extended; the inventory update was sent to Channex."
+    "toastStayExtended": "Stay extended; the inventory update was sent to Channex.",
+    "actionConfirm": "Confirm",
+    "toastConfirm": "Confirmed: {name}",
+    "toastConfirmShort": "Reservation confirmed.",
+    "toastConfirmFailed": "Confirmation failed."
   },
   "reservationsReconciliation": {
     "pageTitle": "OTA–PMS reconciliation",
@@ -6333,7 +6337,8 @@
     "extendStay": "Extend stay",
     "manageDeparture": "Manage departure",
     "earlyDeparture": "Early departure",
-    "openPage": "Open full page"
+    "openPage": "Open full page",
+    "confirm": "Confirm"
   },
   "reservationModals": {
     "earlyDeparture": {
