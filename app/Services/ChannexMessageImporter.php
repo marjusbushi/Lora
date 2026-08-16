@@ -108,6 +108,11 @@ class ChannexMessageImporter
                     // edhe kur job-i i ri nuk prodhon dot (gjetje Codex).
                     $thread->ai_suggestion = null;
                     $thread->ai_suggested_at = null;
+                    // Edhe flamuri "s'e dinte" i mesazhit të kaluar: përndryshe
+                    // përgjigjja e stafit për KËTË mesazh çiftohet me pyetjen e
+                    // vjetër dhe çifti i gabuar bëhet FAQ (gjetje Codex, PR #434).
+                    // Job-i i ri e rivendos për këtë mesazh nëse s'e di as këtë.
+                    $thread->ai_unanswered_question = null;
 
                     // Lora AI Chat — VETËM nga webhook-u (koha reale); pull-i i
                     // historikut s'duhet t'i përgjigjet kurrë mesazheve të vjetra.

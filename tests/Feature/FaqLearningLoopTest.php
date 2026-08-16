@@ -195,6 +195,63 @@ class FaqLearningLoopTest extends TestCase
         $this->assertSame(0, HotelFaq::query()->count());
     }
 
+    public function test_new_guest_webhook_message_clears_the_stale_unanswered_flag(): void
+    {
+        // Mysafiri dërgon mesazh pasues PARA se stafi të përgjigjet: flamuri i
+        // pyetjes së kaluar duhet të pastrohet nga importuesi — përndryshe
+        // përgjigjja e stafit çiftohet me pyetjen e GABUAR (gjetje Codex #434).
+        config([
+            'services.channex.api_key' => 'test-key',
+            'services.channex.base_url' => 'https://staging.channex.io/api/v1',
+            'services.channex.property_id' => 'PROP-1',
+            'services.channex.webhook_secret' => 'topsecret',
+        ]);
+        \Illuminate\Support\Facades\Http::fake([
+            'https://staging.channex.io/api/v1/message_threads/*' => \Illuminate\Support\Facades\Http::response(['data' => ['attributes' => [
+                'title' => 'John Guest', 'channel' => 'booking.com', 'status' => 'open', 'property_id' => 'PROP-1',
+            ]]], 200),
+            'https://staging.channex.io/api/v1/bookings/*' => \Illuminate\Support\Facades\Http::response(['data' => [
+                'id' => 'BK-1', 'attributes' => ['ota_reservation_code' => 'BK-REF'],
+            ]], 200),
+        ]);
+
+        // Gemini "i pakonfiguruar": job-i i ri (afterCommit ekzekutohet edhe nën
+        // RefreshDatabase) del herët — testi mat VETËM pastrimin e importuesit.
+        $this->mock(GeminiClient::class, fn ($mock) => $mock->shouldReceive('configured')->andReturn(false));
+
+        [$thread] = $this->makeThreadWithGuestMessage('A ofroni masazhe?');
+        $thread->forceFill([
+            'channex_thread_id' => 'TH-1',
+            'ai_unanswered_question' => 'A ofroni masazhe?',
+        ])->save();
+
+        $this->postJson('/channex/webhook', ['event' => 'message', 'payload' => [
+            'id' => 'MSG-2',
+            'message' => 'Dhe sauna?',
+            'sender' => 'guest',
+            'property_id' => 'PROP-1',
+            'booking_id' => 'BK-1',
+            'message_thread_id' => 'TH-1',
+            'have_attachment' => false,
+        ]], ['X-Channex-Webhook-Secret' => 'topsecret'])->assertOk();
+
+        $this->assertNull($thread->refresh()->ai_unanswered_question);
+    }
+
+    public function test_accept_after_dismiss_is_refused_and_creates_no_faq(): void
+    {
+        $suggestion = HotelFaqSuggestion::create(['question' => 'X?', 'suggested_answer' => 'Y']);
+        $suggestion->update(['status' => HotelFaqSuggestion::STATUS_DISMISSED]);
+
+        $this->actingAs($this->admin)
+            ->post(route('settings.faqs.suggestions.accept', $suggestion), [
+                'question' => 'X?', 'answer' => 'Y',
+            ])->assertRedirect();
+
+        $this->assertSame(0, HotelFaq::query()->count());
+        $this->assertSame(HotelFaqSuggestion::STATUS_DISMISSED, $suggestion->refresh()->status);
+    }
+
     public function test_cross_tenant_suggestion_is_404(): void
     {
         $other = Tenant::factory()->create();

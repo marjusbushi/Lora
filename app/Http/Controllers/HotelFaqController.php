@@ -56,33 +56,45 @@ class HotelFaqController extends Controller
      */
     public function acceptSuggestion(Request $request, HotelFaqSuggestion $suggestion): RedirectResponse
     {
-        if ($suggestion->status !== HotelFaqSuggestion::STATUS_PENDING) {
-            return back()->with('error', 'Ky sugjerim është trajtuar tashmë.');
-        }
-
         $data = $request->validate([
             'question' => ['required', 'string', 'max:300'],
             'answer' => ['required', 'string', 'max:2000'],
         ]);
 
-        DB::transaction(function () use ($suggestion, $data) {
+        // Kalimi pending→saved është UPDATE i kushtëzuar: dy adminë në garë
+        // (kutia te Mesazhet + Cilësimet njëkohësisht) — vetëm njëri e "fiton"
+        // rreshtin, tjetri merr 0 dhe s'krijon FAQ të dytë (gjetje Codex).
+        $claimed = DB::transaction(function () use ($suggestion, $data) {
+            $won = HotelFaqSuggestion::query()
+                ->where('id', $suggestion->id)
+                ->where('status', HotelFaqSuggestion::STATUS_PENDING)
+                ->update(['status' => HotelFaqSuggestion::STATUS_SAVED]);
+
+            if (! $won) {
+                return false;
+            }
+
             HotelFaq::create($data + [
                 'sort_order' => (int) (HotelFaq::query()->max('sort_order') + 1),
             ]);
-            $suggestion->update(['status' => HotelFaqSuggestion::STATUS_SAVED]);
+
+            return true;
         });
 
-        return back()->with('success', 'U shtua te FAQ — Lora e mësoi këtë përgjigje.');
+        return $claimed
+            ? back()->with('success', 'U shtua te FAQ — Lora e mësoi këtë përgjigje.')
+            : back()->with('error', 'Ky sugjerim është trajtuar tashmë.');
     }
 
     public function dismissSuggestion(HotelFaqSuggestion $suggestion): RedirectResponse
     {
-        if ($suggestion->status !== HotelFaqSuggestion::STATUS_PENDING) {
-            return back()->with('error', 'Ky sugjerim është trajtuar tashmë.');
-        }
+        $won = HotelFaqSuggestion::query()
+            ->where('id', $suggestion->id)
+            ->where('status', HotelFaqSuggestion::STATUS_PENDING)
+            ->update(['status' => HotelFaqSuggestion::STATUS_DISMISSED]);
 
-        $suggestion->update(['status' => HotelFaqSuggestion::STATUS_DISMISSED]);
-
-        return back()->with('success', 'Sugjerimi u hodh.');
+        return $won
+            ? back()->with('success', 'Sugjerimi u hodh.')
+            : back()->with('error', 'Ky sugjerim është trajtuar tashmë.');
     }
 }
