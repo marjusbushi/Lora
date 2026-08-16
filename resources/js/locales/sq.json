@@ -6261,7 +6261,11 @@
     "toastUpdated": "Rezervimi u përditësua.",
     "toastRoomMoved": "Dhoma u ndryshua.",
     "toastDeparturePlanUpdated": "Plani i largimit u përditësua.",
-    "toastStayExtended": "Qëndrimi u zgjat; përditësimi i inventarit u dërgua te Channex."
+    "toastStayExtended": "Qëndrimi u zgjat; përditësimi i inventarit u dërgua te Channex.",
+    "actionConfirm": "Konfirmo",
+    "toastConfirm": "U konfirmua: {name}",
+    "toastConfirmShort": "Rezervimi u konfirmua.",
+    "toastConfirmFailed": "Konfirmimi dështoi."
   },
   "reservationsReconciliation": {
     "pageTitle": "Kontrolli OTA–PMS",
@@ -6333,7 +6337,8 @@
     "extendStay": "Zgjat qëndrimin",
     "manageDeparture": "Menaxho largimin",
     "earlyDeparture": "Largim më herët",
-    "openPage": "Hap faqen"
+    "openPage": "Hap faqen",
+    "confirm": "Konfirmo"
   },
   "reservationModals": {
     "earlyDeparture": {

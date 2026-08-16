@@ -96,6 +96,10 @@ const selectedRoom = computed(() => {
     return id ? props.rooms.find((r) => Number(r.id) === id) || null : null;
 });
 const maxOccupancy = computed(() => selectedRoom.value?.room_type?.max_occupancy ?? null);
+const statusOptions = computed(() => [
+    { value: 'pending', label: translate('reservationsIndex.statusPending') },
+    { value: 'confirmed', label: translate('reservationsIndex.statusConfirmed') },
+]);
 const adultsOptions = computed(() => {
     const cap = maxOccupancy.value || 10;
     return Array.from({ length: cap }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
@@ -176,6 +180,14 @@ function submit() {
                 </FormGroup>
                 <FormGroup :label="$t('admin.generated.k_305cf5d36909')" :error="form.errors.children">
                     <Select v-model="form.children" :options="childrenOptions" placeholder="" :error="form.errors.children" />
+                </FormGroup>
+                <!--
+                    Vetëm pending|confirmed. Anullimi ka rrugën e vet me guardet e veta
+                    (refuzon të paguarit) dhe check-in/out kanë kushtet e tyre (dhoma e
+                    pastruar, folio e mbyllur) — një dropdown nuk guxon t'i anashkalojë.
+                -->
+                <FormGroup :label="$t('reservationsIndex.colStatus')" :error="form.errors.status">
+                    <Select v-model="form.status" :options="statusOptions" :error="form.errors.status" />
                 </FormGroup>
                 <FormGroup :label="$t('admin.generated.k_77fb5e8d0ec8')" :error="form.errors.channel">
                     <Select v-model="form.channel" :options="channelOptions" :disabled="sourceLocked" :error="form.errors.channel" />
