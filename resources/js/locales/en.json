@@ -4420,6 +4420,26 @@
     "beachBadge": "Beach"
   },
   "superAdmin": {
+    "catalog": {
+      "pageTitle": "Price catalog",
+      "title": "Price catalog",
+      "subtitle": "Official module prices — a change here shows up immediately on marketing, the subscription dialog, and new activations.",
+      "listTitle": "Modules and prices",
+      "snapshotNote": "Existing customers keep their frozen contract price — the catalog only affects new activations.",
+      "price": "Price",
+      "firstUnit": "First outlet",
+      "extraUnit": "Each extra outlet",
+      "tierLimit": "Up to (units)",
+      "excessPrice": "Above the limit",
+      "percent": "Percentage",
+      "basePrefix": "Base:",
+      "changedBy": "Changed by {name} · {date}",
+      "reset": "Reset to base",
+      "resetTitle": "Returns this module to the platform base price",
+      "applyNote": "Saving applies the changes immediately, no deploy.",
+      "save": "Save prices",
+      "saving": "Saving…"
+    },
     "moduleList": {
       "priceFlat": "{price} / mo",
       "pricePerUnit": "{price} / {unit}",
@@ -4975,6 +4995,7 @@
       "paymentAttempts": "Payment Attempts",
       "providerEvents": "Provider Events",
       "currencies": "Currencies",
+      "catalog": "Price catalog",
       "open": "Open",
       "close": "Close",
       "openMenu": "Open menu",
