@@ -12,12 +12,14 @@ import TextInput from '@/Components/UI/TextInput.vue';
 import DatePicker from '@/Components/UI/DatePicker.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
+import PricingTabs from '@/Components/Pricing/PricingTabs.vue';
 
 const props = defineProps({
     roomTypes: { type: Array, default: () => [] },
     seasons: { type: Array, default: () => [] },
     otaWindow: { type: Object, default: () => ({}) },
     seasonCopy: { type: Object, default: () => ({}) },
+    smartModule: { type: Object, default: () => ({}) },
 });
 
 const toasts = ref(null);
@@ -409,17 +411,11 @@ const gaps = computed(() => {
         width: ((b - a + 1) / len) * 100,
     }));
 });
-const gapDays = computed(() => gaps.value.reduce((sum, g) => sum + g.days, 0));
-const coveredDays = computed(() => yearDays.value - gapDays.value);
 const todayPct = computed(() => {
     const i = dayIdx(todayIso);
     return i >= 0 && i < yearDays.value ? ((i + 0.5) / yearDays.value) * 100 : null;
 });
 const nextYearEmpty = computed(() => !props.seasons.some((s) => Number(String(s.end_date).slice(0, 4)) >= year.value + 1));
-const avgBase = computed(() => {
-    const vals = props.roomTypes.map((t) => Number(base[t.id])).filter((v) => Number.isFinite(v) && v > 0);
-    return vals.length ? Math.round(vals.reduce((sum, v) => sum + v, 0) / vals.length) : null;
-});
 
 // Inline season editor under the band (creation keeps the modal).
 const inlineOpen = ref(false);
@@ -545,6 +541,7 @@ function fmtRange(s) {
             :breadcrumbs="[{ label: $t('admin.generated.k_f226794ce976'), href: '/dashboard' }, { label: $t('admin.generated.k_9cccd7468e78') }]"
         >
             <template #actions>
+                <PricingTabs active="seasons" :smart-price-cents="Number(smartModule?.priceCents) || 0" />
                 <div class="inline-flex items-center rounded-xl border border-neutral-200 bg-white shadow-sm overflow-hidden">
                     <button class="px-3 py-2 text-neutral-500 hover:text-primary-900 hover:bg-neutral-50 font-bold" @click="year -= 1">‹</button>
                     <b class="px-1.5 text-body font-bold text-primary-900 tabular-nums">{{ year }}</b>
@@ -556,26 +553,7 @@ function fmtRange(s) {
             </template>
         </PageHeader>
 
-        <!-- month KPIs: the year's pricing health at a glance -->
-        <div class="mt-5 flex flex-wrap items-center gap-2">
-            <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600 shadow-sm">
-                📅 {{ $t('pricingIndex.yearCoverage') }} <b class="text-primary-900 tabular-nums">{{ coveredDays }}/{{ yearDays }}</b> {{ $t('pricingIndex.days') }}
-            </span>
-            <span v-if="avgBase" class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600 shadow-sm">
-                {{ $t('pricingIndex.avgBase') }} <b class="text-primary-900 tabular-nums">{{ formatPrice(avgBase) }}</b>
-            </span>
-            <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600 shadow-sm">
-                <b class="text-primary-900 tabular-nums">{{ yearSeasons.length }}</b> {{ $t('pricingIndex.seasonsWord') }} · <b class="text-primary-900 tabular-nums">{{ roomTypes.length }}</b> {{ $t('pricingIndex.roomTypesWord') }}
-            </span>
-            <span v-if="gapDays" class="inline-flex items-center gap-1.5 rounded-full border border-warning-300 bg-warning-50 px-3 py-1.5 text-tiny font-bold text-warning-800 shadow-sm">
-                {{ $t('pricingIndex.gapDaysWarning', { days: gapDays }) }}
-            </span>
-            <a :href="route('pricing.smart.index')" class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-bold text-primary-900 no-underline shadow-sm hover:border-ionian">
-                {{ $t('pricingIndex.smartPricingLink') }}
-            </a>
-        </div>
-
-        <div class="mt-4 space-y-5">
+        <div class="mt-6 space-y-5">
             <!-- Channel manager (Channex): one calm strip, banners only when real -->
             <div v-if="channelManagerEnabled" class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-body-sm shadow-sm">
                 <span class="relative flex h-2.5 w-2.5">

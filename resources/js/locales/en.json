@@ -6714,6 +6714,33 @@
     "outletSubscription": "{count} of {limit} subscribed outlets",
     "outletLimitReached": "Limit reached — contact Lora PMS for an additional outlet"
   },
+  "pricingTabs": {
+    "ariaLabel": "Pricing navigation",
+    "calendar": "Calendar",
+    "seasons": "Seasons",
+    "lockedPrice": "€{price}/mo",
+    "lockedTitle": "Smart Pricing — €{price}/mo · contact Lora to activate",
+    "lockedTitleNoPrice": "Smart Pricing — contact Lora to activate"
+  },
+  "smartCal": {
+    "dows": { "0": "Mo", "1": "Tu", "2": "We", "3": "Th", "4": "Fr", "5": "Sa", "6": "Su" },
+    "dowsShort": { "0": "Mon", "1": "Tue", "2": "Wed", "3": "Thu", "4": "Fri", "5": "Sat", "6": "Sun" },
+    "monthOccupancy": "Month occupancy",
+    "avgPrice": "Average price",
+    "marketAvg": "Market average",
+    "suggestionsCount": "{count} suggestions",
+    "today": "TODAY",
+    "now": "Now",
+    "clampedTitle": "Held at the {bound} bound",
+    "acceptTitle": "Accept {price}",
+    "legendSuggestion": "= the suggestion (big number) · Now = live price",
+    "legendOccBar": "Bottom bar = occupancy:",
+    "legendOccCalm": "calm",
+    "legendOccFilling": "filling up",
+    "legendOccHot": "hot",
+    "strategyChanged": "Strategy updated — suggestions refreshed.",
+    "strategySaveFailed": "Strategy was not saved."
+  },
   "pricingIndex": {
     "monthsShort": {
       "0": "Jan",

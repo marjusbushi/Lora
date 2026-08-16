@@ -47,6 +47,11 @@ class PricingController extends Controller
                 'default_source_year' => $defaultSourceYear,
                 'default_target_year' => $defaultSourceYear + 1,
             ],
+            // Catalog price for the locked "Kalendari" tab (PricingTabs) — read
+            // from config so a catalog change never leaves a stale price in UI.
+            'smartModule' => [
+                'priceCents' => (int) config('lora_modules.modules.smart_pricing.unit_price_cents', 0),
+            ],
         ]);
     }
 
