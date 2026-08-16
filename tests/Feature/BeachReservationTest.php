@@ -158,6 +158,50 @@ class BeachReservationTest extends TestCase
         $this->assertNotNull($reservation->fresh()->paid_at);
     }
 
+    public function test_mark_paid_confirms_a_pending_website_reservation(): void
+    {
+        $d = fn (int $offset) => today()->addDays($offset)->toDateString();
+        $reservation = $this->reserve($d(3), $d(4), BeachReservation::STATUS_PENDING);
+        $reservation->update(['source' => BeachReservation::SOURCE_WEBSITE]);
+        $this->openShiftFor($this->admin);
+
+        // Pagesa e marrë NË PLAZH e konfirmon rezervimin, njësoj si pagesa online POK.
+        $this->actingAs($this->admin)
+            ->post(route('beach.reservations.mark-paid', $reservation), ['method' => 'cash'])
+            ->assertSessionHasNoErrors();
+
+        $fresh = $reservation->fresh();
+        $this->assertSame(BeachReservation::STATUS_CONFIRMED, $fresh->status);
+        $this->assertNotNull($fresh->paid_at);
+        $this->assertSame('cash', $fresh->payment_method);
+
+        // Heqja e shënimit NUK e zbret statusin: rezervimet e recepsionit janë 'confirmed'
+        // pa qenë të paguara fare, ndaj një kthim automatik do t'i degradonte padrejtësisht.
+        $this->actingAs($this->admin)
+            ->post(route('beach.reservations.unmark-paid', $reservation))
+            ->assertSessionHasNoErrors();
+
+        $afterUnmark = $reservation->fresh();
+        $this->assertSame(BeachReservation::STATUS_CONFIRMED, $afterUnmark->status);
+        $this->assertNull($afterUnmark->paid_at);
+    }
+
+    public function test_mark_paid_never_resurrects_a_cancelled_reservation(): void
+    {
+        $d = fn (int $offset) => today()->addDays($offset)->toDateString();
+        $cancelled = $this->reserve($d(5), $d(6), BeachReservation::STATUS_CANCELLED);
+        $this->openShiftFor($this->admin);
+
+        $this->actingAs($this->admin)
+            ->postJson(route('beach.reservations.mark-paid', $cancelled), ['method' => 'cash'])
+            ->assertStatus(422);
+
+        $fresh = $cancelled->fresh();
+        $this->assertSame(BeachReservation::STATUS_CANCELLED, $fresh->status);
+        $this->assertNull($fresh->paid_at);
+        $this->assertNull($fresh->payment_method);
+    }
+
     public function test_calendar_props_carry_payment_state_and_routes_are_gated(): void
     {
         $d = fn (int $offset) => today()->addDays($offset)->toDateString();

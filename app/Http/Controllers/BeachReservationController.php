@@ -168,10 +168,18 @@ class BeachReservationController extends Controller
 
             // Flip atomik: vetëm një rezervim ende i papaguar dhe jo i anulluar shënohet —
             // dy klikime të njëkohshme s'e shënojnë dot dy herë.
+            // Statusi hyn në TË NJËJTIN update si pagesa online (BeachPokPayments::settle):
+            // pagesa E KONFIRMON rezervimin, ndryshe një rezervim i paguar në plazh mbetej
+            // përgjithmonë "Në pritje". Guard-i mbi 'cancelled' e mban ringjalljen të pamundur.
             $flipped = BeachReservation::whereKey($beachReservation->id)
                 ->whereNull('paid_at')
                 ->where('status', '!=', BeachReservation::STATUS_CANCELLED)
-                ->update(['paid_at' => now(), 'payment_method' => $data['method'], 'beach_shift_id' => $shift->id]);
+                ->update([
+                    'status' => BeachReservation::STATUS_CONFIRMED,
+                    'paid_at' => now(),
+                    'payment_method' => $data['method'],
+                    'beach_shift_id' => $shift->id,
+                ]);
 
             if ($flipped !== 1) {
                 throw ValidationException::withMessages([
