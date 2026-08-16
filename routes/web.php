@@ -5,6 +5,7 @@ use App\Http\Controllers\BeachReservationController;
 use App\Http\Controllers\BeachSetupController;
 use App\Http\Controllers\ChannexController;
 use App\Http\Controllers\ChannexWebhookController;
+use App\Http\Controllers\WhatsAppController;
 use App\Http\Controllers\CleaningTaskController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceController;
@@ -123,6 +124,10 @@ Route::post('/contact', [WebsiteController::class, 'submitContact'])->middleware
 // Inbound Channex booking webhook (server-to-server; CSRF-excluded in bootstrap/app.php).
 // Auth is a shared secret header validated in the controller — Channex has no HMAC.
 Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->middleware(['module:channel_manager', 'throttle:channex-webhook'])->name('channex.webhook');
+
+// Ngjarjet e urës WhatsApp (Node/Baileys, i njëjti server) — si channex/webhook:
+// tenant-i zgjidhet nga hosti i hotelit, token-i verifikohet në kontrollues.
+Route::post('/whatsapp/bridge/event', [WhatsAppController::class, 'event'])->middleware(['module:messages', 'throttle:60,1'])->name('whatsapp.bridge.event');
 
 // Short-lived, one-time Control Panel -> hotel-domain authentication callback.
 Route::get('/tenant-handoff', TenantHandoffController::class)
@@ -595,6 +600,13 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/settings/pricing-programs', [SettingsController::class, 'updatePricingPrograms'])->name('settings.pricing-programs');
         Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->middleware('module:housekeeping')->name('settings.housekeeping');
         Route::put('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai');
+
+        // WhatsApp QR-lite (moduli messages): lidhja/statusi/shkëputja e numrit.
+        Route::middleware('module:messages')->group(function () {
+            Route::get('/settings/whatsapp/status', [WhatsAppController::class, 'status'])->name('settings.whatsapp.status');
+            Route::post('/settings/whatsapp/connect', [WhatsAppController::class, 'connect'])->name('settings.whatsapp.connect');
+            Route::post('/settings/whatsapp/disconnect', [WhatsAppController::class, 'disconnect'])->name('settings.whatsapp.disconnect');
+        });
         Route::put('/settings/beach', [SettingsController::class, 'updateBeach'])->middleware('module:beach')->name('settings.beach');
         Route::post('/settings/integrations/{provider}/test', [SettingsController::class, 'testIntegration'])
             ->whereIn('provider', ['fature_al'])->middleware('throttle:10,1')->name('settings.integrations.test');

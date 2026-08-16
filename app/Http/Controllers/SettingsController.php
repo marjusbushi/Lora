@@ -127,6 +127,11 @@ class SettingsController extends Controller
             // Cikli i mësimit: pyetjet që Lora s'i dinte, në pritje të pronarit.
             'faqSuggestions' => \App\Models\HotelFaqSuggestion::query()->pending()
                 ->latest('id')->limit(20)->get(['id', 'question', 'suggested_answer']),
+            // WhatsApp QR-lite: gjendja e fundit e raportuar + a ekziston ura.
+            'whatsapp' => [
+                'connection' => \App\Models\WhatsAppConnection::query()->first(['id', 'status', 'phone_number', 'last_event_at']),
+                'bridge_configured' => app(\App\Services\WhatsAppBridgeClient::class)->configured(),
+            ],
             'checklistDefaults' => CleaningTask::DEFAULT_CHECKLISTS,
             'roomTypes' => RoomType::withCount('rooms')->with('images')->orderBy('name')->get(),
             'menuCategories' => MenuCategory::with([

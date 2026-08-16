@@ -79,6 +79,7 @@ const CHANNELS = {
     airbnb: { label: translate('admin.generated.k_a52540094dea'), badge: 'bg-[#fdeded] text-[#e0565b]', grad: 'linear-gradient(145deg,#ec7a7e,#e0565b)' },
     expedia: { label: translate('admin.generated.k_9ccffb2c9d20'), badge: 'bg-[#f9f1da] text-[#a9790a]', grad: 'linear-gradient(145deg,#caa031,#a9790a)' },
     agoda: { label: translate('admin.generated.k_d10d71d623eb'), badge: 'bg-neutral-100 text-neutral-600', grad: 'linear-gradient(145deg,#7c8b85,#556059)' },
+    whatsapp: { label: 'WhatsApp', badge: 'bg-[#e7f8ef] text-[#128c4b]', grad: 'linear-gradient(145deg,#3ddc7a,#128c4b)' },
 };
 function chan(c) {
     return CHANNELS[c] || { label: c || 'OTA', badge: 'bg-neutral-100 text-neutral-600', grad: 'linear-gradient(145deg,#7c8b85,#556059)' };

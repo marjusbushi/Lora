@@ -20,6 +20,7 @@ export const settingsTabs = [
     { id: 'ai', sidebarId: 'lora-ai', labelKey: 'settingsTabs.navigation.tabs.ai', group: 'automation', href: '/pms/lora-ai' },
     { id: 'channel-manager', labelKey: 'settingsTabs.navigation.tabs.channelManager', group: 'automation', module: 'channel_manager' },
     { id: 'faqs', labelKey: 'settingsTabs.navigation.tabs.faqs', group: 'automation', module: 'messages' },
+    { id: 'whatsapp', labelKey: 'settingsTabs.navigation.tabs.whatsapp', group: 'automation', module: 'messages' },
     { id: 'users', labelKey: 'settingsTabs.navigation.tabs.users', group: 'system' },
     { id: 'notifications', labelKey: 'settingsTabs.navigation.tabs.notifications', group: 'system' },
     { id: 'security', labelKey: 'settingsTabs.navigation.tabs.security', group: 'system' },

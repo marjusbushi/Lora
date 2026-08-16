@@ -6990,7 +6990,8 @@
         "notifications": "Njoftimet",
         "security": "Siguria",
         "history": "Auditimi",
-        "beach": "Plazhi"
+        "beach": "Plazhi",
+        "whatsapp": "WhatsApp"
       },
       "groups": {
         "hotel": "Hoteli",
@@ -7086,6 +7087,26 @@
       "checkOutLabel": "Ora standarde e check-out",
       "futureNote": "Politikat e anulimit, parapagimit dhe no-show do të shtohen këtu kur të aktivizohet motori i politikave.",
       "save": "Ruaj politikat"
+    },
+    "whatsapp": {
+      "title": "WhatsApp i hotelit",
+      "subtitle": "Lidh numrin e hotelit me skanim QR — mesazhet vijnë te Mesazhet si çdo bisedë tjetër.",
+      "warningTitle": "Kujdes:",
+      "warningBody": "kjo lidhje përdor rrugën jo-zyrtare të WhatsApp Web. Meta mund ta bllokojë numrin — përdor një numër të dedikuar për hotelin, jo numrin personal. Sesioni mund të bjerë herë pas here dhe kërkon ri-skanim.",
+      "statusConnected": "I lidhur",
+      "statusPairing": "Duke u çiftuar",
+      "statusDisconnected": "I shkëputur",
+      "connectedAs": "I lidhur si",
+      "connectedHint": "Mesazhet e reja shfaqen te Mesazhet me shenjën e gjelbër WhatsApp.",
+      "disconnect": "Shkëput",
+      "confirmDisconnect": "Ta shkëpus WhatsApp-in? Mesazhet s'do vijnë më në Lora derisa ta lidhësh sërish.",
+      "connect": "Lidh me QR",
+      "disconnectedHint": "Kliko dhe skano kodin me telefonin ku është numri i hotelit: WhatsApp → Pajisjet e lidhura → Lidh një pajisje.",
+      "qrAlt": "Kodi QR i WhatsApp",
+      "qrLoading": "Duke gjeneruar kodin QR…",
+      "qrHint": "Hap WhatsApp në telefonin e hotelit → Pajisjet e lidhura → Lidh një pajisje, dhe skano kodin. Kodi rifreskohet vetiu.",
+      "cancelPairing": "Anulo",
+      "bridgeOffline": "Ura e WhatsApp s'është aktive në këtë server ende — kontakto Lora për aktivizimin."
     }
   },
   "shared": {

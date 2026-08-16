@@ -81,6 +81,13 @@ return [
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
     ],
 
+    // Ura lokale e WhatsApp (Node/Baileys, daemon në të njëjtin server).
+    // Token bosh = integrimi i FIKUR fare (fail-closed në të dy drejtimet).
+    'whatsapp_bridge' => [
+        'url' => env('WHATSAPP_BRIDGE_URL', 'http://127.0.0.1:3100'),
+        'token' => env('WHATSAPP_BRIDGE_TOKEN', ''),
+    ],
+
     // POK (pokpay.io) card payments for the public booking site. Auth = login
     // (keyId/keySecret) → short-lived Bearer token; amounts in MINOR units (cents).
     // Defaults to STAGING until POK_PRODUCTION=true. See the pok-embedded-contract memory.
