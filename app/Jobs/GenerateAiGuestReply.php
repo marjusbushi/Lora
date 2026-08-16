@@ -89,6 +89,15 @@ class GenerateAiGuestReply implements ShouldQueue
             return;
         }
 
+        // Thirrja e Gemini-t mund të zgjasë deri në 45s — nëse ndërkohë foli
+        // stafi (ose erdhi mesazh i ri), përgjigja jonë është e vjetruar: as
+        // dërgim, as draft (gjetje Codex, PR #433).
+        $thread->refresh();
+        $latest = $thread->messages()->reorder()->latest('sent_at')->latest('id')->first();
+        if (! $latest || $latest->id !== $this->messageId || $thread->status === 'closed') {
+            return;
+        }
+
         $autoEnabled = filter_var(Setting::get('ai_mcp.guest_auto_reply_enabled', true), FILTER_VALIDATE_BOOL);
 
         // Niveli 2 VETËM me FAQ aktive — hotel pa FAQ s'e lëshon kurrë AI-në
@@ -180,7 +189,7 @@ PROMPT;
         }
 
         try {
-            $channex->sendThreadMessage($thread->channex_thread_id, $reply);
+            $sent = $channex->sendThreadMessage($thread->channex_thread_id, $reply);
         } catch (\Throwable $e) {
             report($e);
 
@@ -191,7 +200,9 @@ PROMPT;
         }
 
         $thread->messages()->create([
-            'channex_message_id' => null,
+            // ID-ja e Channex ruhet që echo e webhook-ut të deduplikohet dhe
+            // të mos futet kopje e dytë pa etiketë (gjetje Codex, PR #433).
+            'channex_message_id' => (string) ($sent['id'] ?? '') ?: null,
             'sender' => Message::SENDER_HOST,
             'sent_by_ai' => true,
             'body' => $reply,

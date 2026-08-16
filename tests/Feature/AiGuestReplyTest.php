@@ -178,6 +178,49 @@ class AiGuestReplyTest extends TestCase
         $this->assertNull($thread->refresh()->ai_suggestion);
     }
 
+    public function test_race_staff_reply_during_gemini_flight_prevents_send_and_draft(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        // Gemini "vonon" — dhe ndërkohë stafi përgjigjet.
+        $this->mock(GeminiClient::class, function ($mock) use ($thread) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('structured')->andReturnUsing(function () use ($thread) {
+                $thread->messages()->create([
+                    'sender' => Message::SENDER_HOST,
+                    'body' => 'Staff replied mid-flight',
+                    'sent_at' => now()->addSecond(),
+                ]);
+
+                return ['confident' => true, 'reply' => 'Late AI answer'];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    public function test_auto_reply_stores_channex_message_id_for_dedup(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->fakeGemini(true);
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once()->andReturn(['id' => 'chx-msg-123']));
+
+        $this->runJob($thread, $message);
+
+        $this->assertDatabaseHas('messages', [
+            'message_thread_id' => $thread->id,
+            'sent_by_ai' => true,
+            'channex_message_id' => 'chx-msg-123',
+        ]);
+    }
+
     public function test_staff_reply_clears_the_ai_draft(): void
     {
         [$thread] = $this->makeThreadWithGuestMessage();
