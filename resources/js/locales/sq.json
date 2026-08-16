@@ -4436,6 +4436,9 @@
       "changedBy": "Ndryshuar nga {name} · {date}",
       "reset": "Rikthe në bazë",
       "resetTitle": "E kthen këtë modul te çmimi bazë i platformës",
+      "inCalculator": "Në kalkulator",
+      "inCalculatorTitle": "Nëse ndizet, ky modul del i aktivizuar që në hapje te kalkulatori publik i çmimeve",
+      "coreAlways": "Gjithmonë aktiv në kalkulator",
       "applyNote": "Ruajtja i zbaton ndryshimet menjëherë, pa deploy.",
       "save": "Ruaj çmimet",
       "saving": "Duke ruajtur…"

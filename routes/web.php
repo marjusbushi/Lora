@@ -69,6 +69,7 @@ Route::get('/', function (Request $request) {
                 'tier_limit' => $module['tier_limit'] ?? null,
                 'excess_unit_price_cents' => $module['excess_unit_price_cents'] ?? null,
                 'percentage_bps' => $module['percentage_bps'] ?? null,
+                'calculator_default' => (bool) ($module['calculator_default'] ?? false),
             ])->all(),
             'contractDiscounts' => config('lora_modules.contract_discounts', []),
         ]);

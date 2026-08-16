@@ -56,16 +56,20 @@ const carouselReverse = ref(false);
 const activeProduct = ref('reservations');
 const openFaq = ref(0);
 
+// Gjendja fillestare vjen nga katalogu (çelësi "Në kalkulator" te paneli Lora)
+// — kurrë e ngulitur këtu. Mesazhet nisin vetëm bashkë me Channel Manager-in.
+const calcDefault = (code) => props.catalog?.[code]?.calculator_default === true;
+
 const modules = ref({
-    channel: true,
-    messages: true,
-    booking: true,
-    housekeeping: true,
-    maintenance: true,
-    pos: true,
-    smartPricing: true,
-    finance: true,
-    beach: false,
+    channel: calcDefault('channel_manager'),
+    messages: calcDefault('messages') && calcDefault('channel_manager'),
+    booking: calcDefault('booking_engine'),
+    housekeeping: calcDefault('housekeeping'),
+    maintenance: calcDefault('maintenance'),
+    pos: calcDefault('pos'),
+    smartPricing: calcDefault('smart_pricing'),
+    finance: calcDefault('finance'),
+    beach: calcDefault('beach'),
 });
 
 const navigation = computed(() => [

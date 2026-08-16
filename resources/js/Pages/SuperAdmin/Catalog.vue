@@ -27,6 +27,8 @@ const buildRows = (modules) => modules.map((module) => ({
     excess_unit_price: toEuro(module.active.excess_unit_price_cents),
     tier_limit: module.active.tier_limit,
     percentage: module.active.percentage_bps === null ? null : module.active.percentage_bps / 100,
+    calculator_default: module.calculator_active,
+    calculator_base: module.calculator_base,
 }));
 
 const rows = reactive(buildRows(props.modules));
@@ -79,6 +81,7 @@ const resetRow = (row) => {
     row.excess_unit_price = toEuro(row.defaults.excess_unit_price_cents);
     row.tier_limit = row.defaults.tier_limit;
     row.percentage = row.defaults.percentage_bps === null ? null : row.defaults.percentage_bps / 100;
+    row.calculator_default = row.calculator_base;
 };
 
 function save() {
@@ -90,6 +93,7 @@ function save() {
             excess_unit_price_cents: toCents(row.excess_unit_price),
             tier_limit: row.tier_limit === null || row.tier_limit === '' ? null : Number(row.tier_limit),
             percentage_bps: row.percentage === null || row.percentage === '' ? null : Math.round(Number(row.percentage) * 100),
+            calculator_default: Boolean(row.calculator_default),
         })),
     })).put('/super-admin/catalog', { preserveScroll: true });
 }
@@ -168,6 +172,12 @@ const inputClass = 'w-24 rounded-lg border-neutral-300 py-1.5 text-right text-xs
                                         <div class="mt-1 flex items-center gap-1"><span class="text-[10px] text-neutral-500">€</span><input v-model.number="row.unit_price" type="number" min="0" step="1" :class="inputClass" /></div>
                                     </label>
                                 </template>
+
+                                <label v-if="row.code !== 'core'" class="mb-1 flex items-center gap-1.5 text-[10px] font-semibold text-neutral-600" :title="$t('superAdmin.catalog.inCalculatorTitle')">
+                                    <input v-model="row.calculator_default" type="checkbox" class="h-3.5 w-3.5 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600" />
+                                    {{ $t('superAdmin.catalog.inCalculator') }}
+                                </label>
+                                <span v-else class="mb-1 text-[10px] font-semibold text-neutral-400">{{ $t('superAdmin.catalog.coreAlways') }}</span>
 
                                 <button
                                     v-if="row.has_override"
