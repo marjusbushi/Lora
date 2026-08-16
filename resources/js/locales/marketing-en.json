@@ -202,7 +202,7 @@
       "channel": {
         "title": "Channel Manager",
         "unit": "/ room",
-        "note": "First 30 · then €5/room"
+        "note": "First {limit} · then {excess}/room"
       },
       "booking": {
         "title": "Booking Online",
@@ -217,7 +217,7 @@
       "pos": {
         "title": "POS",
         "unit": "/ sales point",
-        "note": "First outlet — then €19/outlet · fiscalization included, unlimited users"
+        "note": "First outlet — then {extra}/outlet · fiscalization included, unlimited users"
       },
       "smart": {
         "title": "Smart Pricing",

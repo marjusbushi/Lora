@@ -4420,6 +4420,14 @@
     "beachBadge": "Plazh"
   },
   "superAdmin": {
+    "moduleList": {
+      "priceFlat": "{price} / muaj",
+      "pricePerUnit": "{price} / {unit}",
+      "pricePos": "{first} pika e parë · pastaj {extra}/pikë",
+      "priceTiered": "{price}/{unit} deri në {limit} · pastaj {excess}",
+      "pricePercentage": "{percent}% / {unit}",
+      "nowPaying": "tani: {price} / muaj"
+    },
     "tenantShow": {
       "actionCreated": "Hoteli u krijua",
       "actionUpdated": "Të dhënat e hotelit u përditësuan",
