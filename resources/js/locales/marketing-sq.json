@@ -204,6 +204,11 @@
         "unit": "/ dhomë",
         "note": "{limit} të parat · pastaj {excess}/dhomë"
       },
+      "messages": {
+        "title": "Mesazhet",
+        "unit": "/ muaj",
+        "note": "Inbox i unifikuar i mysafirëve nga OTA-t"
+      },
       "booking": {
         "title": "Booking Online",
         "unit": "",
@@ -213,6 +218,11 @@
         "title": "Housekeeping",
         "unit": "/ muaj",
         "note": "Tarifë fikse për modulin"
+      },
+      "maintenance": {
+        "title": "Mirëmbajtja",
+        "unit": "/ muaj",
+        "note": "Raportim defektesh, ndërhyrje dhe historiku"
       },
       "pos": {
         "title": "POS",

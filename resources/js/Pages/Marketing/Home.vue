@@ -25,6 +25,8 @@ import {
     UtensilsCrossed,
     WalletCards,
     X,
+    MessageCircle,
+    Wrench,
     Zap,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
@@ -56,8 +58,10 @@ const openFaq = ref(0);
 
 const modules = ref({
     channel: true,
+    messages: true,
     booking: true,
     housekeeping: true,
+    maintenance: true,
     pos: true,
     smartPricing: true,
     finance: true,
@@ -107,8 +111,10 @@ const pricingCards = computed(() => {
     return [
         { ...cards.core, monthlyPrice: catalogPrice('core'), icon: ShieldCheck },
         { ...cards.channel, note: channelNote, monthlyPrice: catalogPrice('channel_manager'), icon: Zap },
+        { ...cards.messages, monthlyPrice: catalogPrice('messages'), icon: MessageCircle },
         { ...cards.booking, displayPrice: `${(Number(props.catalog?.booking_engine?.percentage_bps) || 0) / 100}%`, icon: Globe2 },
         { ...cards.housekeeping, monthlyPrice: catalogPrice('housekeeping'), icon: UsersRound },
+        { ...cards.maintenance, monthlyPrice: catalogPrice('maintenance'), icon: Wrench },
         { ...cards.pos, note: posNote, monthlyPrice: catalogPrice('pos', 'first_unit_price_cents'), icon: Store },
         { ...cards.smart, monthlyPrice: catalogPrice('smart_pricing'), icon: Sparkles },
         { ...cards.finance, monthlyPrice: catalogPrice('finance'), icon: WalletCards },
@@ -161,8 +167,10 @@ const onboardingSteps = computed(() => {
 });
 const calculatorModules = computed(() => [
     { key: 'channel', label: 'Channel Manager' },
+    { key: 'messages', label: t('marketing.pricing.cards.messages.title') },
     { key: 'booking', label: 'Booking Online' },
     { key: 'housekeeping', label: 'Housekeeping' },
+    { key: 'maintenance', label: t('marketing.pricing.cards.maintenance.title') },
     { key: 'pos', label: 'POS' },
     { key: 'smartPricing', label: t('marketing.pricing.smartPricing') },
     { key: 'finance', label: t('marketing.pricing.finance') },
@@ -192,7 +200,9 @@ const posCost = computed(() => {
 const monthlyFixed = computed(() => {
     return catalogPrice('core')
         + channelCost.value
+        + (modules.value.messages ? catalogPrice('messages') : 0)
         + (modules.value.housekeeping ? catalogPrice('housekeeping') : 0)
+        + (modules.value.maintenance ? catalogPrice('maintenance') : 0)
         + posCost.value
         + (modules.value.smartPricing ? catalogPrice('smart_pricing') : 0)
         + (modules.value.finance ? catalogPrice('finance') : 0)

@@ -204,6 +204,11 @@
         "unit": "/ room",
         "note": "First {limit} · then {excess}/room"
       },
+      "messages": {
+        "title": "Messages",
+        "unit": "/ month",
+        "note": "Unified guest inbox from the OTAs"
+      },
       "booking": {
         "title": "Booking Online",
         "unit": "",
@@ -213,6 +218,11 @@
         "title": "Housekeeping",
         "unit": "/ month",
         "note": "One flat module fee"
+      },
+      "maintenance": {
+        "title": "Maintenance",
+        "unit": "/ month",
+        "note": "Issue reporting, interventions and history"
       },
       "pos": {
         "title": "POS",

@@ -49,7 +49,7 @@ function hasModule(module) {
 
 // Preserve production's unread OTA-message alert without polling tenants that
 // do not have the channel-manager module enabled.
-const messagingEnabled = computed(() => can('view_reservations') && hasModule('channel_manager'));
+const messagingEnabled = computed(() => can('view_reservations') && hasModule('messages'));
 const unreadMessages = ref(0);
 let pollTimer = null;
 let audioCtx = null;
@@ -164,9 +164,9 @@ const allNavItems = computed(() => [
     { label: t('admin.sidebar.reservations'), href: '/pms/reservations', match: '/pms/reservations', icon: icons.reservations, permission: 'view_reservations' },
     { label: t('admin.sidebar.rooms'), href: '/pms/rooms', icon: icons.rooms, permission: 'view_rooms' },
     { label: t('admin.sidebar.guests'), href: '/pms/guests', icon: icons.guests, permission: 'view_guests' },
-    { label: t('admin.sidebar.messages'), href: '/pms/messages', match: '/pms/messages', icon: icons.messages, permission: 'view_reservations', module: 'channel_manager' },
+    { label: t('admin.sidebar.messages'), href: '/pms/messages', match: '/pms/messages', icon: icons.messages, permission: 'view_reservations', module: 'messages' },
     { label: t('admin.sidebar.housekeeping'), href: '/pms/housekeeping', icon: icons.housekeeping, permission: 'view_housekeeping', module: 'housekeeping' },
-    { label: t('maintenance.title'), href: '/pms/maintenance', icon: icons.maintenance, permission: 'view_maintenance' },
+    { label: t('maintenance.title'), href: '/pms/maintenance', icon: icons.maintenance, permission: 'view_maintenance', module: 'maintenance' },
     {
         label: t('admin.sidebar.pos'),
         icon: icons.pos,
