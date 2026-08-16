@@ -173,10 +173,11 @@ const inputClass = 'w-24 rounded-lg border-neutral-300 py-1.5 text-right text-xs
                                     </label>
                                 </template>
 
-                                <label class="mb-1 flex items-center gap-1.5 text-[10px] font-semibold text-neutral-600" :title="$t('superAdmin.catalog.inCalculatorTitle')">
+                                <label v-if="row.code !== 'core'" class="mb-1 flex items-center gap-1.5 text-[10px] font-semibold text-neutral-600" :title="$t('superAdmin.catalog.inCalculatorTitle')">
                                     <input v-model="row.calculator_default" type="checkbox" class="h-3.5 w-3.5 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600" />
                                     {{ $t('superAdmin.catalog.inCalculator') }}
                                 </label>
+                                <span v-else class="mb-1 text-[10px] font-semibold text-neutral-400">{{ $t('superAdmin.catalog.coreAlways') }}</span>
 
                                 <button
                                     v-if="row.has_override"

@@ -87,8 +87,10 @@ class CatalogController extends Controller
                 }
 
                 // Flag-u i kalkulatorit: barazi me config = NULL (baza ndjek kodin).
+                // Core s'ka toggle në kalkulatorin publik — override-i do ishte pa
+                // efekt (gjetje Codex, PR #431), ndaj për të s'ruhet kurrë.
                 $calculator = (bool) $entry['calculator_default'];
-                $override['calculator_default_on'] = $calculator === (bool) ($defaults['calculator_default'] ?? false)
+                $override['calculator_default_on'] = ($code === 'core' || $calculator === (bool) ($defaults['calculator_default'] ?? false))
                     ? null
                     : $calculator;
 

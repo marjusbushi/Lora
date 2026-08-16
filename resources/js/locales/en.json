@@ -4438,6 +4438,7 @@
       "resetTitle": "Returns this module to the platform base price",
       "inCalculator": "In calculator",
       "inCalculatorTitle": "When on, this module starts enabled in the public pricing calculator",
+      "coreAlways": "Always on in the calculator",
       "applyNote": "Saving applies the changes immediately, no deploy.",
       "save": "Save prices",
       "saving": "Saving…"
