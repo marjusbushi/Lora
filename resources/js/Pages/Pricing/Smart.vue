@@ -1,6 +1,6 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
@@ -57,9 +57,33 @@ const hasOtaPrograms = computed(() => Object.keys(props.otaPrograms || {}).lengt
 // klikimi (ose Enter) e shfaq detajin si tekst i dukshëm nën rresht. Tooltip-i
 // mbetet vetëm si shtesë për miun.
 const openOta = ref(null);
+const otaAnchor = ref(null);
 const toggleOta = (key) => {
     openOta.value = openOta.value === key ? null : key;
 };
+
+// Escape + klik jashtë. Listener-at rrinë te document (jo @blur): blur-i ikën para se
+// klikimi brenda panelit të regjistrohet, ndaj do ta mbyllte panelin nën gisht.
+const closeOtaOnOutside = (event) => {
+    if (openOta.value && otaAnchor.value && !otaAnchor.value.contains(event.target)) {
+        openOta.value = null;
+    }
+};
+const closeOtaOnEscape = (event) => {
+    if (event.key === 'Escape') {
+        openOta.value = null;
+    }
+};
+
+onMounted(() => {
+    document.addEventListener('click', closeOtaOnOutside);
+    document.addEventListener('keydown', closeOtaOnEscape);
+});
+
+onBeforeUnmount(() => {
+    document.removeEventListener('click', closeOtaOnOutside);
+    document.removeEventListener('keydown', closeOtaOnEscape);
+});
 
 const toasts = ref(null);
 const typeId = computed(() => props.selectedTypeId);
@@ -576,11 +600,6 @@ function syncLabel(ts) {
                         </button>
                     </div>
 
-                    <span class="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-tiny text-neutral-500" :title="$t('smartPricing.rounding.tooltip')">
-                        <span aria-hidden="true">≈</span>
-                        {{ roundingPolicyLabel }}
-                    </span>
-
                     <!-- Sugjerimet mbeten këtu sepse mbajnë një VEPRIM, jo thjesht një numër. -->
                     <span v-if="kpis && actionableCount" class="inline-flex items-center gap-2 rounded-full border border-success-300 bg-success-50 px-3 py-1 text-tiny font-semibold text-success-700">
                         {{ $t('smartCal.suggestionsCount', { count: actionableCount }) }}<template v-if="kpis.gain > 0"> → <b class="tabular-nums">+{{ currency }}{{ kpis.gain }}</b></template>
@@ -599,7 +618,14 @@ function syncLabel(ts) {
                     Lexohen një herë kur hap muajin, ndaj rrëshqasin bashkë me faqen.
                     Detajet e promocioneve jetojnë në tooltip — asgjë nuk humbet.
                 -->
-                <div v-if="kpis || hasOtaPrograms" class="flex flex-wrap items-center gap-2 mb-4">
+                <div class="flex flex-wrap items-center gap-2 mb-4">
+                    <!-- Rrumbullakimi rri KËTU: është politikë e lexuar një herë, jo kontroll —
+                         dhe në rreshtin 1 e shtynte navigimin e muajit në një rresht të dytë. -->
+                    <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny text-neutral-500" :title="$t('smartPricing.rounding.tooltip')">
+                        <span aria-hidden="true">≈</span>
+                        {{ roundingPolicyLabel }}
+                    </span>
+
                     <template v-if="kpis">
                         <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
                             <i class="w-2 h-2 rounded-full" :class="kpis.occ >= 90 ? 'bg-error-400' : kpis.occ >= 65 ? 'bg-warning-400' : 'bg-success-400'" />
@@ -613,7 +639,7 @@ function syncLabel(ts) {
                         </span>
                     </template>
 
-                    <div v-if="hasOtaPrograms" class="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+                    <div v-if="hasOtaPrograms" ref="otaAnchor" class="relative ml-auto flex flex-wrap items-center justify-end gap-1.5">
                         <button
                             v-for="(program, key) in otaPrograms"
                             :key="key"
@@ -630,10 +656,18 @@ function syncLabel(ts) {
                             </b>
                         </button>
 
-                        <!-- Detaji i dukshëm: e vetmja rrugë që funksionon edhe me prekje edhe me tastierë. -->
-                        <p v-if="openOta && otaPrograms[openOta]" class="w-full text-right text-tiny text-neutral-500">
-                            <b class="text-neutral-600">{{ otaLabel(openOta) }}</b> · {{ otaTooltip(otaPrograms[openOta]) }}
-                        </p>
+                        <!--
+                            Detaji NOTON mbi përmbajtjen (absolute), nuk zë rresht në rrjedhë:
+                            ndryshe hapja e tij e shtynte kalendarin poshtë — pikërisht zvarritja
+                            vertikale që ky shirit erdhi ta zhdukë.
+                        -->
+                        <div
+                            v-if="openOta && otaPrograms[openOta]"
+                            class="absolute right-0 top-full z-30 mt-1.5 max-w-[min(20rem,80vw)] rounded-xl border border-neutral-200 bg-white px-3 py-2 text-tiny text-neutral-500 shadow-card"
+                            role="status"
+                        >
+                            <b class="text-primary-900">{{ otaLabel(openOta) }}</b> · {{ otaTooltip(otaPrograms[openOta]) }}
+                        </div>
                     </div>
                 </div>
 
