@@ -18,6 +18,7 @@ return [
             'billing_model' => 'flat',
             'unit_label' => 'muaj',
             'unit_price_cents' => 2900,
+            'calculator_default' => true,
         ],
         'channel_manager' => [
             'name' => 'Channel Manager',
@@ -28,6 +29,7 @@ return [
             'unit_price_cents' => 700,
             'tier_limit' => 30,
             'excess_unit_price_cents' => 500,
+            'calculator_default' => true,
         ],
         'messages' => [
             'name' => 'Mesazhet',
@@ -35,6 +37,7 @@ return [
             'billing_model' => 'flat',
             'unit_label' => 'muaj',
             'unit_price_cents' => 1900,
+            'calculator_default' => true,
         ],
         'booking_engine' => [
             'name' => 'Booking Online',
@@ -42,6 +45,7 @@ return [
             'billing_model' => 'percentage',
             'unit_label' => 'rezervim direkt',
             'percentage_bps' => 100,
+            'calculator_default' => true,
         ],
         'housekeeping' => [
             'name' => 'Housekeeping',
@@ -49,6 +53,7 @@ return [
             'billing_model' => 'per_user',
             'unit_label' => 'përdorues',
             'unit_price_cents' => 900,
+            'calculator_default' => false,
         ],
         'maintenance' => [
             'name' => 'Mirëmbajtja',
@@ -56,6 +61,7 @@ return [
             'billing_model' => 'flat',
             'unit_label' => 'muaj',
             'unit_price_cents' => 900,
+            'calculator_default' => false,
         ],
         'pos' => [
             'name' => 'POS Bar/Restorant',
@@ -65,6 +71,7 @@ return [
             // Pika e parë €49 (mbulon fiskalizimin + përdorues pa limit); çdo pikë shtesë €19.
             'first_unit_price_cents' => 4900,
             'unit_price_cents' => 1900,
+            'calculator_default' => false,
         ],
         'finance' => [
             'name' => 'Financa & Inventari',
@@ -72,6 +79,7 @@ return [
             'billing_model' => 'flat',
             'unit_label' => 'muaj',
             'unit_price_cents' => 2900,
+            'calculator_default' => false,
         ],
         'smart_pricing' => [
             'name' => 'Çmime Inteligjente',
@@ -79,6 +87,7 @@ return [
             'billing_model' => 'flat',
             'unit_label' => 'muaj',
             'unit_price_cents' => 4900,
+            'calculator_default' => false,
         ],
         'beach' => [
             'name' => 'Plazhi',
@@ -86,6 +95,7 @@ return [
             'billing_model' => 'flat',
             'unit_label' => 'muaj',
             'unit_price_cents' => 2900,
+            'calculator_default' => false,
         ],
     ],
 ];

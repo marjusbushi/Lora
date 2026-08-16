@@ -22,6 +22,7 @@ class CatalogPriceOverride extends Model
         'excess_unit_price_cents',
         'tier_limit',
         'percentage_bps',
+        'calculator_default_on',
         'updated_by',
     ];
 
@@ -33,6 +34,7 @@ class CatalogPriceOverride extends Model
             'excess_unit_price_cents' => 'integer',
             'tier_limit' => 'integer',
             'percentage_bps' => 'integer',
+            'calculator_default_on' => 'boolean',
         ];
     }
 

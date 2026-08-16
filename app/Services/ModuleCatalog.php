@@ -54,6 +54,11 @@ class ModuleCatalog
                     $modules[$code][$field] = (int) $override->{$field};
                 }
             }
+
+            // Gjendja fillestare në kalkulatorin publik — NULL = vlen config-u.
+            if ($override->calculator_default_on !== null) {
+                $modules[$code]['calculator_default'] = (bool) $override->calculator_default_on;
+            }
         }
 
         return self::$cached = $modules;

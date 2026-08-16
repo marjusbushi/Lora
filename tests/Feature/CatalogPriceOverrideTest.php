@@ -73,9 +73,9 @@ class CatalogPriceOverrideTest extends TestCase
 
         $response = $this->actingAs($admin)->put('https://admin.lorapms.test/super-admin/catalog', [
             'modules' => [
-                ['code' => 'smart_pricing', 'unit_price_cents' => 5900],
+                ['code' => 'smart_pricing', 'unit_price_cents' => 5900, 'calculator_default' => false],
                 // E barabartë me config-un → s'duhet të mbetet override.
-                ['code' => 'finance', 'unit_price_cents' => (int) config('lora_modules.modules.finance.unit_price_cents')],
+                ['code' => 'finance', 'unit_price_cents' => (int) config('lora_modules.modules.finance.unit_price_cents'), 'calculator_default' => false],
             ],
         ]);
 
@@ -88,6 +88,37 @@ class CatalogPriceOverrideTest extends TestCase
         $this->assertDatabaseMissing('catalog_price_overrides', ['module_code' => 'finance']);
 
         $this->assertSame(5900, ModuleCatalog::modules()['smart_pricing']['unit_price_cents']);
+    }
+
+    public function test_calculator_default_comes_from_config_and_override_wins(): void
+    {
+        // Bazat e config-ut: CM ndezur, POS fikur.
+        $this->assertTrue(ModuleCatalog::modules()['channel_manager']['calculator_default']);
+        $this->assertFalse(ModuleCatalog::modules()['pos']['calculator_default']);
+
+        CatalogPriceOverride::create(['module_code' => 'pos', 'calculator_default_on' => true]);
+        ModuleCatalog::flush();
+
+        $this->assertTrue(ModuleCatalog::modules()['pos']['calculator_default']);
+    }
+
+    public function test_super_admin_toggles_calculator_flag_and_equality_clears_it(): void
+    {
+        $admin = User::factory()->create(['is_super_admin' => true]);
+
+        $this->actingAs($admin)->put('https://admin.lorapms.test/super-admin/catalog', [
+            'modules' => [
+                ['code' => 'pos', 'calculator_default' => true],
+                // E barabartë me bazën (false) → s'duhet të mbetet rresht.
+                ['code' => 'finance', 'calculator_default' => false],
+            ],
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('catalog_price_overrides', ['module_code' => 'pos', 'calculator_default_on' => true]);
+        $this->assertDatabaseMissing('catalog_price_overrides', ['module_code' => 'finance']);
+
+        ModuleCatalog::flush();
+        $this->assertTrue(ModuleCatalog::modules()['pos']['calculator_default']);
     }
 
     public function test_enabled_entitlement_keeps_frozen_snapshot_after_catalog_change(): void

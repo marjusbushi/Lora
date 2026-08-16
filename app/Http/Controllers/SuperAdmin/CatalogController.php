@@ -44,6 +44,8 @@ class CatalogController extends Controller
                     ->mapWithKeys(fn (string $field) => [$field => $definition[$field] ?? null])
                     ->all(),
                 'has_override' => (bool) $override,
+                'calculator_active' => (bool) ($merged[$code]['calculator_default'] ?? false),
+                'calculator_base' => (bool) ($definition['calculator_default'] ?? false),
                 'updated_by' => $override?->updatedBy?->name,
                 'updated_at' => $override?->updated_at?->toIso8601String(),
             ];
@@ -64,6 +66,7 @@ class CatalogController extends Controller
             'modules.*.excess_unit_price_cents' => ['nullable', 'integer', 'min:0', 'max:100000000'],
             'modules.*.tier_limit' => ['nullable', 'integer', 'min:1', 'max:65000'],
             'modules.*.percentage_bps' => ['nullable', 'integer', 'min:0', 'max:10000'],
+            'modules.*.calculator_default' => ['required', 'boolean'],
         ]);
 
         $config = config('lora_modules.modules', []);
@@ -82,6 +85,12 @@ class CatalogController extends Controller
                         ? null
                         : (int) $value;
                 }
+
+                // Flag-u i kalkulatorit: barazi me config = NULL (baza ndjek kodin).
+                $calculator = (bool) $entry['calculator_default'];
+                $override['calculator_default_on'] = $calculator === (bool) ($defaults['calculator_default'] ?? false)
+                    ? null
+                    : $calculator;
 
                 if (collect($override)->every(fn ($value) => $value === null)) {
                     CatalogPriceOverride::query()->where('module_code', $code)->delete();
