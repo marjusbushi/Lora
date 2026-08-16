@@ -58,6 +58,25 @@ class ModuleGatingMaintenanceMessagesTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_legacy_tenant_is_grandfathered_free_with_frozen_zero_price(): void
+    {
+        // Tenant-i legacy krijohet nga migrimet (Villa Mucho pattern) me CM aktiv.
+        $tenant = Tenant::query()->sole();
+        $billing = app(TenantBillingService::class)->summary($tenant);
+
+        $this->assertTrue($billing['modules']['maintenance']['enabled']);
+        $this->assertTrue($billing['modules']['messages']['enabled']);
+        // Çmimi i NGRIRË 0 € — jo katalogu (900/1900).
+        $this->assertSame(0, $billing['modules']['maintenance']['monthly_cents']);
+        $this->assertSame(0, $billing['modules']['messages']['monthly_cents']);
+        $this->assertSame(0, $billing['modules']['maintenance']['unit_price_cents']);
+        // Totali mujor i pandryshuar nga modulet e reja (ishin falas si pjesë e paketës).
+        $this->assertSame(20100, $billing['monthly_fixed_cents']);
+        // Snapshot-i i aksesit i rifreskuar — middleware-i i moduleve i lejon.
+        $this->assertTrue(app(TenantBillingService::class)->enabled('maintenance', $tenant->fresh()));
+        $this->assertTrue(app(TenantBillingService::class)->enabled('messages', $tenant->fresh()));
+    }
+
     public function test_messages_without_channel_manager_is_rejected_by_validation(): void
     {
         config(['lora.control_panel_hosts' => ['localhost']]);
