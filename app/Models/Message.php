@@ -10,7 +10,7 @@ class Message extends TenantModel
     public const SENDER_HOST = 'host';
 
     protected $fillable = [
-        'message_thread_id', 'channex_message_id', 'sender', 'sent_by_ai', 'body', 'has_attachment', 'sent_at',
+        'message_thread_id', 'channex_message_id', 'whatsapp_message_id', 'sender', 'sent_by_ai', 'body', 'has_attachment', 'sent_at',
     ];
 
     protected function casts(): array

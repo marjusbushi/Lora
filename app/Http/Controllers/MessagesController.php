@@ -50,7 +50,7 @@ class MessagesController extends Controller
                     'guest_email' => $r?->guest?->email,
                     'channel' => $thread->channel,
                     'status' => $thread->status,
-                    'can_reply' => (bool) $thread->channex_thread_id,
+                    'can_reply' => (bool) ($thread->channex_thread_id || $thread->whatsapp_jid),
                     'reservation' => $r ? [
                         'id' => $r->id,
                         'ref' => $r->channel_ref,
@@ -164,28 +164,46 @@ class MessagesController extends Controller
         return response()->json(['count' => (int) MessageThread::sum('unread_count')]);
     }
 
-    public function reply(Request $request, MessageThread $thread, ChannexClient $channex): RedirectResponse
+    public function reply(Request $request, MessageThread $thread, ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp): RedirectResponse
     {
         $data = $request->validate([
             'body' => ['required', 'string', 'max:2000'],
         ]);
 
-        if (! $thread->channex_thread_id) {
-            return back()->with('error', 'Kjo bisedë s\'ka lidhje aktive me Channex.');
-        }
+        $whatsappMessageId = null;
 
-        try {
-            $channex->sendThreadMessage($thread->channex_thread_id, $data['body']);
-        } catch (\Throwable $e) {
-            report($e);
+        if ($thread->channel === 'whatsapp') {
+            // Biseda WhatsApp dërgon përmes urës lokale — kurrë Channex.
+            if (! $thread->whatsapp_jid) {
+                return back()->with('error', 'Kjo bisedë s\'ka numër WhatsApp të lidhur.');
+            }
 
-            return back()->with('error', 'Nuk u dërgua dot mesazhi. Provo sërish.');
+            try {
+                $sent = $whatsapp->send($thread->tenant_id, $thread->whatsapp_jid, $data['body']);
+                $whatsappMessageId = (string) ($sent['id'] ?? '') ?: null;
+            } catch (\RuntimeException $e) {
+                return back()->with('error', $e->getMessage());
+            }
+        } else {
+            if (! $thread->channex_thread_id) {
+                return back()->with('error', 'Kjo bisedë s\'ka lidhje aktive me Channex.');
+            }
+
+            try {
+                $channex->sendThreadMessage($thread->channex_thread_id, $data['body']);
+            } catch (\Throwable $e) {
+                report($e);
+
+                return back()->with('error', 'Nuk u dërgua dot mesazhi. Provo sërish.');
+            }
         }
 
         // Mirror the sent reply locally so it shows immediately (Channex may also
-        // echo it back via webhook — deduped on channex_message_id, null here).
+        // echo it back via webhook — deduped on channex_message_id, null here;
+        // ura e WhatsApp e injoron echo-n fromMe, id-ja ruhet për çdo rast).
         $thread->messages()->create([
             'channex_message_id' => null,
+            'whatsapp_message_id' => $whatsappMessageId,
             'sender' => Message::SENDER_HOST,
             'body' => $data['body'],
             'sent_at' => now(),

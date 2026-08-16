@@ -1,0 +1,19 @@
+{
+  "name": "lora-whatsapp-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ura WhatsApp QR-lite e Lora PMS — sesione Baileys per-tenant, API lokale me token, ngjarjet POST-ohen te domaini i hotelit.",
+  "main": "src/index.mjs",
+  "scripts": {
+    "start": "node src/index.mjs"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

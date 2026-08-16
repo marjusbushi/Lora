@@ -6990,7 +6990,8 @@
         "notifications": "Notifications",
         "security": "Security",
         "history": "Audit",
-        "beach": "Beach"
+        "beach": "Beach",
+        "whatsapp": "WhatsApp"
       },
       "groups": {
         "hotel": "Hotel",
@@ -7086,6 +7087,26 @@
       "checkOutLabel": "Standard check-out time",
       "futureNote": "Cancellation, prepayment and no-show policies will be added here once the policy engine is enabled.",
       "save": "Save policies"
+    },
+    "whatsapp": {
+      "title": "Hotel WhatsApp",
+      "subtitle": "Link the hotel's number with a QR scan — messages arrive in Messages like any other conversation.",
+      "warningTitle": "Warning:",
+      "warningBody": "this link uses the unofficial WhatsApp Web route. Meta may block the number — use a dedicated hotel number, never a personal one. The session can drop occasionally and needs re-scanning.",
+      "statusConnected": "Connected",
+      "statusPairing": "Pairing",
+      "statusDisconnected": "Disconnected",
+      "connectedAs": "Connected as",
+      "connectedHint": "New messages appear in Messages with the green WhatsApp badge.",
+      "disconnect": "Disconnect",
+      "confirmDisconnect": "Disconnect WhatsApp? Messages will stop arriving in Lora until you link it again.",
+      "connect": "Link with QR",
+      "disconnectedHint": "Click and scan the code with the phone holding the hotel's number: WhatsApp → Linked devices → Link a device.",
+      "qrAlt": "WhatsApp QR code",
+      "qrLoading": "Generating the QR code…",
+      "qrHint": "Open WhatsApp on the hotel phone → Linked devices → Link a device, and scan the code. The code refreshes automatically.",
+      "cancelPairing": "Cancel",
+      "bridgeOffline": "The WhatsApp bridge isn't active on this server yet — contact Lora to enable it."
     }
   },
   "shared": {
