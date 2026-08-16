@@ -19,6 +19,7 @@ class SavedReportController extends Controller
         'reports.housekeepingReport', 'reports.maintenanceSla', 'reports.recurringMaintenance',
         'reports.roomReadiness', 'reports.operationsExecutive', 'reports.guestMovements',
         'reports.inHouse', 'reports.discounts', 'reports.departmentRevenue',
+        'reports.bankPayments',
     ];
 
     public function index(Request $request): JsonResponse

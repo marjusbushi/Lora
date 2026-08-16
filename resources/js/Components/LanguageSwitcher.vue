@@ -21,15 +21,15 @@ const langs = [
             <button
                 type="button"
                 class="grid h-9 w-9 place-items-center rounded-lg text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 focus:outline-none focus:ring-2 focus:ring-accent-500/30"
-                :aria-label="locale === 'sq' ? 'Zgjidh gjuhën' : 'Choose language'"
-                :title="locale === 'sq' ? 'Gjuha' : 'Language'"
+                :aria-label="$t('shared.languageSwitcher.chooseLanguage')"
+                :title="$t('shared.languageSwitcher.language')"
             >
                 <Globe2 class="h-[18px] w-[18px]" />
             </button>
         </template>
 
         <template #content>
-            <div role="menu" :aria-label="locale === 'sq' ? 'Zgjidh gjuhën' : 'Choose language'">
+            <div role="menu" :aria-label="$t('shared.languageSwitcher.chooseLanguage')">
                 <button
                     v-for="language in langs"
                     :key="language.code"

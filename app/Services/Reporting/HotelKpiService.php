@@ -58,6 +58,9 @@ final class HotelKpiService
             }
         }
 
+        // Maintenance rooms are excluded per-day by the downtime blocks
+        // (event intervals + current-status fallback in MaintenanceDowntimeService)
+        // — the room count itself must stay total, or they'd subtract twice.
         $roomIds = Room::query()->pluck('id');
         $blocks = $this->maintenanceDowntime->forRooms($roomIds, $period);
 

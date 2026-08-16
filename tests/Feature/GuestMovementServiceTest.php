@@ -29,7 +29,7 @@ class GuestMovementServiceTest extends TestCase
         $this->reservation($this->room($type, '103'), $guest, $user, 'checked_in', '2026-07-09', '2026-08-01', 500);
         $completedArrival = $this->reservation($this->room($type, '104'), $guest, $user, 'checked_out', '2026-07-10', '2026-07-11', 60);
 
-        FolioItem::create(['reservation_id' => $arrival->id, 'description' => 'Spa', 'amount' => 20, 'type' => 'spa', 'charge_date' => '2026-07-10']);
+        FolioItem::create(['reservation_id' => $arrival->id, 'description' => 'Spa', 'amount' => 20, 'type' => 'extra', 'charge_date' => '2026-07-10']);
         FolioItem::create(['reservation_id' => $arrival->id, 'description' => 'Discount', 'amount' => 5, 'type' => 'discount', 'charge_date' => '2026-07-10']);
         Payment::create(['reservation_id' => $arrival->id, 'amount' => 40, 'method' => 'cash', 'created_by' => $user->id]);
         Payment::create(['reservation_id' => $arrival->id, 'amount' => 10, 'method' => 'cash', 'type' => 'refund', 'created_by' => $user->id]);

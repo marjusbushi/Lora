@@ -22,7 +22,7 @@ final class RecurringMaintenanceIssueService
             ])
             ->whereBetween('created_at', [$lookbackFrom, $asOf])
             ->get([
-                'id', 'room_id', 'title', 'category', 'priority', 'status',
+                'id', 'room_id', 'title', 'category', 'issue_key', 'priority', 'status',
                 'asset_name', 'asset_code', 'started_at', 'resolved_at', 'verified_at', 'closed_at', 'created_at',
             ]);
         $periodIssues = $issues->filter(fn (MaintenanceIssue $issue) => $this->inPeriod($issue, $period, $asOf));
@@ -55,6 +55,7 @@ final class RecurringMaintenanceIssueService
 
                 return ['date' => $date, 'value' => $repeatDates->filter(fn (string $repeatDate) => $repeatDate === $date)->count()];
             })->all(),
+            'groups_truncated' => max(0, $groups->count() - 50),
             'groups' => $groups->take(50)->map(fn (array $group) => collect($group)->except(['repeat_dates', 'interval_days', 'room_ids'])->all())->all(),
         ];
     }
@@ -101,6 +102,12 @@ final class RecurringMaintenanceIssueService
     {
         if ($this->normalize($issue->asset_code) !== '') {
             return 'asset:'.$this->normalize($issue->asset_code);
+        }
+
+        // Catalog type key: language- and wording-independent, so the same
+        // problem groups no matter who reported it or in which UI language.
+        if ($issue->issue_key) {
+            return implode(':', ['type', $issue->room_id ?: 'general', $issue->issue_key]);
         }
 
         $subject = $this->normalize($issue->asset_name) ?: $this->normalize($issue->title);

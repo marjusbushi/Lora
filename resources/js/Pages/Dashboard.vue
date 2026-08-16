@@ -8,6 +8,8 @@ import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import Button from '@/Components/UI/Button.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 import { channelMeta } from '@/channels';
 import {
     AlertTriangle,
@@ -40,6 +42,8 @@ const props = defineProps({
     ownerPulse: { type: Object, default: null },
     forecast: { type: Array, default: () => [] },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: null },
+    baseToPricingRate: { type: [Number, String], default: null },
 });
 
 const page = usePage();
@@ -86,10 +90,7 @@ const number = (value) => {
 const integer = (value) => Math.max(0, Math.round(number(value)));
 const percentage = (value) => Math.min(100, Math.max(0, Math.round(number(value))));
 
-const money = (value) => `${props.currency}${number(value).toLocaleString(getIntlLocale(), {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-})}`;
+const { money, moneyBase, showBase, displayRate, pricingCode } = useReportCurrency(props);
 
 const weekdaysLongSq = ['e diel', translate('admin.generated.k_06574a6a7c25'), translate('admin.generated.k_754fe3084c7e'), translate('admin.generated.k_9a7a13c77891'), 'e enjte', 'e premte', translate('admin.generated.k_d9c3b08164f5')];
 const weekdaysShortSq = ['Die', translate('admin.generated.k_ec287e95ed4c'), 'Mar', translate('admin.generated.k_12efb44b2db9'), 'Enj', 'Pre', 'Sht'];
@@ -159,6 +160,8 @@ const departures = computed(() => ({
 const housekeepingSummary = computed(() => ({
     open: integer(props.operational?.housekeeping?.open),
     rush: integer(props.operational?.housekeeping?.rush),
+    open_today: integer(props.operational?.housekeeping?.open_today),
+    open_older: integer(props.operational?.housekeeping?.open_older),
 }));
 
 const dueToday = computed(() => ({
@@ -354,7 +357,7 @@ function topChannelLabel(channel) {
                     <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
                             <Badge :variant="otaMeta.variant" dot>{{ $t('admin.generated.k_9b3821f6183d') }}</Badge>
-                            <p class="text-body-sm font-semibold text-neutral-900">{{ otaHealth.label || otaMeta.defaultLabel }}</p>
+                            <p class="flex items-center gap-1 text-body-sm font-semibold text-neutral-900">{{ otaHealth.label || otaMeta.defaultLabel }}<InfoTip :text="$t('reports360.help.dbChannex')" :label="$t('admin.generated.k_9b3821f6183d')" /></p>
                         </div>
                         <p class="mt-1 text-tiny text-neutral-500">
 {{ $t('admin.generated.k_f08ecbd00ec7') }} <template v-if="otaHealth.last_sync_at"> {{ $t('admin.generated.k_255deab1e509') }} {{ formatDateTime(otaHealth.last_sync_at) }}</template>
@@ -382,7 +385,7 @@ function topChannelLabel(channel) {
             <Card>
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <p class="text-tiny uppercase tracking-wider text-neutral-500">{{ $t('admin.generated.k_d7c19375ba4f') }}</p>
+                        <p class="flex items-center gap-1 text-tiny uppercase tracking-wider text-neutral-500">{{ $t('admin.generated.k_d7c19375ba4f') }}<InfoTip :text="$t('reports360.help.dbTonight')" :label="$t('admin.generated.k_d7c19375ba4f')" /></p>
                         <p class="mt-1 text-h2 leading-none text-primary-900">{{ occupancyTonight.pct }}%</p>
                         <p class="mt-1 text-tiny text-neutral-500">{{ occupancyTonight.sold }} {{ $t('admin.generated.k_5b67427cc9bc') }} {{ occupancyTonight.sellable }} {{ $t('admin.generated.k_13eef48ece88') }}</p>
                     </div>
@@ -393,7 +396,7 @@ function topChannelLabel(channel) {
             <Card>
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <p class="text-tiny uppercase tracking-wider text-neutral-500">{{ $t('admin.generated.k_8035f7307191') }}</p>
+                        <p class="flex items-center gap-1 text-tiny uppercase tracking-wider text-neutral-500">{{ $t('admin.generated.k_8035f7307191') }}<InfoTip :text="$t('reports360.help.dbMovements')" :label="$t('admin.generated.k_8035f7307191')" /></p>
                         <p class="mt-1 text-h2 leading-none text-primary-900">{{ arrivals.remaining }} / {{ departures.remaining }}</p>
                         <p class="mt-1 text-tiny text-neutral-500">
 {{ $t('admin.generated.k_7f877cb4ada2') }} {{ arrivals.completed }} / {{ departures.completed }}
@@ -406,10 +409,13 @@ function topChannelLabel(channel) {
             <Card>
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <p class="text-tiny uppercase tracking-wider text-neutral-500">{{ $t('admin.generated.k_16ccc03435c2') }}</p>
+                        <p class="flex items-center gap-1 text-tiny uppercase tracking-wider text-neutral-500">{{ $t('admin.generated.k_16ccc03435c2') }}<InfoTip :text="$t('reports360.help.dbCleaning')" :label="$t('admin.generated.k_16ccc03435c2')" /></p>
                         <p class="mt-1 text-h2 leading-none text-primary-900">{{ housekeepingSummary.open }}</p>
                         <p class="mt-1 text-tiny" :class="housekeepingSummary.rush ? 'text-error-700' : 'text-neutral-500'">
                             {{ housekeepingSummary.rush }} {{ $t('admin.generated.k_0b09fda106fd') }} </p>
+                        <p v-if="housekeepingSummary.open_older" class="mt-0.5 text-tiny text-warning-700">
+                            {{ $t('shared.dashboard.cleaningAge', { today: housekeepingSummary.open_today || 0, older: housekeepingSummary.open_older }) }}
+                        </p>
                     </div>
                     <Sparkles class="h-5 w-5 shrink-0 text-warning-600" aria-hidden="true" />
                 </div>
@@ -418,8 +424,9 @@ function topChannelLabel(channel) {
             <Card v-if="canViewFinancials">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
-                        <p class="text-tiny uppercase tracking-wider text-neutral-500">{{ $t('admin.generated.k_581516fba779') }}</p>
+                        <p class="flex items-center gap-1 text-tiny uppercase tracking-wider text-neutral-500">{{ $t('admin.generated.k_581516fba779') }}<InfoTip :text="$t('reports360.help.dbDueToday')" :label="$t('admin.generated.k_581516fba779')" /></p>
                         <p class="mt-1 truncate text-h2 leading-none text-primary-900">{{ money(dueToday.amount) }}</p>
+                        <p v-if="showBase" class="mt-0.5 truncate text-tiny text-neutral-400">{{ moneyBase(dueToday.amount) }}</p>
                         <p class="mt-1 text-tiny text-neutral-500">{{ dueToday.count }} {{ $t('admin.generated.k_eae396ff5c9e') }}</p>
                     </div>
                     <Wallet class="h-5 w-5 shrink-0 text-accent-600" aria-hidden="true" />
@@ -444,7 +451,7 @@ function topChannelLabel(channel) {
             <Card :padding="false" class="xl:col-span-2">
                 <div class="flex flex-col gap-2 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <h2 class="text-label font-semibold text-neutral-900">{{ $t('admin.generated.k_183abb954511') }}</h2>
+                        <h2 class="flex items-center gap-1 text-label font-semibold text-neutral-900">{{ $t('admin.generated.k_183abb954511') }}<InfoTip :text="$t('reports360.help.dbRoomFlow')" :label="$t('admin.generated.k_183abb954511')" /></h2>
                         <p class="mt-0.5 text-tiny text-neutral-500">{{ $t('admin.generated.k_ed305042322c') }}</p>
                     </div>
                     <Button
@@ -454,7 +461,7 @@ function topChannelLabel(channel) {
                         :aria-expanded="showAllRooms"
                         @click="showAllRooms = !showAllRooms"
                     >
-                        {{ showAllRooms ? $t('admin.generated.k_e0c24d45d7cc') : `Të gjitha (${roomRows.length})` }}
+                        {{ showAllRooms ? $t('admin.generated.k_e0c24d45d7cc') : $t('shared.dashboard.allRooms', { count: roomRows.length }) }}
                         <template #icon-right>
                             <ChevronUp v-if="showAllRooms" class="h-4 w-4" aria-hidden="true" />
                             <ChevronDown v-else class="h-4 w-4" aria-hidden="true" />
@@ -598,7 +605,7 @@ function topChannelLabel(channel) {
             <Card :padding="false">
                 <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
                     <div>
-                        <h2 class="text-label font-semibold text-neutral-900">{{ $t('admin.generated.k_916e8f743d0a') }}</h2>
+                        <h2 class="flex items-center gap-1 text-label font-semibold text-neutral-900">{{ $t('admin.generated.k_916e8f743d0a') }}<InfoTip :text="$t('reports360.help.dbActions')" :label="$t('admin.generated.k_916e8f743d0a')" /></h2>
                         <p class="mt-0.5 text-tiny text-neutral-500">{{ $t('admin.generated.k_371ddcba188c') }}</p>
                     </div>
                     <Badge :variant="actionRows.length ? 'warning' : 'success'">{{ actionIssueCount }} {{ $t('admin.generated.k_8523c52f2bd2') }}</Badge>
@@ -631,7 +638,7 @@ function topChannelLabel(channel) {
                 </div>
 
                 <div v-if="canViewPos && openPos.count" class="border-t border-neutral-200 bg-neutral-50 px-5 py-3 text-tiny text-neutral-600">
-                    {{ openPos.count }} {{ $t('admin.generated.k_7c6f6ad916fe') }}<span v-if="canViewFinancials"> · {{ money(openPos.total) }}</span>
+                    {{ openPos.count }} {{ $t('admin.generated.k_7c6f6ad916fe') }}<span v-if="canViewFinancials"> · {{ money(openPos.total) }}<span v-if="showBase" class="text-neutral-400"> ({{ moneyBase(openPos.total) }})</span></span>
                 </div>
             </Card>
         </section>
@@ -645,7 +652,7 @@ function topChannelLabel(channel) {
             <Card :class="canViewFinancials && ownerPulse ? 'xl:col-span-2' : ''">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                        <h2 class="text-label font-semibold text-neutral-900">{{ $t('admin.generated.k_f2aca9e6d758') }}</h2>
+                        <h2 class="flex items-center gap-1 text-label font-semibold text-neutral-900">{{ $t('admin.generated.k_f2aca9e6d758') }}<InfoTip :text="$t('reports360.help.dbForecast')" :label="$t('admin.generated.k_f2aca9e6d758')" /></h2>
                         <p class="mt-0.5 text-tiny text-neutral-500">
                             <template v-if="forecastAverage !== null">{{ $t('admin.generated.k_f1d9a9f9911a') }} {{ forecastAverage }}{{ $t('admin.generated.k_20ee9d7a8681') }}</template>
                             <template v-else>{{ $t('admin.generated.k_950f20c8a542') }}</template>
@@ -693,8 +700,9 @@ function topChannelLabel(channel) {
             <Card v-if="canViewFinancials && ownerPulse">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <h2 class="text-label font-semibold text-neutral-900">{{ $t('admin.generated.k_623070d33725') }}</h2>
+                        <h2 class="flex items-center gap-1 text-label font-semibold text-neutral-900">{{ $t('admin.generated.k_623070d33725') }}<InfoTip :text="$t('reports360.help.dbPulse')" :label="$t('admin.generated.k_623070d33725')" /></h2>
                         <p class="mt-0.5 text-tiny text-neutral-500">{{ $t('admin.generated.k_c4fcd75b8f36') }}</p>
+                        <p v-if="displayRate" class="mt-0.5 text-tiny text-neutral-400">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</p>
                     </div>
                     <Wallet class="h-5 w-5 text-accent-600" aria-hidden="true" />
                 </div>
@@ -704,12 +712,13 @@ function topChannelLabel(channel) {
                         <dt class="text-body-sm text-neutral-600">{{ $t('admin.generated.k_3a3c8fb8eb08') }}</dt>
                         <dd class="text-right text-body-sm font-semibold text-primary-900">
                             {{ money(ownerPulse.collected_today) }}
+                            <span v-if="showBase" class="mt-0.5 block text-tiny font-normal text-neutral-400">{{ moneyBase(ownerPulse.collected_today) }}</span>
                             <span class="mt-0.5 block text-tiny font-normal text-neutral-500">{{ $t('admin.generated.k_35f3acff7252') }} {{ money(ownerPulse.cash_today) }} {{ $t('admin.generated.k_c787bff3610c') }} {{ money(ownerPulse.card_today) }}</span>
                         </dd>
                     </div>
                     <div class="flex items-start justify-between gap-4 py-3">
                         <dt class="text-body-sm text-neutral-600">{{ $t('admin.generated.k_d141c6dc5de3') }}</dt>
-                        <dd class="text-right text-body-sm font-semibold text-primary-900">{{ money(ownerPulse.collected_month) }}</dd>
+                        <dd class="text-right text-body-sm font-semibold text-primary-900">{{ money(ownerPulse.collected_month) }}<span v-if="showBase" class="mt-0.5 block text-tiny font-normal text-neutral-400">{{ moneyBase(ownerPulse.collected_month) }}</span></dd>
                     </div>
                     <div class="flex items-start justify-between gap-4 py-3">
                         <dt class="text-body-sm text-neutral-600">{{ $t('admin.generated.k_972d8399b5dc') }}</dt>

@@ -13,6 +13,7 @@ class VerifyTenantIntegrity extends Command
     protected $signature = 'tenants:verify-integrity
                             {--snapshot= : Write a PII-free counts/totals baseline to this JSON file}
                             {--compare= : Compare current counts/totals with this JSON baseline}
+                            {--verify-storage : Verify every supported database file reference exists on its local/public disk}
                             {--allow-additive-schema : Allow new tables and permission/role growth while preserving every existing count/total}
                             {--allow-additive-settings : Allow setting rows to grow for existing tenants while preserving every other count/total}';
 
@@ -36,6 +37,9 @@ class VerifyTenantIntegrity extends Command
         }
 
         $violations = $auditor->violations();
+        if ($this->option('verify-storage')) {
+            array_push($violations, ...$auditor->storageViolations());
+        }
         if ($violations !== []) {
             foreach ($violations as $violation) {
                 $this->error($violation);
@@ -103,7 +107,11 @@ class VerifyTenantIntegrity extends Command
     private function writeSnapshot(string $path, array $snapshot): void
     {
         $directory = dirname($path);
-        if (! is_dir($directory) || ! is_writable($directory)) {
+        $pathExists = file_exists($path) || is_link($path);
+        if ($pathExists && (is_link($path) || ! is_file($path) || ! is_writable($path))) {
+            throw new RuntimeException("Snapshot target is not a writable regular file: {$path}");
+        }
+        if (! $pathExists && (! is_dir($directory) || ! is_writable($directory))) {
             throw new RuntimeException("Snapshot directory is not writable: {$directory}");
         }
 
@@ -172,6 +180,28 @@ class VerifyTenantIntegrity extends Command
                 continue;
             }
 
+            // The category-unification migration converts existing POS menu
+            // categories into inventory tree nodes, so per-tenant category
+            // counts may only ever GROW under an approved additive migration.
+            if ($allowAdditiveSchema && str_starts_with($path, 'tenant_counts.inventory_categories.')) {
+                if (! is_int($expected) || ! is_int($actual) || $actual < $expected) {
+                    $changes[] = $path;
+                }
+
+                continue;
+            }
+
+            // A migration shipping a NEW module grants its entitlement to the
+            // existing tenants, so per-tenant entitlement counts may only ever
+            // GROW under an approved additive migration.
+            if ($allowAdditiveSchema && str_starts_with($path, 'tenant_counts.tenant_module_entitlements.')) {
+                if (! is_int($expected) || ! is_int($actual) || $actual < $expected) {
+                    $changes[] = $path;
+                }
+
+                continue;
+            }
+
             if ($allowAdditiveSettings
                 && str_starts_with($path, 'tenant_counts.settings.')
                 && is_int($expected)
@@ -200,7 +230,14 @@ class VerifyTenantIntegrity extends Command
                 // inside an existing table/metric remain data changes.
                 if (! $allowAdditiveSchema || ! in_array($path, ['tenant_counts', 'financial_totals'], true)) {
                     foreach (array_keys(array_diff_key($actual, $expected)) as $addedKey) {
-                        $changes[] = "{$path}.{$addedKey}";
+                        $addedPath = "{$path}.{$addedKey}";
+                        // A tenant gaining its FIRST inventory categories during
+                        // the category-unification migration is approved growth
+                        // too — the tenant id is absent from the baseline map.
+                        if ($allowAdditiveSchema && str_starts_with($addedPath, 'tenant_counts.inventory_categories.')) {
+                            continue;
+                        }
+                        $changes[] = $addedPath;
                     }
                 }
 

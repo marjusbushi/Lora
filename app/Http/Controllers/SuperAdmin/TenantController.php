@@ -12,7 +12,9 @@ use App\Models\TenantIntegration;
 use App\Models\User;
 use App\Services\AiOAuthGrantManager;
 use App\Services\BaseCurrency;
+use App\Services\DomainProvisioner;
 use App\Services\FatureAlClient;
+use App\Services\ForgeClient;
 use App\Services\TenantBillingService;
 use App\Services\TenantHandoff;
 use App\Services\TenantOnboardingService;
@@ -60,6 +62,9 @@ class TenantController extends Controller
                         'id' => $domain->id,
                         'domain' => $domain->domain,
                         'is_primary' => (bool) $domain->is_primary,
+                        'status' => $domain->status,
+                        'status_message' => $domain->status_message,
+                        'verified_at' => $domain->verified_at?->toIso8601String(),
                     ])->values(),
                     'created_at' => $tenant->created_at?->toIso8601String(),
                     'billing' => $billing->summary($tenant),
@@ -137,7 +142,11 @@ class TenantController extends Controller
                     'id' => $domain->id,
                     'domain' => $domain->domain,
                     'is_primary' => (bool) $domain->is_primary,
+                    'status' => $domain->status,
+                    'status_message' => $domain->status_message,
+                    'verified_at' => $domain->verified_at?->toIso8601String(),
                 ])->values(),
+                'domainServerIp' => ForgeClient::serverIp(),
                 'billing' => $summary,
                 'mrr_cents' => $mrrCents,
                 'integrations' => $this->integrationSummaries($tenant),
@@ -501,6 +510,9 @@ class TenantController extends Controller
         $rules = [
             'status' => ['required', Rule::in(['trialing', 'active', 'past_due', 'suspended', 'canceled'])],
             'billing_cycle' => ['required', Rule::in(['monthly', 'annual'])],
+            // 'sometimes': sirtari i listës së tenant-ëve s'e dërgon fushën — atëherë
+            // ruhet vlera ekzistuese e abonimit (fallback në TenantBillingService::update).
+            'contract_years' => ['sometimes', 'required', Rule::in(array_keys(config('lora_modules.contract_discounts', [1 => 10])))],
             'current_period_ends_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'modules' => ['required', 'array:'.implode(',', $moduleCodes)],
@@ -788,6 +800,48 @@ class TenantController extends Controller
         $context->run($tenant, fn () => AuditLog::record('tenant.domain.primary', $tenant, ['domain' => $domain->domain]));
 
         return back()->with('success', "{$domain->domain} u caktua si primar.");
+    }
+
+    public function verifyDomainDns(Tenant $tenant, TenantDomain $domain, DomainProvisioner $provisioner, TenantContext $context): RedirectResponse
+    {
+        $verified = $provisioner->verifyDns($domain);
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.domain.verify_dns', $tenant, [
+            'domain' => $domain->domain,
+            'verified' => $verified,
+        ]));
+
+        return $verified
+            ? back()->with('success', "DNS i {$domain->domain} tregon te serveri — gati për provizionim.")
+            : back()->with('error', $domain->fresh()->status_message ?: 'DNS ende i paverifikuar.');
+    }
+
+    public function provisionDomain(Tenant $tenant, TenantDomain $domain, DomainProvisioner $provisioner, TenantContext $context): RedirectResponse
+    {
+        $active = $provisioner->provision($domain);
+
+        $context->run($tenant, fn () => AuditLog::record('tenant.domain.provision', $tenant, [
+            'domain' => $domain->domain,
+            'status' => $domain->fresh()->status,
+        ]));
+
+        $fresh = $domain->fresh();
+
+        return match (true) {
+            $active => back()->with('success', "{$domain->domain} është aktiv me SSL."),
+            $fresh->status === TenantDomain::STATUS_PROVISIONING => back()->with('success', $fresh->status_message ?: 'Provizionimi nisi — rifresko statusin pas ~1 minute.'),
+            default => back()->with('error', $fresh->status_message ?: 'Provizionimi nuk nisi.'),
+        };
+    }
+
+    public function refreshDomainStatus(Tenant $tenant, TenantDomain $domain, DomainProvisioner $provisioner): RedirectResponse
+    {
+        $active = $provisioner->refreshStatus($domain);
+        $fresh = $domain->fresh();
+
+        return $active
+            ? back()->with('success', "{$domain->domain} është aktiv me SSL.")
+            : back()->with($fresh->status === TenantDomain::STATUS_FAILED ? 'error' : 'success', $fresh->status_message ?: 'Statusi u rifreskua.');
     }
 
     /** Presence + non-secret config only — secret values never leave the server. */

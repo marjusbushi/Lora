@@ -20,7 +20,7 @@ final class ChannelPerformanceService
             ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
             ->whereDate('check_out_date', '>', $period->from->toDateString())
-            ->get(['id', 'channel', 'check_in_date', 'check_out_date', 'total_amount_base', 'commission_amount_base']);
+            ->get(['id', 'channel', 'channel_ref', 'check_in_date', 'check_out_date', 'total_amount_base', 'commission_amount_base']);
         $discountFactors = $this->roomRevenue->discountFactors($reservations->pluck('id')->all());
 
         $daily = [];
@@ -100,8 +100,21 @@ final class ChannelPerformanceService
             'revenue_share' => $gross > 0 ? round($row['gross_revenue'] / $gross * 100, 1) : 0,
         ])->all();
 
+        // Data-quality guard: an OTA BOOKING with no commission silently deflates
+        // the blended rate (the Aug-2026 migration gap sat at 5.1% unnoticed).
+        // Grouped by channel_ref because a multi-room booking carries its whole
+        // commission on the first room row — siblings legitimately hold 0.
+        $otaMissingCommission = $reservations
+            ->filter(fn (Reservation $reservation) => Reservation::normalizeChannel($reservation->channel) !== 'direct')
+            ->groupBy(fn (Reservation $reservation) => filled($reservation->channel_ref)
+                ? 'ref:'.$reservation->channel_ref
+                : 'res:'.$reservation->id)
+            ->filter(fn ($booking) => (float) $booking->sum('commission_amount_base') <= 0)
+            ->count();
+
         return [
             'period' => $period->toArray(),
+            'data_quality' => ['ota_missing_commission' => $otaMissingCommission],
             'totals' => [
                 'bookings' => (int) collect($rows)->sum('bookings'),
                 'nights' => $nights,

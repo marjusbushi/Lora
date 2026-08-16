@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
 use App\Models\InventoryTransfer;
@@ -28,6 +29,7 @@ class InventoryController extends Controller
     {
         Warehouse::ensureDefault();
         $items = InventoryItem::query()
+            ->with('category:id,name')
             ->where('is_active', true)
             ->withSum('movements as stock_quantity', 'quantity')
             ->orderBy('name')
@@ -63,8 +65,14 @@ class InventoryController extends Controller
             ? $request->input('status')
             : 'active';
 
+        $categories = $this->categoryRows();
+        $categoryFilter = $request->integer('category_id');
+
         $items = InventoryItem::query()
-            ->with('posMenuItem:id,inventory_item_id,menu_category_id,warehouse_id')
+            ->with([
+                'posMenuItem:id,inventory_item_id,menu_category_id,warehouse_id',
+                'category:id,name,parent_id',
+            ])
             ->withSum('movements as stock_quantity', 'quantity')
             ->when($status === 'active', fn ($query) => $query->where('is_active', true))
             ->when($status === 'inactive', fn ($query) => $query->where('is_active', false))
@@ -73,6 +81,11 @@ class InventoryController extends Controller
                     ->orWhere('sku', 'like', "%{$search}%")
                     ->orWhere('barcode', 'like', "%{$search}%");
             }))
+            // Filtering by a category includes its whole subtree.
+            ->when($categoryFilter, fn ($query, $categoryId) => $query->whereIn(
+                'category_id',
+                $this->categoryWithDescendants($categories, $categoryId),
+            ))
             ->when($request->integer('item_id'), fn ($query, $id) => $query->whereKey($id))
             ->orderBy('name')
             ->get();
@@ -103,9 +116,12 @@ class InventoryController extends Controller
                 return $row;
             })->values(),
             'warehouses' => Warehouse::where('is_active', true)->orderByDesc('is_default')->orderBy('name')->get(['id', 'name']),
-            'posCategories' => MenuCategory::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'outlet']),
-            'filters' => ['search' => $search, 'status' => $status],
-            'can' => ['manageInventory' => $request->user()->can('manage_inventory')],
+            'categories' => $categories,
+            'filters' => ['search' => $search, 'status' => $status, 'category_id' => $categoryFilter ?: null],
+            'can' => [
+                'manageInventory' => $request->user()->can('manage_inventory'),
+                'writeOffs' => $request->user()->can('manage_stock_writeoffs'),
+            ],
         ]);
     }
 
@@ -128,7 +144,7 @@ class InventoryController extends Controller
                 'name' => trim($data['name']),
                 'sku' => mb_strtoupper(trim($data['sku'])),
                 'barcode' => ! empty($data['barcode']) ? trim($data['barcode']) : null,
-                'category' => ! empty($data['category']) ? trim($data['category']) : null,
+                'category_id' => $data['category_id'] ?? null,
                 'type' => $data['type'],
                 'unit' => $data['unit'],
                 'image_path' => $data['image_path'],
@@ -176,7 +192,7 @@ class InventoryController extends Controller
                 'name' => trim($data['name']),
                 'sku' => mb_strtoupper(trim($data['sku'])),
                 'barcode' => ! empty($data['barcode']) ? trim($data['barcode']) : null,
-                'category' => ! empty($data['category']) ? trim($data['category']) : null,
+                'category_id' => $data['category_id'] ?? null,
                 'type' => $data['type'],
                 'unit' => $data['unit'],
                 'image_path' => $newImage ?: (($data['remove_image'] ?? false) ? null : $item->image_path),
@@ -208,7 +224,7 @@ class InventoryController extends Controller
 
         return Inertia::render('Inventory/Warehouses', [
             'warehouses' => $this->warehouseRows(),
-            'items' => InventoryItem::query()->where('is_active', true)
+            'items' => InventoryItem::query()->with('category:id,name')->where('is_active', true)
                 ->withSum('movements as stock_quantity', 'quantity')
                 ->orderBy('name')->get()->map(function ($item) use ($warehouseStock) {
                     return $this->itemRow($item) + [
@@ -290,20 +306,155 @@ class InventoryController extends Controller
         return back()->with('success', 'Transferimi i stokut u regjistrua.');
     }
 
+    public function storeCategory(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:80'],
+            'parent_id' => ['nullable', TenantRule::exists('inventory_categories')],
+        ]);
+
+        $parent = ! empty($data['parent_id']) ? InventoryCategory::findOrFail($data['parent_id']) : null;
+        // Roots may carry two levels of subcategories — a level-2 node cannot parent.
+        if ($parent && $parent->depth() >= 2) {
+            throw ValidationException::withMessages(['parent_id' => 'Kategoritë lejojnë deri në dy nivele nën-kategorish.']);
+        }
+        $this->assertCategoryNameFree(trim($data['name']), $parent?->id);
+
+        InventoryCategory::create(['name' => trim($data['name']), 'parent_id' => $parent?->id]);
+
+        return back()->with('success', 'Kategoria u krijua.');
+    }
+
+    /** Rename only — re-parenting could sink a whole subtree below the depth cap. */
+    public function updateCategory(Request $request, InventoryCategory $category): RedirectResponse
+    {
+        $data = $request->validate(['name' => ['required', 'string', 'max:80']]);
+        $this->assertCategoryNameFree(trim($data['name']), $category->parent_id, $category->id);
+
+        $category->update(['name' => trim($data['name'])]);
+        // The tree owns the names — linked POS menu groups follow.
+        $category->menuCategories()->update(['name' => $category->name]);
+
+        return back()->with('success', 'Kategoria u riemërtua.');
+    }
+
+    public function destroyCategory(InventoryCategory $category): RedirectResponse
+    {
+        if ($category->children()->exists() || $category->items()->exists()) {
+            return back()->with('error', 'Fshihen vetëm kategoritë bosh — pa nën-kategori dhe pa artikuj.');
+        }
+        if ($category->menuCategories()->whereHas('items')->exists()) {
+            return back()->with('error', 'Kategoria mban një grup POS me artikuj menuje — zbraze menunë fillimisht.');
+        }
+
+        // An empty linked POS group dies with its node.
+        $category->menuCategories()->delete();
+        $category->delete();
+
+        return back()->with('success', 'Kategoria u fshi.');
+    }
+
+    /** The DB unique cannot catch root duplicates (NULL parent) — enforce here for every level. */
+    private function assertCategoryNameFree(string $name, ?int $parentId, ?int $ignoreId = null): void
+    {
+        $taken = InventoryCategory::query()
+            ->where('name', $name)
+            ->where('parent_id', $parentId)
+            ->when($ignoreId, fn ($query, $id) => $query->where('id', '!=', $id))
+            ->exists();
+
+        if ($taken) {
+            throw ValidationException::withMessages(['name' => 'Ekziston një kategori me këtë emër në të njëjtin nivel.']);
+        }
+    }
+
+    /**
+     * Flat, depth-annotated tree (roots first, children right below their
+     * parent) — one shape serves the hierarchical select, the management
+     * modal and the subtree filter.
+     *
+     * @return list<array{id:int,name:string,parent_id:?int,depth:int,items_count:int,children_count:int}>
+     */
+    private function categoryRows(): array
+    {
+        $categories = InventoryCategory::query()
+            ->withCount(['items', 'children'])
+            ->orderBy('name')
+            ->get(['id', 'name', 'parent_id']);
+        $byParent = $categories->groupBy(fn (InventoryCategory $category) => $category->parent_id ?? 0);
+
+        $flat = [];
+        $walk = function (int $parentKey, int $depth) use (&$walk, $byParent, &$flat) {
+            foreach ($byParent->get($parentKey, collect()) as $category) {
+                $flat[] = [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                    'parent_id' => $category->parent_id,
+                    'depth' => $depth,
+                    'items_count' => $category->items_count,
+                    'children_count' => $category->children_count,
+                ];
+                $walk($category->id, $depth + 1);
+            }
+        };
+        $walk(0, 0);
+
+        return $flat;
+    }
+
+    /** @return list<int> the category itself plus every descendant id */
+    private function categoryWithDescendants(array $categories, int $categoryId): array
+    {
+        $ids = [$categoryId];
+        $added = true;
+        while ($added) {
+            $added = false;
+            foreach ($categories as $category) {
+                if (in_array($category['parent_id'], $ids, true) && ! in_array($category['id'], $ids, true)) {
+                    $ids[] = $category['id'];
+                    $added = true;
+                }
+            }
+        }
+
+        return $ids;
+    }
+
+    public function writeOff(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'inventory_item_id' => ['required', TenantRule::exists('inventory_items')->where('is_active', true)->whereNot('type', 'service')],
+            'warehouse_id' => ['required', TenantRule::exists('warehouses')->where('is_active', true)],
+            'quantity' => ['required', 'numeric', 'min:0.0001', 'max:9999999'],
+            'reason' => ['required', Rule::in(array_keys(InventoryLedger::WRITE_OFF_REASONS))],
+            'notes' => ['nullable', 'string', 'max:300'],
+        ]);
+
+        $this->ledger->writeOff(
+            InventoryItem::findOrFail($data['inventory_item_id']),
+            Warehouse::findOrFail($data['warehouse_id']),
+            (float) $data['quantity'],
+            $data['reason'],
+            $data['notes'] ?? null,
+            $request->user()->id,
+        );
+
+        return back()->with('success', 'Artikulli u nxor nga stoku.');
+    }
+
     private function itemData(Request $request, ?int $ignoreId = null, bool $includeInitial = true): array
     {
         $rules = [
             'name' => ['required', 'string', 'max:150'],
             'sku' => ['required', 'string', 'max:60', TenantRule::unique('inventory_items', 'sku')->ignore($ignoreId)],
             'barcode' => ['nullable', 'string', 'max:80', TenantRule::unique('inventory_items', 'barcode')->ignore($ignoreId)],
-            'category' => ['nullable', 'string', 'max:80'],
+            'category_id' => ['nullable', TenantRule::exists('inventory_categories')],
             'type' => ['required', Rule::in(['product', 'ingredient', 'consumable', 'service'])],
             'unit' => ['required', Rule::in(['piece', 'kg', 'liter', 'pack'])],
             'selling_price' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_image' => ['nullable', 'boolean'],
             'sell_in_pos' => ['nullable', 'boolean'],
-            'pos_menu_category_id' => ['nullable', TenantRule::exists('menu_categories')],
             'pos_warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
             'sell_in_rooms' => ['nullable', 'boolean'],
             'room_selling_price' => ['nullable', 'numeric', 'min:0.01', 'max:9999999'],
@@ -324,8 +475,9 @@ class InventoryController extends Controller
         if (($data['sell_in_pos'] ?? false) && $data['type'] !== 'product') {
             throw ValidationException::withMessages(['sell_in_pos' => 'Vetëm produktet mund të publikohen në POS.']);
         }
-        if (($data['sell_in_pos'] ?? false) && empty($data['pos_menu_category_id'])) {
-            throw ValidationException::withMessages(['pos_menu_category_id' => 'Zgjidh kategorinë e POS-it.']);
+        if (($data['sell_in_pos'] ?? false) && empty($data['category_id'])) {
+            // The POS group derives from the article's own category — one system.
+            throw ValidationException::withMessages(['category_id' => 'Cakto kategorinë e artikullit para publikimit në POS.']);
         }
         if (($data['sell_in_pos'] ?? false) && empty($data['pos_warehouse_id'])) {
             throw ValidationException::withMessages(['pos_warehouse_id' => 'Zgjidh magazinën e POS-it.']);
@@ -368,14 +520,14 @@ class InventoryController extends Controller
             'name' => $item->name,
             'sku' => $item->sku,
             'barcode' => $item->barcode,
-            'category' => $item->category,
+            'category' => $item->category?->name,
+            'category_id' => $item->category_id,
             'type' => $item->type,
             'unit' => $item->unit,
             'image_path' => $item->image_path,
             'average_cost' => (float) $item->average_cost,
             'selling_price' => $item->selling_price !== null ? (float) $item->selling_price : null,
             'sell_in_pos' => $item->sell_in_pos,
-            'pos_menu_category_id' => $item->posMenuItem?->menu_category_id,
             'pos_warehouse_id' => $item->posMenuItem?->warehouse_id,
             'sell_in_rooms' => $item->sell_in_rooms,
             'room_selling_price' => $item->room_selling_price !== null ? (float) $item->room_selling_price : null,
@@ -401,7 +553,9 @@ class InventoryController extends Controller
         $menuItem = MenuItem::updateOrCreate(
             ['inventory_item_id' => $item->id],
             [
-                'menu_category_id' => $data['pos_menu_category_id'],
+                'menu_category_id' => MenuCategory::forInventoryCategory(
+                    InventoryCategory::findOrFail($item->category_id),
+                )->id,
                 'warehouse_id' => $data['pos_warehouse_id'],
                 'name' => $item->name,
                 'price' => $item->selling_price,

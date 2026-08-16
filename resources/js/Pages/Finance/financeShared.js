@@ -1,8 +1,22 @@
+import { usePage } from '@inertiajs/vue3';
+
 /** Shared display helpers for the Finance screens. */
-export function money(v, currency = 'EUR') {
+
+// Finance/inventory amounts live in the tenant BASE currency — resolve it from
+// the dedicated shared prop (never `settings`, which pages can shadow). The
+// try/catch keeps the helper safe if called before the Inertia app boots.
+function baseCurrencyCode() {
+    try {
+        return usePage().props?.currencies?.base_code || 'EUR';
+    } catch {
+        return 'EUR';
+    }
+}
+
+export function money(v, currency = null) {
     return new Intl.NumberFormat('de-DE', {
         style: 'currency',
-        currency: currency || 'EUR',
+        currency: currency || baseCurrencyCode(),
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     }).format(Number(v || 0));

@@ -226,8 +226,8 @@ class WebsiteController extends Controller
             'room_id' => ['required', TenantRule::exists('rooms')],
             'check_in' => ['required', 'date', 'after_or_equal:today'],
             'check_out' => ['required', 'date', 'after:check_in'],
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
+            'first_name' => ['required', 'string', 'max:255', new \App\Rules\ContainsLetters(2)],
+            'last_name' => ['required', 'string', 'max:255', new \App\Rules\ContainsLetters(1)],
             'email' => ['required', 'email', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
             'nationality' => ['nullable', 'string', 'max:3'],
@@ -484,6 +484,13 @@ class WebsiteController extends Controller
             if ($reservation) {
                 try {
                     app(PokPayments::class)->settle($reservation); // confirms a payment OR reverses a refund
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            } elseif ($beach = \App\Models\BeachReservation::where('pok_order_id', $orderId)->first()) {
+                // I njëjti webhook mbulon edhe pagesat e çadrave të plazhit.
+                try {
+                    app(\App\Services\BeachPokPayments::class)->settle($beach);
                 } catch (\Throwable $e) {
                     report($e);
                 }

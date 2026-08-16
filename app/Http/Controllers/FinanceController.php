@@ -8,6 +8,7 @@ use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
 use App\Models\FiscalDocument;
 use App\Models\FolioItem;
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -22,6 +23,7 @@ use App\Models\Warehouse;
 use App\Services\BaseCurrency;
 use App\Services\BillDocumentAiExtractor;
 use App\Services\CurrencyRates;
+use App\Services\FinanceLedger;
 use App\Services\GeminiClient;
 use App\Services\InventoryLedger;
 use App\Services\ReservationMoney;
@@ -431,6 +433,40 @@ class FinanceController extends Controller
         ]));
     }
 
+    /** Where POS money lands: shared hotel accounts, split cash drawer, or split cash+bank. */
+    public function updatePosAccountMode(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'mode' => ['required', Rule::in([
+                FinanceLedger::POS_MODE_SHARED,
+                FinanceLedger::POS_MODE_SPLIT_CASH,
+                FinanceLedger::POS_MODE_SPLIT_BANK,
+                FinanceLedger::POS_MODE_SPLIT_ALL,
+            ])],
+        ]);
+
+        Setting::set('finance.pos_account_mode', $data['mode']);
+
+        return back()->with('success', 'Modaliteti i llogarive POS u ruajt — pagesat e reja ndjekin routimin e ri, historiku nuk preket.');
+    }
+
+    /** Njësoj si POS-i: ku shkojnë paratë e plazhit — bashkë me hotelin apo në arkën/bankën e vet. */
+    public function updateBeachAccountMode(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'mode' => ['required', Rule::in([
+                FinanceLedger::POS_MODE_SHARED,
+                FinanceLedger::POS_MODE_SPLIT_CASH,
+                FinanceLedger::POS_MODE_SPLIT_BANK,
+                FinanceLedger::POS_MODE_SPLIT_ALL,
+            ])],
+        ]);
+
+        Setting::set('finance.beach_account_mode', $data['mode']);
+
+        return back()->with('success', 'Modaliteti i llogarive të plazhit u ruajt — pagesat e reja ndjekin routimin e ri, historiku nuk preket.');
+    }
+
     /** New cash box or bank account (owner-only via manage_finance_settings). */
     public function storeAccount(Request $request): RedirectResponse
     {
@@ -465,9 +501,10 @@ class FinanceController extends Controller
      */
     public function toggleAccount(Request $request, FinanceAccount $account): RedirectResponse
     {
-        if ($account->is_active && $account->currency === BaseCurrency::code()) {
+        if ($account->is_active && $account->scope === 'general' && $account->currency === BaseCurrency::code()) {
             $lastOfType = ! FinanceAccount::where('type', $account->type)
                 ->where('currency', BaseCurrency::code())
+                ->where('scope', 'general')
                 ->where('is_active', true)->where('id', '!=', $account->id)->exists();
             if ($lastOfType) {
                 $lloji = $account->type === 'cash' ? 'arkë' : 'bankë';
@@ -758,13 +795,11 @@ class FinanceController extends Controller
         $today = CarbonImmutable::today();
 
         // This month's spend per category (paid or not — commitment view),
-        // plus the auto OTA commissions which are never ledger rows.
+        // plus the auto OTA commissions which are never ledger rows. The
+        // breakdown reads the LINES (item → tree root), so mixed bills split
+        // accurately instead of following one hand-picked document category.
         $monthStart = $today->startOfMonth();
-        $byCategory = Bill::where('issue_date', '>=', $monthStart->toDateString())
-            ->get(['category', 'total_base'])
-            ->groupBy('category')
-            ->map(fn ($g) => round((float) $g->sum('total_base'), 2))
-            ->sortDesc();
+        $byCategory = Bill::spendByItemCategory($monthStart->toDateString());
         $commissions = (float) Reservation::whereNotIn('status', ['cancelled'])
             ->whereDate('check_in_date', '>=', $monthStart->toDateString())
             ->sum('commission_amount');
@@ -813,7 +848,9 @@ class FinanceController extends Controller
             'accounts' => $this->visibleAccounts($request),
             'suppliers' => Supplier::where('is_active', true)->orderBy('name')
                 ->get(['id', 'name', 'nipt', 'category', 'payment_terms_days']),
-            'categories' => Bill::categories(),
+            // Filter options are the categories that actually exist on bills
+            // (auto-derived tree roots + legacy hand-picked names).
+            'categories' => Bill::query()->whereNotNull('category')->distinct()->orderBy('category')->pluck('category')->values(),
             'filters' => ['filter' => $filter, 'category' => $category, 'search' => $search, 'bill_id' => $billId],
             'byCategory' => $byCategory,
             'summary' => $summary,
@@ -909,7 +946,8 @@ class FinanceController extends Controller
         $data = $request->validate([
             'supplier_id' => ['required', 'integer', TenantRule::exists('suppliers')],
             'number' => ['nullable', 'string', 'max:60'],
-            'category' => ['required', 'string', 'max:60', Rule::in(Bill::categories())],
+            // The expense category is DERIVED from the lines after save — the
+            // items know what was bought better than a hand-picked dropdown.
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'currency' => ['required', Rule::in(config('lora.tenant_currencies', ['EUR', 'ALL']))],
@@ -971,7 +1009,10 @@ class FinanceController extends Controller
         }
 
         DB::transaction(function () use ($data, $lines, $request) {
-            $bill = Bill::create(collect($data)->except(['items', 'receive_stock'])->all() + ['status' => 'open']);
+            $bill = Bill::create(collect($data)->except(['items', 'receive_stock'])->all() + [
+                'status' => 'open',
+                'category' => Bill::UNCATEGORIZED,
+            ]);
             if (! $bill->number) {
                 $bill->update(['number' => $this->automaticBillNumber($bill)]);
             }
@@ -1003,6 +1044,13 @@ class FinanceController extends Controller
                     $this->inventoryLedger->receiveBillItem($line, $request->user()->id);
                 }
             }
+
+            // The stored category keeps the list filter and supplier views
+            // working — auto-filled from what the bill actually contains.
+            $dominant = $bill->fresh()->dominantItemCategory();
+            if ($dominant) {
+                $bill->update(['category' => $dominant]);
+            }
         });
 
         return redirect()->route('finance.bills')->with('success', $lines->isNotEmpty()
@@ -1022,7 +1070,7 @@ class FinanceController extends Controller
         $rules = [
             'supplier_id' => ['required', 'integer', TenantRule::exists('suppliers')],
             'number' => ['nullable', 'string', 'max:60'],
-            'category' => ['required', 'string', 'max:60', Rule::in(Bill::categories())],
+            // Category is derived from the lines after save, never hand-picked.
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'notes' => ['nullable', 'string', 'max:500'],
@@ -1157,6 +1205,9 @@ class FinanceController extends Controller
                     $this->inventoryLedger->receiveBillItem($line, $request->user()->id);
                 }
             }
+
+            $dominant = $lockedBill->fresh()->dominantItemCategory();
+            $lockedBill->update(['category' => $dominant ?? ($lockedBill->category ?: Bill::UNCATEGORIZED)]);
         });
 
         return redirect()->route('finance.bills')->with('success', 'Fatura u përditësua.');
@@ -1288,7 +1339,7 @@ class FinanceController extends Controller
             'name' => $name,
             'sku' => $this->availableImportedSku($sku !== '' ? $sku : $name),
             'barcode' => $barcode !== '' ? $barcode : null,
-            'category' => trim((string) ($new['category'] ?? '')) ?: null,
+            'category_id' => $this->importedCategoryId($new['category'] ?? null),
             'type' => $new['type'] ?? 'product',
             'unit' => $new['unit'] ?? 'piece',
             'average_cost' => (float) ($lineData['unit_cost'] ?? 0),
@@ -1298,6 +1349,17 @@ class FinanceController extends Controller
             'minimum_stock' => 0,
             'is_active' => true,
         ]);
+    }
+
+    /** Bill imports may suggest a category by name — map it onto a root category, creating it on first use. */
+    private function importedCategoryId(?string $name): ?int
+    {
+        $name = trim((string) $name);
+        if ($name === '') {
+            return null;
+        }
+
+        return InventoryCategory::firstOrCreate(['name' => $name, 'parent_id' => null])->id;
     }
 
     private function availableImportedSku(string $source): string
@@ -1693,6 +1755,7 @@ class FinanceController extends Controller
                 'name' => $a->name,
                 'type' => $a->type,
                 'currency' => $a->currency,
+                'scope' => $a->scope,
                 'iban' => $a->iban,
                 'is_active' => $a->is_active,
                 'balance' => $balance,

@@ -1,12 +1,14 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
+import { useCurrency } from '@/composables/useCurrency';
 import { Bell, Volume2, VolumeX } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
 const currentUserId = Number(usePage().props.auth.user?.id || 0);
+const { pricingSymbol: currencySymbol } = useCurrency();
 const LAST_ID_KEY = `notif_last_received_reservation_id_v2:${currentUserId}`;
 const UNREAD_IDS_KEY = `notif_unread_reservation_ids_v2:${currentUserId}`;
 const SOUND_KEY = `notif_reservation_sound_enabled:${currentUserId}`;
@@ -201,9 +203,14 @@ onUnmounted(() => {
 
         <!-- Dropdown. The bell is not the topbar's rightmost item, so a 320px
              panel anchored to it overflows a phone screen — on <sm it becomes
-             a fixed sheet spanning the viewport just under the h-16 topbar. -->
-        <div v-if="open" class="fixed inset-0 z-40" @click="open = false" />
-        <div v-if="open" class="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 z-50 rounded-lg bg-white shadow-dropdown border border-neutral-200 overflow-hidden">
+             a fixed sheet spanning the viewport just under the h-16 topbar.
+             TELEPORTED to body: the sticky topbar is a z-30 stacking context,
+             so anything inside it paints UNDER the calendar's z-40 sticky day
+             row no matter its own z-index. Fixed right-6/top-16 lands on the
+             bell's visual spot; z stays below Modal (z-100). -->
+        <Teleport to="body">
+        <div v-if="open" class="fixed inset-0 z-[55]" @click="open = false" />
+        <div v-if="open" class="fixed inset-x-3 top-16 sm:inset-x-auto sm:right-6 sm:mt-2 sm:w-80 z-[60] rounded-lg bg-white shadow-dropdown border border-neutral-200 overflow-hidden">
             <div class="px-4 py-3 border-b border-neutral-100 flex items-center justify-between gap-3">
                 <div>
                     <span class="block text-body-sm font-medium text-primary-900">{{ $t('admin.generated.k_f3797fba7339') }}</span>
@@ -229,7 +236,7 @@ onUnmounted(() => {
                 >
                     <div class="flex items-center justify-between gap-2">
                         <span class="text-body-sm font-medium text-primary-900 truncate">{{ r.guest }}</span>
-                        <span class="text-tiny text-accent-700 whitespace-nowrap">€{{ r.total }}</span>
+                        <span class="text-tiny text-accent-700 whitespace-nowrap">{{ currencySymbol }}{{ r.total }}</span>
                     </div>
                     <div class="text-small text-neutral-500 mt-0.5">
 {{ $t('admin.generated.k_bdd4ab5b92b8') }} {{ r.room }} · {{ r.check_in }} → {{ r.check_out }}
@@ -241,6 +248,7 @@ onUnmounted(() => {
             <a href="/pms/reservations" class="block px-4 py-2.5 text-center text-body-sm text-accent-700 hover:bg-neutral-50 border-t border-neutral-100 no-underline">
 {{ $t('admin.generated.k_35ee70cdf835') }} </a>
         </div>
+        </Teleport>
 
         <!-- Live toast on a brand-new reservation -->
         <Teleport to="body">
@@ -259,7 +267,7 @@ onUnmounted(() => {
                     <span class="min-w-0">
                         <span class="block text-body-sm font-semibold">{{ $t('admin.generated.k_cae91dcb7b31') }}</span>
                         <span class="block text-body-sm text-neutral-300 truncate">{{ toast.guest }} {{ $t('admin.generated.k_854094340734') }} {{ toast.room }}</span>
-                        <span class="block text-tiny text-neutral-400 mt-0.5">{{ toast.check_in }} → {{ toast.check_out }} · €{{ toast.total }}</span>
+                        <span class="block text-tiny text-neutral-400 mt-0.5">{{ toast.check_in }} → {{ toast.check_out }} · {{ currencySymbol }}{{ toast.total }}</span>
                     </span>
                 </button>
             </Transition>

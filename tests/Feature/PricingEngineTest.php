@@ -197,6 +197,29 @@ class PricingEngineTest extends TestCase
         $this->assertEquals(10.0, $event['pct'], "owner's event uplift is NEVER scaled");
     }
 
+    public function test_commercial_rounding_never_reverses_a_positive_demand_signal(): void
+    {
+        $type = $this->type(102);
+        [$room] = $this->rooms($type, 2);
+        $date = $this->weekdayAfter(15);
+        $this->book($room, $date->toDateString()); // 50% occupancy stays neutral.
+
+        PricingEvent::create([
+            'name' => 'Sinjal i vogël pozitiv',
+            'date_from' => $date->toDateString(),
+            'date_to' => $date->toDateString(),
+            'uplift_pct' => 0.1,
+            'source' => 'manual',
+        ]);
+
+        $row = $this->rowFor($type, $date);
+
+        $this->assertEquals(102.10, $row['calculated_price']);
+        $this->assertEquals(105.0, $row['suggested_price']);
+        $this->assertGreaterThan(0, $row['adjustment_pct']);
+        $this->assertSame('high', $row['kind']);
+    }
+
     public function test_overlapping_event_uplifts_are_explicitly_multiplicative(): void
     {
         $type = $this->type(100);

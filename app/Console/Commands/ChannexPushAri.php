@@ -29,11 +29,16 @@ class ChannexPushAri extends Command
 
     protected $description = 'Push availability + rates for all Channex-mapped room types';
 
-    public function handle(ChannelSync $sync, OtaSellWindow $sellWindow, ChannexClient $channex): int
+    public function handle(): int
     {
         if (! $this->ensureTenantContext()) {
             return self::FAILURE;
         }
+
+        // After the tenant context — see ChannexPing for why.
+        $sync = app(ChannelSync::class);
+        $sellWindow = app(OtaSellWindow::class);
+        $channex = app(ChannexClient::class);
 
         if (! $channex->configured()) {
             $this->error('Channex is not configured for this hotel.');

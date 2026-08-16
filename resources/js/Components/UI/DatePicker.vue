@@ -45,21 +45,25 @@ const ariaLabels = computed(() => ({ input: props.ariaLabel }));
 </script>
 
 <template>
+    <!-- @vuepic v14 grouped the old flat props: enable-time-picker lives in
+         time-config, the input format in formats, and the popup is positioned
+         by floating-ui via `floating` — the old flat names are silently
+         IGNORED (that regression shipped datetime pickers app-wide). -->
     <VueDatePicker
         v-model="inner"
-        :enable-time-picker="false"
+        :time-config="{ enableTimePicker: false }"
+        :formats="{ input: 'dd/MM/yyyy' }"
+        :floating="{ placement: 'bottom-start' }"
         :min-date="minDate"
         :max-date="maxDate"
         :placeholder="placeholder"
         :input-attrs="resolvedInputAttrs"
         :aria-labels="ariaLabels"
         :disabled="disabled"
-        :clearable="true"
         :auto-apply="true"
         :teleport="true"
         :six-weeks="'append'"
         week-start="1"
-        format="dd/MM/yyyy"
         :class="{ 'dp-has-error': !!error }"
     />
 </template>

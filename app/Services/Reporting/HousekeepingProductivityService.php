@@ -45,6 +45,7 @@ final class HousekeepingProductivityService
             'staff' => $this->staff($tasks, $period),
             'types' => $this->types($tasks, $period),
             'daily' => $this->daily($tasks, $period),
+            'tasks_truncated' => max(0, $tasks->count() - 50),
             'tasks' => $tasks->take(50)->map(fn (CleaningTask $task) => [
                 'id' => $task->id,
                 'room' => $task->room?->room_number ?? '—',

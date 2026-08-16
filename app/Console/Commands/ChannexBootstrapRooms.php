@@ -14,10 +14,11 @@ use Illuminate\Support\Str;
 /**
  * Create a Channex room type + its rate plans for each PMS room type that does
  * not have them yet, so a FRESH property (e.g. the new production account) has
- * the structure that channex:link-rooms needs to map against. THREE rate plans
+ * the structure that channex:link-rooms needs to map against. FOUR rate plans
  * per room type: the BASE plan (canonical PMS price) plus one per OTA channel
- * (Booking.com / Expedia) that carries the program-compensated price so member
- * promotions land back on the PMS price (see ChannelSync::pushRatesForMapping).
+ * (Booking.com / Expedia / Airbnb) that carries the program-compensated price
+ * so member promotions — or Airbnb's payout-side host fee — land back on the
+ * PMS price (see ChannelSync::pushRatesForMapping).
  *
  * IDEMPOTENT + re-runnable: it matches existing Channex room types by
  * (case-insensitive) title and skips creating them, and ensures each rate-plan
@@ -36,11 +37,14 @@ class ChannexBootstrapRooms extends Command
 
     protected $description = 'Create a Channex room type + base and per-channel rate plans for each PMS room type (idempotent)';
 
-    public function handle(ChannexClient $channex): int
+    public function handle(): int
     {
         if (! $this->ensureTenantContext()) {
             return self::FAILURE;
         }
+
+        // After the tenant context — see ChannexPing for why.
+        $channex = app(ChannexClient::class);
 
         if (! $channex->configured()) {
             $this->error('CHANNEX_API_KEY is not set (.env).');
@@ -74,6 +78,7 @@ class ChannexBootstrapRooms extends Command
         $channelTitles = [
             Str::lower(ChannelSync::RATE_PLAN_TITLE_BOOKING),
             Str::lower(ChannelSync::RATE_PLAN_TITLE_EXPEDIA),
+            Str::lower(ChannelSync::RATE_PLAN_TITLE_AIRBNB),
         ];
 
         $dry = (bool) $this->option('dry');
@@ -115,6 +120,7 @@ class ChannexBootstrapRooms extends Command
                 [$hasBase, ChannelSync::RATE_PLAN_TITLE_BASE, 'base'],
                 [in_array($channelTitles[0], $titles, true), ChannelSync::RATE_PLAN_TITLE_BOOKING, 'booking.com'],
                 [in_array($channelTitles[1], $titles, true), ChannelSync::RATE_PLAN_TITLE_EXPEDIA, 'expedia'],
+                [in_array($channelTitles[2], $titles, true), ChannelSync::RATE_PLAN_TITLE_AIRBNB, 'airbnb'],
             ];
 
             foreach ($roles as [$exists, $planTitle, $role]) {

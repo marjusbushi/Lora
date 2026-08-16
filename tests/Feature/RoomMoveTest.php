@@ -88,8 +88,10 @@ class RoomMoveTest extends TestCase
         $this->assertEquals($room1->id, $res->refresh()->room_id);
     }
 
-    public function test_move_is_only_allowed_for_checked_in(): void
+    public function test_confirmed_future_reservation_moves_without_physical_side_effects(): void
     {
+        // A pre-arrival move is administrative: the assignment changes, but no
+        // room flips state and nobody is sent to clean an untouched room.
         [$admin, $room1, $room2, $guest] = $this->setupHotel();
         $res = Reservation::create([
             'room_id' => $room1->id,
@@ -98,6 +100,30 @@ class RoomMoveTest extends TestCase
             'check_in_date' => now()->addDays(2)->toDateString(),
             'check_out_date' => now()->addDays(4)->toDateString(),
             'status' => 'confirmed',
+            'total_amount' => 200,
+            'adults' => 1,
+        ]);
+
+        $this->actingAs($admin)->post(route('reservations.move-room', $res->id), [
+            'room_id' => $room2->id,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertEquals($room2->id, $res->refresh()->room_id);
+        $this->assertEquals('available', $room2->refresh()->status);
+        $this->assertEquals('occupied', $room1->refresh()->status); // untouched
+        $this->assertFalse(CleaningTask::where('room_id', $room1->id)->exists());
+    }
+
+    public function test_move_refused_for_terminal_states(): void
+    {
+        [$admin, $room1, $room2, $guest] = $this->setupHotel();
+        $res = Reservation::create([
+            'room_id' => $room1->id,
+            'guest_id' => $guest->id,
+            'created_by' => $admin->id,
+            'check_in_date' => now()->addDays(2)->toDateString(),
+            'check_out_date' => now()->addDays(4)->toDateString(),
+            'status' => 'cancelled',
             'total_amount' => 200,
             'adults' => 1,
         ]);

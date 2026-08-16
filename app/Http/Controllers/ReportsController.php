@@ -2,13 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CleaningTask;
+use App\Models\FinanceAccount;
+use App\Models\MaintenanceIssue;
 use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\Payment;
 use App\Models\PosOrder;
+use App\Models\PosOutlet;
+use App\Tenancy\TenantRule;
 use App\Models\Reservation;
 use App\Models\Room;
+use App\Models\Setting;
 use App\Services\BaseCurrency;
+use App\Services\CurrencyRates;
+use App\Services\PricingCurrency;
+use App\Services\Reporting\BankPaymentsReportService;
 use App\Services\Reporting\BookingBehaviorService;
 use App\Services\Reporting\BudgetTargetService;
 use App\Services\Reporting\CancellationRiskService;
@@ -26,6 +35,7 @@ use App\Services\Reporting\OperationsExecutiveService;
 use App\Services\Reporting\OutstandingBalanceService;
 use App\Services\Reporting\PaymentReconciliationService;
 use App\Services\Reporting\PickupPaceService;
+use App\Services\Reporting\PurchasesByCategoryReportService;
 use App\Services\Reporting\PosControlReportService;
 use App\Services\Reporting\PosPerformanceService;
 use App\Services\Reporting\RecurringMaintenanceIssueService;
@@ -60,21 +70,29 @@ class ReportsController extends Controller
         BudgetTargetService $budgetTargets,
         OutstandingBalanceService $outstandingBalances,
         StayRevenueAllocator $revenueAllocator,
+        GuestMovementService $guestMovements,
     ): Response {
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+        ]);
+
         [$from, $to] = $this->range($request);
         $period = new ReportingPeriod($from, $to);
         $analytics = $hotelKpis->withComparisons($period);
         $budget = $budgetTargets->forPeriod($period);
-        $outstanding = $outstandingBalances->summary();
+        $outstandingAnalytics = $outstandingBalances->analytics();
         $forecastPeriod = new ReportingPeriod(today()->toDateString(), today()->addDays(29)->toDateString());
         $forecast = $hotelKpis->summary($forecastPeriod);
 
+        // Every figure on this page is base-currency; the channel table must
+        // be too (the *_base columns), or the blocks aren't comparable.
         $channelRows = Reservation::query()
             ->where('status', '!=', 'cancelled')
             ->whereNull('no_show_at')
             ->whereDate('check_in_date', '<=', $period->to->toDateString())
             ->whereDate('check_out_date', '>', $period->from->toDateString())
-            ->get(['id', 'channel', 'check_in_date', 'check_out_date', 'total_amount', 'commission_amount'])
+            ->get(['id', 'channel', 'check_in_date', 'check_out_date', 'total_amount_base', 'commission_amount_base'])
             ->groupBy(fn (Reservation $reservation) => Reservation::normalizeChannel($reservation->channel))
             ->map(function ($reservations, string $channel) use ($period, $revenueAllocator) {
                 $revenue = 0.0;
@@ -85,7 +103,7 @@ class ReportsController extends Controller
                     $allocatedRevenue = $revenueAllocator->allocate(
                         $reservation->check_in_date,
                         $reservation->check_out_date,
-                        $reservation->total_amount,
+                        $reservation->total_amount_base,
                         $period,
                     );
                     $revenue += array_sum($allocatedRevenue);
@@ -93,7 +111,7 @@ class ReportsController extends Controller
                     $commission += array_sum($revenueAllocator->allocate(
                         $reservation->check_in_date,
                         $reservation->check_out_date,
-                        $reservation->commission_amount ?? 0,
+                        $reservation->commission_amount_base ?? 0,
                         $period,
                     ));
                 }
@@ -120,6 +138,22 @@ class ReportsController extends Controller
             ->sortByDesc('occupancy')
             ->first();
 
+        // Split what's owed by urgency: OVERDUE (past the due date — act now),
+        // DUE AT CHECKOUT (guest in house / leaving today), and FUTURE stays
+        // that simply haven't arrived yet (normal, not alarm-worthy).
+        $outstandingRows = collect($outstandingAnalytics['rows']);
+        $overdueRows = $outstandingRows->where('bucket', '!=', 'not_due');
+        $dueAtCheckoutRows = $outstandingRows->where('bucket', 'not_due')
+            ->whereIn('status', ['checked_in', 'checked_out']);
+        $futureRows = $outstandingRows->where('bucket', 'not_due')->where('status', 'confirmed');
+        $outstandingSplit = [
+            'overdue' => ['count' => $overdueRows->count(), 'total' => round((float) $overdueRows->sum('balance'), 2)],
+            'due_at_checkout' => ['count' => $dueAtCheckoutRows->count(), 'total' => round((float) $dueAtCheckoutRows->sum('balance'), 2)],
+            'future' => ['count' => $futureRows->count(), 'total' => round((float) $futureRows->sum('balance'), 2)],
+        ];
+
+        $occupancyAlertPct = min(100, max(1, (int) Setting::get('reports.occupancy_alert_pct', 85)));
+
         $alerts = collect();
         if ($budget['revenue_target'] && $analytics['current']['kpis']['total_revenue'] < $budget['revenue_target']) {
             $alerts->push([
@@ -127,22 +161,44 @@ class ReportsController extends Controller
                 'value' => round($budget['revenue_target'] - $analytics['current']['kpis']['total_revenue'], 2),
             ]);
         }
-        if ($outstanding['total'] > 0) {
-            $alerts->push(['kind' => 'outstanding', 'value' => $outstanding['total'], 'count' => $outstanding['count']]);
+        if ($outstandingSplit['overdue']['total'] > 0) {
+            $alerts->push([
+                'kind' => 'outstanding',
+                'value' => $outstandingSplit['overdue']['total'],
+                'count' => $outstandingSplit['overdue']['count'],
+            ]);
         }
-        if (($peakForecast['occupancy'] ?? 0) >= 85) {
+        if (($peakForecast['occupancy'] ?? 0) >= $occupancyAlertPct) {
             $alerts->push(['kind' => 'demand', 'value' => $peakForecast['occupancy'], 'date' => $peakForecast['date']]);
         }
+
+        // Today's operations at a glance — arrivals/departures/in-house/cleaning.
+        $todayPeriod = new ReportingPeriod(today()->toDateString(), today()->toDateString());
+        $movement = $guestMovements->summary($todayPeriod);
+        $operations = [
+            'arrivals' => $movement['summary']['arrivals'],
+            'departures' => $movement['summary']['departures'],
+            'in_house' => $movement['summary']['in_house'],
+            'rooms_to_clean' => CleaningTask::whereIn('status', ['pending', 'in_progress'])->count(),
+        ];
 
         return Inertia::render('Reports/Executive', [
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $analytics,
             'budget' => $budget,
             'forecast' => $forecast,
-            'outstanding' => $outstanding,
+            'outstanding' => [
+                'count' => $outstandingAnalytics['summary']['count'] ?? $outstandingRows->count(),
+                'total' => $outstandingAnalytics['summary']['total'] ?? round((float) $outstandingRows->sum('balance'), 2),
+            ],
+            'outstandingSplit' => $outstandingSplit,
+            'operations' => $operations,
             'channels' => $channelRows,
             'alerts' => $alerts,
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
+            'occupancyAlertPct' => $occupancyAlertPct,
         ]);
     }
 
@@ -161,21 +217,54 @@ class ReportsController extends Controller
             'filters' => $period->toArray(),
             'analytics' => $channelPerformance->withComparisons($period),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
     /** Outstanding balances (debtors): every non-cancelled stay that still owes money. */
     public function outstanding(Request $request, OutstandingBalanceService $outstandingBalances): Response
     {
-        $analytics = $outstandingBalances->analytics();
+        $request->validate([
+            'as_of' => [
+                'nullable',
+                'date_format:Y-m-d',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    // date_format already rejects garbage — parsing it here would 500.
+                    if (\DateTime::createFromFormat('Y-m-d', (string) $value) === false) {
+                        return;
+                    }
+                    if (Carbon::parse($value)->isAfter(today())) {
+                        $fail(app()->getLocale() === 'sq'
+                            ? 'Data "deri më" nuk mund të jetë në të ardhmen.'
+                            : 'The as-of date cannot be in the future.');
+                    }
+                },
+            ],
+            'arrival_from' => ['nullable', 'date_format:Y-m-d'],
+            'arrival_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:arrival_from'],
+        ]);
+
+        $asOf = $request->filled('as_of')
+            ? \Carbon\CarbonImmutable::parse($request->input('as_of'))
+            : null;
+        $analytics = $outstandingBalances->analytics(
+            $asOf,
+            $request->input('arrival_from'),
+            $request->input('arrival_to'),
+        );
 
         return Inertia::render('Reports/Outstanding', [
             'analytics' => $analytics,
-            // Preserve the original payload while report consumers migrate to analytics.
-            'rows' => $analytics['rows'],
-            'total' => $analytics['summary']['total'],
+            'filters' => [
+                'as_of' => $request->input('as_of'),
+                'arrival_from' => $request->input('arrival_from'),
+                'arrival_to' => $request->input('arrival_to'),
+            ],
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -189,6 +278,8 @@ class ReportsController extends Controller
             'filters' => ['from' => $from, 'to' => $to],
             ...$analytics,
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -222,18 +313,22 @@ class ReportsController extends Controller
         ]);
     }
 
-    /** POS performance: sales, margin, hourly demand, categories and top items. */
+    /** POS performance: sales, margin, hourly demand, categories and top items — filterable per sales outlet. */
     public function posSales(Request $request, PosPerformanceService $report): Response
     {
+        $request->validate(['outlet' => ['nullable', 'integer', TenantRule::exists('pos_outlets')]]);
+        $outletId = $request->integer('outlet') ?: null;
         [$from, $to] = $this->range($request);
-        $analytics = $report->withComparison(new ReportingPeriod($from, $to));
+        $analytics = $report->withComparison(new ReportingPeriod($from, $to), $outletId);
         $current = $analytics['current'];
 
         return Inertia::render('Reports/PosSales', [
-            'filters' => ['from' => $from, 'to' => $to],
+            'filters' => ['from' => $from, 'to' => $to, 'outlet' => $outletId],
             'analytics' => $analytics,
             'byCategory' => $current['categories'],
             'topItems' => $current['top_items'],
+            'byOutlet' => $current['outlets'],
+            'outlets' => PosOutlet::ordered()->get(['id', 'name']),
             'summary' => $current['summary'],
             'currency' => $this->currency(),
         ]);
@@ -387,6 +482,8 @@ class ReportsController extends Controller
             'filters' => $period->toArray(),
             'analytics' => $pickupPace->summary($period),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -436,6 +533,8 @@ class ReportsController extends Controller
             'noShows' => $overdueArrivals,
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -491,6 +590,42 @@ class ReportsController extends Controller
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'canViewPos' => (bool) $request->user()?->can('view_pos_orders'),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
+        ]);
+    }
+
+    /** Pagesat në bankë: every ledger row that touched a bank account, for statement reconciliation. */
+    public function bankPayments(Request $request, BankPaymentsReportService $report): Response
+    {
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+            'account_id' => ['nullable', 'integer'],
+        ]);
+
+        [$from, $to] = $this->range($request);
+        if (Carbon::parse($from)->diffInDays(Carbon::parse($to)) > 366) {
+            throw ValidationException::withMessages([
+                'to' => app()->getLocale() === 'sq'
+                    ? 'Periudha e raportit nuk mund të kalojë 367 ditë.'
+                    : 'The report period cannot exceed 367 days.',
+            ]);
+        }
+
+        $accountId = $request->integer('account_id') ?: null;
+        $data = $report->summary(new ReportingPeriod($from, $to), $accountId);
+
+        return Inertia::render('Reports/BankPayments', [
+            'filters' => ['from' => $from, 'to' => $to, 'account_id' => $accountId],
+            'accounts' => $data['accounts'],
+            'rows' => $data['rows'],
+            'totals' => $data['totals'],
+            'bankAccounts' => FinanceAccount::query()
+                ->where('type', 'bank')
+                ->orderBy('name')
+                ->get(['id', 'name', 'currency']),
+            'currency' => $this->currency(),
         ]);
     }
 
@@ -508,6 +643,8 @@ class ReportsController extends Controller
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'canViewPos' => (bool) $request->user()?->can('view_pos_orders'),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -517,6 +654,11 @@ class ReportsController extends Controller
         RoomTypePerformanceService $performance,
         BudgetTargetService $budgetTargets,
     ): Response {
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+        ]);
+
         [$from, $to] = $this->range($request);
         $period = new ReportingPeriod($from, $to);
 
@@ -525,6 +667,8 @@ class ReportsController extends Controller
             'analytics' => $performance->withComparisons($period),
             'budget' => $budgetTargets->forPeriod($period),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -634,8 +778,10 @@ class ReportsController extends Controller
     /** POS sales and refund events by hour-of-day and weekday. */
     public function posHourly(Request $request, PosPerformanceService $report): Response
     {
+        $request->validate(['outlet' => ['nullable', 'integer', TenantRule::exists('pos_outlets')]]);
+        $outletId = $request->integer('outlet') ?: null;
         [$from, $to, $days] = $this->range($request);
-        $analytics = $report->summary(new ReportingPeriod($from, $to));
+        $analytics = $report->summary(new ReportingPeriod($from, $to), $outletId);
         $weekdayLabels = [1 => 'Hën', 2 => 'Mar', 3 => 'Mër', 4 => 'Enj', 5 => 'Pre', 6 => 'Sht', 7 => 'Die'];
         $byHour = collect($analytics['hours'])->map(fn (array $row) => [
             'hour' => $row['hour'],
@@ -649,7 +795,7 @@ class ReportsController extends Controller
         ])->values();
 
         return Inertia::render('Reports/PosHourly', [
-            'filters' => ['from' => $from, 'to' => $to],
+            'filters' => ['from' => $from, 'to' => $to, 'outlet' => $outletId],
             'byHour' => $byHour,
             'byWeekday' => $byWeekday,
             'summary' => [
@@ -693,6 +839,8 @@ class ReportsController extends Controller
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -704,6 +852,21 @@ class ReportsController extends Controller
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
+        ]);
+    }
+
+    public function purchasesByCategory(Request $request, PurchasesByCategoryReportService $report): Response
+    {
+        [$from, $to] = $this->range($request);
+
+        return Inertia::render('Reports/PurchasesByCategory', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
+            'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -715,13 +878,36 @@ class ReportsController extends Controller
             ->orderBy('room_number')
             ->get(['id', 'room_type_id', 'room_number', 'floor', 'status']);
 
-        $rows = $rooms->map(fn ($r) => [
-            'id' => $r->id,
-            'room_number' => $r->room_number,
-            'floor' => $r->floor,
-            'room_type' => $r->roomType?->name ?? '—',
-            'status' => $r->status,
-        ])->values();
+        // The stored status is maintained by hand and drifts (room 308 sat in
+        // "cleaning" for days after its task was inspected, blocking a
+        // check-in). Cross-check every room against operational truth so the
+        // report flags drift instead of mirroring it.
+        $checkedInRoomIds = Reservation::where('status', 'checked_in')->pluck('room_id')->filter()->unique();
+        $openTaskRoomIds = CleaningTask::whereIn('status', ['pending', 'in_progress'])->pluck('room_id')->filter()->unique();
+        $openIssueRoomIds = MaintenanceIssue::whereNotIn('status', ['verified', 'closed'])->pluck('room_id')->filter()->unique();
+
+        $rows = $rooms->map(function ($r) use ($checkedInRoomIds, $openTaskRoomIds, $openIssueRoomIds) {
+            $stale = null;
+            if ($r->status === 'occupied' && ! $checkedInRoomIds->contains($r->id)) {
+                $stale = 'occupied_no_guest';
+            } elseif ($r->status !== 'occupied' && $checkedInRoomIds->contains($r->id)) {
+                $stale = 'guest_not_occupied';
+            } elseif ($r->status === 'cleaning' && ! $openTaskRoomIds->contains($r->id)) {
+                $stale = 'cleaning_no_task';
+            } elseif ($r->status === 'maintenance' && ! $openIssueRoomIds->contains($r->id)) {
+                $stale = 'maintenance_no_issue';
+            }
+
+            return [
+                'id' => $r->id,
+                'room_number' => $r->room_number,
+                'floor' => $r->floor,
+                'room_type' => $r->roomType?->name ?? '—',
+                'status' => $r->status,
+                'stale' => $stale,
+                'maintenance_open' => $openIssueRoomIds->contains($r->id),
+            ];
+        })->values();
 
         $statuses = ['available', 'occupied', 'cleaning', 'maintenance'];
         $counts = [];
@@ -729,6 +915,7 @@ class ReportsController extends Controller
             $counts[$s] = (int) $rooms->where('status', $s)->count();
         }
         $counts['total'] = (int) $rooms->count();
+        $counts['stale'] = $rows->filter(fn (array $row) => $row['stale'] !== null)->count();
 
         return Inertia::render('Reports/RoomStatus', [
             'rows' => $rows,
@@ -804,6 +991,8 @@ class ReportsController extends Controller
             ),
             'permissions' => $permissions,
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -817,6 +1006,8 @@ class ReportsController extends Controller
             'activeTab' => $request->input('tab', 'arrivals'),
             'analytics' => $report->summary(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -843,6 +1034,8 @@ class ReportsController extends Controller
             'canViewReservations' => $request->user()?->can('view_reservations') ?? false,
             'canViewPos' => $request->user()?->can('view_pos_orders') ?? false,
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -855,12 +1048,45 @@ class ReportsController extends Controller
             'filters' => ['from' => $from, 'to' => $to],
             'analytics' => $report->withComparison(new ReportingPeriod($from, $to)),
             'currency' => $this->currency(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
     /** from/to (default = current month) + inclusive day count. */
+    /**
+     * Shared date window for every report endpoint. Validates HERE so all
+     * callers are protected centrally: malformed dates 422 instead of a
+     * Carbon parse 500, and the window is capped at 367 days so a crafted
+     * URL cannot load the whole reservation history in one request.
+     */
     private function range(Request $request): array
     {
+        $request->validate([
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => [
+                'nullable',
+                'date_format:Y-m-d',
+                'after_or_equal:from',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    // Cap the EFFECTIVE window: with "from" omitted it defaults
+                    // to the start of the month, so a lone far-future "to"
+                    // must not slip past the cap.
+                    $effectiveFrom = $request->input('from', now()->startOfMonth()->toDateString());
+                    // Malformed dates are date_format's job — parsing them here would 500.
+                    if (\DateTime::createFromFormat('Y-m-d', (string) $value) === false
+                        || \DateTime::createFromFormat('Y-m-d', (string) $effectiveFrom) === false) {
+                        return;
+                    }
+                    if (Carbon::parse($effectiveFrom)->diffInDays(Carbon::parse($value)) > 366) {
+                        $fail(app()->getLocale() === 'sq'
+                            ? 'Periudha e raportit nuk mund të kalojë 367 ditë.'
+                            : 'The report period cannot exceed 367 days.');
+                    }
+                },
+            ],
+        ]);
+
         $from = $request->input('from', now()->startOfMonth()->toDateString());
         $to = $request->input('to', now()->endOfMonth()->toDateString());
         $days = Carbon::parse($from)->diffInDays(Carbon::parse($to)) + 1;

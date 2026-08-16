@@ -2,8 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\FinanceAccount;
-use App\Models\FinancePayment;
 use App\Models\FolioItem;
 use App\Models\Guest;
 use App\Models\Payment;
@@ -22,7 +20,7 @@ class DiscountRefundCashFlowServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_it_combines_discounts_refunds_and_real_ledger_cash_flow(): void
+    public function test_it_reports_discounts_refunds_and_leakage_shares(): void
     {
         $user = User::factory()->create();
         $type = RoomType::create(['name' => 'Standard', 'base_price' => 100, 'max_occupancy' => 2, 'amenities' => []]);
@@ -50,7 +48,13 @@ class DiscountRefundCashFlowServiceTest extends TestCase
         ]);
         $refund->timestamps = false;
         $refund->forceFill(['created_at' => '2026-07-04 10:00:00', 'updated_at' => '2026-07-04 10:00:00'])->saveQuietly();
-        FinancePayment::query()->delete();
+
+        // A real collection so the refund share has a denominator: 18 / 50 = 36%.
+        $collection = Payment::create([
+            'reservation_id' => $reservation->id, 'amount' => 50, 'method' => 'cash', 'created_by' => $user->id,
+        ]);
+        $collection->timestamps = false;
+        $collection->forceFill(['created_at' => '2026-07-03 10:00:00', 'updated_at' => '2026-07-03 10:00:00'])->saveQuietly();
 
         $pos = PosOrder::create([
             'status' => 'completed', 'payment_method' => 'card', 'total_amount' => 30,
@@ -66,28 +70,35 @@ class DiscountRefundCashFlowServiceTest extends TestCase
             'type' => 'discount', 'charge_date' => '2026-07-04',
         ]);
 
-        $account = FinanceAccount::firstOrCreate(
-            ['name' => 'Arka'],
-            ['type' => 'cash', 'currency' => 'EUR'],
-        );
-        foreach ([['in', 200, '2026-07-02 12:00:00'], ['out', 40, '2026-07-03 12:00:00']] as [$direction, $amount, $paidAt]) {
-            FinancePayment::create([
-                'direction' => $direction, 'account_id' => $account->id, 'amount' => $amount,
-                'currency' => 'EUR', 'method' => 'cash', 'source' => 'manual', 'paid_at' => $paidAt,
-            ]);
-        }
-
         $report = app(DiscountRefundCashFlowService::class)->summary(new ReportingPeriod('2026-07-01', '2026-07-31'));
 
         $this->assertSame(40.0, $report['summary']['discounts']);
         $this->assertSame(18.0, $report['summary']['refunds']);
-        $this->assertSame(200.0, $report['summary']['inflow']);
-        $this->assertSame(40.0, $report['summary']['outflow']);
-        $this->assertSame(160.0, $report['summary']['net_cash_flow']);
         $this->assertSame(3, $report['summary']['discount_count']);
+        $this->assertSame(50.0, $report['summary']['collections']);
+        $this->assertSame(36.0, $report['summary']['refund_share']);
+        $this->assertGreaterThan(0, $report['summary']['revenue_net']);
+        $this->assertSame(
+            round($report['summary']['discounts'] / $report['summary']['revenue_net'] * 100, 1),
+            $report['summary']['discount_share'],
+        );
         $this->assertCount(5, $report['activity']);
         $this->assertSame(35.0, collect($report['discount_sources'])->firstWhere('source', 'pms')['amount']);
         $this->assertFalse(collect($report['activity'])->contains('reason', 'POS refund reversal'));
-        $this->assertSame(200.0, collect($report['daily'])->firstWhere('date', '2026-07-02')['inflow']);
+        // The cash-flow half is gone — the payload no longer carries ledger keys.
+        $this->assertArrayNotHasKey('inflow', $report['summary']);
+        $this->assertArrayNotHasKey('net_cash_flow', $report['summary']);
+        $this->assertArrayNotHasKey('daily', $report);
+    }
+
+    public function test_shares_are_null_when_denominators_are_zero(): void
+    {
+        $report = app(DiscountRefundCashFlowService::class)->summary(new ReportingPeriod('2026-03-01', '2026-03-31'));
+
+        $this->assertSame(0.0, $report['summary']['discounts']);
+        $this->assertSame(0.0, $report['summary']['revenue_net']);
+        $this->assertSame(0.0, $report['summary']['collections']);
+        $this->assertNull($report['summary']['discount_share']);
+        $this->assertNull($report['summary']['refund_share']);
     }
 }

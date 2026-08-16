@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\InventoryCategory;
 use App\Models\RoomType;
 use App\Models\Setting;
 use App\Models\Tenant;
@@ -10,6 +11,7 @@ use App\Services\TenantRoleService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -22,6 +24,76 @@ class TenantIntegrityCommandTest extends TestCase
         $this->artisan('tenants:verify-integrity')
             ->expectsOutput('Tenant integrity passed.')
             ->assertSuccessful();
+    }
+
+    public function test_storage_verification_fails_closed_for_a_missing_database_file_reference(): void
+    {
+        Storage::fake('public');
+        $tenant = Tenant::query()->sole();
+        $path = "tenants/{$tenant->id}/branding/logo.png";
+        Storage::disk('public')->put($path, 'image');
+        Setting::set('hotel.logo', $path, 'image');
+
+        $this->artisan('tenants:verify-integrity', ['--verify-storage' => true])
+            ->expectsOutput('Tenant integrity passed.')
+            ->assertSuccessful();
+
+        Storage::disk('public')->delete($path);
+
+        $this->artisan('tenants:verify-integrity')
+            ->expectsOutput('Tenant integrity passed.')
+            ->assertSuccessful();
+
+        $this->artisan('tenants:verify-integrity', ['--verify-storage' => true])
+            ->expectsOutputToContain('settings.value: 1 rows reference a missing stored file')
+            ->assertFailed();
+    }
+
+    public function test_storage_verification_rejects_a_cross_tenant_file_namespace(): void
+    {
+        Storage::fake('public');
+        $first = Tenant::query()->sole();
+        $second = Tenant::factory()->create();
+        $foreignPath = "tenants/{$second->id}/branding/logo.png";
+        Storage::disk('public')->put($foreignPath, 'image');
+        Setting::set('hotel.logo', $foreignPath, 'image');
+
+        $this->artisan('tenants:verify-integrity', ['--verify-storage' => true])
+            ->expectsOutputToContain("settings.value: 1 rows reference another tenant's storage namespace")
+            ->assertFailed();
+
+        $this->assertNotSame($first->id, $second->id);
+    }
+
+    public function test_storage_verification_rejects_a_cross_tenant_onboarding_document(): void
+    {
+        Storage::fake('local');
+        $first = Tenant::query()->sole();
+        $second = Tenant::factory()->create();
+        $onboardingId = DB::table('tenant_onboardings')->insertGetId([
+            'tenant_id' => $first->id,
+            'status' => 'not_started',
+            'progress' => 0,
+            'steps' => '[]',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $foreignPath = "onboarding/tenant-{$second->id}/contract.pdf";
+        Storage::disk('local')->put($foreignPath, 'document');
+        DB::table('tenant_onboarding_documents')->insert([
+            'tenant_onboarding_id' => $onboardingId,
+            'step_key' => 'contract',
+            'name' => 'contract.pdf',
+            'disk' => 'local',
+            'path' => $foreignPath,
+            'size' => 8,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->artisan('tenants:verify-integrity', ['--verify-storage' => true])
+            ->expectsOutputToContain("tenant_onboarding_documents.path: 1 rows reference another tenant's storage namespace")
+            ->assertFailed();
     }
 
     public function test_unresolved_provider_event_without_billing_references_is_valid(): void
@@ -181,6 +253,71 @@ class TenantIntegrityCommandTest extends TestCase
                 '--allow-additive-schema' => true,
             ])
                 ->expectsOutputToContain('Baseline value changed: tenant_counts.room_types')
+                ->assertFailed();
+        } finally {
+            if (is_string($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
+    public function test_additive_schema_compare_allows_a_tenants_first_inventory_categories(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'lora-tenant-baseline-');
+        $this->assertNotFalse($path);
+
+        try {
+            // Zero categories at baseline — the CI upgrade scenario: the
+            // tenant id is ABSENT from the baseline map and appears only
+            // after the unification migration backfills the tree.
+            $this->artisan('tenants:verify-integrity', ['--snapshot' => $path])
+                ->assertSuccessful();
+
+            InventoryCategory::create(['name' => 'Pije']);
+
+            $this->artisan('tenants:verify-integrity', [
+                '--compare' => $path,
+                '--allow-additive-schema' => true,
+            ])->assertSuccessful();
+        } finally {
+            if (is_string($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
+    public function test_additive_schema_compare_allows_inventory_category_growth_only(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'lora-tenant-baseline-');
+        $this->assertNotFalse($path);
+
+        try {
+            InventoryCategory::create(['name' => 'Pije']);
+
+            $this->artisan('tenants:verify-integrity', ['--snapshot' => $path])
+                ->assertSuccessful();
+
+            // The category-unification migration converts menu categories into
+            // tree nodes — approved growth under the additive flag.
+            InventoryCategory::create(['name' => 'Ushqim']);
+
+            $this->artisan('tenants:verify-integrity', [
+                '--compare' => $path,
+                '--allow-additive-schema' => true,
+            ])->assertSuccessful();
+
+            // Without the flag it stays an ordinary data change.
+            $this->artisan('tenants:verify-integrity', ['--compare' => $path])
+                ->expectsOutputToContain('Tenant counts or financial totals changed from the baseline.')
+                ->assertFailed();
+
+            // Shrinking below the baseline is never approved.
+            InventoryCategory::query()->delete();
+            $this->artisan('tenants:verify-integrity', [
+                '--compare' => $path,
+                '--allow-additive-schema' => true,
+            ])
+                ->expectsOutputToContain('Baseline value changed: tenant_counts.inventory_categories')
                 ->assertFailed();
         } finally {
             if (is_string($path)) {

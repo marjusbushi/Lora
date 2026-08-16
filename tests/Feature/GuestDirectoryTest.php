@@ -51,11 +51,16 @@ class GuestDirectoryTest extends TestCase
         $rows = collect($props['guests']['data'])->keyBy('id');
 
         $this->assertSame(7, $props['stats']['total']);
-        $this->assertSame(1, $props['stats']['in_house']);
+        // in_house counts PEOPLE (adults + children), not profiles.
+        $this->assertSame(2, $props['stats']['in_house']);
+        $this->assertSame(1, $props['stats']['in_house_rooms']);
+        $this->assertSame(1, $props['stats']['in_house_profiles']);
         $this->assertSame(2, $props['stats']['arriving_7_days']);
         $this->assertSame(1, $props['stats']['incomplete']);
-        $this->assertSame(2, $props['stats']['duplicate_profiles']);
-        $this->assertSame(3, $props['stats']['attention']);
+        // "Past Stay" and "Possible Duplicate" share a phone but have DIFFERENT
+        // names — v2 classifies them as travel companions, not duplicates.
+        $this->assertSame(0, $props['stats']['duplicate_profiles']);
+        $this->assertSame(1, $props['stats']['attention']);
 
         $this->assertSame('in_house', $rows[$inHouse->id]['state']);
         $this->assertSame('101', $rows[$inHouse->id]['current_stay']['room_number']);
@@ -64,8 +69,10 @@ class GuestDirectoryTest extends TestCase
         $this->assertSame('past', $rows[$past->id]['state']);
         $this->assertSame('new', $rows[$duplicate->id]['state']);
         $this->assertSame('new', $rows[$noShow->id]['state']);
-        $this->assertTrue($rows[$past->id]['is_duplicate']);
-        $this->assertTrue($rows[$duplicate->id]['is_duplicate']);
+        $this->assertFalse($rows[$past->id]['is_duplicate']);
+        $this->assertTrue($rows[$past->id]['is_companion']);
+        $this->assertFalse($rows[$duplicate->id]['is_duplicate']);
+        $this->assertTrue($rows[$duplicate->id]['is_companion']);
         $this->assertSame(0, $rows[$incomplete->id]['profile_completeness']);
         $this->assertSame(['email', 'phone', 'nationality'], $rows[$incomplete->id]['missing_fields']);
         $this->assertArrayNotHasKey('lifetime_spend', $rows[$past->id]);
@@ -75,10 +82,64 @@ class GuestDirectoryTest extends TestCase
             'sort' => 'name',
         ]))->assertOk());
         $this->assertSame('duplicates', $duplicateProps['filters']['segment']);
+        // Companions no longer pollute the duplicates segment.
+        $this->assertSame([], collect($duplicateProps['guests']['data'])->pluck('id')->all());
+    }
+
+    public function test_contact_sharing_splits_duplicates_from_companions(): void
+    {
+        $admin = $this->user('admin');
+
+        // Same phone, same name: one person registered twice.
+        $twinA = $this->guest('Amber', 'Geukens', 'amber1@example.test', '+32468276028', 'BEL');
+        $twinB = $this->guest('Amber', 'Geukens', 'amber2@example.test', '+32468276028', 'BEL');
+        // Same email, FLIPPED name order: still the same person.
+        $flippedA = $this->guest('Antonio', 'Abbatiello', 'antonio@example.test', '+390000000001', 'ITA');
+        $flippedB = $this->guest('Abbatiello', 'Antonio', 'antonio@example.test', '+390000000002', 'ITA');
+        // (No shared-document case: the tenant-unique constraint on
+        // document_number makes that collision impossible by schema.)
+        // Same booking-alias email, different names: travel companions.
+        $familyA = $this->guest('Najat', 'mohd', 'mtmra.636297@guest.booking.com', '+355690004001', 'KWT');
+        $familyB = $this->guest('Majda', 'mohd', 'mtmra.636297@guest.booking.com', '+355690004002', 'KWT');
+
+        $props = $this->props($this->actingAs($admin)->get(route('guests.index', ['sort' => 'name']))->assertOk());
+        $rows = collect($props['guests']['data'])->keyBy('id');
+
+        $this->assertSame(4, $props['stats']['duplicate_profiles']);
+        foreach ([$twinA, $twinB, $flippedA, $flippedB] as $suspect) {
+            $this->assertTrue($rows[$suspect->id]['is_duplicate'], "Guest {$suspect->id} should be a duplicate suspect.");
+        }
+        foreach ([$familyA, $familyB] as $companion) {
+            $this->assertFalse($rows[$companion->id]['is_duplicate']);
+            $this->assertTrue($rows[$companion->id]['is_companion']);
+        }
+
+        $segment = $this->props($this->actingAs($admin)->get(route('guests.index', ['segment' => 'duplicates']))->assertOk());
         $this->assertEqualsCanonicalizing(
-            [$past->id, $duplicate->id],
-            collect($duplicateProps['guests']['data'])->pluck('id')->all(),
+            [$twinA->id, $twinB->id, $flippedA->id, $flippedB->id],
+            collect($segment['guests']['data'])->pluck('id')->all(),
         );
+    }
+
+    public function test_inside_counts_people_not_profiles(): void
+    {
+        $admin = $this->user('admin');
+        $rooms = $this->rooms(3);
+        $group = $this->guest('Group', 'Booker', 'group@example.test', '+355690002001', 'POL');
+        $solo = $this->guest('Solo', 'Guest', 'solo@example.test', '+355690002002', 'ALB');
+
+        $this->reservation($rooms[0], $group, $admin, 'checked_in', '2026-07-09', '2026-07-12');
+        $second = $this->reservation($rooms[1], $group, $admin, 'checked_in', '2026-07-09', '2026-07-12');
+        $second->forceFill(['adults' => 2, 'children' => 1])->saveQuietly();
+        $this->reservation($rooms[2], $solo, $admin, 'checked_in', '2026-07-10', '2026-07-13');
+
+        $props = $this->props($this->actingAs($admin)->get(route('guests.index'))->assertOk());
+
+        // One group booker with two rooms (2 + 3 people) and one solo pair:
+        // 7 people, 3 rooms, but only 2 named profiles.
+        $this->assertSame(7, $props['stats']['in_house']);
+        $this->assertSame(3, $props['stats']['in_house_rooms']);
+        $this->assertSame(2, $props['stats']['in_house_profiles']);
     }
 
     public function test_multi_room_booking_group_counts_as_one_completed_stay(): void

@@ -89,6 +89,8 @@ class GuestController extends Controller
             $query->whereIn('nationality', $nationalityAliases);
         }
 
+        $verdicts = $this->contactShareVerdicts();
+
         match ($segment) {
             'in_house' => $query->whereHas('reservations', fn (Builder $reservation) => $reservation
                 ->where('status', 'checked_in')),
@@ -98,8 +100,8 @@ class GuestController extends Controller
                 ->whereBetween('check_in_date', [$todayString, $windowEndString])),
             'returning' => $this->whereReturningGuest($query),
             'incomplete' => $this->whereProfileIncomplete($query),
-            'duplicates' => $this->whereDuplicateProfile($query),
-            'attention' => $this->whereNeedsAttention($query),
+            'duplicates' => $query->whereIn('id', $verdicts['duplicates']->all()),
+            'attention' => $this->whereNeedsAttention($query, $verdicts['duplicates']),
             default => null,
         };
 
@@ -139,13 +141,6 @@ class GuestController extends Controller
             ->withQueryString();
 
         $guestIds = collect($paginator->items())->pluck('id');
-        $duplicateGuestIds = $guestIds->isEmpty()
-            ? collect()
-            : $this->duplicateGuestsQuery()
-                ->whereIn('id', $guestIds->all())
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->values();
         $reservationsByGuest = $guestIds->isEmpty()
             ? collect()
             : Reservation::query()
@@ -166,11 +161,13 @@ class GuestController extends Controller
                 ->get()
                 ->groupBy('guest_id');
 
-        $duplicateLookup = $duplicateGuestIds->flip();
+        $duplicateLookup = $verdicts['duplicates']->flip();
+        $companionLookup = $verdicts['companions']->flip();
 
         $paginator->through(function (Guest $guest) use (
             $canUpdate,
             $duplicateLookup,
+            $companionLookup,
             $reservationsByGuest,
             $today,
             $windowEnd
@@ -239,6 +236,7 @@ class GuestController extends Controller
                 'profile_completeness' => $profileCompleteness,
                 'missing_fields' => $missingFields,
                 'is_duplicate' => $isDuplicate,
+                'is_companion' => $companionLookup->has($guest->id),
                 'needs_attention' => $isDuplicate || $missingFields->isNotEmpty(),
                 'has_reservations' => (int) $guest->reservation_history_count > 0,
                 'has_documents' => (bool) $guest->documents_exists,
@@ -259,10 +257,19 @@ class GuestController extends Controller
             ];
         });
 
+        // "Inside" counts PEOPLE (adults + children of checked-in stays) — a
+        // group booking is many rooms and many people under ONE profile, so a
+        // profile count reads far too low (Saturn: 11 people, 4 profiles).
+        $inHouse = Reservation::query()
+            ->where('status', 'checked_in')
+            ->selectRaw('COUNT(*) as rooms, COALESCE(SUM(adults + children), 0) as people, COUNT(DISTINCT guest_id) as profiles')
+            ->first();
+
         $stats = [
             'total' => Guest::count(),
-            'in_house' => Guest::whereHas('reservations', fn (Builder $reservation) => $reservation
-                ->where('status', 'checked_in'))->count(),
+            'in_house' => (int) $inHouse->people,
+            'in_house_rooms' => (int) $inHouse->rooms,
+            'in_house_profiles' => (int) $inHouse->profiles,
             'arriving_7_days' => Guest::whereHas('reservations', fn (Builder $reservation) => $reservation
                 ->where('status', 'confirmed')
                 ->whereNull('no_show_at')
@@ -275,8 +282,8 @@ class GuestController extends Controller
                 ->count(),
             'returning' => $this->returningGuestsQuery()->count(),
             'incomplete' => $this->profileIncompleteQuery()->count(),
-            'duplicate_profiles' => $this->duplicateGuestsQuery()->count(),
-            'attention' => $this->needsAttentionQuery()->count(),
+            'duplicate_profiles' => $verdicts['duplicates']->count(),
+            'attention' => $this->whereNeedsAttention(Guest::query(), $verdicts['duplicates'])->count(),
         ];
 
         return Inertia::render('Guests/Index', [
@@ -548,8 +555,8 @@ class GuestController extends Controller
         abort_if($updates === [], 422, 'Fushat e zgjedhura nuk kanë të dhëna të lexueshme.');
 
         Validator::make($updates, [
-            'first_name' => ['sometimes', 'required', 'string', 'max:255'],
-            'last_name' => ['sometimes', 'required', 'string', 'max:255'],
+            'first_name' => ['sometimes', 'required', 'string', 'max:255', new \App\Rules\ContainsLetters(2)],
+            'last_name' => ['sometimes', 'required', 'string', 'max:255', new \App\Rules\ContainsLetters(1)],
             'nationality' => ['sometimes', 'nullable', 'string', 'size:3', 'regex:/^[A-Z]{3}$/'],
             'date_of_birth' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'before:today'],
             'document_type' => ['sometimes', 'nullable', 'in:id_card,passport,drivers_license'],
@@ -667,26 +674,67 @@ class GuestController extends Controller
         return $code;
     }
 
-    private function duplicateGuestsQuery(): Builder
+    /**
+     * Contact-sharing profiles split into TRUE duplicate suspects and travel
+     * companions. Same contact + same token-sorted name = one person twice
+     * (catches "Antonio Abbatiello" ↔ "Abbatiello Antonio"); same contact +
+     * different names = companions who got the booker's contact pasted on
+     * their profiles at registration (Booking.com issues ONE alias email per
+     * reservation, so a family of five all carry it). A shared DOCUMENT
+     * NUMBER is always suspect — IDs are personal. Deliberate trade-off: a
+     * duplicate whose second profile has a typo'd name reads as companion —
+     * still visible in the list, labeled instead of flagged.
+     *
+     * @return array{duplicates: Collection<int, int>, companions: Collection<int, int>}
+     */
+    private function contactShareVerdicts(): array
     {
-        return $this->whereDuplicateProfile(Guest::query());
+        $duplicates = [];
+        $companions = [];
+
+        // document_number is deliberately absent: the tenant-unique constraint
+        // (2026_06_27_000003) makes a shared ID number impossible by schema.
+        foreach (['email', 'phone'] as $field) {
+            $sharedValues = Guest::query()
+                ->select($field)
+                ->whereNotNull($field)
+                ->where($field, '!=', '')
+                ->groupBy($field)
+                ->havingRaw('COUNT(*) > 1');
+            $groups = Guest::query()
+                ->whereIn($field, $sharedValues)
+                ->get(['id', 'first_name', 'last_name', $field])
+                ->groupBy($field);
+
+            foreach ($groups as $group) {
+                $group = $group->values();
+                $names = $group->map(fn (Guest $guest) => $this->normalizedName($guest));
+                foreach ($group as $index => $guest) {
+                    $sameNameTwin = $names->contains(
+                        fn (string $name, int $other) => $other !== $index && $name !== '' && $name === $names[$index],
+                    );
+                    if ($sameNameTwin) {
+                        $duplicates[$guest->id] = true;
+                    } else {
+                        $companions[$guest->id] = true;
+                    }
+                }
+            }
+        }
+
+        // Duplicate via one field outranks companion via another.
+        return [
+            'duplicates' => collect(array_keys($duplicates))->values(),
+            'companions' => collect(array_keys(array_diff_key($companions, $duplicates)))->values(),
+        ];
     }
 
-    private function whereDuplicateProfile(Builder $query): Builder
+    private function normalizedName(Guest $guest): string
     {
-        return $query->where(function (Builder $duplicates) {
-            foreach (['email', 'phone', 'document_number'] as $index => $field) {
-                $duplicateValues = Guest::query()
-                    ->select($field)
-                    ->whereNotNull($field)
-                    ->where($field, '!=', '')
-                    ->groupBy($field)
-                    ->havingRaw('COUNT(*) > 1');
+        $tokens = preg_split('/\s+/u', mb_strtolower(trim($guest->first_name.' '.$guest->last_name))) ?: [];
+        sort($tokens);
 
-                $method = $index === 0 ? 'whereIn' : 'orWhereIn';
-                $duplicates->{$method}($field, $duplicateValues);
-            }
-        });
+        return implode(' ', array_filter($tokens));
     }
 
     private function whereProfileIncomplete(Builder $query): Builder
@@ -696,26 +744,23 @@ class GuestController extends Controller
         });
     }
 
-    private function whereNeedsAttention(Builder $query): Builder
+    private function whereNeedsAttention(Builder $query, Collection $duplicateIds): Builder
     {
-        return $query->where(function (Builder $attention) {
+        return $query->where(function (Builder $attention) use ($duplicateIds) {
             $attention->where(function (Builder $missing) {
                 $this->addMissingProfileConditions($missing);
             });
-            $attention->orWhere(function (Builder $duplicates) {
-                $this->whereDuplicateProfile($duplicates);
-            });
+            if ($duplicateIds->isNotEmpty()) {
+                // Only TRUE duplicate suspects demand attention — companions
+                // sharing the booker's contact are normal, just labeled.
+                $attention->orWhereIn('id', $duplicateIds->all());
+            }
         });
     }
 
     private function profileIncompleteQuery(): Builder
     {
         return $this->whereProfileIncomplete(Guest::query());
-    }
-
-    private function needsAttentionQuery(): Builder
-    {
-        return $this->whereNeedsAttention(Guest::query());
     }
 
     private function addMissingProfileConditions(Builder $query): void

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Observers\ReservationObserver;
 use App\Services\MoneySnapshot;
 use App\Services\PricingCurrency;
+use App\Tenancy\TenantRule;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -42,6 +43,7 @@ class Reservation extends TenantModel
         'confirmation_token',
         'check_in_date',
         'check_out_date',
+        'original_check_out_date',
         'status',
         'total_amount',
         'currency',
@@ -70,6 +72,14 @@ class Reservation extends TenantModel
         'etd',
         'early_check_in',
         'late_check_out',
+        'early_departure_original_room_total',
+        'early_departure_scheduled_at',
+        'early_departure_scheduled_by',
+        'early_departure_at',
+        'early_departure_by',
+        'early_departure_policy',
+        'early_departure_penalty_amount',
+        'early_departure_reason',
     ];
 
     /**
@@ -121,6 +131,46 @@ class Reservation extends TenantModel
         return $channel === '' || $channel === 'manual' ? 'direct' : $channel;
     }
 
+    /** Channels whose booking references are purely numeric on the OTA side. */
+    public const NUMERIC_REF_CHANNELS = ['booking.com', 'expedia', 'agoda', 'hotels.com', 'trip.com'];
+
+    /**
+     * Validation rules for channel_ref given the (normalized) channel. For any
+     * third-party source the OTA's reservation number is mandatory: cancellations
+     * and modifications can only reach a reservation through it, and an unlinked
+     * manual copy becomes invisible to the channel manager (Novotny/Morvan cases).
+     * Uniqueness is per channel among non-cancelled rows, so a legitimate
+     * re-entry after a cancel-and-replace still passes.
+     */
+    public static function channelRefRules(mixed $channel, ?int $ignoreReservationId = null): array
+    {
+        // A malformed channel (array, object) is rejected by the channel field's
+        // own rule — stay lenient here so validation answers 422, not a 500.
+        if (! is_string($channel) && $channel !== null) {
+            return ['nullable', 'string', 'max:120'];
+        }
+
+        $channel = static::normalizeChannel($channel);
+        if ($channel === 'direct') {
+            return ['nullable', 'string', 'max:120'];
+        }
+
+        $unique = TenantRule::unique('reservations', 'channel_ref')
+            ->where(fn ($query) => $query->where('channel', $channel)->where('status', '!=', 'cancelled'));
+        if ($ignoreReservationId !== null) {
+            $unique->ignore($ignoreReservationId);
+        }
+
+        return [
+            'required',
+            'string',
+            in_array($channel, self::NUMERIC_REF_CHANNELS, true)
+                ? 'regex:/^\d{6,15}$/'
+                : 'regex:/^[A-Za-z0-9\-]{4,40}$/',
+            $unique,
+        ];
+    }
+
     protected function casts(): array
     {
         return [
@@ -130,6 +180,7 @@ class Reservation extends TenantModel
             // read '2026-09-06' — the edit form shifted every date one day back.
             'check_in_date' => 'date:Y-m-d',
             'check_out_date' => 'date:Y-m-d',
+            'original_check_out_date' => 'date:Y-m-d',
             'booked_at' => 'datetime',
             'total_amount' => 'decimal:2',
             'exchange_rate' => 'decimal:6',
@@ -145,6 +196,10 @@ class Reservation extends TenantModel
             'no_show_at' => 'datetime',
             'early_check_in' => 'boolean',
             'late_check_out' => 'boolean',
+            'early_departure_original_room_total' => 'decimal:2',
+            'early_departure_scheduled_at' => 'datetime',
+            'early_departure_at' => 'datetime',
+            'early_departure_penalty_amount' => 'decimal:2',
         ];
     }
 
@@ -161,6 +216,16 @@ class Reservation extends TenantModel
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function earlyDepartureBy()
+    {
+        return $this->belongsTo(User::class, 'early_departure_by');
+    }
+
+    public function earlyDepartureScheduledBy()
+    {
+        return $this->belongsTo(User::class, 'early_departure_scheduled_by');
     }
 
     public function folioItems()

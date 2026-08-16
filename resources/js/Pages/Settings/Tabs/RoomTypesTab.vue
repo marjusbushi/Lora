@@ -2,6 +2,7 @@
 import { translate } from '@/i18n';
 import { ref, computed } from 'vue';
 import { useForm, usePage, router } from '@inertiajs/vue3';
+import { useCurrency } from '@/composables/useCurrency';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
@@ -13,7 +14,7 @@ import Checkbox from '@/Components/UI/Checkbox.vue';
 
 const props = defineProps({ roomTypes: Array, amenities: { type: Array, default: () => [] }, toasts: Object });
 
-const pricingSymbol = usePage().props.settings?.pricing_currency_symbol || '€';
+const { pricingSymbol } = useCurrency();
 
 const showModal = ref(false);
 const showImagesModal = ref(false);
@@ -53,17 +54,24 @@ async function prepareImage(file) {
 
     // imageOrientation honors EXIF so a portrait phone photo isn't uploaded sideways.
     const bitmap = await createImageBitmap(source, { imageOrientation: 'from-image' });
-    const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(bitmap.width, bitmap.height));
-    const width = Math.round(bitmap.width * scale);
-    const height = Math.round(bitmap.height * scale);
 
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+    // Retry ladder: a photo that encodes over the server's per-file budget is
+    // re-encoded smaller until it fits — hotel shots at 1600-2048px stay sharp.
+    const attempts = [[MAX_IMAGE_DIM, JPEG_QUALITY], [2048, 0.75], [1600, 0.6]];
+    let blob = null;
+    for (const [maxDim, quality] of attempts) {
+        const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+        const width = Math.round(bitmap.width * scale);
+        const height = Math.round(bitmap.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+        blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+        if (blob && blob.size <= SINGLE_FILE_TARGET_BYTES) break;
+    }
     bitmap.close?.();
 
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
     const baseName = (file.name || 'foto').replace(/\.[^.]+$/, '');
     return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
 }
@@ -133,48 +141,121 @@ function deleteType(type) {
     });
 }
 
+// A 47-photo iPhone batch used to convert one-by-one (minutes of WASM HEIC
+// decoding) and then upload as ONE ~14MB request with no visible progress.
+// Now: conversion runs a few photos at a time, and the upload goes out in
+// small batches — partial success survives a network hiccup, and the counter
+// moves the whole way through.
+const CONVERT_CONCURRENCY = 3;
+// Batches are packed by BYTES, not count: production nginx has no
+// client_max_body_size override (default 1MB!) and PHP caps 2M/file, 8M/request.
+// A 10-photo batch always blew the 1MB wall — nginx cut the body and the
+// progress froze mid-percent. Raise these only after the server limits rise.
+const MAX_BATCH_BYTES = 900 * 1024;
+const SINGLE_FILE_TARGET_BYTES = 850 * 1024;
+
+async function prepareAllImages(files) {
+    const prepared = [];
+    let done = 0;
+    let next = 0;
+    const workers = Array.from({ length: Math.min(CONVERT_CONCURRENCY, files.length) }, async () => {
+        while (next < files.length) {
+            const index = next++;
+            try {
+                const file = await prepareImage(files[index]);
+                prepared[index] = file;
+            } catch (e) {
+                props.toasts?.error(translate('admin.generated.k_24d20006e9fc', { p0: files[index].name || index + 1 }));
+            }
+            uploadStatus.value = translate('admin.generated.k_24d4d2fa2511', { p0: ++done, p1: files.length });
+        }
+    });
+    await Promise.all(workers);
+
+    return prepared.filter(Boolean);
+}
+
+function uploadBatch(batch, batchNo, batchCount, uploadedSoFar, total) {
+    return new Promise((resolve) => {
+        let settled = false;
+        const done = (ok) => { if (!settled) { settled = true; resolve(ok); } };
+
+        const formData = new FormData();
+        batch.forEach((f) => formData.append('images[]', f));
+
+        router.post(route('settings.room-types.images.upload', selectedType.value.id), formData, {
+            forceFormData: true,
+            preserveScroll: true,
+            preserveState: true,
+            onProgress: (event) => {
+                const pct = event?.percentage ? ` ${Math.round(event.percentage)}%` : '';
+                uploadStatus.value = `Po ngarkohen foto ${uploadedSoFar + 1}–${uploadedSoFar + batch.length} nga ${total}...${pct}`;
+            },
+            onSuccess: () => done(true),
+            // Surface the real reason instead of failing silently (this was the whole bug).
+            onError: (errors) => {
+                const first = Object.values(errors || {})[0];
+                props.toasts?.error(first || translate('admin.generated.k_5553defcbf3d'));
+                done(false);
+            },
+            // A non-Inertia failure (413 from nginx, 502, dropped connection)
+            // fires NEITHER of the above — without this the promise never
+            // resolved and the spinner spun forever. setTimeout(0) lets
+            // onSuccess/onError run first when they did fire.
+            onFinish: () => {
+                window.setTimeout(() => {
+                    if (!settled) {
+                        props.toasts?.error(translate('settingsTabs.roomTypes.uploadInterrupted'));
+                        done(false);
+                    }
+                }, 0);
+            },
+        });
+    });
+}
+
 async function uploadImages() {
     const files = imageFiles.value?.files;
     if (!files?.length || uploading.value) return;
 
     uploading.value = true;
-    const prepared = [];
-    for (let i = 0; i < files.length; i++) {
-        uploadStatus.value = translate('admin.generated.k_24d4d2fa2511', { p0: i + 1, p1: files.length });
-        try {
-            prepared.push(await prepareImage(files[i]));
-        } catch (e) {
-            props.toasts?.error(translate('admin.generated.k_24d20006e9fc', { p0: files[i].name || i + 1 }));
-        }
-    }
+    try {
+        const prepared = await prepareAllImages(Array.from(files));
+        if (!prepared.length) return;
 
-    if (!prepared.length) {
+        // Pack by bytes so no single request crosses the server's body limit.
+        const batches = [];
+        let current = [];
+        let currentBytes = 0;
+        for (const file of prepared) {
+            if (current.length && currentBytes + file.size > MAX_BATCH_BYTES) {
+                batches.push(current);
+                current = [];
+                currentBytes = 0;
+            }
+            current.push(file);
+            currentBytes += file.size;
+        }
+        if (current.length) batches.push(current);
+
+        let uploaded = 0;
+        for (let i = 0; i < batches.length; i++) {
+            const ok = await uploadBatch(batches[i], i + 1, batches.length, uploaded, prepared.length);
+            if (!ok) {
+                // Everything before this batch is already saved — say so honestly.
+                if (uploaded > 0) props.toasts?.error(translate('settingsTabs.roomTypes.uploadPartial', { saved: uploaded, next: uploaded + 1 }));
+
+                return;
+            }
+            uploaded += batches[i].length;
+        }
+
+        props.toasts?.success(translate('admin.generated.k_72b21cef3f46'));
+        if (imageFiles.value) imageFiles.value.value = '';
+    } finally {
         uploading.value = false;
         uploadStatus.value = '';
-        return;
     }
-
-    const formData = new FormData();
-    prepared.forEach((f) => formData.append('images[]', f));
-    uploadStatus.value = `Po ngarkohen ${prepared.length} foto...`;
-
-    router.post(route('settings.room-types.images.upload', selectedType.value.id), formData, {
-        forceFormData: true,
-        preserveScroll: true,
-        onSuccess: () => {
-            props.toasts?.success(translate('admin.generated.k_72b21cef3f46'));
-            if (imageFiles.value) imageFiles.value.value = '';
-        },
-        // Surface the real reason instead of failing silently (this was the whole bug).
-        onError: (errors) => {
-            const first = Object.values(errors || {})[0];
-            props.toasts?.error(first || translate('admin.generated.k_5553defcbf3d'));
-        },
-        onFinish: () => {
-            uploading.value = false;
-            uploadStatus.value = '';
-        },
-    });
 }
 
 function deleteImage(imageId) {

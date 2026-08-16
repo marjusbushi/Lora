@@ -51,7 +51,7 @@ class PricingSnapshot extends Command
             ->whereDate('check_out_date', '>', $today)
             ->whereDate('check_in_date', '<=', $horizon)
             ->with('room:id,room_type_id')
-            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount']);
+            ->get(['id', 'room_id', 'check_in_date', 'check_out_date', 'total_amount_base']);
         $discountFactors = $roomRevenue->discountFactors($reservations->pluck('id')->all());
 
         $rows = [];
@@ -64,11 +64,14 @@ class PricingSnapshot extends Command
             $total = $typeRooms->count();
             $outOfOrder = $typeRooms->where('status', 'maintenance')->count();
             $typeReservations = $reservations->filter(fn ($r) => $r->room?->room_type_id === $typeId);
+            // BASE currency on purpose: PickupPaceService compares this against
+            // today's on-books computed from total_amount_base — a reservation-
+            // currency snapshot would subtract euros from lek on a Lek hotel.
             $revenueByReservation = $typeReservations->mapWithKeys(fn ($reservation) => [
                 $reservation->id => $revenueAllocator->allocate(
                     $reservation->check_in_date,
                     $reservation->check_out_date,
-                    round((float) $reservation->total_amount * ($discountFactors[$reservation->id] ?? 1), 2),
+                    round((float) $reservation->total_amount_base * ($discountFactors[$reservation->id] ?? 1), 2),
                     $snapshotPeriod,
                 ),
             ]);

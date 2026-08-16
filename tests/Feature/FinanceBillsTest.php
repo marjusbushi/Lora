@@ -6,6 +6,7 @@ use App\Models\Bill;
 use App\Models\BillItem;
 use App\Models\FinanceAccount;
 use App\Models\FinancePayment;
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\Setting;
 use App\Models\Supplier;
@@ -181,10 +182,11 @@ class FinanceBillsTest extends TestCase
             ])->assertRedirect(route('finance.bills'))
             ->assertSessionHasNoErrors();
 
+        // The bills-page filter lists categories bills actually CARRY (auto-
+        // derived); a freshly added settings category feeds suppliers instead.
         $this->actingAs($admin)->get(route('finance.bills'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('categories.6', 'Pajisje hoteli')
                 ->where('suppliers.0.name', 'Tekno Hotel'));
     }
 
@@ -206,6 +208,8 @@ class FinanceBillsTest extends TestCase
         $this->assertSame('Ushqime & Furnizime', $supplier->fresh()->category);
         $this->assertSame('Ushqime & Furnizime', $bill->fresh()->category);
 
+        // The category input is IGNORED now — a totals-only bill derives
+        // "Të tjera", regardless of what a stale client sends.
         $this->actingAs($admin)->from(route('finance.bills.create'))
             ->post(route('finance.bills.store'), [
                 'supplier_id' => $supplier->id,
@@ -214,8 +218,10 @@ class FinanceBillsTest extends TestCase
                 'currency' => 'ALL',
                 'fx_rate' => 98.7,
                 'total' => 9870,
-            ])->assertSessionHasErrors('category');
+            ])->assertSessionHasNoErrors();
+        $this->assertSame('Të tjera', Bill::query()->latest('id')->first()->category);
 
+        // Updating without lines keeps the renamed stored category.
         $this->actingAs($admin)->from(route('finance.bills.edit', $bill))
             ->put(route('finance.bills.update', $bill), [
                 'supplier_id' => $supplier->id,
@@ -226,7 +232,8 @@ class FinanceBillsTest extends TestCase
                 'currency' => 'ALL',
                 'fx_rate' => 98.7,
                 'total' => 9870,
-            ])->assertSessionHasErrors('category');
+            ])->assertSessionHasNoErrors();
+        $this->assertSame('Ushqime & Furnizime', $bill->fresh()->category);
 
         $this->actingAs($admin)->from(route('finance.suppliers'))
             ->delete(route('finance.bill-categories.destroy', ['category' => 'Ushqime & Furnizime']))
@@ -299,6 +306,42 @@ class FinanceBillsTest extends TestCase
                 ->where('bills.data.0.id', $bill->id));
     }
 
+    public function test_mixed_bill_splits_spend_by_item_tree_roots_and_derives_its_category(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-07-13 12:00:00'));
+        $this->withoutVite();
+        $admin = $this->role('admin');
+        $supplier = $this->supplier();
+        $warehouse = Warehouse::ensureDefault();
+
+        $drinksRoot = InventoryCategory::create(['name' => 'Pije']);
+        $drinksLeaf = InventoryCategory::create(['name' => 'Freskuese', 'parent_id' => $drinksRoot->id]);
+        $fixedRoot = InventoryCategory::create(['name' => 'Shpenzime Fikse']);
+        $cola = InventoryItem::create(['name' => 'Cola', 'sku' => 'COLA', 'type' => 'product', 'unit' => 'piece', 'category_id' => $drinksLeaf->id, 'is_active' => true]);
+        $drita = InventoryItem::create(['name' => 'Drita', 'sku' => 'DRITA', 'type' => 'service', 'unit' => 'piece', 'category_id' => $fixedRoot->id, 'is_active' => true]);
+
+        $this->actingAs($admin)->post(route('finance.bills.store'), [
+            'supplier_id' => $supplier->id,
+            'issue_date' => now()->toDateString(),
+            'currency' => 'EUR',
+            'total' => 1, // recomputed from the lines
+            'items' => [
+                ['inventory_item_id' => $cola->id, 'warehouse_id' => $warehouse->id, 'quantity' => 100, 'unit_cost' => 2],
+                ['inventory_item_id' => $drita->id, 'quantity' => 1, 'unit_cost' => 100],
+            ],
+        ])->assertSessionHasNoErrors();
+
+        // The stored category is the DOMINANT root (drinks: 200 vs 100), with
+        // the leaf ("Freskuese") rolled up under its root ("Pije").
+        $bill = Bill::query()->latest('id')->first();
+        $this->assertSame('Pije', $bill->category);
+
+        // The month breakdown splits the SAME bill across both roots.
+        $spend = Bill::spendByItemCategory(now()->startOfMonth()->toDateString());
+        $this->assertSame(200.0, $spend['Pije']);
+        $this->assertSame(100.0, $spend['Shpenzime Fikse']);
+    }
+
     public function test_bill_create_is_a_dedicated_page_with_document_options(): void
     {
         $this->withoutVite();
@@ -367,7 +410,7 @@ class FinanceBillsTest extends TestCase
 
         $bill->refresh();
         $this->assertSame('EDIT-2', $bill->number);
-        $this->assertSame('Mirëmbajtje', $bill->category);
+        $this->assertSame('Të tjera', $bill->category); // derived from the lines, not the request
         $this->assertSame(15.0, (float) $bill->total);
         $this->assertSame(3.0, (float) $bill->items()->firstOrFail()->quantity);
         $this->assertSame(0.0, $item->fresh()->stock($warehouse->id));
@@ -472,7 +515,7 @@ class FinanceBillsTest extends TestCase
 
         $bill->refresh();
         $this->assertSame('STOCK-2', $bill->number);
-        $this->assertSame('Mirëmbajtje', $bill->category);
+        $this->assertSame('Të tjera', $bill->category); // stock-locked header edit keeps the derived category
         $this->assertSame('EUR', $bill->currency);
         $this->assertSame(12.0, (float) $bill->total);
         $this->assertSame(6.0, $item->fresh()->stock($warehouse->id));

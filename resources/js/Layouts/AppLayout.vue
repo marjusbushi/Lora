@@ -1,3 +1,10 @@
+<script>
+// MODULE scope — survives Inertia page swaps. AppLayout remounts on every
+// navigation, so per-instance state resets each click: keeping the last-known
+// unread count here is what stops the ding from replaying on every page.
+let lastKnownUnread = 0;
+</script>
+
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import Sidebar from '@/Components/UI/Sidebar.vue';
@@ -46,7 +53,9 @@ const messagingEnabled = computed(() => can('view_reservations') && hasModule('c
 const unreadMessages = ref(0);
 let pollTimer = null;
 let audioCtx = null;
-const baseTitle = typeof document !== 'undefined' ? document.title : '';
+// Strip any "(n) " unread prefix a previous layout instance left behind —
+// capturing it verbatim is what made titles accumulate "(1) (1) (1) …".
+const baseTitle = typeof document !== 'undefined' ? document.title.replace(/^(\(\d+\)\s*)+/, '') : '';
 
 function soundMuted() {
     return typeof window !== 'undefined' && localStorage.getItem('msgSoundMuted') === '1';
@@ -98,7 +107,10 @@ async function pollUnread() {
         });
         if (!response.ok) return;
         const { count } = await response.json();
-        if (count > unreadMessages.value) playDing();
+        // Ding only for genuinely NEW messages — compare against the
+        // module-scope count, not this instance's (which resets per page).
+        if (count > lastKnownUnread) playDing();
+        lastKnownUnread = count;
         unreadMessages.value = count;
         refreshTitle();
     } catch (error) {
@@ -161,10 +173,22 @@ const allNavItems = computed(() => [
         permission: 'view_pos_orders',
         module: 'pos',
         children: [
-            { label: 'Shitje', href: '/pms/pos/tables' },
-            { label: 'Porositë', href: '/pms/pos/orders' },
-            { label: 'Shitjet & kuponët', href: '/pms/pos/receipts' },
-            { label: 'Turnet', href: '/pms/pos/shifts' },
+            { label: t('shared.appLayout.posSales'), href: '/pms/pos/tables' },
+            { label: t('shared.appLayout.posOrders'), href: '/pms/pos/orders' },
+            // Paneli i plazhit jeton te POS-i, po ka kuptim vetëm me modulin beach aktiv.
+            ...(hasModule('beach') ? [{ label: t('shared.appLayout.posBeach'), href: '/pms/pos/beach' }] : []),
+            { label: t('shared.appLayout.posReceipts'), href: '/pms/pos/receipts' },
+            { label: t('shared.appLayout.posShifts'), href: '/pms/pos/shifts' },
+        ],
+    },
+    {
+        label: t('admin.sidebar.beach'),
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="M12 2v20"/><path d="M4.5 10.5c0-4.14 3.36-7.5 7.5-7.5s7.5 3.36 7.5 7.5"/><path d="M4.5 10.5c1.5-1.2 3.5-1.2 5 0 1.5-1.2 3.5-1.2 5 0 1.5-1.2 3.5-1.2 5 0"/><path d="M6 22h12"/></svg>',
+        permission: 'view_beach',
+        module: 'beach',
+        children: [
+            { label: t('beach.nav.calendar'), href: '/pms/beach/calendar' },
+            { label: t('beach.nav.setup'), href: '/pms/beach/setup' },
         ],
     },
     {

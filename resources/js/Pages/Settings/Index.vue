@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n';
 import AboutTab from './Tabs/AboutTab.vue';
 import AiTab from './Tabs/AiTab.vue';
 import AmenitiesTab from './Tabs/AmenitiesTab.vue';
+import BeachTab from './Tabs/BeachTab.vue';
 import BookingPoliciesTab from './Tabs/BookingPoliciesTab.vue';
 import CurrenciesTab from './Tabs/CurrenciesTab.vue';
 import FinancialTab from './Tabs/FinancialTab.vue';
@@ -42,22 +43,27 @@ const props = defineProps({
     auditHistory: { type: Object, default: () => ({}) },
     integrations: { type: Array, default: () => [] },
     posStaff: { type: Array, default: () => [] },
+    posAccountMode: { type: String, default: 'shared' },
+    beachAccountMode: { type: String, default: 'shared' },
+    posOutlets: { type: Array, default: () => [] },
+    posOutletLimit: { type: Number, default: 1 },
+    inventoryCategoryTree: { type: Array, default: () => [] },
 });
 
 const toasts = ref(null);
 const modules = computed(() => usePage().props.modules || {});
-const { locale } = useI18n();
+const { locale, t } = useI18n();
 const search = ref('');
 const groupIcons = { Hotel, BriefcaseBusiness, Bot, ShieldCheck };
 
 const requestedTab = new URLSearchParams(usePage().url.split('?')[1] || '').get('tab');
 const tabs = computed(() => visibleSettingsTabs(modules.value).map((tab) => ({
     ...tab,
-    label: locale.value === 'sq' ? tab.labelSq : tab.labelEn,
+    label: t(tab.labelKey),
 })));
 const groups = computed(() => settingsGroups.map((group) => ({
     ...group,
-    label: locale.value === 'sq' ? group.labelSq : group.labelEn,
+    label: t(group.labelKey),
     tabs: tabs.value.filter((tab) => tab.group === group.id),
 })));
 const validTabs = visibleSettingsTabs(modules.value).map((tab) => tab.id);
@@ -115,7 +121,7 @@ function selectMobileTab(tabId) {
 
                 <div class="settings-search relative w-full md:w-[340px]">
                     <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                    <input v-model="search" type="search" class="w-full border bg-white py-2 pl-9 pr-9" :placeholder="locale === 'sq' ? 'Kërko konfigurim…' : 'Search settings…'">
+                    <input v-model="search" type="search" class="w-full border bg-white py-2 pl-9 pr-9" :placeholder="$t('settingsTabs.index.searchPlaceholder')">
                     <button v-if="search" type="button" class="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" @click="search = ''">
                         <X class="h-4 w-4" />
                     </button>
@@ -124,12 +130,12 @@ function selectMobileTab(tabId) {
                             <span>{{ tab.label }}</span>
                             <span class="text-tiny text-neutral-400">{{ groups.find((group) => group.id === tab.group)?.label }}</span>
                         </button>
-                        <p v-if="!searchResults.length" class="px-3 py-3 text-body-sm text-neutral-500">{{ locale === 'sq' ? 'Nuk u gjet konfigurim.' : 'No settings found.' }}</p>
+                        <p v-if="!searchResults.length" class="px-3 py-3 text-body-sm text-neutral-500">{{ $t('settingsTabs.index.noResults') }}</p>
                     </div>
                 </div>
             </header>
 
-            <nav class="settings-category-tabs mt-5 hidden grid-cols-4 gap-2 rounded-xl border border-neutral-200 bg-white p-2 shadow-card lg:grid" :aria-label="locale === 'sq' ? 'Kategoritë e konfigurimit' : 'Settings categories'">
+            <nav class="settings-category-tabs mt-5 hidden grid-cols-4 gap-2 rounded-xl border border-neutral-200 bg-white p-2 shadow-card lg:grid" :aria-label="$t('settingsTabs.index.categoriesAria')">
                 <button v-for="group in groups" :key="group.id" type="button" class="settings-category-tab flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-body-sm font-semibold transition" :class="group.id === activeGroup ? 'bg-accent-700 text-white shadow-sm' : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'" :aria-pressed="group.id === activeGroup" @click="selectGroup(group.id)">
                     <component :is="groupIcons[group.icon]" class="h-4 w-4" />
                     <span>{{ group.label }}</span>
@@ -163,9 +169,10 @@ function selectMobileTab(tabId) {
                     <RoomTypesTab v-else-if="activeTab === 'room-types'" :room-types="roomTypes" :amenities="amenities" :toasts="toasts" />
                     <AmenitiesTab v-else-if="activeTab === 'amenities'" :amenities="amenities" :toasts="toasts" />
                     <FloorsTab v-else-if="activeTab === 'floors'" :floors="floors" :toasts="toasts" />
-                    <PosTab v-else-if="activeTab === 'pos'" :settings="settings.pos || {}" :staff="posStaff" :toasts="toasts" />
-                    <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :inventory-enabled="modules.finance === true" :currency-symbol="settings.financial?.default_currency_symbol || '€'" :toasts="toasts" />
+                    <PosTab v-else-if="activeTab === 'pos'" :settings="settings.pos || {}" :staff="posStaff" :account-mode="posAccountMode" :outlets="posOutlets" :outlet-limit="posOutletLimit" :warehouses="inventoryWarehouses" :toasts="toasts" />
+                    <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :tree="inventoryCategoryTree" :inventory-enabled="modules.finance === true" :pos-outlets="posOutlets" :toasts="toasts" />
                     <HousekeepingTab v-else-if="activeTab === 'housekeeping'" :settings="settings.housekeeping || {}" :checklist-defaults="checklistDefaults" :toasts="toasts" />
+                    <BeachTab v-else-if="activeTab === 'beach'" :settings="settings.beach || {}" :account-mode="beachAccountMode" :pos-outlets="posOutlets" :toasts="toasts" />
                     <FinancialTab v-else-if="activeTab === 'financial'" :settings="settings.financial || {}" :toasts="toasts" />
                     <CurrenciesTab v-else-if="activeTab === 'currencies'" :settings="settings.currencies || {}" :toasts="toasts" />
                     <PricingProgramsTab v-else-if="activeTab === 'pricing-programs'" :settings="settings.pricing_programs || {}" :financial="settings.financial || {}" :toasts="toasts" />

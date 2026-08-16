@@ -67,6 +67,30 @@ class ChannexClientTest extends TestCase
         });
     }
 
+    public function test_booking_audit_collection_is_paginated_and_property_scoped(): void
+    {
+        Http::fakeSequence()
+            ->push([
+                'data' => [['id' => 'B-1']],
+                'meta' => ['total' => 2],
+            ])
+            ->push([
+                'data' => [['id' => 'B-2']],
+                'meta' => ['total' => 2],
+            ]);
+
+        $bookings = (new ChannexClient)->listBookings(maxPages: 3, limit: 1);
+
+        $this->assertSame(['B-1', 'B-2'], array_column($bookings, 'id'));
+        Http::assertSent(function ($request) {
+            $data = $request->data();
+
+            return str_contains($request->url(), '/bookings')
+                && ($data['filter']['property_id'] ?? null) === 'PROP-1'
+                && ($data['pagination']['limit'] ?? null) === 1;
+        });
+    }
+
     public function test_get_availability_range_uses_property_and_inclusive_date_filters(): void
     {
         Http::fake(['*availability*' => Http::response(['data' => [

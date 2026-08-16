@@ -14,7 +14,9 @@ use App\Models\Room;
 use App\Models\Setting;
 use App\Services\BaseCurrency;
 use App\Services\ChannexConfiguration;
+use App\Services\CurrencyRates;
 use App\Services\OtaSellWindow;
+use App\Services\PricingCurrency;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -199,6 +201,16 @@ class DashboardController extends Controller
             'housekeeping' => [
                 'open' => $openCleaningCount,
                 'rush' => $rushRoomIds->count(),
+                // A queue that silently mixes today's checkouts with rooms whose
+                // task was opened days ago reads as today's workload — split it.
+                'open_today' => $openCleaningTasks
+                    ->groupBy('room_id')
+                    ->filter(fn (Collection $tasks) => $tasks->min('created_at') >= $today)
+                    ->count(),
+                'open_older' => $openCleaningTasks
+                    ->groupBy('room_id')
+                    ->filter(fn (Collection $tasks) => $tasks->min('created_at') < $today)
+                    ->count(),
             ],
             'due_today' => [
                 'amount' => round((float) $positiveDueBalances->sum(), 2),
@@ -248,6 +260,8 @@ class DashboardController extends Controller
             'ownerPulse' => $permissions['view_financials'] ? $this->ownerPulse($today) : null,
             'forecast' => $this->occupancyForecast($today, $sellableRoomIds),
             'currency' => BaseCurrency::symbol(),
+            'pricingCurrency' => PricingCurrency::code(),
+            'baseToPricingRate' => CurrencyRates::between(BaseCurrency::code(), PricingCurrency::code()),
         ]);
     }
 
@@ -669,10 +683,13 @@ class DashboardController extends Controller
         $fromTimestamp = $from->copy()->startOfDay();
         $toTimestamp = $to->copy()->endOfDay();
 
+        // amount_base, not amount: payments are recorded in their document
+        // currency (on Saturn all EUR) — summing documents and labeling the
+        // total with the base symbol understated the pulse ~93×.
         $payments = Payment::query()
             ->notVoided()
             ->whereBetween('created_at', [$fromTimestamp, $toTimestamp])
-            ->select('method', DB::raw('SUM(amount) as total'))
+            ->select('method', DB::raw('SUM(amount_base) as total'))
             ->groupBy('method')
             ->pluck('total', 'method');
 
@@ -697,6 +714,8 @@ class DashboardController extends Controller
                             ->whereBetween('updated_at', [$fromTimestamp, $toTimestamp]);
                     });
             })
+            // pos_orders carries no currency/exchange_rate column (schema
+            // verified): order totals are base-denominated by construction.
             ->select('payment_method', DB::raw('SUM(total_amount) as total'))
             ->groupBy('payment_method')
             ->pluck('total', 'payment_method');

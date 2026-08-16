@@ -46,6 +46,7 @@ return [
                 'cash' => ['title' => 'Arka kryesore', 'description' => 'Arka në monedhën bazë', 'action' => ['type' => 'tenant', 'path' => '/finance/accounts']],
                 'bank' => ['title' => 'Llogaria bankare', 'description' => 'Banka dhe të dhënat e pagesës', 'action' => ['type' => 'tenant', 'path' => '/finance/accounts']],
                 'payment_methods' => ['title' => 'Mënyrat e pagesës', 'description' => 'Cash, kartë dhe pagesa online', 'action' => ['type' => 'tenant', 'path' => '/settings?tab=financial']],
+                'pos_accounts' => ['title' => 'Llogaritë e POS Bar/Restorant', 'description' => 'Ku derdhen paratë e POS: llogaritë e hotelit ose të veçanta', 'action' => ['type' => 'tenant', 'path' => '/settings?tab=pos']],
             ],
         ],
         'pos_inventory' => [

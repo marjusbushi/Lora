@@ -689,7 +689,7 @@ function syncLabel(ts) {
                         <span><i class="inline-block w-2 h-2 rounded-full bg-info-500 mr-1.5 align-[0px]" />{{ $t('admin.generated.k_647217d35b40') }}</span>
                     </div>
 
-                    <!-- selected day: "Pse ky çmim?" -->
+                    <!-- selected day: the "why this price?" breakdown -->
                     <div v-if="selected" class="mt-5 border border-neutral-200 rounded-2xl overflow-hidden">
                         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 border-b border-neutral-200" :class="selected.holiday ? 'bg-error-50' : 'bg-neutral-50'">
                             <span class="min-w-0 text-body-sm font-semibold text-primary-900 capitalize flex flex-wrap items-center gap-2">
@@ -731,7 +731,7 @@ function syncLabel(ts) {
 
                             <div v-if="selected.ota_prices" class="grid sm:grid-cols-2 gap-3">
                                 <div v-for="(ota, key) in selected.ota_prices" :key="key" class="rounded-xl border border-info-100 bg-info-50/50 p-3">
-                                    <p class="text-tiny font-bold uppercase tracking-wide text-info-700">{{ key === 'booking' ? $t('admin.generated.k_16c93c3b7fc4') : $t('admin.generated.k_d47b7f97166a') }}</p>
+                                    <p class="text-tiny font-bold uppercase tracking-wide text-info-700">{{ key === 'booking' ? $t('admin.generated.k_16c93c3b7fc4') : key === 'airbnb' ? 'Airbnb' : $t('admin.generated.k_d47b7f97166a') }}</p>
                                     <div class="mt-2 space-y-1 text-body-sm">
                                         <div class="flex justify-between gap-3"><span class="text-neutral-500">{{ $t('admin.generated.k_72c51795efd1') }}</span><b class="tabular-nums">{{ currency }}{{ fmtPrice(ota.target_price) }}</b></div>
                                         <div class="flex justify-between gap-3"><span class="text-neutral-500">{{ $t('admin.generated.k_4b37e487f890') }}</span><b class="tabular-nums text-info-700">{{ currency }}{{ fmtPrice(ota.published_price) }}</b></div>
@@ -762,7 +762,7 @@ function syncLabel(ts) {
                                 <p class="text-tiny text-neutral-400 mt-2">{{ $t('admin.generated.k_bebb7a96065e') }}</p>
                             </div>
 
-                            <!-- PSE KY ÇMIM? — the factor breakdown, plain Albanian -->
+                            <!-- WHY THIS PRICE? — the factor breakdown -->
                             <div v-if="selected.factors && selected.factors.length" class="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
                                 <p class="text-tiny font-bold uppercase tracking-wide text-neutral-400 mb-2">{{ $t('admin.generated.k_b2be658767b6') }}</p>
                                 <div class="space-y-1.5">

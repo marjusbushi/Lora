@@ -15,7 +15,7 @@ use Illuminate\Support\Str;
  * channel_mappings row per pair. Matches by exact (case-insensitive) title, so
  * it works whether the Channex room types were created by the API bootstrap or
  * already existed. Rate plans are classified by ROLE from their title: the
- * per-channel plans (Booking.com / Expedia — see ChannelSync's title
+ * per-channel plans (Booking.com / Expedia / Airbnb — see ChannelSync's title
  * constants) fill their own columns; the first remaining plan is the BASE.
  * Idempotent (updateOrCreate) — safe to re-run.
  *
@@ -30,11 +30,14 @@ class ChannexLinkRooms extends Command
 
     protected $description = 'Map each PMS room type to its Channex room type + rate plan (channel_mappings)';
 
-    public function handle(ChannexClient $channex): int
+    public function handle(): int
     {
         if (! $this->ensureTenantContext()) {
             return self::FAILURE;
         }
+
+        // After the tenant context — see ChannexPing for why.
+        $channex = app(ChannexClient::class);
 
         if (! $channex->configured()) {
             $this->error('CHANNEX_API_KEY is not set (.env).');
@@ -68,6 +71,7 @@ class ChannexLinkRooms extends Command
         // Channex is JSON:API — the room type is under relationships, not attributes.
         $bookingTitle = Str::lower(ChannelSync::RATE_PLAN_TITLE_BOOKING);
         $expediaTitle = Str::lower(ChannelSync::RATE_PLAN_TITLE_EXPEDIA);
+        $airbnbTitle = Str::lower(ChannelSync::RATE_PLAN_TITLE_AIRBNB);
         $plansByRoomType = [];
         foreach ($ratePlans as $rp) {
             $rtId = $rp['relationships']['room_type']['data']['id'] ?? null;
@@ -78,6 +82,7 @@ class ChannexLinkRooms extends Command
             $role = match ($title) {
                 $bookingTitle => 'booking',
                 $expediaTitle => 'expedia',
+                $airbnbTitle => 'airbnb',
                 default => 'base',
             };
             if ($role !== 'base' || ! isset($plansByRoomType[$rtId]['base'])) {
@@ -101,12 +106,13 @@ class ChannexLinkRooms extends Command
             $rtId = $match['id'];
             $plans = $plansByRoomType[$rtId] ?? [];
             $this->line(sprintf(
-                '  %-34s -> %s (base: %s | booking: %s | expedia: %s)',
+                '  %-34s -> %s (base: %s | booking: %s | expedia: %s | airbnb: %s)',
                 $roomType->name,
                 $rtId,
                 $plans['base'] ?? '—',
                 $plans['booking'] ?? '—',
                 $plans['expedia'] ?? '—',
+                $plans['airbnb'] ?? '—',
             ));
 
             if (! $dry) {
@@ -118,6 +124,7 @@ class ChannexLinkRooms extends Command
                         'channex_rate_plan_id' => $plans['base'] ?? null,
                         'channex_booking_rate_plan_id' => $plans['booking'] ?? null,
                         'channex_expedia_rate_plan_id' => $plans['expedia'] ?? null,
+                        'channex_airbnb_rate_plan_id' => $plans['airbnb'] ?? null,
                     ],
                 );
             }

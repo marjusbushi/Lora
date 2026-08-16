@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\InventoryMovement;
 use App\Models\MenuCategory;
@@ -119,26 +120,52 @@ class PosInventoryTest extends TestCase
         $this->assertSame(20.0, $product->fresh()->stock($central->id));
     }
 
+    public function test_menu_item_with_sales_history_refuses_deletion_with_a_clear_message(): void
+    {
+        $admin = $this->admin();
+        $category = MenuCategory::create(['name' => 'Pije', 'sort_order' => 1]);
+        $sold = MenuItem::create(['menu_category_id' => $category->id, 'name' => 'Cola', 'price' => 3, 'is_available' => true]);
+        $unsold = MenuItem::create(['menu_category_id' => $category->id, 'name' => 'Fanta', 'price' => 3, 'is_available' => true]);
+        $order = PosOrder::create(['status' => 'completed', 'payment_method' => 'cash', 'total_amount' => 3, 'paid_at' => now(), 'created_by' => $admin->id]);
+        PosOrderItem::create(['pos_order_id' => $order->id, 'menu_item_id' => $sold->id, 'quantity' => 1, 'unit_price' => 3, 'total_price' => 3]);
+
+        // Sales history is protected: a clear error instead of the old FK 500.
+        $this->actingAs($admin)->delete(route('settings.menu-items.destroy', $sold))
+            ->assertRedirect()->assertSessionHas('error');
+        $this->assertNotNull($sold->fresh());
+
+        $this->actingAs($admin)->delete(route('settings.menu-items.destroy', $unsold))
+            ->assertRedirect()->assertSessionHas('success');
+        $this->assertNull(MenuItem::find($unsold->id));
+    }
+
     public function test_menu_settings_save_warehouse_and_inventory_recipe(): void
     {
         $admin = $this->admin();
         $warehouse = Warehouse::ensureDefault();
         $inventoryItem = InventoryItem::create(['name' => 'Birrë', 'sku' => 'BIRRE', 'type' => 'product', 'unit' => 'piece']);
 
-        $this->actingAs($admin)->post(route('settings.menu-categories.store'), [
-            'name' => 'Bar', 'outlet' => 'bar', 'warehouse_id' => $warehouse->id,
-        ])->assertRedirect()->assertSessionHasNoErrors();
-        $category = MenuCategory::where('name', 'Bar')->firstOrFail();
+        // Unified categories: a standalone menu item picks a TREE node; its
+        // POS group auto-creates, then keeps outlet/warehouse as settings.
+        $barNode = InventoryCategory::create(['name' => 'Bar']);
 
         $this->actingAs($admin)->post(route('settings.menu-items.store'), [
-            'menu_category_id' => $category->id, 'name' => 'Birrë 0.33', 'price' => 3,
+            'inventory_category_id' => $barNode->id, 'name' => 'Birrë 0.33', 'price' => 3,
             'inventory_components' => [[
                 'inventory_item_id' => $inventoryItem->id, 'quantity' => 1,
             ]],
         ])->assertRedirect()->assertSessionHasNoErrors();
 
         $menuItem = MenuItem::where('name', 'Birrë 0.33')->firstOrFail();
+        $category = $menuItem->category;
+        $this->assertSame($barNode->id, $category->inventory_category_id);
+
+        $this->actingAs($admin)->put(route('settings.menu-categories.update', $category), [
+            'outlet' => 'bar', 'warehouse_id' => $warehouse->id,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
         $this->assertSame($warehouse->id, $category->fresh()->warehouse_id);
+        $this->assertSame('Bar', $category->fresh()->name);
         $this->assertDatabaseHas('menu_item_inventory', [
             'menu_item_id' => $menuItem->id, 'inventory_item_id' => $inventoryItem->id, 'quantity' => 1,
         ]);

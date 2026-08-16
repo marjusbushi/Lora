@@ -9,7 +9,7 @@ import { getIntlLocale, translate } from '@/i18n';
 
 defineProps({ summary: Object, lowItems: Array, warehouses: Array, recentMovements: Array, can: Object });
 
-const movementLabels = Object.fromEntries(['purchase', 'opening_balance', 'transfer_in', 'transfer_out', 'sale', 'adjustment', 'room_charge'].map((key) => [key, translate(`inventory.movementTypes.${key}`)]));
+const movementLabels = Object.fromEntries(['purchase', 'opening_balance', 'transfer_in', 'transfer_out', 'sale', 'adjustment', 'room_charge', 'write_off'].map((key) => [key, translate(`inventory.movementTypes.${key}`)]));
 const unitLabels = { piece: translate('inventory.units.piece'), kg: translate('inventory.units.kg'), liter: translate('inventory.units.liter'), pack: translate('inventory.units.pack') };
 
 function formatDate(value) {

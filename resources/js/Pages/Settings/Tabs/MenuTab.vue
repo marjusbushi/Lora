@@ -8,42 +8,73 @@ import Badge from '@/Components/UI/Badge.vue';
 import Modal from '@/Components/UI/Modal.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
-import { Package, Plus, Trash2 } from 'lucide-vue-next';
+import { MapPin, Package, Plus, Trash2 } from 'lucide-vue-next';
+import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
     categories: Array,
     inventoryItems: Array,
     warehouses: Array,
+    tree: { type: Array, default: () => [] },
     inventoryEnabled: { type: Boolean, default: false },
-    currencySymbol: { type: String, default: '€' },
+    posOutlets: { type: Array, default: () => [] },
     toasts: Object,
 });
 
-// Category
+const { baseSymbol: currencySymbol } = useCurrency();
+
+// Indented label for the tree select: Pije / — Alkoolike / —— Verë.
+function treeLabel(node) {
+    return `${'—'.repeat(node.depth)}${node.depth ? ' ' : ''}${node.name}`;
+}
+
+// Category groups come from the inventory tree — here only the POS-side
+// settings (outlet, source warehouse) are edited; names live on the tree.
 const showCatModal = ref(false);
 const editingCat = ref(null);
-const catForm = useForm({ name: '', outlet: '', warehouse_id: null });
+const catForm = useForm({ name: '', outlet: '', warehouse_id: null, outlet_ids: [] });
 
-function openCreateCat() { editingCat.value = null; catForm.reset(); Object.assign(catForm, { outlet: '', warehouse_id: props.warehouses[0]?.id || null }); showCatModal.value = true; }
-function openEditCat(cat) { editingCat.value = cat; Object.assign(catForm, { name: cat.name, outlet: cat.outlet || '', warehouse_id: cat.warehouse_id || null }); showCatModal.value = true; }
+// No saved restriction = visible in EVERY outlet, so the checkboxes open
+// all-checked; the server normalizes a full selection back to "everywhere".
+function openEditCat(cat) {
+    editingCat.value = cat;
+    Object.assign(catForm, {
+        name: cat.name,
+        outlet: cat.outlet || '',
+        warehouse_id: cat.warehouse_id || null,
+        outlet_ids: cat.outlet_ids?.length ? [...cat.outlet_ids] : props.posOutlets.map((outlet) => outlet.id),
+    });
+    showCatModal.value = true;
+}
+
+function restrictedOutletNames(cat) {
+    if (!cat.outlet_ids?.length) return null;
+    return props.posOutlets
+        .filter((outlet) => cat.outlet_ids.includes(outlet.id))
+        .map((outlet) => outlet.is_active ? outlet.name : `${outlet.name} (${translate('settingsPos.outletInactive')})`)
+        .join(' · ');
+}
 
 function submitCat() {
-    if (editingCat.value) {
-        catForm.put(route('settings.menu-categories.update', editingCat.value.id), {
-            onSuccess: () => { showCatModal.value = false; props.toasts?.success(translate('admin.generated.k_98bda6c4106b')); },
-        });
-    } else {
-        catForm.post(route('settings.menu-categories.store'), {
-            onSuccess: () => { showCatModal.value = false; catForm.reset(); props.toasts?.success(translate('admin.generated.k_bffb68e4eb11')); },
-        });
-    }
+    catForm.put(route('settings.menu-categories.update', editingCat.value.id), {
+        onSuccess: () => { showCatModal.value = false; props.toasts?.success(translate('admin.generated.k_98bda6c4106b')); },
+    });
+}
+
+// A refused action still completes the Inertia visit (redirect-back with a
+// flash error), so onSuccess fires — read the flash before claiming victory,
+// or the server's explanation drowns under a false "deleted" toast.
+function flashToast(page, successMessage) {
+    const flashError = page?.props?.flash?.error;
+    if (flashError) props.toasts?.error(flashError);
+    else props.toasts?.success(successMessage);
 }
 
 function deleteCat(cat) {
-    if (!confirm(`Fshi kategorine "${cat.name}"?`)) return;
+    if (!confirm(translate('settingsTabs.menu.deleteCategoryConfirm', { name: cat.name }))) return;
     router.delete(route('settings.menu-categories.destroy', cat.id), {
         preserveScroll: true,
-        onSuccess: () => props.toasts?.success(translate('admin.generated.k_4d43fb45068e')),
+        onSuccess: (page) => flashToast(page, translate('admin.generated.k_4d43fb45068e')),
         onError: () => props.toasts?.error(translate('admin.generated.k_5af41fa6dae3')),
     });
 }
@@ -51,24 +82,24 @@ function deleteCat(cat) {
 // Item
 const showItemModal = ref(false);
 const editingItem = ref(null);
-const itemForm = useForm({ menu_category_id: '', name: '', price: '', image: null, inventory_components: [] });
+const itemForm = useForm({ inventory_category_id: null, name: '', price: '', image: null, inventory_components: [] });
 const imagePreview = ref(null);
 const fileInput = ref(null);
 
-function openCreateItem(catId) {
+function openCreateItem(cat) {
     editingItem.value = null;
     itemForm.reset();
-    itemForm.menu_category_id = catId;
+    itemForm.inventory_category_id = cat?.inventory_category_id || null;
     itemForm.inventory_components = [];
     imagePreview.value = null;
     showItemModal.value = true;
 }
 
-function openEditItem(item) {
+function openEditItem(item, cat) {
     editingItem.value = item;
     itemForm.name = item.name;
     itemForm.price = item.price;
-    itemForm.menu_category_id = item.menu_category_id;
+    itemForm.inventory_category_id = cat?.inventory_category_id || null;
     itemForm.image = null;
     itemForm.inventory_components = (item.inventory_components || []).map(component => ({
         inventory_item_id: component.inventory_item_id,
@@ -107,6 +138,7 @@ function submitItem() {
     formData.append('name', itemForm.name);
     formData.append('price', itemForm.price);
     if (itemForm.image) formData.append('image', itemForm.image);
+    if (itemForm.inventory_category_id) formData.append('inventory_category_id', itemForm.inventory_category_id);
     itemForm.inventory_components.forEach((component, index) => {
         formData.append(`inventory_components[${index}][inventory_item_id]`, component.inventory_item_id ?? '');
         formData.append(`inventory_components[${index}][quantity]`, component.quantity ?? '');
@@ -120,7 +152,6 @@ function submitItem() {
             onSuccess: () => { showItemModal.value = false; props.toasts?.success(translate('admin.generated.k_147fcb2c4362')); },
         });
     } else {
-        formData.append('menu_category_id', itemForm.menu_category_id);
         router.post(route('settings.menu-items.store'), formData, {
             forceFormData: true,
             preserveScroll: true,
@@ -132,25 +163,28 @@ function submitItem() {
 function toggleItem(item) {
     router.patch(route('settings.menu-items.toggle', item.id), {}, {
         preserveScroll: true,
-        onSuccess: () => props.toasts?.info(`${item.name}: ${item.is_available ? 'jo disponueshem' : 'disponueshem'}`),
+        onSuccess: () => props.toasts?.info(`${item.name}: ${item.is_available ? translate('settingsTabs.menu.unavailable') : translate('settingsTabs.menu.available')}`),
     });
 }
 
 function deleteItem(item) {
-    if (!confirm(`Fshi "${item.name}"?`)) return;
+    if (!confirm(translate('settingsTabs.menu.deleteItemConfirm', { name: item.name }))) return;
     router.delete(route('settings.menu-items.destroy', item.id), {
         preserveScroll: true,
-        onSuccess: () => props.toasts?.success(translate('admin.generated.k_8ee8e0129285')),
+        onSuccess: (page) => flashToast(page, translate('admin.generated.k_8ee8e0129285')),
     });
 }
 </script>
 
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h3 class="text-h4 text-primary-900">{{ $t('admin.generated.k_78be5e1611cb') }}</h3>
-            <Button size="sm" variant="primary" @click="openCreateCat">{{ $t('admin.generated.k_8b3808420dbb') }}</Button>
+            <Button size="sm" variant="primary" @click="openCreateItem(null)"><Plus class="h-4 w-4" /> {{ $t('settingsTabs.menu.newItem') }}</Button>
         </div>
+        <p class="rounded-lg border border-blue-100 bg-blue-50 px-3.5 py-2.5 text-small text-blue-800">
+            {{ $t('settingsTabs.menu.groupsInfo') }}
+        </p>
 
         <Card v-for="cat in categories" :key="cat.id">
             <template #header>
@@ -159,11 +193,12 @@ function deleteItem(item) {
                         <h4 class="text-label text-primary-900">{{ cat.name }}</h4>
                         <Badge variant="neutral" size="sm">{{ cat.items?.length || 0 }} {{ $t('admin.generated.k_d24c59d8b853') }}</Badge>
                         <Badge v-if="inventoryEnabled && cat.warehouse_id" variant="success" size="sm"><Package class="h-3 w-3" /> {{ warehouses.find(warehouse => warehouse.id === cat.warehouse_id)?.name }}</Badge>
+                        <Badge v-if="restrictedOutletNames(cat)" variant="info" size="sm"><MapPin class="h-3 w-3" /> {{ restrictedOutletNames(cat) }}</Badge>
                     </div>
                     <div class="flex gap-1.5">
-                        <Button size="sm" variant="ghost" @click="openCreateItem(cat.id)">{{ $t('admin.generated.k_3acd3ffafdb5') }}</Button>
-                        <Button size="sm" variant="ghost" @click="openEditCat(cat)">{{ $t('admin.generated.k_69b7a8e80aee') }}</Button>
-                        <Button size="sm" variant="ghost" class="text-error-600" @click="deleteCat(cat)">{{ $t('admin.generated.k_94078f0402e2') }}</Button>
+                        <Button size="sm" variant="ghost" @click="openCreateItem(cat)">{{ $t('admin.generated.k_3acd3ffafdb5') }}</Button>
+                        <Button size="sm" variant="ghost" @click="openEditCat(cat)">{{ $t('settingsTabs.menu.settings') }}</Button>
+                        <Button v-if="!cat.inventory_category_id" size="sm" variant="ghost" class="text-error-600" @click="deleteCat(cat)">{{ $t('admin.generated.k_94078f0402e2') }}</Button>
                     </div>
                 </div>
             </template>
@@ -179,7 +214,7 @@ function deleteItem(item) {
                         <div>
                             <span class="text-body-sm text-primary-900 font-medium">{{ item.name }}</span>
                             <span class="text-body-sm text-accent-600 font-medium ml-2">{{ currencySymbol }}{{ item.price }}</span>
-                            <span v-if="item.inventory_item_id" class="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Nga inventari</span>
+                            <span v-if="item.inventory_item_id" class="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{{ $t('settingsTabs.menu.fromInventory') }}</span>
                             <span v-if="item.inventory_components?.length" class="mt-0.5 block text-tiny text-neutral-400">{{ item.inventory_components.length }} {{ $t('inventory.pos.components') }}</span>
                         </div>
                         <Badge v-if="!item.is_available" variant="error" size="sm">{{ $t('admin.generated.k_0389a69f50e1') }}</Badge>
@@ -188,7 +223,7 @@ function deleteItem(item) {
                         <Button size="sm" variant="ghost" @click="toggleItem(item)">
                             {{ item.is_available ? $t('admin.generated.k_fe06b9e8b743') : $t('admin.generated.k_31730ad3e645') }}
                         </Button>
-                        <Button v-if="!item.inventory_item_id" size="sm" variant="ghost" @click="openEditItem(item)">{{ $t('admin.generated.k_69b7a8e80aee') }}</Button>
+                        <Button v-if="!item.inventory_item_id" size="sm" variant="ghost" @click="openEditItem(item, cat)">{{ $t('admin.generated.k_69b7a8e80aee') }}</Button>
                         <Button v-if="!item.inventory_item_id" size="sm" variant="ghost" class="text-error-600" @click="deleteItem(item)">{{ $t('admin.generated.k_94078f0402e2') }}</Button>
                     </div>
                 </div>
@@ -200,13 +235,17 @@ function deleteItem(item) {
     </div>
 
     <!-- Category Modal -->
-    <Modal :show="showCatModal" :title="editingCat ? $t('admin.generated.k_fac35fe7bac4') : $t('admin.generated.k_e5e49fbd75f4')" max-width="sm" @close="showCatModal = false">
+    <Modal :show="showCatModal" :title="`${$t('settingsTabs.menu.groupSettingsTitle')} · ${editingCat?.name || ''}`" max-width="sm" @close="showCatModal = false">
         <div class="space-y-4">
-            <FormGroup :label="$t('admin.generated.k_588dd1daa42d')" :error="catForm.errors.name" required>
+            <p v-if="editingCat?.inventory_category_id" class="rounded-lg bg-neutral-50 px-3 py-2 text-small text-neutral-600">
+                {{ $t('settingsTabs.menu.nameFromInventory', { name: editingCat?.name || '' }) }}
+            </p>
+            <FormGroup v-else :label="$t('admin.generated.k_588dd1daa42d')" :error="catForm.errors.name" required>
                 <TextInput v-model="catForm.name" :placeholder="$t('admin.generated.k_2454362e8872')" :error="catForm.errors.name" />
             </FormGroup>
             <div class="grid gap-4 sm:grid-cols-2">
-                <FormGroup :label="$t('inventory.pos.outlet')">
+                <!-- Legacy warehouse-type hint; superseded by real outlets once any exist -->
+                <FormGroup v-if="!posOutlets.length" :label="$t('inventory.pos.outlet')">
                     <select v-model="catForm.outlet" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
                         <option value="">—</option><option value="bar">Bar</option><option value="restaurant">{{ $t('inventory.warehouseTypes.restaurant') }}</option>
                     </select>
@@ -217,10 +256,25 @@ function deleteItem(item) {
                     </select>
                 </FormGroup>
             </div>
+            <FormGroup v-if="posOutlets.length" :label="$t('settingsTabs.menu.visibleIn')" :error="catForm.errors.outlet_ids">
+                <div class="space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                    <label v-for="outlet in posOutlets" :key="outlet.id" class="flex items-center gap-2.5">
+                        <input
+                            v-model="catForm.outlet_ids"
+                            type="checkbox"
+                            :value="outlet.id"
+                            class="h-4 w-4 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+                        >
+                        <span class="text-body-sm text-primary-900">{{ outlet.name }}</span>
+                        <span v-if="!outlet.is_active" class="text-tiny text-neutral-400">({{ $t('settingsPos.outletInactive') }})</span>
+                    </label>
+                    <p class="text-tiny text-neutral-400">{{ $t('settingsTabs.menu.visibleInHint') }}</p>
+                </div>
+            </FormGroup>
         </div>
         <template #footer>
             <Button variant="outline" @click="showCatModal = false">{{ $t('admin.generated.k_71826e412580') }}</Button>
-            <Button variant="primary" :loading="catForm.processing" @click="submitCat">{{ editingCat ? $t('admin.generated.k_f5ca5b683c10') : $t('admin.generated.k_be09ce96c961') }}</Button>
+            <Button variant="primary" :loading="catForm.processing" @click="submitCat">{{ $t('admin.generated.k_f5ca5b683c10') }}</Button>
         </template>
     </Modal>
 
@@ -253,10 +307,17 @@ function deleteItem(item) {
                 <FormGroup :label="$t('admin.generated.k_588dd1daa42d')" :error="itemForm.errors?.name" required>
                     <TextInput v-model="itemForm.name" :placeholder="$t('admin.generated.k_f52281cd0a63')" :error="itemForm.errors?.name" />
                 </FormGroup>
-                <FormGroup :label="$t('admin.generated.k_0b3c36d88455')" :error="itemForm.errors?.price" required>
+                <FormGroup :label="`${$t('settingsTabs.menu.price')} (${currencySymbol})`" :error="itemForm.errors?.price" required>
                     <TextInput type="number" v-model="itemForm.price" min="0.01" step="0.01" :error="itemForm.errors?.price" />
                 </FormGroup>
             </div>
+
+            <FormGroup :label="$t('settingsTabs.menu.categoryFromInventory')" :error="itemForm.errors?.inventory_category_id" required>
+                <select v-model="itemForm.inventory_category_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                    <option :value="null" disabled>{{ $t('settingsTabs.menu.chooseCategory') }}</option>
+                    <option v-for="node in tree" :key="node.id" :value="node.id">{{ treeLabel(node) }}</option>
+                </select>
+            </FormGroup>
 
             <section v-if="inventoryEnabled" class="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                 <div class="flex items-start justify-between gap-3">

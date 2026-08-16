@@ -14,6 +14,14 @@ use Illuminate\Validation\ValidationException;
 
 class InventoryLedger
 {
+    /** Why stock leaves outside a sale — the reason is part of the audit trail. */
+    public const WRITE_OFF_REASONS = [
+        'damaged' => 'Dëmtuar',
+        'lost' => 'Humbur',
+        'expired' => 'Skaduar',
+        'other' => 'Tjetër',
+    ];
+
     public function receiveBillItem(BillItem $billItem, ?int $userId = null): InventoryMovement
     {
         return DB::transaction(function () use ($billItem, $userId) {
@@ -136,18 +144,59 @@ class InventoryLedger
         });
     }
 
+    /**
+     * Controlled stock exit for damaged/lost/expired goods — always a ledger
+     * row (never a silent quantity edit), so purchased 10 − written off 2
+     * keeps reconciling against the movement history.
+     */
+    public function writeOff(
+        InventoryItem $item,
+        Warehouse $warehouse,
+        float $quantity,
+        string $reason,
+        ?string $notes,
+        ?int $userId,
+    ): InventoryMovement {
+        return DB::transaction(function () use ($item, $warehouse, $quantity, $reason, $notes, $userId) {
+            $locked = InventoryItem::query()->lockForUpdate()->findOrFail($item->id);
+            $available = $locked->stock($warehouse->id);
+            if ($available + 0.00005 < $quantity) {
+                throw ValidationException::withMessages([
+                    'quantity' => 'Sasia e kërkuar kalon stokun e disponueshëm ('.$available.').',
+                ]);
+            }
+
+            return InventoryMovement::create([
+                'inventory_item_id' => $locked->id,
+                'warehouse_id' => $warehouse->id,
+                'type' => 'write_off',
+                'quantity' => -$quantity,
+                'unit_cost' => (float) $locked->average_cost,
+                'notes' => (self::WRITE_OFF_REASONS[$reason] ?? $reason).($notes ? ' · '.$notes : ''),
+                'occurred_at' => now(),
+                'created_by' => $userId,
+            ]);
+        });
+    }
+
     public function consumePosOrderItem(PosOrderItem $orderItem, ?int $userId = null): void
     {
         DB::transaction(function () use ($orderItem, $userId) {
             $orderItem->loadMissing([
-                'order',
+                'order.outlet.warehouse',
                 'menuItem.category.warehouse',
                 'menuItem.warehouse',
                 'menuItem.inventoryComponents.inventoryItem',
             ]);
 
             $category = $orderItem->menuItem?->category;
-            $warehouse = $orderItem->menuItem?->warehouse?->is_active
+            // An order stamped with an outlet that owns a warehouse deducts
+            // from THAT warehouse ("pika ka magazinën e vet") — the item/
+            // category chain below only applies to outlet-less orders or
+            // outlets without a warehouse, so today's behaviour is unchanged.
+            $outletWarehouse = $orderItem->order?->outlet?->warehouse;
+            $warehouse = $outletWarehouse?->is_active ? $outletWarehouse : null;
+            $warehouse ??= $orderItem->menuItem?->warehouse?->is_active
                 ? $orderItem->menuItem->warehouse
                 : null;
             $warehouse ??= $category?->warehouse?->is_active ? $category->warehouse : null;
@@ -158,11 +207,14 @@ class InventoryLedger
 
             foreach ($orderItem->menuItem?->inventoryComponents ?? [] as $component) {
                 $item = InventoryItem::query()->lockForUpdate()->findOrFail($component->inventory_item_id);
+                // Idempotency is per order-line + item, NOT per warehouse: if the
+                // resolved warehouse changes between store() and complete() (an
+                // admin re-assigns the outlet/category warehouse while a ticket
+                // is open), a warehouse-scoped check would deduct a second time.
                 $existing = InventoryMovement::query()
                     ->where('sourceable_type', PosOrderItem::class)
                     ->where('sourceable_id', $orderItem->id)
                     ->where('type', 'sale')
-                    ->where('warehouse_id', $warehouse->id)
                     ->where('inventory_item_id', $item->id)
                     ->exists();
                 if ($existing) {

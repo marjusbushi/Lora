@@ -6,14 +6,19 @@ import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
+import CategoryTree from '@/Components/UI/CategoryTree.vue';
+import InfoTip from '@/Components/UI/InfoTip.vue';
 import { AlertTriangle, Clock3, ReceiptText, Truck } from 'lucide-vue-next';
 import { Link } from '@inertiajs/vue3';
 import { useReportDrilldown } from '@/composables/useReportDrilldown';
+import { useReportCurrency } from '@/composables/useReportCurrency';
 
 const props = defineProps({
     filters: Object,
     analytics: { type: Object, default: () => ({}) },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: null },
+    baseToPricingRate: { type: [Number, String], default: null },
 });
 const { can, hasModule } = useReportDrilldown();
 const supplierHref = (row) => can('view_finance') && hasModule('finance') ? route('finance.suppliers', { supplier: row.id }) : null;
@@ -25,7 +30,7 @@ const suppliers = computed(() => current.value.suppliers || []);
 const categories = computed(() => current.value.categories || []);
 const topItems = computed(() => current.value.top_items || []);
 const changes = computed(() => props.analytics.changes || {});
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const { money, moneyBase, showBase, displayRate, pricingCode } = useReportCurrency(props);
 const number = (value, digits = 1) => Number(value ?? 0).toLocaleString(getIntlLocale(), { maximumFractionDigits: digits });
 const pctChange = (key, suffix = '%') => changes.value[key] == null ? translate('reports360.noComparison') : `${changes.value[key] > 0 ? '+' : ''}${number(changes.value[key])}${suffix}`;
 const trend = (value, inverse = false) => {
@@ -36,10 +41,10 @@ const statusLabel = (status) => translate(`reports360.supplierPerformance.status
 const statusVariant = (status) => ({ healthy: 'success', watch: 'warning', risk: 'error' }[status] || 'neutral');
 
 const kpis = computed(() => [
-    { label: translate('reports360.supplierPerformance.spend'), value: money(summary.value.total_spend), tone: 'accent', icon: Truck, trend: trend(changes.value.total_spend), trendText: pctChange('total_spend'), href: can('view_finance') && hasModule('finance') ? route('finance.bills') : null },
-    { label: translate('reports360.supplierPerformance.avgBill'), value: money(summary.value.average_bill), tone: 'info', icon: ReceiptText, trend: trend(changes.value.average_bill), trendText: pctChange('average_bill'), detail: `${summary.value.bill_count || 0} ${translate('reports360.supplierPerformance.bills')}`, href: can('view_finance') && hasModule('finance') ? route('finance.bills') : null },
-    { label: translate('reports360.supplierPerformance.onTime'), value: `${number(summary.value.on_time_rate)}%`, tone: 'success', icon: Clock3, trend: trend(changes.value.on_time_rate), trendText: pctChange('on_time_rate', ' pp'), href: can('view_finance') && hasModule('finance') ? route('finance.suppliers') : null },
-    { label: translate('reports360.supplierPerformance.overdue'), value: money(summary.value.overdue_exposure), tone: summary.value.overdue_exposure ? 'warning' : 'neutral', icon: AlertTriangle, trend: trend(changes.value.overdue_exposure, true), trendText: pctChange('overdue_exposure'), detail: `${money(summary.value.outstanding)} ${translate('reports360.supplierPerformance.outstanding').toLocaleLowerCase(getIntlLocale())}`, href: can('view_finance') && hasModule('finance') ? route('finance.bills', { status: 'overdue' }) : null },
+    { label: translate('reports360.supplierPerformance.spend'), help: translate('reports360.help.spSpend'), value: money(summary.value.total_spend), subvalue: showBase.value ? moneyBase(summary.value.total_spend) : null, tone: 'accent', icon: Truck, trend: trend(changes.value.total_spend), trendText: pctChange('total_spend'), href: can('view_finance') && hasModule('finance') ? route('finance.bills') : null },
+    { label: translate('reports360.supplierPerformance.avgBill'), value: money(summary.value.average_bill), subvalue: showBase.value ? moneyBase(summary.value.average_bill) : null, tone: 'info', icon: ReceiptText, trend: trend(changes.value.average_bill), trendText: pctChange('average_bill'), detail: `${summary.value.bill_count || 0} ${translate('reports360.supplierPerformance.bills')}`, href: can('view_finance') && hasModule('finance') ? route('finance.bills') : null },
+    { label: translate('reports360.supplierPerformance.onTime'), help: translate('reports360.help.spOnTime'), value: `${number(summary.value.on_time_rate)}%`, tone: 'success', icon: Clock3, trend: trend(changes.value.on_time_rate), trendText: pctChange('on_time_rate', ' pp'), href: can('view_finance') && hasModule('finance') ? route('finance.suppliers') : null },
+    { label: translate('reports360.supplierPerformance.overdue'), help: translate('reports360.help.spOverdue'), value: money(summary.value.overdue_exposure), subvalue: showBase.value ? moneyBase(summary.value.overdue_exposure) : null, tone: summary.value.overdue_exposure ? 'warning' : 'neutral', icon: AlertTriangle, trend: trend(changes.value.overdue_exposure, true), trendText: pctChange('overdue_exposure'), detail: `${money(summary.value.outstanding)} ${translate('reports360.supplierPerformance.outstanding').toLocaleLowerCase(getIntlLocale())}`, href: can('view_finance') && hasModule('finance') ? route('finance.bills', { status: 'overdue' }) : null },
 ]);
 
 const supplierBars = computed(() => suppliers.value.filter((row) => row.spend > 0).slice(0, 8).map((row) => ({
@@ -51,23 +56,33 @@ const supplierBars = computed(() => suppliers.value.filter((row) => row.spend > 
     href: supplierHref(row),
 })));
 
-const categoryBars = computed(() => categories.value.map((row) => ({
-    key: row.category,
-    label: row.category,
-    value: Number(row.spend || 0),
-    display: money(row.spend),
-    detail: `${row.bill_count} ${translate('reports360.supplierPerformance.bills')}`,
-    barClass: 'bg-info-500',
-})));
+const maxCategorySpend = computed(() => Math.max(1, ...categories.value.filter((row) => row.depth === 0).map((row) => Number(row.spend || 0))));
 </script>
 
 <template>
     <ReportShell :title="$t('reports360.supplierPerformance.title')" route-name="reports.supplierPerformance" :filters="filters" :description="$t('reports360.supplierPerformance.short')" :category="$t('reports360.supplierPerformance.category')">
         <ReportKpiGrid :items="kpis" />
+        <div v-if="displayRate" class="mt-3 text-right text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</div>
 
         <div class="mt-4 grid gap-4 xl:grid-cols-2">
             <ReportBarList :title="$t('reports360.supplierPerformance.bySupplier')" :rows="supplierBars" />
-            <ReportBarList :title="$t('reports360.supplierPerformance.byCategory')" :rows="categoryBars" />
+            <Card :padding="false">
+                <div class="border-b border-neutral-200 px-5 py-4">
+                    <h2 class="flex items-center gap-1 text-body font-semibold text-primary-900">{{ $t('reports360.supplierPerformance.byCategory') }}<InfoTip :text="$t('reports360.help.spCategories')" :label="$t('reports360.supplierPerformance.byCategory')" /></h2>
+                </div>
+                <CategoryTree :nodes="categories" :expand-label="$t('reports360.categoryTree.toggle')">
+                    <template #default="{ node }">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="truncate text-body-sm" :class="node.id === null ? 'italic text-warning-700' : 'font-medium text-primary-900'">{{ node.category }}</span>
+                            <span class="shrink-0 text-body-sm text-neutral-600">{{ node.bill_count }} · <b class="tabular-nums text-primary-900">{{ money(node.spend) }}</b> · {{ number(node.share) }}%</span>
+                        </div>
+                        <span v-if="node.depth === 0" class="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-neutral-100">
+                            <i class="block h-full rounded-full bg-info-500" :style="{ width: `${Math.max(2, Number(node.spend) / maxCategorySpend * 100)}%` }" />
+                        </span>
+                    </template>
+                </CategoryTree>
+                <div v-if="!categories.length" class="px-5 py-10 text-center text-body-sm text-neutral-400">{{ $t('reports360.noData') }}</div>
+            </Card>
         </div>
 
         <Card class="mt-4" :padding="false">
@@ -83,8 +98,8 @@ const categoryBars = computed(() => categories.value.map((row) => ({
                             <th class="px-4 py-3 text-right">{{ $t('reports360.supplierPerformance.spend') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.supplierPerformance.outstanding') }}</th>
                             <th class="px-4 py-3 text-right">{{ $t('reports360.supplierPerformance.onTime') }}</th>
-                            <th class="px-4 py-3 text-right">{{ $t('reports360.supplierPerformance.receiptRate') }}</th>
-                            <th class="px-5 py-3 text-right">{{ $t('reports360.supplierPerformance.statusLabel') }}</th>
+                            <th class="px-4 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.supplierPerformance.receiptRate') }}<InfoTip :text="$t('reports360.help.spReceiptRate')" :label="$t('reports360.supplierPerformance.receiptRate')" /></span></th>
+                            <th class="px-5 py-3 text-right"><span class="inline-flex items-center gap-1">{{ $t('reports360.supplierPerformance.statusLabel') }}<InfoTip :text="$t('reports360.help.spStatus')" :label="$t('reports360.supplierPerformance.statusLabel')" /></span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-neutral-100">

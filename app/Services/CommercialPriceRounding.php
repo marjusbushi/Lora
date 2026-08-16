@@ -49,6 +49,7 @@ class CommercialPriceRounding
         ?float $max = null,
         ?string $currency = null,
         ?string $mode = null,
+        ?float $reference = null,
     ): array {
         $currency = strtoupper($currency ?: PricingCurrency::code());
         $mode ??= self::mode();
@@ -59,8 +60,10 @@ class CommercialPriceRounding
         } else {
             $rounded = self::commercial($guarded, $currency);
 
-            if (! self::inside($rounded, $min, $max)) {
-                $rounded = self::closestAllowedInside($guarded, $currency, $min, $max) ?? round($guarded, 2);
+            if (! self::inside($rounded, $min, $max)
+                || ! self::preservesDirection($guarded, $rounded, $reference)) {
+                $rounded = self::closestAllowedInside($guarded, $currency, $min, $max, $reference)
+                    ?? round($guarded, 2);
             }
         }
 
@@ -107,8 +110,13 @@ class CommercialPriceRounding
             && ($max === null || $price <= $max + 0.0001);
     }
 
-    private static function closestAllowedInside(float $price, string $currency, ?float $min, ?float $max): ?float
-    {
+    private static function closestAllowedInside(
+        float $price,
+        string $currency,
+        ?float $min,
+        ?float $max,
+        ?float $reference = null,
+    ): ?float {
         $candidates = $currency === 'ALL'
             ? self::stepCandidates($price, $min, $max, 100, 100)
             : array_merge(
@@ -116,9 +124,29 @@ class CommercialPriceRounding
                 self::stepCandidates($price, $min, $max, 5, 100),
             );
 
-        $allowed = array_values(array_filter(array_unique($candidates), fn ($candidate) => self::inside((float) $candidate, $min, $max)));
+        $allowed = array_values(array_filter(
+            array_unique($candidates),
+            fn ($candidate) => self::inside((float) $candidate, $min, $max)
+                && self::preservesDirection($price, (float) $candidate, $reference),
+        ));
 
         return $allowed === [] ? null : self::nearest($price, $allowed);
+    }
+
+    /** Commercial presentation must never turn an increase into a decrease, or vice versa. */
+    private static function preservesDirection(float $price, float $candidate, ?float $reference): bool
+    {
+        if ($reference === null) {
+            return true;
+        }
+
+        $direction = $price <=> $reference;
+
+        return match ($direction) {
+            1 => $candidate >= $reference - 0.0001,
+            -1 => $candidate <= $reference + 0.0001,
+            default => abs($candidate - $reference) < 0.0001,
+        };
     }
 
     /** @return list<float> */

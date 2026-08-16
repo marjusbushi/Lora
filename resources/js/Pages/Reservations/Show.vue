@@ -15,12 +15,17 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import AuditTimeline from '@/Components/AuditTimeline.vue';
 import HotelInvoice from '@/Components/Invoices/HotelInvoice.vue';
+import EarlyDepartureModal from '@/Components/Reservations/EarlyDepartureModal.vue';
+import StayExtensionModal from '@/Components/Reservations/StayExtensionModal.vue';
 import { channelMeta } from '@/channels';
 import {
     ArrowLeft,
     ArrowRight,
     Banknote,
+    CalendarClock,
     CalendarDays,
+    CalendarMinus,
+    CalendarPlus,
     Check,
     ChevronDown,
     CircleAlert,
@@ -46,6 +51,7 @@ const props = defineProps({
     currency: { type: String, default: '€' },
     invoicePrint: { type: Object, default: () => ({}) },
     fiscalization: { type: Object, default: () => ({ configured: false, verified: false, environment: 'sandbox', document: null }) },
+    hotelToday: { type: String, default: '' },
 });
 
 const toasts = ref(null);
@@ -57,6 +63,8 @@ const showInvoice = ref(false);
 const checkoutMode = ref(false);
 const paymentSubmitting = ref(false);
 const fiscalizing = ref(false);
+const showEarlyDeparture = ref(false);
+const showStayExtension = ref(false);
 
 const perms = usePage().props.auth.user?.permissions || [];
 const canUpdate = perms.includes('update_reservations');
@@ -70,7 +78,7 @@ function requestCleaning() {
         onSuccess: (page) => {
             const flash = page.props?.flash || {};
             if (flash.error) toasts.value?.error(flash.error);
-            else toasts.value?.success(flash.success || 'Pastrimi ditor u kerkua.');
+            else toasts.value?.success(flash.success || translate('reservationShow.cleaningRequested'));
         },
         onFinish: () => (requestingCleaning.value = false),
     });
@@ -85,30 +93,51 @@ const statusBadge = {
 };
 
 const typeLabel = {
-    room: translate('admin.generated.k_654e9cd3a2c4'), restaurant: 'Restorant', bar: 'Bar',
-    minibar: 'Minibar', extra: translate('admin.generated.k_d65a8958aa77'), tax: 'Taksa', discount: 'Zbritje',
+    room: translate('admin.generated.k_654e9cd3a2c4'), restaurant: translate('reservationShow.typeRestaurant'), bar: translate('reservationShow.typeBar'),
+    minibar: translate('reservationShow.typeMinibar'), extra: translate('admin.generated.k_d65a8958aa77'), tax: translate('reservationShow.typeTax'), discount: translate('reservationShow.typeDiscount'),
 };
-const methodLabel = { cash: 'Kesh', card: 'Karte' };
+const methodLabel = { cash: translate('reservationShow.methodCash'), card: translate('reservationShow.methodCard'), ota: translate('reservationShow.methodOta') };
 
 const lineTypeOptions = computed(() => [
     ...(!props.inventoryEnabled ? [{ value: 'minibar', label: translate('admin.generated.k_c88066bb10cd') }] : []),
     { value: 'extra', label: translate('admin.generated.k_74f0c49d9770') },
     { value: 'discount', label: translate('admin.generated.k_0f4209c81496') },
 ]);
-const methodOptions = [
+// The 'ota' method appears only for OTA-channel reservations: the money went
+// to the OTA online, so it must land on the channel's account, not Arka/Banka.
+const isOtaChannel = computed(() => ['booking.com', 'expedia', 'airbnb'].includes(props.reservation.channel));
+const methodOptions = computed(() => [
     { value: 'cash', label: translate('admin.generated.k_da508864861c') },
     { value: 'card', label: translate('admin.generated.k_6d64b27daef1') },
-];
+    ...(isOtaChannel.value ? [{ value: 'ota', label: translate('reservationShow.methodPaidOnlineOta') }] : []),
+]);
 
 const hasOpenOrders = computed(() => (props.openPosOrders?.length || 0) > 0);
 const unsettled = computed(() => Number(props.folio.outstanding) > 0.005);
 const canAddCharge = computed(() => canUpdate && ['pending', 'confirmed', 'checked_in'].includes(props.reservation.status));
 const isCheckedIn = computed(() => props.reservation.status === 'checked_in');
+const earlyDeparturePlanned = computed(() => Boolean(
+    props.reservation.early_departure_scheduled_at
+    && !props.reservation.early_departure_at
+    && props.reservation.original_check_out_date
+));
+const canDepartEarly = computed(() => {
+    if (!isCheckedIn.value) return false;
+    const contractualCheckOut = props.reservation.original_check_out_date || props.reservation.check_out_date;
+    const earliestDeparture = new Date(`${props.reservation.check_in_date}T00:00:00Z`);
+    earliestDeparture.setUTCDate(earliestDeparture.getUTCDate() + 1);
+
+    return earliestDeparture.toISOString().slice(0, 10) < contractualCheckOut;
+});
+const plannedDepartureDue = computed(() => (
+    earlyDeparturePlanned.value && props.reservation.check_out_date <= props.hotelToday
+));
 const hasMoreMenuActions = computed(() => (
     (canUpdate && isCheckedIn.value && props.inventoryEnabled && props.inventoryItems.length > 0)
     || canAddCharge.value
     || (canUpdate && props.reservation.status !== 'cancelled' && unsettled.value)
     || (canUpdate && isCheckedIn.value)
+    || (canUpdate && canDepartEarly.value)
 ));
 const guestInitials = computed(() => (props.reservation.guest?.name || '?')
     .split(/\s+/)
@@ -141,8 +170,22 @@ const checkoutState = computed(() => {
 
 function printInvoice() {
     document.body.classList.add('printing-hotel-invoice');
+    // The hidden page content still OCCUPIES layout space, which used to
+    // paginate into trailing blank pages. Clamp the printed document to the
+    // invoice's own height (works for multi-page invoices too).
+    const invoice = document.getElementById('hotel-invoice');
+    if (invoice) {
+        // BOTH html and body: body's overflow/height alone propagates to the
+        // viewport instead of clipping, leaving the blank pages in place.
+        document.documentElement.style.height = `${invoice.scrollHeight}px`;
+        document.body.style.height = `${invoice.scrollHeight}px`;
+    }
     window.print();
-    window.setTimeout(() => document.body.classList.remove('printing-hotel-invoice'), 500);
+    window.setTimeout(() => {
+        document.body.classList.remove('printing-hotel-invoice');
+        document.body.style.height = '';
+        document.documentElement.style.height = '';
+    }, 500);
 }
 
 const fiscalDocument = computed(() => props.fiscalization?.document || null);
@@ -272,6 +315,13 @@ function runMoreMenuAction(action) {
     action();
 }
 
+function openEarlyDepartureModal() {
+    showEarlyDeparture.value = true;
+}
+function openStayExtensionModal() {
+    showStayExtension.value = true;
+}
+
 onBeforeUnmount(() => closeMoreMenu(false));
 
 const lineForm = useForm({ type: 'extra', description: '', amount: '', charge_date: '' });
@@ -358,9 +408,9 @@ function submitMinibar() {
         onSuccess: () => {
             showMinibarModal.value = false;
             minibarForm.inventory_reference = newInventoryReference();
-            toasts.value?.success('Minibari u regjistrua dhe stoku u përditësua.');
+            toasts.value?.success(translate('reservationShow.minibarSuccess'));
         },
-        onError: (errors) => toasts.value?.error(Object.values(errors)[0] || 'Minibari nuk u regjistrua.'),
+        onError: (errors) => toasts.value?.error(Object.values(errors)[0] || translate('reservationShow.minibarNotPosted')),
     });
 }
 
@@ -368,7 +418,8 @@ function openPaymentModal() {
     payForm.reset();
     payForm.clearErrors();
     payForm.amount = Number(props.folio.outstanding).toFixed(2);
-    payForm.method = 'cash';
+    // The OTA already collected online → confirming that is the default.
+    payForm.method = props.reservation.payment_collect === 'ota' ? 'ota' : 'cash';
     showPayModal.value = true;
 }
 
@@ -404,7 +455,7 @@ async function submitPay() {
     payForm.clearErrors();
 
     if (!paymentIsValid.value) {
-        payForm.setError('amount', `Shuma duhet të jetë nga 0.01 deri në ${money(props.folio.outstanding)}.`);
+        payForm.setError('amount', translate('reservationShow.amountRange', { max: money(props.folio.outstanding) }));
         return;
     }
 
@@ -420,18 +471,18 @@ async function submitPay() {
         paymentSubmitting.value = false;
         closePaymentModal();
         router.reload({ only: ['folio', 'payments'] });
-        toasts.value?.success(`Pagesa ${money(recordedAmount)} u regjistrua me sukses.`);
+        toasts.value?.success(translate('reservationShow.paymentSuccess', { amount: money(recordedAmount) }));
     } catch (error) {
         const status = error.response?.status;
         const errors = error.response?.data?.errors;
 
         if (status === 422 && errors) {
             Object.entries(errors).forEach(([field, messages]) => payForm.setError(field, messages[0]));
-            toasts.value?.error(Object.values(errors)[0]?.[0] || 'Kontrollo të dhënat e pagesës.');
+            toasts.value?.error(Object.values(errors)[0]?.[0] || translate('reservationShow.paymentCheckDetails'));
         } else if (status === 503) {
-            toasts.value?.warning('Sistemi po përditësohet. Pagesa nuk u regjistrua; provo përsëri pas pak sekondash.');
+            toasts.value?.warning(translate('reservationShow.paymentSystemUpdating'));
         } else {
-            toasts.value?.error('Pagesa nuk u regjistrua. Provo përsëri.');
+            toasts.value?.error(translate('reservationShow.paymentFailed'));
         }
     } finally {
         paymentSubmitting.value = false;
@@ -445,6 +496,10 @@ function openInvoice() {
     showInvoice.value = true;
 }
 function openCheckout() {
+    if (earlyDeparturePlanned.value) {
+        openEarlyDepartureModal();
+        return;
+    }
     if (hasOpenOrders.value) { toasts.value?.error(translate('admin.generated.k_b42ad0dd36d6')); return; }
     checkoutMode.value = true;
     showInvoice.value = true;
@@ -462,11 +517,11 @@ function settleAndCheckout(method) {
                 checkoutMode.value = false;
                 toasts.value?.success(
                     method
-                        ? `Pagesa u regjistrua (${methodLabel[method]}) dhe check-out u krye.`
-                        : 'Check-out u krye.'
+                        ? translate('reservationShow.settledCheckoutSuccess', { method: methodLabel[method] })
+                        : translate('reservationShow.checkoutSuccess')
                 );
             },
-            onError: (errors) => toasts.value?.error(errors.settle_method || 'Check-out deshtoi.'),
+            onError: (errors) => toasts.value?.error(errors.settle_method || translate('reservationShow.checkoutFailed')),
             onFinish: () => { checkingOut.value = false; },
         }
     );
@@ -518,15 +573,17 @@ function settleAndCheckout(method) {
                             :style="moreMenuStyle"
                             role="menu"
                         >
-                            <button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openMinibarModal)"><PackageOpen class="h-4 w-4" />Shto minibar</button>
+                            <button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openMinibarModal)"><PackageOpen class="h-4 w-4" />{{ $t('reservationShow.addMinibar') }}</button>
                             <button v-if="canAddCharge" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openLineModal)"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</button>
                             <button v-if="canUpdate && reservation.status !== 'cancelled' && unsettled" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openPaymentModal)"><CreditCard class="h-4 w-4" />{{ $t('reservationShow.recordPayment') }}</button>
                             <button v-if="canUpdate && isCheckedIn" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50" :disabled="requestingCleaning" @click="runMoreMenuAction(requestCleaning)"><RefreshCcw class="h-4 w-4" />{{ $t('reservationShow.requestCleaning') }}</button>
+                            <button v-if="canUpdate && isCheckedIn && !earlyDeparturePlanned" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openStayExtensionModal)"><CalendarPlus class="h-4 w-4" />{{ $t('reservationShow.extendStay') }}</button>
+                            <button v-if="canUpdate && canDepartEarly" type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50" @click="runMoreMenuAction(openEarlyDepartureModal)"><CalendarMinus class="h-4 w-4" />{{ earlyDeparturePlanned ? $t('reservationShow.manageDeparture') : $t('reservationShow.earlyDeparture') }}</button>
                         </div>
                     </template>
                 </Teleport>
                 <Button v-if="canUpdate && isCheckedIn" variant="primary" :disabled="hasOpenOrders" @click="openCheckout">
-                    {{ $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" />
+                    {{ earlyDeparturePlanned ? (plannedDepartureDue ? $t('reservationShow.finalizeDeparture') : $t('reservationShow.manageDeparture')) : $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" />
                 </Button>
             </div>
         </div>
@@ -547,6 +604,17 @@ function settleAndCheckout(method) {
             <div class="border-t border-neutral-100 pt-3 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0"><p class="text-xs text-neutral-400">{{ $t('reservationShow.total') }}</p><p class="mt-1 text-sm font-semibold text-neutral-900">{{ money(folio.gross) }}</p></div>
         </section>
 
+        <section v-if="earlyDeparturePlanned" class="mt-4 flex flex-col gap-3 rounded-xl border border-info-200 bg-info-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex items-start gap-3">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-info-700 ring-1 ring-info-200"><CalendarClock class="h-5 w-5" /></span>
+                <div>
+                    <p class="font-semibold text-info-900">{{ $t('reservationShow.plannedDepartureOn', { date: formatDate(reservation.check_out_date) }) }}</p>
+                    <p class="mt-0.5 text-sm text-info-700">{{ $t('reservationShow.plannedDepartureInfo', { date: formatDate(reservation.original_check_out_date) }) }}</p>
+                </div>
+            </div>
+            <Button variant="outline" @click="openEarlyDepartureModal">{{ plannedDepartureDue ? $t('reservationShow.finalizeDeparture') : $t('reservationShow.managePlan') }}</Button>
+        </section>
+
         <section
             v-if="isCheckedIn"
             class="mt-4 flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -559,7 +627,7 @@ function settleAndCheckout(method) {
                 </span>
                 <div><p class="font-semibold" :class="checkoutState.tone === 'success' ? 'text-success-800' : 'text-warning-800'">{{ checkoutState.title }}</p><p class="mt-0.5 text-sm" :class="checkoutState.tone === 'success' ? 'text-success-700' : 'text-warning-700'">{{ checkoutState.description }}</p></div>
             </div>
-            <Button variant="primary" :disabled="hasOpenOrders" @click="openCheckout">{{ $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" /></Button>
+            <Button variant="primary" :disabled="hasOpenOrders" @click="openCheckout">{{ earlyDeparturePlanned ? (plannedDepartureDue ? $t('reservationShow.finalizeDeparture') : $t('reservationShow.manageDeparture')) : $t('reservationShow.completeCheckout') }} <ArrowRight class="h-4 w-4" /></Button>
         </section>
 
         <div class="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
@@ -635,7 +703,7 @@ function settleAndCheckout(method) {
                 <div class="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-4">
                     <div><h3 class="text-lg font-semibold text-neutral-900">{{ $t('reservationShow.folioTitle') }}</h3><p class="mt-1 text-xs text-neutral-500">{{ $t('reservationShow.folioSubtitle') }}</p></div>
                     <div class="flex items-center gap-2">
-                        <Button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" size="sm" variant="primary" @click="openMinibarModal"><PackageOpen class="h-4 w-4" />Shto minibar</Button>
+                        <Button v-if="canUpdate && isCheckedIn && inventoryEnabled && inventoryItems.length" size="sm" variant="primary" @click="openMinibarModal"><PackageOpen class="h-4 w-4" />{{ $t('reservationShow.addMinibar') }}</Button>
                         <Button v-if="canAddCharge" size="sm" variant="outline" @click="openLineModal"><Plus class="h-4 w-4" />{{ $t('reservationShow.addCharge') }}</Button>
                     </div>
                 </div>
@@ -793,7 +861,7 @@ function settleAndCheckout(method) {
                     <FormGroup :label="$t('admin.generated.k_db85f6c8ba94')" :error="lineForm.errors.type" required>
                         <Select v-model="lineForm.type" :options="lineTypeOptions" :error="lineForm.errors.type" />
                     </FormGroup>
-                    <FormGroup :label="lineForm.type === 'discount' ? 'Shuma e zbritjes' : 'Shuma'" :error="lineForm.errors.amount" required>
+                    <FormGroup :label="lineForm.type === 'discount' ? $t('reservationShow.discountAmount') : $t('reservationShow.amount')" :error="lineForm.errors.amount" required>
                         <TextInput type="number" step="0.01" min="0.01" v-model="lineForm.amount" placeholder="0.00" :error="lineForm.errors.amount" />
                     </FormGroup>
                 </div>
@@ -818,16 +886,16 @@ function settleAndCheckout(method) {
                 <div class="rounded-lg border border-accent-100 bg-accent-50/60 p-4">
                     <div class="grid grid-cols-2 gap-4 text-body-sm">
                         <div>
-                            <p class="text-neutral-500">Totali i rezervimit</p>
+                            <p class="text-neutral-500">{{ $t('reservationShow.reservationTotal') }}</p>
                             <p class="mt-1 font-semibold text-neutral-900">{{ money(folio.gross) }}</p>
                         </div>
                         <div class="text-right">
-                            <p class="text-neutral-500">Paguar deri tani</p>
+                            <p class="text-neutral-500">{{ $t('reservationShow.paidSoFar') }}</p>
                             <p class="mt-1 font-semibold text-success-700">{{ money(folio.paid) }}</p>
                         </div>
                     </div>
                     <div class="mt-3 flex items-center justify-between border-t border-accent-100 pt-3">
-                        <span class="font-medium text-neutral-700">Mbetur për t'u paguar</span>
+                        <span class="font-medium text-neutral-700">{{ $t('reservationShow.outstanding') }}</span>
                         <span class="text-h4 text-error-600">{{ money(folio.outstanding) }}</span>
                     </div>
                 </div>
@@ -852,7 +920,7 @@ function settleAndCheckout(method) {
                         class="mt-2 text-body-sm font-medium text-accent-700 hover:text-accent-800"
                         @click="payForm.amount = Number(folio.outstanding).toFixed(2)"
                     >
-                        Paguaj të gjithë shumën
+                        {{ $t('reservationShow.payFullAmount') }}
                     </button>
                 </FormGroup>
 
@@ -877,15 +945,18 @@ function settleAndCheckout(method) {
                     </div>
                 </FormGroup>
 
+                <div v-if="payForm.method === 'ota'" class="rounded-lg bg-info-50 p-3 text-tiny text-info-800">
+                    {{ $t('reservationShow.otaAccountHint', { channel: reservation.channel }) }}
+                </div>
                 <div class="flex items-start gap-2 text-tiny text-neutral-500">
                     <ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-success-600" />
-                    <span>Pagesa ruhet vetëm një herë dhe zbritet menjëherë nga balanca e rezervimit.</span>
+                    <span>{{ $t('reservationShow.paymentStoredOnce') }}</span>
                 </div>
             </form>
             <template #footer>
                 <Button variant="outline" :disabled="paymentSubmitting" @click="closePaymentModal">{{ $t('admin.generated.k_1ae76507a0e9') }}</Button>
                 <Button variant="success" :loading="paymentSubmitting" :disabled="!paymentIsValid" @click="submitPay">
-                    Regjistro {{ paymentIsValid ? money(paymentAmount) : 'pagesën' }}
+                    {{ paymentIsValid ? $t('reservationShow.recordAmount', { amount: money(paymentAmount) }) : $t('reservationShow.recordThePayment') }}
                 </Button>
             </template>
         </Modal>
@@ -963,7 +1034,8 @@ function settleAndCheckout(method) {
                     <template v-if="!hasOpenOrders">
                         <template v-if="unsettled">
                             <Button variant="outline" :loading="checkingOut" @click="settleAndCheckout('cash')">{{ $t('admin.generated.k_87a50ba2dbca') }}</Button>
-                            <Button variant="primary" :loading="checkingOut" @click="settleAndCheckout('card')">{{ $t('admin.generated.k_1ca92da022d3') }}</Button>
+                            <Button :variant="reservation.payment_collect === 'ota' ? 'outline' : 'primary'" :loading="checkingOut" @click="settleAndCheckout('card')">{{ $t('admin.generated.k_1ca92da022d3') }}</Button>
+                            <Button v-if="reservation.payment_collect === 'ota'" variant="primary" :loading="checkingOut" @click="settleAndCheckout('ota')">{{ $t('reservationShow.paidOnlineCheckout') }}</Button>
                         </template>
                         <Button v-else variant="primary" :loading="checkingOut" @click="settleAndCheckout(null)">{{ $t('admin.generated.k_3c2400f3c583') }}</Button>
                     </template>
@@ -984,6 +1056,20 @@ function settleAndCheckout(method) {
             </template>
         </Modal>
 
+        <EarlyDepartureModal
+            :show="showEarlyDeparture"
+            :reservation="reservation"
+            :hotel-today="hotelToday"
+            @close="showEarlyDeparture = false"
+            @completed="toasts?.success($t('reservationShow.departurePlanUpdated'))"
+        />
+        <StayExtensionModal
+            :show="showStayExtension"
+            :reservation="reservation"
+            :hotel-today="hotelToday"
+            @close="showStayExtension = false"
+            @extended="toasts?.success($t('reservationShow.stayExtended'))"
+        />
         <ToastContainer ref="toasts" />
     </AppLayout>
 </template>
@@ -993,6 +1079,21 @@ function settleAndCheckout(method) {
     @page { size: A4; margin: 0; }
     body.printing-hotel-invoice * { visibility: hidden !important; }
     body.printing-hotel-invoice #hotel-invoice, body.printing-hotel-invoice #hotel-invoice * { visibility: visible !important; }
-    body.printing-hotel-invoice #hotel-invoice { position: absolute; left: 0; top: 0; margin: 0; box-shadow: none !important; }
+    /* The invoice prints from inside the modal's scroll panel: its absolute
+       placement anchors to that positioned, overflow-clipped panel, so only
+       the first screenful used to reach paper. Lift positioning, clipping and
+       height caps from every ANCESTOR (everything except the invoice itself)
+       so the document anchors to the page and paginates in full. */
+    body.printing-hotel-invoice :not(#hotel-invoice):not(#hotel-invoice *) {
+        position: static !important;
+        overflow: visible !important;
+        max-height: none !important;
+        transform: none !important;
+    }
+    body.printing-hotel-invoice #hotel-invoice { position: absolute !important; left: 0; top: 0; margin: 0; box-shadow: none !important; }
+    /* Pair of the JS height clamp: nothing beyond the invoice may paginate.
+       html must clip too — body overflow alone propagates to the viewport. */
+    body.printing-hotel-invoice { overflow: hidden !important; }
+    html:has(> body.printing-hotel-invoice) { overflow: hidden !important; }
 }
 </style>

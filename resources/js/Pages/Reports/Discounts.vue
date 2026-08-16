@@ -7,7 +7,9 @@ import ReportKpiGrid from '@/Components/UI/ReportKpiGrid.vue';
 import ReportBarList from '@/Components/UI/ReportBarList.vue';
 import Card from '@/Components/UI/Card.vue';
 import Badge from '@/Components/UI/Badge.vue';
-import { ArrowDownToLine, ArrowUpFromLine, CirclePercent, RefreshCcw } from 'lucide-vue-next';
+import InfoTip from '@/Components/UI/InfoTip.vue';
+import { useReportCurrency } from '@/composables/useReportCurrency';
+import { CirclePercent, Gauge, RefreshCcw, Scale } from 'lucide-vue-next';
 
 const props = defineProps({
     filters: Object,
@@ -15,14 +17,15 @@ const props = defineProps({
     canViewReservations: { type: Boolean, default: false },
     canViewPos: { type: Boolean, default: false },
     currency: { type: String, default: '€' },
+    pricingCurrency: { type: String, default: null },
+    baseToPricingRate: { type: [Number, String], default: null },
 });
 
 const summary = computed(() => props.analytics.summary || {});
-const daily = computed(() => props.analytics.daily || []);
 const activity = computed(() => props.analytics.activity || []);
-const maxFlow = computed(() => Math.max(1, ...daily.value.flatMap((day) => [Number(day.inflow || 0), Number(day.outflow || 0)])));
-const money = (value) => `${props.currency}${Number(value ?? 0).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const { money, moneyBase, showBase, displayRate, pricingCode } = useReportCurrency(props);
 const fmt = (date) => date ? new Date(`${date}T00:00:00`).toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const pct = (value) => value == null ? '—' : `${Number(value).toLocaleString(getIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 
 const sourceBars = computed(() => (props.analytics.discount_sources || []).map((row) => ({
     key: row.source,
@@ -39,10 +42,10 @@ const reasonBars = computed(() => (props.analytics.reasons || []).map((row) => (
     barClass: 'bg-warning-500',
 })));
 const kpis = computed(() => [
-    { label: translate('reports360.discountCashFlow.discounts'), value: money(summary.value.discounts), tone: 'warning', icon: CirclePercent, detail: `${summary.value.discount_count || 0} ${translate('reports360.discountCashFlow.transactions')}` },
-    { label: translate('reports360.discountCashFlow.refunds'), value: money(summary.value.refunds), tone: 'error', icon: RefreshCcw, detail: `${summary.value.refund_count || 0} ${translate('reports360.discountCashFlow.transactions')}` },
-    { label: translate('reports360.discountCashFlow.inflow'), value: money(summary.value.inflow), tone: 'success', icon: ArrowDownToLine },
-    { label: translate('reports360.discountCashFlow.net'), value: money(summary.value.net_cash_flow), tone: Number(summary.value.net_cash_flow || 0) >= 0 ? 'accent' : 'error', icon: ArrowUpFromLine, detail: `${translate('reports360.discountCashFlow.outflow')}: ${money(summary.value.outflow)}` },
+    { label: translate('reports360.discountCashFlow.discounts'), help: translate('reports360.help.dcDiscounts'), value: money(summary.value.discounts), subvalue: showBase.value ? moneyBase(summary.value.discounts) : null, tone: summary.value.discounts ? 'warning' : 'success', icon: CirclePercent, detail: `${summary.value.discount_count || 0} ${translate('reports360.discountCashFlow.transactions')}` },
+    { label: translate('reports360.discountCashFlow.refunds'), value: money(summary.value.refunds), subvalue: showBase.value ? moneyBase(summary.value.refunds) : null, tone: summary.value.refunds ? 'error' : 'success', icon: RefreshCcw, detail: `${summary.value.refund_count || 0} ${translate('reports360.discountCashFlow.transactions')}` },
+    { label: translate('reports360.discountCashFlow.discountShare'), help: translate('reports360.help.dcDiscountShare'), value: pct(summary.value.discount_share), tone: (summary.value.discount_share || 0) >= 5 ? 'warning' : 'neutral', icon: Gauge, detail: `${translate('reports360.discountCashFlow.revenueNetDetail')}: ${money(summary.value.revenue_net)}` },
+    { label: translate('reports360.discountCashFlow.refundShare'), help: translate('reports360.help.dcRefundShare'), value: pct(summary.value.refund_share), tone: (summary.value.refund_share || 0) >= 5 ? 'warning' : 'neutral', icon: Scale, detail: `${translate('reports360.discountCashFlow.collectionsDetail')}: ${money(summary.value.collections)}` },
 ]);
 const href = (row) => {
     if (row.link_kind === 'reservation' && props.canViewReservations) return route('reservations.show', row.link_id);
@@ -60,32 +63,14 @@ const href = (row) => {
         :category="$t('reports360.discountCashFlow.category')"
     >
         <ReportKpiGrid :items="kpis" />
+        <div v-if="displayRate" class="mt-3 text-right text-tiny text-neutral-500">{{ $t('reports360.amountsShownIn', { currency: pricingCode }) }}</div>
 
-        <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
-            <Card :padding="false">
-                <div class="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
-                    <h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.discountCashFlow.cashFlow') }}</h2>
-                    <span class="text-tiny text-neutral-500">{{ $t('reports360.discountCashFlow.ledgerOnly') }}</span>
-                </div>
-                <div class="h-56 px-5 pb-4 pt-5">
-                    <div v-if="daily.length" class="flex h-full items-end gap-1.5 border-b border-neutral-200">
-                        <div v-for="day in daily" :key="day.date" class="group flex h-full min-w-0 flex-1 items-end justify-center gap-px" :title="`${fmt(day.date)} · ${money(day.net)}`">
-                            <span class="w-2/5 rounded-t bg-success-500" :style="{ height: `${day.inflow ? Math.max(2, Number(day.inflow) / maxFlow * 100) : 0}%` }" />
-                            <span class="w-2/5 rounded-t bg-error-400" :style="{ height: `${day.outflow ? Math.max(2, Number(day.outflow) / maxFlow * 100) : 0}%` }" />
-                        </div>
-                    </div>
-                    <div v-else class="flex h-full items-center justify-center text-body-sm text-neutral-400">{{ $t('reports360.noData') }}</div>
-                </div>
-                <div class="flex justify-end gap-4 border-t border-neutral-200 px-5 py-3 text-tiny text-neutral-600">
-                    <span class="flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-success-500" />{{ $t('reports360.discountCashFlow.inflow') }}</span>
-                    <span class="flex items-center gap-1.5"><i class="h-2 w-2 rounded-full bg-error-400" />{{ $t('reports360.discountCashFlow.outflow') }}</span>
-                </div>
-            </Card>
+        <div class="mt-4 grid gap-4 xl:grid-cols-2">
             <ReportBarList :title="$t('reports360.discountCashFlow.discountSources')" :rows="sourceBars" />
+            <ReportBarList :title="$t('reports360.discountCashFlow.topReasons')" :rows="reasonBars" />
         </div>
 
-        <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(280px,0.6fr)_minmax(0,1.4fr)]">
-            <ReportBarList :title="$t('reports360.discountCashFlow.topReasons')" :rows="reasonBars" />
+        <div class="mt-4">
             <Card :padding="false">
                 <div class="border-b border-neutral-200 px-5 py-4">
                     <h2 class="text-body font-semibold text-primary-900">{{ $t('reports360.discountCashFlow.activity') }}</h2>

@@ -26,6 +26,8 @@ class TenantRoleService
                 'view_maintenance', 'create_maintenance', 'update_maintenance', 'delete_maintenance',
                 'view_pos_orders', 'create_pos_orders', 'update_pos_orders', 'delete_pos_orders',
                 'open_pos_shift', 'close_pos_shift', 'close_any_pos_shift',
+                'view_beach', 'create_beach', 'update_beach',
+                'open_beach_shift', 'close_beach_shift', 'close_any_beach_shift',
                 'view_reports',
                 // Finance: everything operational EXCEPT bank visibility,
                 // finance settings and deleting records (owner-only).
@@ -40,6 +42,8 @@ class TenantRoleService
                 'view_maintenance', 'create_maintenance', 'update_maintenance',
                 'view_pos_orders', 'create_pos_orders', 'update_pos_orders',
                 'open_pos_shift', 'close_pos_shift',
+                'view_beach', 'create_beach', 'update_beach',
+                'open_beach_shift', 'close_beach_shift',
                 'view_reports',
                 // Finance: sees the arka and records incoming payments only.
                 'view_finance', 'create_payment',
@@ -65,6 +69,9 @@ class TenantRoleService
                 'manage_transfers', 'manage_invoices', 'manage_bills',
                 'manage_suppliers', 'manage_deposits',
                 'view_reports',
+                // Sees stock and writes off damaged/lost goods, but cannot
+                // create or edit the articles themselves.
+                'view_inventory', 'manage_stock_writeoffs',
             ],
         ];
     }
@@ -80,6 +87,8 @@ class TenantRoleService
             'maintenance' => ['view', 'create', 'update', 'delete'],
             'pos_orders' => ['view', 'create', 'update', 'delete'],
             'pos_shift' => ['open', 'close', 'close_any'],
+            'beach' => ['view', 'create', 'update', 'delete'],
+            'beach_shift' => ['open', 'close', 'close_any'],
             'reports' => ['view'],
             'settings' => ['view', 'update'],
             'users' => ['view', 'create', 'update', 'delete'],
@@ -92,7 +101,7 @@ class TenantRoleService
             'manage_transfers', 'manage_invoices', 'manage_bills',
             'manage_suppliers', 'manage_finance_settings', 'delete_finance_records',
             'manage_deposits', 'manage_withdrawals',
-            'view_inventory', 'manage_inventory',
+            'view_inventory', 'manage_inventory', 'manage_stock_writeoffs',
         ];
 
         return collect($resources)
