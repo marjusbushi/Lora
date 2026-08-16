@@ -6714,6 +6714,13 @@
     "outletSubscription": "{count} nga {limit} pika të abonimit",
     "outletLimitReached": "Limiti u arrit — për një pikë të re kontaktoni Lora PMS"
   },
+  "pricingTabs": {
+    "ariaLabel": "Navigimi i çmimeve",
+    "calendar": "Kalendari",
+    "seasons": "Sezonet",
+    "lockedPrice": "{price} €/muaj",
+    "lockedTitle": "Çmime Inteligjente — {price} €/muaj · kliko për ta aktivizuar"
+  },
   "pricingIndex": {
     "monthsShort": {
       "0": "Jan",

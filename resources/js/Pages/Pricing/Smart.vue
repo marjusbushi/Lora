@@ -1,13 +1,14 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
 import { ref, computed, watch } from 'vue';
-import { router, Link } from '@inertiajs/vue3';
+import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import Modal from '@/Components/UI/Modal.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
+import PricingTabs from '@/Components/Pricing/PricingTabs.vue';
 
 const props = defineProps({
     roomTypes: { type: Array, default: () => [] },       // {id, name, min_price, max_price}
@@ -493,7 +494,7 @@ function syncLabel(ts) {
                     <i class="w-2 h-2 rounded-full" :class="lastSyncAt ? 'bg-success-500' : 'bg-neutral-300'" />
 {{ $t('admin.generated.k_4c3b98d8c589') }} {{ syncLabel(lastSyncAt) }}
                 </span>
-                <Link href="/pms/pricing" class="no-underline"><Button variant="outline">{{ $t('admin.generated.k_cba33d0b7d25') }}</Button></Link>
+                <PricingTabs active="calendar" />
             </template>
         </PageHeader>
 
