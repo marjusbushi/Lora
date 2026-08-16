@@ -170,6 +170,50 @@ class ReservationPaymentTest extends TestCase
         $this->assertSame('cancelled', $this->reservation->fresh()->status);
     }
 
+    /**
+     * Gjetje P1 e Codex: një update bulk mbi query-builder i kapërcen në heshtje
+     * ReservationObserver — pra historia e statuseve (ushqimi i analitikës së
+     * çmimeve), AuditLog-u dhe ri-push-i i disponueshmërisë te Channex. Të dyja
+     * rrugët e konfirmimit duhet ta lënë gjurmën.
+     */
+    public function test_both_confirmation_paths_record_the_status_transition(): void
+    {
+        $this->actingAs($this->staff)
+            ->postJson(route('reservations.payment', $this->reservation), [
+                'amount' => 50,
+                'method' => 'cash',
+            ])
+            ->assertCreated();
+
+        $this->assertDatabaseHas('reservation_status_logs', [
+            'reservation_id' => $this->reservation->id,
+            'from_status' => 'pending',
+            'to_status' => 'confirmed',
+        ]);
+
+        $second = Reservation::create([
+            'room_id' => $this->reservation->room_id,
+            'guest_id' => $this->reservation->guest_id,
+            'created_by' => $this->staff->id,
+            'check_in_date' => now()->addDays(20)->toDateString(),
+            'check_out_date' => now()->addDays(22)->toDateString(),
+            'status' => 'pending',
+            'total_amount' => 200,
+            'adults' => 2,
+            'channel' => 'direct',
+        ]);
+
+        $this->actingAs($this->staff)
+            ->post(route('reservations.confirm', $second))
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('reservation_status_logs', [
+            'reservation_id' => $second->id,
+            'from_status' => 'pending',
+            'to_status' => 'confirmed',
+        ]);
+    }
+
     public function test_confirm_requires_the_update_reservations_permission(): void
     {
         $housekeeper = User::factory()->create(['current_tenant_id' => $this->staff->current_tenant_id]);

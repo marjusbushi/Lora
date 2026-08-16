@@ -764,11 +764,13 @@ class ReservationController extends Controller
             // përgjithmonë "Në pritje" dhe Check-in nuk shfaqej kurrë.
             // Edhe një KAPAR i pjesshëm konfirmon: kapari është shenja që rezervimi
             // është i vërtetë; mbetja mblidhet në check-out (vendim i Marjusit).
-            // Update i kushtëzuar, jo read-then-write: sqlite e injoron lockForUpdate
-            // (mësimi #78), ndaj kushti mbi status është vetë roja.
-            Reservation::whereKey($lockedReservation->id)
-                ->where('status', 'pending')
-                ->update(['status' => 'confirmed']);
+            // MBI MODELIN, jo update bulk: kalimi i statusit duhet të ndezë
+            // ReservationObserver — reservation_status_logs (ushqimi i analitikës së
+            // çmimeve), AuditLog dhe ri-push-i i disponueshmërisë te Channex.
+            // Roja e konkurrencës është rreshti i kyçur më lart (lockForUpdate).
+            if ($lockedReservation->status === 'pending') {
+                $lockedReservation->update(['status' => 'confirmed']);
+            }
 
             return $created;
         });
@@ -1038,19 +1040,21 @@ class ReservationController extends Controller
      */
     public function confirm(Reservation $reservation): RedirectResponse
     {
-        // Update i kushtëzuar: vetëm 'pending' kalon. Një i anulluar nuk ringjallet,
-        // dhe një i konfirmuar/check-in-uar nuk zbret kurrë prapa.
-        $confirmed = Reservation::whereKey($reservation->id)
-            ->where('status', 'pending')
-            ->update(['status' => 'confirmed']);
+        // Si checkIn: rreshti kyçet, statusi rilexohet nën kyç, dhe kalimi shkruhet
+        // MBI MODELIN — që ReservationObserver të ndizet (reservation_status_logs,
+        // AuditLog, ri-push i disponueshmërisë te Channex). Një update bulk do t'i
+        // kapërcente të treja në heshtje.
+        DB::transaction(function () use ($reservation) {
+            $lockedReservation = Reservation::query()->lockForUpdate()->findOrFail($reservation->id);
 
-        if ($confirmed !== 1) {
-            throw ValidationException::withMessages([
-                'confirm' => 'Vetëm rezervimet në pritje mund të konfirmohen.',
-            ]);
-        }
+            if ($lockedReservation->status !== 'pending') {
+                throw ValidationException::withMessages([
+                    'confirm' => 'Vetëm rezervimet në pritje mund të konfirmohen.',
+                ]);
+            }
 
-        AuditLog::record('reservation.confirm', $reservation);
+            $lockedReservation->update(['status' => 'confirmed']);
+        });
 
         return back()->with('success', 'Rezervimi u konfirmua.');
     }
