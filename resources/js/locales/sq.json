@@ -4420,6 +4420,26 @@
     "beachBadge": "Plazh"
   },
   "superAdmin": {
+    "catalog": {
+      "pageTitle": "Katalogu i çmimeve",
+      "title": "Katalogu i çmimeve",
+      "subtitle": "Çmimet zyrtare të moduleve — ndryshimi këtu duket menjëherë në marketing, te dialogu i abonimit dhe te aktivizimet e reja.",
+      "listTitle": "Modulet dhe çmimet",
+      "snapshotNote": "Klientët ekzistues mbajnë çmimin e ngrirë të kontratës së tyre — katalogu prek vetëm aktivizimet e reja.",
+      "price": "Çmimi",
+      "firstUnit": "Pika e parë",
+      "extraUnit": "Çdo pikë shtesë",
+      "tierLimit": "Deri në (njësi)",
+      "excessPrice": "Mbi kufirin",
+      "percent": "Përqindja",
+      "basePrefix": "Baza:",
+      "changedBy": "Ndryshuar nga {name} · {date}",
+      "reset": "Rikthe në bazë",
+      "resetTitle": "E kthen këtë modul te çmimi bazë i platformës",
+      "applyNote": "Ruajtja i zbaton ndryshimet menjëherë, pa deploy.",
+      "save": "Ruaj çmimet",
+      "saving": "Duke ruajtur…"
+    },
     "moduleList": {
       "priceFlat": "{price} / muaj",
       "pricePerUnit": "{price} / {unit}",
@@ -4975,6 +4995,7 @@
       "paymentAttempts": "Tentativat",
       "providerEvents": "Provider Events",
       "currencies": "Monedhat",
+      "catalog": "Katalogu i çmimeve",
       "open": "Hap",
       "close": "Mbyll",
       "openMenu": "Hap menunë",
