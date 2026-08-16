@@ -78,8 +78,8 @@ function setStrategy(key) {
     strategySaving.value = true;
     router.post(route('pricing.smart.strategy'), { strategy: key }, {
         preserveScroll: true,
-        onSuccess: (page) => showServerResult(page, 'Strategjia u ndryshua — sugjerimet u rifreskuan.'),
-        onError: (e) => toasts.value?.error(Object.values(e)[0] || 'Strategjia nuk u ruajt.'),
+        onSuccess: (page) => showServerResult(page, translate('smartCal.strategyChanged')),
+        onError: (e) => toasts.value?.error(Object.values(e)[0] || translate('smartCal.strategySaveFailed')),
         onFinish: () => { strategySaving.value = false; },
     });
 }
@@ -362,7 +362,7 @@ function fmtRange(a, b) {
 }
 
 // ── Kalendari ──
-const dows = [translate('admin.generated.k_156039b2640c'), 'Ma', translate('admin.generated.k_c198630c8786'), 'En', 'Pr', 'Sh', 'Di'];
+const dows = [0, 1, 2, 3, 4, 5, 6].map((i) => translate(`smartCal.dows.${i}`));
 const monthLabel = computed(() =>
     props.month ? new Date(props.month + 'T00:00:00').toLocaleDateString(getIntlLocale(), { month: 'long', year: 'numeric' }) : '',
 );
@@ -407,7 +407,7 @@ const kpis = computed(() => {
     return { occ, avg, mkt, gain: Math.round(gain) };
 });
 function isFull(d) { return d.total > 0 && d.booked >= d.total; }
-function shortDow(d) { return ['Hën', 'Mar', 'Mër', 'Enj', 'Pre', 'Sht', 'Die'][d.dow - 1] || ''; }
+function shortDow(d) { return d.dow >= 1 && d.dow <= 7 ? translate(`smartCal.dowsShort.${d.dow - 1}`) : ''; }
 // Bottom occupancy bar — the standard hotel colour code at a glance.
 function occBar(d) {
     const occ = d.occupancy_type_pct || 0;
@@ -565,16 +565,16 @@ function syncLabel(ts) {
                 <div v-if="kpis" class="flex flex-wrap items-center gap-2 mb-5">
                     <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
                         <i class="w-2 h-2 rounded-full" :class="kpis.occ >= 90 ? 'bg-error-400' : kpis.occ >= 65 ? 'bg-warning-400' : 'bg-success-400'" />
-                        Zënia e muajit <b class="text-primary-900 tabular-nums">{{ kpis.occ }}%</b>
+                        {{ $t('smartCal.monthOccupancy') }} <b class="text-primary-900 tabular-nums">{{ kpis.occ }}%</b>
                     </span>
                     <span class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
-                        Çmimi mesatar <b class="text-primary-900 tabular-nums">{{ currency }}{{ kpis.avg }}</b>
+                        {{ $t('smartCal.avgPrice') }} <b class="text-primary-900 tabular-nums">{{ currency }}{{ kpis.avg }}</b>
                     </span>
                     <span v-if="marketEnabled && kpis.mkt" class="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-tiny font-semibold text-neutral-600">
-                        ⌂ Tregu mesatar <b class="text-primary-900 tabular-nums">{{ currency }}{{ kpis.mkt }}</b>
+                        ⌂ {{ $t('smartCal.marketAvg') }} <b class="text-primary-900 tabular-nums">{{ currency }}{{ kpis.mkt }}</b>
                     </span>
                     <span v-if="actionableCount" class="inline-flex items-center gap-2 rounded-full border border-success-300 bg-success-50 px-3 py-1 text-tiny font-semibold text-success-700">
-                        {{ actionableCount }} sugjerime<template v-if="kpis.gain > 0"> → <b class="tabular-nums">+{{ currency }}{{ kpis.gain }}</b></template>
+                        {{ $t('smartCal.suggestionsCount', { count: actionableCount }) }}<template v-if="kpis.gain > 0"> → <b class="tabular-nums">+{{ currency }}{{ kpis.gain }}</b></template>
                         <Button size="sm" variant="outline" :disabled="navigationLocked" @click="askBulkMonth">{{ $t('admin.generated.k_47b01d6519f6') }}</Button>
                     </span>
                 </div>
@@ -624,7 +624,7 @@ function syncLabel(ts) {
                                     <span class="sm:hidden uppercase mr-1">{{ shortDow(d) }}</span>{{ dayNum(d) }}
                                 </span>
                                 <span class="flex items-center gap-1">
-                                    <span v-if="d.date === todayStr" class="text-[9px] font-extrabold text-white bg-primary-900 rounded-full px-1.5 py-0.5 leading-none">SOT</span>
+                                    <span v-if="d.date === todayStr" class="text-[9px] font-extrabold text-white bg-primary-900 rounded-full px-1.5 py-0.5 leading-none">{{ $t('smartCal.today') }}</span>
                                     <span v-if="d.holiday" class="text-error-600 text-tiny leading-none" :title="d.holiday">⚑</span>
                                     <span v-if="isFull(d)" class="text-[9px] font-extrabold text-white bg-error-500 rounded-full px-1.5 py-0.5 leading-none">{{ $t('admin.generated.k_d083746b5f78') }}</span>
                                 </span>
@@ -633,7 +633,7 @@ function syncLabel(ts) {
                             <!-- with a suggestion: "Tani" small, the suggested price IS the number -->
                             <template v-if="d.actionable">
                                 <div class="mt-0.5 text-[10px] text-neutral-400 leading-tight">
-                                    Tani <b class="text-neutral-600 tabular-nums font-semibold">{{ currency }}{{ fmtPrice(d.current_price) }}</b>
+                                    {{ $t('smartCal.now') }} <b class="text-neutral-600 tabular-nums font-semibold">{{ currency }}{{ fmtPrice(d.current_price) }}</b>
                                 </div>
                                 <div class="flex items-baseline gap-1 flex-wrap">
                                     <span class="text-body-sm sm:text-h4 font-extrabold tabular-nums leading-none" :class="d.adjustment_pct > 0 ? 'text-success-800' : 'text-info-800'">
@@ -642,7 +642,7 @@ function syncLabel(ts) {
                                     <span class="text-[10px] font-extrabold rounded-full px-1.5 py-0.5 leading-none" :class="d.adjustment_pct > 0 ? 'bg-success-50 text-success-700' : 'bg-info-50 text-info-700'">
                                         {{ d.adjustment_pct > 0 ? '▲ +' : '▼ ' }}{{ d.adjustment_pct }}%
                                     </span>
-                                    <span v-if="d.clamped" class="text-[10px] leading-none" :title="'I ndalur te kufiri ' + (d.clamped === 'max' ? $t('admin.generated.k_a79d1410fa68') : $t('admin.generated.k_3925eeee4836'))">🔒</span>
+                                    <span v-if="d.clamped" class="text-[10px] leading-none" :title="$t('smartCal.clampedTitle', { bound: d.clamped === 'max' ? $t('admin.generated.k_a79d1410fa68') : $t('admin.generated.k_3925eeee4836') })">🔒</span>
                                 </div>
                             </template>
                             <!-- quiet / full day: just the live price, calm -->
@@ -664,7 +664,7 @@ function syncLabel(ts) {
                             <button
                                 v-if="d.actionable && !d.is_past"
                                 class="hidden sm:group-hover:flex absolute top-1.5 right-1.5 h-6 w-6 items-center justify-center rounded-full bg-primary-900 text-white text-tiny font-bold shadow hover:bg-primary-700"
-                                :title="'Prano ' + currency + fmtPrice(d.suggested_price)"
+                                :title="$t('smartCal.acceptTitle', { price: currency + fmtPrice(d.suggested_price) })"
                                 :disabled="applySaving"
                                 @click.stop="apply(d, null, true)"
                             >✓</button>
@@ -680,11 +680,11 @@ function syncLabel(ts) {
 
                     <!-- legend -->
                     <div class="flex flex-wrap gap-x-5 gap-y-2 mt-5 text-tiny text-neutral-500">
-                        <span><b class="text-primary-900">{{ currency }}135</b> = sugjerimi (numri i madh) · Tani = çmimi live</span>
+                        <span><b class="text-primary-900">{{ currency }}135</b> {{ $t('smartCal.legendSuggestion') }}</span>
                         <span><span class="text-success-700 font-bold mr-1">▲</span>{{ $t('admin.generated.k_ab198a82455d') }}</span>
                         <span><span class="text-info-700 font-bold mr-1">▼</span>{{ $t('admin.generated.k_4af68492052d') }}</span>
                         <span><span class="font-bold mr-1">🔒</span>{{ $t('admin.generated.k_1a7e22f88381') }}</span>
-                        <span>Vija poshtë = zënia: <i class="inline-block w-2.5 h-1 rounded-full bg-success-300 mx-1 align-[2px]" />qetë <i class="inline-block w-2.5 h-1 rounded-full bg-warning-400 mx-1 align-[2px]" />po mbushet <i class="inline-block w-2.5 h-1 rounded-full bg-error-400 mx-1 align-[2px]" />nxehtë</span>
+                        <span>{{ $t('smartCal.legendOccBar') }} <i class="inline-block w-2.5 h-1 rounded-full bg-success-300 mx-1 align-[2px]" />{{ $t('smartCal.legendOccCalm') }} <i class="inline-block w-2.5 h-1 rounded-full bg-warning-400 mx-1 align-[2px]" />{{ $t('smartCal.legendOccFilling') }} <i class="inline-block w-2.5 h-1 rounded-full bg-error-400 mx-1 align-[2px]" />{{ $t('smartCal.legendOccHot') }}</span>
                         <span><span class="text-error-600 font-bold mr-1">⚑</span>{{ $t('admin.generated.k_e9b445ba65ca') }}</span>
                         <span v-if="marketEnabled"><span class="font-bold mr-1">⌂</span>{{ $t('admin.generated.k_fbef875466bf') }}</span>
                         <span><i class="inline-block w-2 h-2 rounded-full bg-info-500 mr-1.5 align-[0px]" />{{ $t('admin.generated.k_647217d35b40') }}</span>

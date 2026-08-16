@@ -34,17 +34,16 @@ const idleClass = 'text-neutral-500 hover:text-primary-900';
         >
             <span aria-hidden="true">✨</span>{{ $t('pricingTabs.calendar') }}
         </Link>
-        <Link
+        <span
             v-else
-            :href="route('lora-ai.index')"
-            :class="[baseClass, idleClass]"
-            :title="priceLabel ? $t('pricingTabs.lockedTitle', { price: priceLabel }) : undefined"
+            :class="[baseClass, 'cursor-help text-neutral-400']"
+            :title="priceLabel ? $t('pricingTabs.lockedTitle', { price: priceLabel }) : $t('pricingTabs.lockedTitleNoPrice')"
         >
             <span aria-hidden="true">🔒</span>{{ $t('pricingTabs.calendar') }}
             <span v-if="priceLabel" class="rounded-full border border-neutral-200 bg-white px-2 py-0.5 text-tiny font-bold text-primary-900">
                 {{ $t('pricingTabs.lockedPrice', { price: priceLabel }) }}
             </span>
-        </Link>
+        </span>
         <Link
             :href="route('pricing.index')"
             :class="[baseClass, active === 'seasons' ? activeClass : idleClass]"
