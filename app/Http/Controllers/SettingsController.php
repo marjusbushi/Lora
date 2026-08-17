@@ -292,13 +292,18 @@ class SettingsController extends Controller
 
         DB::transaction(function () use ($request, $tenant, $currency, $pricingCurrency) {
             foreach ([
-                'name', 'address', 'phone', 'whatsapp_number', 'email', 'timezone', 'check_in_time', 'check_out_time',
+                'name', 'address', 'phone', 'email', 'timezone', 'check_in_time', 'check_out_time',
                 'hero_eyebrow_sq', 'hero_eyebrow_en',
                 'hero_title_sq', 'hero_title_en',
                 'hero_subtitle_sq', 'hero_subtitle_en',
             ] as $key) {
                 Setting::set("hotel.{$key}", $request->input($key));
             }
+
+            // Numri WhatsApp normalizohet në ruajtje: '00…' → '+…' (wa.me e
+            // refuzon prefiksin 00 — task #340); fronti ka edhe rrjetën e vet.
+            $whatsapp = trim((string) $request->input('whatsapp_number'));
+            Setting::set('hotel.whatsapp_number', $whatsapp === '' ? null : preg_replace('/^00/', '+', $whatsapp));
 
             Setting::set('hotel.currency', $currency);
             Setting::set('pricing.currency', $pricingCurrency);

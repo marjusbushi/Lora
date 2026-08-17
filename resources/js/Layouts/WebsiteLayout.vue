@@ -36,9 +36,10 @@ const telHref = computed(() => 'tel:' + phone.value.replace(/[^+\d]/g, ''));
 const mailHref = computed(() => 'mailto:' + email.value);
 
 // Butoni WhatsApp: shfaqet VETËM kur pronari ka vendosur numër te Cilësimet
-// (hotel.whatsapp_number). wa.me kërkon vetëm shifra (pa +, pa hapësira);
-// teksti paraplotësohet sipas gjuhës së vizitorit.
-const whatsappDigits = computed(() => (settings.value.whatsapp_number || '').replace(/\D/g, ''));
+// (hotel.whatsapp_number). wa.me kërkon vetëm shifra pa '+' DHE pa prefiksin
+// ndërkombëtar '00' — 'wa.me/00355…' hap faqe bosh (gjetur live nga Marjusi,
+// task #340); teksti paraplotësohet sipas gjuhës së vizitorit.
+const whatsappDigits = computed(() => (settings.value.whatsapp_number || '').replace(/\D/g, '').replace(/^00/, ''));
 const whatsappHref = computed(() => whatsappDigits.value
     ? `https://wa.me/${whatsappDigits.value}?text=${encodeURIComponent(translate('website.whatsappPrefill', { hotel: hotelName.value }))}`
     : null);
