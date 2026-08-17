@@ -124,10 +124,20 @@ class WhatsAppMessageImporter
         // settings, kështu butoni në web shfaqet vetiu.
         if ($status === WhatsAppConnection::STATUS_CONNECTED && $phone !== '') {
             $digits = preg_replace('/\D/', '', $phone);
-            $current = trim((string) \App\Models\Setting::get('hotel.whatsapp_number'));
 
-            if ($digits !== '' && $current === '') {
-                \App\Models\Setting::set('hotel.whatsapp_number', '+'.$digits);
+            if ($digits !== '') {
+                // Kontrolli "bosh" + shkrimi janë ATOMIKE (lockForUpdate në
+                // transaksion): pa të, ruajtja e njëkohshme e pronarit mund të
+                // mbishkruhej nga webhook-u i lidhjes (gjetje Codex #443).
+                DB::transaction(function () use ($digits) {
+                    $row = \App\Models\Setting::query()
+                        ->where('group', 'hotel')->where('key', 'whatsapp_number')
+                        ->lockForUpdate()->first();
+
+                    if ($row === null || trim((string) $row->value) === '') {
+                        \App\Models\Setting::set('hotel.whatsapp_number', '+'.$digits);
+                    }
+                });
             }
         }
     }
