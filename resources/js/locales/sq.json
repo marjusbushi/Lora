@@ -1,4 +1,18 @@
 {
+  "auth": {
+    "forgot": {
+      "title": "Rivendos fjalëkalimin",
+      "intro": "Shkruaj emailin e llogarisë dhe të dërgojmë një link për të vendosur një fjalëkalim të ri.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "emri@hoteli.com",
+      "submit": "Dërgo linkun",
+      "submitting": "Po dërgohet…",
+      "sent": "Nëse ka llogari me këtë adresë, linku sapo u nis.",
+      "sentHint": "Kontrollo edhe dosjen e spam-it. Linku vlen 60 minuta dhe përdoret një herë.",
+      "noEmailHelp": "Nuk e mban mend emailin? Kontakto administratorin e hotelit tënd — llogaritë i hap ai.",
+      "backToLogin": "← Kthehu te hyrja"
+    }
+  },
   "nav": {
     "home": "Home",
     "rooms": "Dhomat",

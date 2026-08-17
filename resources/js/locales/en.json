@@ -1,4 +1,18 @@
 {
+  "auth": {
+    "forgot": {
+      "title": "Reset your password",
+      "intro": "Enter your account email and we'll send you a link to set a new password.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "name@hotel.com",
+      "submit": "Send the link",
+      "submitting": "Sending…",
+      "sent": "If an account exists for this address, the link is on its way.",
+      "sentHint": "Check your spam folder too. The link is valid for 60 minutes and can be used once.",
+      "noEmailHelp": "Don't remember your email? Contact your hotel administrator — they create the accounts.",
+      "backToLogin": "← Back to sign in"
+    }
+  },
   "nav": {
     "home": "Home",
     "rooms": "Rooms",
