@@ -32,15 +32,17 @@ class RoomReshuffleService
      *                                      (e.g. rooms already used by sibling rows of a
      *                                      multi-room booking mid-import); their reservations
      *                                      are implicitly pinned
+     * @param  array<int>  $excludeReservationIds  stays ignored entirely — the stay being
+     *                                             re-homed must not occupy its own universe
      * @return ?array{room_id: int, moves: array<int, array{reservation_id: int, from_room_id: int, to_room_id: int}>}
      */
-    public function planForIncoming(int $roomTypeId, ?string $checkIn, ?string $checkOut, array $excludeRoomIds = []): ?array
+    public function planForIncoming(int $roomTypeId, ?string $checkIn, ?string $checkOut, array $excludeRoomIds = [], array $excludeReservationIds = []): ?array
     {
         if (! $this->plannableSpan($checkIn, $checkOut)) {
             return null;
         }
 
-        [$roomIds, $pinned, $movable] = $this->loadTypeState($roomTypeId, $excludeRoomIds);
+        [$roomIds, $pinned, $movable] = $this->loadTypeState($roomTypeId, $excludeRoomIds, $excludeReservationIds);
         if ($roomIds === []) {
             return null;
         }
@@ -50,19 +52,54 @@ class RoomReshuffleService
     }
 
     /**
+     * Apply a plan's moves. Per-model saves so the observer writes the
+     * reservation.move_room audit rows (with room labels) and re-pushes the
+     * type's availability window. Each moved stay gets $noteTemplate appended
+     * with {from}/{to} replaced by room numbers. Returns the moves actually
+     * applied (a stale plan row is skipped, never guessed) — the caller owns
+     * any extra trail on top (e.g. the importer's channel sync log).
+     *
+     * @return array<int, array{reservation_id: int, from_room_id: int, to_room_id: int}>
+     */
+    public function apply(array $plan, string $noteTemplate): array
+    {
+        $numbers = Room::whereIn('id', collect($plan['moves'])->flatMap(fn (array $m) => [$m['from_room_id'], $m['to_room_id']]))
+            ->pluck('room_number', 'id');
+
+        $applied = [];
+        foreach ($plan['moves'] as $move) {
+            $res = Reservation::find($move['reservation_id']);
+            if (! $res || $res->room_id !== $move['from_room_id']) {
+                continue; // plan went stale mid-transaction — leave this stay alone
+            }
+
+            $note = strtr($noteTemplate, [
+                '{from}' => $numbers[$move['from_room_id']] ?? (string) $move['from_room_id'],
+                '{to}' => $numbers[$move['to_room_id']] ?? (string) $move['to_room_id'],
+            ]);
+            $res->room_id = $move['to_room_id'];
+            $res->notes = trim(($res->notes ? $res->notes."\n" : '').$note);
+            $res->save();
+            $applied[] = $move;
+        }
+
+        return $applied;
+    }
+
+    /**
      * The FREE room (no moves involved) where [checkIn, checkOut) fits with the
      * least slack around it — placement that packs new stays against existing
      * ones so long free runs survive for long bookings. Null when no room is
      * free for the span or the span is unplannable (missing dates / started in
      * the past); the caller then falls back to its own placement.
      */
-    public function bestFreeRoom(int $roomTypeId, ?string $checkIn, ?string $checkOut, array $excludeRoomIds = []): ?int
+    public function bestFreeRoom(int $roomTypeId, ?string $checkIn, ?string $checkOut, array $excludeRoomIds = [], array $excludeReservationIds = []): ?int
     {
         if (! $this->plannableSpan($checkIn, $checkOut)) {
             return null;
         }
 
-        [$roomIds, $pinned, $movable] = $this->loadTypeState($roomTypeId, $excludeRoomIds);
+        [$roomIds, $pinned, $movable] = $this->loadTypeState($roomTypeId, $excludeRoomIds, $excludeReservationIds);
         $occupied = $pinned;
         foreach ($movable as $m) {
             $occupied[$m['room_id']][] = $m;
@@ -87,7 +124,7 @@ class RoomReshuffleService
      *
      * @return array{0: array<int, int>, 1: array<int, array<int, array{in: string, out: string}>>, 2: array<int, array{in: string, out: string, id: int, room_id: int}>}
      */
-    private function loadTypeState(int $roomTypeId, array $excludeRoomIds): array
+    private function loadTypeState(int $roomTypeId, array $excludeRoomIds, array $excludeReservationIds = []): array
     {
         $rooms = Room::where('room_type_id', $roomTypeId)
             ->where('status', '!=', 'maintenance')
@@ -98,6 +135,7 @@ class RoomReshuffleService
         $today = today()->toDateString();
         // Stays already over cannot collide with anything upcoming.
         $reservations = Reservation::whereIn('room_id', $rooms->pluck('id'))
+            ->whereNotIn('id', $excludeReservationIds ?: [0])
             ->whereNotIn('status', ['cancelled', 'checked_out'])
             ->whereDate('check_out_date', '>', $today)
             ->get(['id', 'room_id', 'status', 'check_in_date', 'check_out_date', 'no_show_at']);

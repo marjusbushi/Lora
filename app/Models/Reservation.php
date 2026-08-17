@@ -61,6 +61,7 @@ class Reservation extends TenantModel
         'channel_ref',
         'channex_booking_id',
         'booking_group_id',
+        'booked_room_type_id',
         'commission_amount',
         'commission_amount_base',
         'payment_collect',
@@ -119,6 +120,12 @@ class Reservation extends TenantModel
 
             if (empty($reservation->confirmation_token)) {
                 $reservation->confirmation_token = (string) Str::random(40);
+            }
+
+            // The product the guest booked — stamped ONCE here so every creation
+            // path gets it; later room moves must never rewrite it.
+            if (empty($reservation->booked_room_type_id) && $reservation->room_id) {
+                $reservation->booked_room_type_id = Room::whereKey($reservation->room_id)->value('room_type_id');
             }
         });
     }
@@ -206,6 +213,12 @@ class Reservation extends TenantModel
     public function room()
     {
         return $this->belongsTo(Room::class);
+    }
+
+    /** The room TYPE the guest booked — immune to later room moves. */
+    public function bookedRoomType()
+    {
+        return $this->belongsTo(RoomType::class, 'booked_room_type_id');
     }
 
     public function guest()
