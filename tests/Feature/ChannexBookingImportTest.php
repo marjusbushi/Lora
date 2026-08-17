@@ -188,6 +188,123 @@ class ChannexBookingImportTest extends TestCase
         $this->assertStringContainsString('MBI-BOOKIM', $over->notes);
     }
 
+    /** A future stay created outside Channex (front desk / direct). */
+    private function directStay(Room $room, int $inDays, int $outDays, array $attrs = []): Reservation
+    {
+        return Reservation::create(array_merge([
+            'room_id' => $room->id,
+            'guest_id' => Guest::firstOrCreate(['email' => 'gjergj@example.com'], ['first_name' => 'Gjergj', 'last_name' => 'Kastrioti'])->id,
+            'created_by' => User::first()->id,
+            'check_in_date' => today()->addDays($inDays)->toDateString(),
+            'check_out_date' => today()->addDays($outDays)->toDateString(),
+            'status' => 'confirmed',
+            'total_amount' => 100,
+            'adults' => 2,
+            'channel' => 'direct',
+        ], $attrs));
+    }
+
+    /** A one-room revision with RELATIVE dates (branch 3 needs a future span). */
+    private function futureRevision(int $inDays, int $outDays, array $attrs = []): array
+    {
+        $in = today()->addDays($inDays)->toDateString();
+        $out = today()->addDays($outDays)->toDateString();
+
+        return $this->revision(array_merge([
+            'arrival_date' => $in,
+            'departure_date' => $out,
+            'rooms' => [[
+                'room_type_id' => 'RT-1',
+                'checkin_date' => $in,
+                'checkout_date' => $out,
+                'amount' => '200.00',
+                'occupancy' => ['adults' => 2, 'children' => 0],
+            ]],
+        ], $attrs));
+    }
+
+    public function test_fragmented_type_is_reshuffled_instead_of_overbooked(): void
+    {
+        // The root-cause scenario: two staggered stays block both rooms, yet the
+        // capacity for the full span exists — moving ONE stay frees a room. The
+        // importer must reshuffle instead of parking the booking as MBI-BOOKIM.
+        $this->studio(2);
+        [$roomA, $roomB] = Room::orderBy('room_number')->get()->all();
+        $early = $this->directStay($roomA, 1, 3);
+        $late = $this->directStay($roomB, 5, 8);
+
+        $summary = app(ChannexBookingImporter::class)->importRevision($this->futureRevision(1, 8));
+
+        $this->assertSame(1, $summary['created']);
+        $imported = Reservation::where('channel_ref', 'BK123')->sole();
+        $this->assertSame($roomA->id, $imported->room_id); // the freed room
+        $this->assertStringNotContainsString('MBI-BOOKIM', (string) $imported->notes);
+        $this->assertSame(0, Reservation::where('notes', 'like', '%MBI-BOOKIM%')->count());
+
+        $this->assertSame($roomB->id, $early->fresh()->room_id); // moved into B's gap
+        $this->assertStringContainsString('Zhvendosur automatikisht', $early->fresh()->notes);
+        $this->assertSame($roomB->id, $late->fresh()->room_id); // untouched
+
+        $log = ChannelSyncLog::where('action', 'booking.reshuffled')->sole();
+        $this->assertSame('booking.com', $log->channel);
+        $this->assertSame($early->id, $log->reservation_id);
+        $this->assertSame('BK123', $log->request['trigger_ref']);
+        $this->assertSame($roomA->id, $log->request['from_room_id']);
+        $this->assertSame($roomB->id, $log->request['to_room_id']);
+        // IDs only in the trail — never the guest of the moved stay.
+        $blob = strtolower(json_encode($log->toArray()));
+        $this->assertStringNotContainsString('gjergj', $blob);
+        $this->assertStringNotContainsString('kastrioti', $blob);
+    }
+
+    public function test_checked_in_blocker_still_parks_as_overbooked(): void
+    {
+        // A guest physically in the room is never moved: with no legal plan the
+        // importer falls back to today's honest MBI-BOOKIM parking.
+        $this->studio(2);
+        [$roomA, $roomB] = Room::orderBy('room_number')->get()->all();
+        $inHouse = $this->directStay($roomA, 0, 9, ['status' => 'checked_in']);
+        $future = $this->directStay($roomB, 2, 4);
+
+        app(ChannexBookingImporter::class)->importRevision($this->futureRevision(1, 8));
+
+        $imported = Reservation::where('channel_ref', 'BK123')->sole();
+        $this->assertStringContainsString('MBI-BOOKIM', $imported->notes);
+        $this->assertSame($roomA->id, $inHouse->fresh()->room_id); // never moved
+        $this->assertSame($roomB->id, $future->fresh()->room_id); // no half-applied plan
+        $this->assertSame(0, ChannelSyncLog::where('action', 'booking.reshuffled')->count());
+    }
+
+    public function test_multi_room_booking_never_reshuffles_its_own_sibling(): void
+    {
+        // Second room of the same booking: the sibling's room (taken) may neither
+        // be freed nor receive a moved stay — the blocker stays put and the second
+        // row parks rather than disturb the just-placed sibling.
+        $this->studio(2);
+        [$roomA, $roomB] = Room::orderBy('room_number')->get()->all();
+        $blocker = $this->directStay($roomB, 1, 8);
+
+        $roomPayload = fn () => [
+            'room_type_id' => 'RT-1',
+            'checkin_date' => today()->addDays(1)->toDateString(),
+            'checkout_date' => today()->addDays(8)->toDateString(),
+            'amount' => '200.00',
+            'occupancy' => ['adults' => 2],
+        ];
+        app(ChannexBookingImporter::class)->importRevision($this->futureRevision(1, 8, [
+            'rooms' => [$roomPayload(), $roomPayload()],
+        ]));
+
+        $rows = Reservation::where('channel_ref', 'BK123')->orderBy('id')->get();
+        $this->assertCount(2, $rows);
+        $this->assertSame($roomA->id, $rows[0]->room_id);
+        $this->assertStringNotContainsString('MBI-BOOKIM', (string) $rows[0]->notes);
+        $this->assertSame($roomB->id, $rows[1]->room_id); // parked, honestly flagged
+        $this->assertStringContainsString('MBI-BOOKIM', $rows[1]->notes);
+        $this->assertSame($roomB->id, $blocker->fresh()->room_id); // not pushed onto the sibling's room
+        $this->assertSame(0, ChannelSyncLog::where('action', 'booking.reshuffled')->count());
+    }
+
     public function test_unmapped_room_type_is_flagged_not_imported(): void
     {
         $this->studio(1, 'RT-1');

@@ -17,14 +17,21 @@ use Illuminate\Support\Str;
  * place instead of duplicating (keyed on channel + channel_ref + room), reusing
  * the room the booking already occupies so a re-delivery never shuffles rooms.
  *
- * An OTA booking is NEVER dropped: if the room type is mapped but every room is
- * taken (the OTA oversold us), it is still created on a room of that type and
- * flagged in the notes for the front desk to resolve.
+ * An OTA booking is NEVER dropped: if the room type is mapped but no single room
+ * is free for the stay, the importer first tries to FREE one by re-assigning
+ * other future stays within the same type (fragmentation — the capacity exists,
+ * just split across rooms). Only when that is impossible (a true oversell) is
+ * the booking parked on an occupied room of the type and flagged in the notes
+ * for the front desk to resolve.
  *
  * Logs only IDs/refs to ChannelSyncLog — never the guest's name/email/phone.
  */
 class ChannexBookingImporter
 {
+    public function __construct(private RoomReshuffleService $reshuffler)
+    {
+    }
+
     /** OTA display name (ota_name) -> PMS channel slug (Reservation::CHANNELS). */
     private const OTA_CHANNEL = [
         'booking.com' => 'booking.com',
@@ -120,7 +127,7 @@ class ChannexBookingImporter
                     continue;
                 }
 
-                [$physical, $overbooked] = $this->pickRoom($roomTypeId, $channel, $ref, $room['checkin_date'] ?? null, $room['checkout_date'] ?? null, $taken);
+                [$physical, $overbooked] = $this->pickRoom($roomTypeId, $channel, $ref, $room['checkin_date'] ?? null, $room['checkout_date'] ?? null, $taken, $revisionId);
                 if (! $physical) {
                     $summary['flagged'][] = "no room for type {$roomTypeId}";
                     $this->log($channel, $ref, $revisionId, 'booking.no_room_available', null, $roomTypeId, 'skipped');
@@ -254,7 +261,7 @@ class ChannexBookingImporter
     /**
      * @return array{0: ?Room, 1: bool} [room, wasOverbooked]
      */
-    private function pickRoom(int $roomTypeId, string $channel, string $ref, ?string $in, ?string $out, array $taken): array
+    private function pickRoom(int $roomTypeId, string $channel, string $ref, ?string $in, ?string $out, array $taken, ?string $revisionId = null): array
     {
         // 1) reuse the room this booking already occupies (stable on re-delivery)
         $existing = Reservation::where('channel', $channel)->where('channel_ref', $ref)
@@ -277,16 +284,69 @@ class ChannexBookingImporter
                 return [$room, false];
             }
         }
-        // 3) none free -> accept the OTA booking anyway (overbooked) on a serviceable room
+
+        // 3) no single room free -> the capacity may just be FRAGMENTED across
+        // rooms: try to free one by re-assigning other future stays of the type
+        // (never a started stay, never across types). Only when no such plan
+        // exists is the type truly oversold.
+        $plan = $this->reshuffler->planForIncoming($roomTypeId, $in, $out, $taken);
+        if ($plan && ($freed = $serviceable->firstWhere('id', $plan['room_id']))) {
+            $this->applyReshuffle($plan, $channel, $ref, $revisionId, $roomTypeId);
+
+            return [$freed, false];
+        }
+
+        // 4) truly oversold -> accept the OTA booking anyway (overbooked) on a serviceable room
         if ($serviceable->isNotEmpty()) {
             return [$serviceable->first(), true];
         }
 
-        // 4) every room of the type is in maintenance -> STILL never drop the OTA
+        // 5) every room of the type is in maintenance -> STILL never drop the OTA
         // booking: fall back to any room of the type, flagged as overbooked.
         $any = Room::where('room_type_id', $roomTypeId)->whereNotIn('id', $taken ?: [0])->first();
 
         return [$any, $any !== null];
+    }
+
+    /**
+     * Apply a reshuffle plan: per-model saves so the observer writes the
+     * reservation.move_room audit row (with room labels) and re-pushes the
+     * type's availability. Each move also leaves a note on the reservation and
+     * a booking.reshuffled sync-log row — IDs only, no guest PII.
+     */
+    private function applyReshuffle(array $plan, string $channel, string $ref, ?string $revisionId, int $roomTypeId): void
+    {
+        $numbers = Room::whereIn('id', collect($plan['moves'])->flatMap(fn (array $m) => [$m['from_room_id'], $m['to_room_id']]))
+            ->pluck('room_number', 'id');
+
+        foreach ($plan['moves'] as $move) {
+            $res = Reservation::find($move['reservation_id']);
+            if (! $res || $res->room_id !== $move['from_room_id']) {
+                continue; // plan went stale mid-transaction — leave this stay alone
+            }
+
+            $from = $numbers[$move['from_room_id']] ?? $move['from_room_id'];
+            $to = $numbers[$move['to_room_id']] ?? $move['to_room_id'];
+            $res->room_id = $move['to_room_id'];
+            $res->notes = trim(($res->notes ? $res->notes."\n" : '')
+                ."Zhvendosur automatikisht nga dhoma {$from} në dhomën {$to} për të sistemuar një rezervim të ri të të njëjtit tip.");
+            $res->save();
+
+            ChannelSyncLog::record([
+                'channel' => $channel,
+                'direction' => 'pull',
+                'action' => 'booking.reshuffled',
+                'reservation_id' => $res->id,
+                'room_type_id' => $roomTypeId,
+                'status' => 'ok',
+                'request' => [ // the booking whose arrival triggered the move — IDs only
+                    'trigger_ref' => $ref,
+                    'revision_id' => $revisionId,
+                    'from_room_id' => $move['from_room_id'],
+                    'to_room_id' => $move['to_room_id'],
+                ],
+            ]);
+        }
     }
 
     private function isFree(int $roomId, ?string $in, ?string $out): bool
