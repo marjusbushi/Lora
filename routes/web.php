@@ -361,6 +361,8 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/reservations/{reservation}/cancel', [ReservationController::class, 'cancel'])->middleware('permission:update_reservations')->name('reservations.cancel');
         Route::post('/reservations/{reservation}/move-room', [ReservationController::class, 'moveRoom'])->middleware('permission:update_reservations')->name('reservations.move-room');
         Route::post('/reservations/{reservation}/resolve-conflict', [ReservationController::class, 'resolveConflict'])->middleware('permission:update_reservations')->name('reservations.resolve-conflict');
+        Route::post('/reservations/{reservation}/split-proposal/accept', [ReservationController::class, 'acceptSplitProposal'])->middleware('permission:update_reservations')->name('reservations.split-proposal.accept');
+        Route::post('/reservations/{reservation}/split-proposal/decline', [ReservationController::class, 'declineSplitProposal'])->middleware('permission:update_reservations')->name('reservations.split-proposal.decline');
         Route::post('/reservations/{reservation}/folio', [ReservationController::class, 'addFolioLine'])->middleware('permission:update_reservations')->name('reservations.folio.add');
         Route::post('/reservations/{reservation}/folio/inventory', [ReservationController::class, 'addInventoryFolioLine'])
             ->middleware(['module:finance', 'permission:update_reservations'])->name('reservations.folio.inventory');

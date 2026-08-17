@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ReservationSplitProposal;
 use App\Models\Setting;
 use App\Services\BaseCurrency;
 use App\Services\CurrencyRates;
@@ -120,6 +121,16 @@ class HandleInertiaRequests extends Middleware
                 'current_period_ends_at' => $billingAccess['current_period_ends_at'],
             ] : null,
             'modules' => $billingAccess['modules'] ?? [],
+            // Global desk alert: split-stay proposals waiting for the guest
+            // conversation. Cached per tenant so every page load costs one
+            // cache read, not a COUNT — the model invalidates it on writes
+            // (query budgets like the guests page stay intact).
+            'splitProposalsPending' => ($user && $tenant)
+                ? Cache::rememberForever(
+                    ReservationSplitProposal::pendingCountCacheKey($tenant->id),
+                    fn () => ReservationSplitProposal::where('status', ReservationSplitProposal::STATUS_PENDING)->count(),
+                )
+                : 0,
             // Platform health — super-admin only, so hotel staff requests pay
             // zero extra queries (also keeps the guests-page query budget).
             'platformAlerts' => $user?->is_super_admin ? [

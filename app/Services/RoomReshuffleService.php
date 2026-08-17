@@ -109,6 +109,79 @@ class RoomReshuffleService
     }
 
     /**
+     * Last resort AFTER planForIncoming returned null: cover the span with a
+     * chain of stays in DIFFERENT rooms of the same type — the guest changes
+     * rooms mid-stay. Only meaningful when nightly inventory suffices but
+     * checked-in (pinned) stays anchor the calendar so no single room can be
+     * freed. Greedy farthest-reach per segment, which provably minimises the
+     * segment count; ties resolve to the first room in stable order. Phase-1
+     * simple by design: no paper moves are combined in (a reshuffle already
+     * failed; combining both is a future refinement).
+     *
+     * Returns null when a night is uncovered (true oversell), when one room
+     * covers everything (that is the primary paths' job, not a split), or when
+     * it would take more than 3 segments (churn no guest should be asked for).
+     *
+     * @return ?array{segments: array<int, array{room_id: int, check_in: string, check_out: string}>}
+     */
+    public function splitPlanForIncoming(int $roomTypeId, ?string $checkIn, ?string $checkOut, array $excludeRoomIds = [], array $excludeReservationIds = []): ?array
+    {
+        if (! $this->plannableSpan($checkIn, $checkOut)) {
+            return null;
+        }
+
+        [$roomIds, $pinned, $movable] = $this->loadTypeState($roomTypeId, $excludeRoomIds, $excludeReservationIds);
+        $occupied = $pinned;
+        foreach ($movable as $m) {
+            $occupied[$m['room_id']][] = $m;
+        }
+
+        $segments = [];
+        $cursor = $checkIn;
+        while ($cursor < $checkOut) {
+            $bestRoom = null;
+            $bestReach = $cursor;
+            foreach ($roomIds as $roomId) {
+                $reach = $this->freeReachFrom($cursor, $occupied[$roomId]);
+                if ($reach !== null && $reach > $bestReach) {
+                    $bestRoom = $roomId;
+                    $bestReach = $reach;
+                }
+            }
+            if ($bestRoom === null) {
+                return null; // a night no room covers — genuinely oversold
+            }
+            $end = min($bestReach, $checkOut);
+            $segments[] = ['room_id' => $bestRoom, 'check_in' => $cursor, 'check_out' => $end];
+            if (count($segments) > 3) {
+                return null;
+            }
+            $cursor = $end;
+        }
+
+        return count($segments) >= 2 ? ['segments' => $segments] : null;
+    }
+
+    /**
+     * How far a room stays continuously free from $from (exclusive end), or
+     * null when the room is busy on that very night.
+     */
+    private function freeReachFrom(string $from, array $roomIntervals): ?string
+    {
+        $reach = '9999-12-31';
+        foreach ($roomIntervals as $interval) {
+            if ($interval['in'] <= $from && $interval['out'] > $from) {
+                return null;
+            }
+            if ($interval['in'] > $from && $interval['in'] < $reach) {
+                $reach = $interval['in'];
+            }
+        }
+
+        return $reach;
+    }
+
+    /**
      * A span that already started is never planned: its past nights collide
      * with stays this planner deliberately does not load (check-out before
      * today), so any plan for it would be built on incomplete occupancy.
