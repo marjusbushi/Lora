@@ -7563,5 +7563,11 @@
   "website": {
     "whatsappCta": "Na shkruaj në WhatsApp",
     "whatsappPrefill": "Përshëndetje {hotel}! Kam një pyetje."
+  },
+  "messagesRt": {
+    "typing": "po shkruan…",
+    "recording": "po dërgon një zë…",
+    "failed": "S'u dërgua",
+    "retry": "Riprovo"
   }
 }

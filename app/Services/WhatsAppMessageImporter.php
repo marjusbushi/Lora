@@ -115,6 +115,41 @@ class WhatsAppMessageImporter
         return $result;
     }
 
+    /**
+     * "Po shkruan / po regjistron zë" nga ura (task #344) — ngjarje KALIMTARE:
+     * asnjë shkrim në DB, asnjë unread; vetëm broadcast te inbox-i i hapur.
+     * Bisedat OTA s'kanë whatsapp_jid, ndaj s'gjenden dot — kriteri "kurrë
+     * për OTA" mbahet nga vetë kërkimi, jo nga një flamur.
+     *
+     * @param array<string,mixed> $payload
+     */
+    public function applyPresence(array $payload): void
+    {
+        $state = (string) ($payload['state'] ?? '');
+        $jid = trim((string) ($payload['jid'] ?? ''));
+
+        if ($jid === '' || ! in_array($state, ['composing', 'recording', 'paused'], true)) {
+            return;
+        }
+
+        $threadId = MessageThread::query()->where('whatsapp_jid', $jid)->value('id');
+        if ($threadId === null) {
+            return; // bisedë e panjohur — asgjë për të treguar, asnjë krijim
+        }
+
+        // Dështimi i transmetimit (Reverb offline) s'guxon të kthejë 500 tek
+        // ura — treguesi është "nice to have", jo ngjarje që riprovohet.
+        try {
+            event(new \App\Events\GuestTyping(
+                app(\App\Tenancy\TenantContext::class)->tenant()->id,
+                (int) $threadId,
+                $state,
+            ));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
     /** @param array<string,mixed> $payload */
     public function applyStatus(array $payload): void
     {
