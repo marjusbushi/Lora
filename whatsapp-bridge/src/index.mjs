@@ -14,7 +14,7 @@
 // paralajmërim në UI.
 
 import { createServer } from 'node:http';
-import { mkdirSync, readdirSync, rmSync, existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, existsSync, readFileSync, writeFileSync, appendFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
@@ -26,10 +26,23 @@ const PORT = Number(process.env.BRIDGE_PORT || 3100);
 // jeton në <app>/whatsapp-bridge). NJË burim i vetëm sekreti: pronari e fut
 // vetëm te Environment i Forge, komanda e daemon-it mbetet pa sekrete
 // ('node src/index.mjs') dhe sekreti s'duket në UI të Forge a në ps.
+// Në layout-in zero-downtime të Forge, cwd zgjidhet përmes symlink-ut 'current'
+// te release-i FIZIK — që fshihet nga retention pas disa deploy-esh. Çdo rrugë
+// e qëndrueshme (env, sessions) duhet realpath-uar NJË herë në nisje drejt
+// vendndodhjes së përbashkët, ndryshe daemon-i mbetet me rrugë të vdekura dhe
+// outbox-i humb ngjarje (gjetje Codex PR #436).
+function stablePath(path) {
+    try {
+        return realpathSync(path);
+    } catch {
+        return path;
+    }
+}
+
 function resolveToken() {
     if (process.env.BRIDGE_TOKEN) return process.env.BRIDGE_TOKEN;
 
-    const envPath = process.env.LARAVEL_ENV_PATH || join(process.cwd(), '..', '.env');
+    const envPath = stablePath(process.env.LARAVEL_ENV_PATH || join(process.cwd(), '..', '.env'));
     try {
         const line = readFileSync(envPath, 'utf8')
             .split('\n')
@@ -49,7 +62,7 @@ const TOKEN = resolveToken();
 // aplikacionit Laravel, parazgjedhja shkon nën storage/ të tij.
 const SESSIONS_DIR = process.env.SESSIONS_DIR
     || (existsSync(join(process.cwd(), '..', 'storage'))
-        ? join(process.cwd(), '..', 'storage', 'whatsapp-sessions')
+        ? join(stablePath(join(process.cwd(), '..', 'storage')), 'whatsapp-sessions')
         : join(process.cwd(), 'sessions'));
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
