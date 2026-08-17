@@ -49,6 +49,23 @@ class WhatsAppPublicButtonTest extends TestCase
         $this->assertSame('', (string) Setting::get('hotel.whatsapp_number'));
     }
 
+    public function test_public_pages_receive_the_number_via_shared_settings(): void
+    {
+        // Zinxhiri i plotë (gjetje Codex #438: whitelist-i i shared props e
+        // mbante numrin të padukshëm): ruajtja → prop-i settings i faqes publike.
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)->put(route('settings.hotel'), $this->hotelPayload([
+            'whatsapp_number' => '+355 69 123 4567',
+        ]))->assertRedirect();
+
+        $this->get(route('website.home'))->assertInertia(
+            fn ($page) => $page->where('settings.whatsapp_number', '+355 69 123 4567')
+        );
+    }
+
     public function test_garbage_whatsapp_number_is_rejected(): void
     {
         $this->seed(RolePermissionSeeder::class);

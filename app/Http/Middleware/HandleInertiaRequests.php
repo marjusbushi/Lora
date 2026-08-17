@@ -65,6 +65,9 @@ class HandleInertiaRequests extends Middleware
                     'logo' => Setting::get('hotel.logo'),
                     'address' => Setting::get('hotel.address'),
                     'phone' => Setting::get('hotel.phone'),
+                    // Butoni WhatsApp i webit publik (WebsiteLayout) — pa këtë
+                    // rresht whitelist-i e mbante numrin të padukshëm (Codex #438).
+                    'whatsapp_number' => Setting::get('hotel.whatsapp_number'),
                     'email' => Setting::get('hotel.email'),
                     'instagram' => Setting::get('hotel.instagram'),
                     'facebook' => Setting::get('hotel.facebook'),
