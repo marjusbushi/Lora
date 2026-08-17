@@ -311,6 +311,80 @@ class RoomReshuffleServiceTest extends TestCase
         ));
     }
 
+    public function test_split_plan_covers_the_span_with_two_segments_when_checked_in_guests_anchor(): void
+    {
+        // Nightly inventory covers the whole span, but the two checked-in guests
+        // anchor a pattern no reshuffle can untangle — the classic split case.
+        $roomA = $this->room('A1');
+        $roomB = $this->room('B1');
+        $this->stay($roomA, 0, 4, ['status' => 'checked_in']);
+        $this->stay($roomB, 4, 9, ['status' => 'checked_in']);
+        $service = app(RoomReshuffleService::class);
+        $in = today()->addDays(1)->toDateString();
+        $out = today()->addDays(8)->toDateString();
+
+        $this->assertNull($service->planForIncoming($this->type->id, $in, $out)); // no single-room answer
+        $this->assertSame([
+            'segments' => [
+                ['room_id' => $roomB->id, 'check_in' => $in, 'check_out' => today()->addDays(4)->toDateString()],
+                ['room_id' => $roomA->id, 'check_in' => today()->addDays(4)->toDateString(), 'check_out' => $out],
+            ],
+        ], $service->splitPlanForIncoming($this->type->id, $in, $out));
+    }
+
+    public function test_split_plan_is_null_when_a_night_is_uncovered(): void
+    {
+        $roomA = $this->room('A1');
+        $roomB = $this->room('B1');
+        $this->stay($roomA, 0, 9, ['status' => 'checked_in']);
+        $this->stay($roomB, 2, 5, ['status' => 'checked_in']); // night d+2 has NO free room
+
+        $this->assertNull(app(RoomReshuffleService::class)->splitPlanForIncoming(
+            $this->type->id, today()->addDays(1)->toDateString(), today()->addDays(8)->toDateString(),
+        ));
+    }
+
+    public function test_split_plan_refuses_more_than_three_segments(): void
+    {
+        // Alternating pinned checkerboard would need 4+ hops — churn no guest
+        // should be asked for.
+        $roomA = $this->room('A1');
+        $roomB = $this->room('B1');
+        foreach ([[2, 3], [4, 5]] as [$in, $out]) {
+            $this->stay($roomA, $in, $out, ['status' => 'checked_in']);
+        }
+        foreach ([[1, 2], [3, 4], [5, 6]] as [$in, $out]) {
+            $this->stay($roomB, $in, $out, ['status' => 'checked_in']);
+        }
+
+        $this->assertNull(app(RoomReshuffleService::class)->splitPlanForIncoming(
+            $this->type->id, today()->addDays(1)->toDateString(), today()->addDays(7)->toDateString(),
+        ));
+    }
+
+    public function test_split_plan_never_uses_other_types_or_maintenance_rooms(): void
+    {
+        $roomA = $this->room('A1'); // the type's only serviceable room
+        $this->room('M1', 'maintenance'); // free the whole time — unusable
+        $otherType = RoomType::create(['name' => 'Apartment', 'base_price' => 200, 'max_occupancy' => 5, 'amenities' => []]);
+        Room::create(['room_type_id' => $otherType->id, 'room_number' => 'X1', 'floor' => 1, 'status' => 'available']);
+        $this->stay($roomA, 3, 5, ['status' => 'checked_in']);
+
+        $this->assertNull(app(RoomReshuffleService::class)->splitPlanForIncoming(
+            $this->type->id, today()->addDays(1)->toDateString(), today()->addDays(8)->toDateString(),
+        ));
+    }
+
+    public function test_split_plan_is_null_when_one_room_covers_everything(): void
+    {
+        // A fully-free room is the primary paths' job, never a split.
+        $this->room('A1');
+
+        $this->assertNull(app(RoomReshuffleService::class)->splitPlanForIncoming(
+            $this->type->id, today()->addDays(1)->toDateString(), today()->addDays(8)->toDateString(),
+        ));
+    }
+
     public function test_cancelled_and_checked_out_stays_do_not_occupy_rooms(): void
     {
         $roomA = $this->room('A1');

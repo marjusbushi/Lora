@@ -738,6 +738,18 @@
       "showOtherTypes": "Show other types",
       "otherTypesWarning": "Careful: these rooms change the product the guest booked (a different room type)."
     },
+    "splitStay": {
+      "title": "Split-stay proposal — talk to the guest",
+      "explain": "The whole stay fits within the same room type, but only with a mid-stay room change. Talk to the guest: if they agree, the split applies in one click; if not, staff act through Booking.com and only the decision is recorded here.",
+      "accept": "Guest agreed — split the stay",
+      "decline": "Guest refused",
+      "declineWhat": "What was done next?",
+      "declinedUpgraded": "An upgrade was offered (another type)",
+      "declinedEscalated": "Escalated to Booking.com",
+      "confirmAccept": "Split the stay into {n} parts as planned? The guest changes rooms on the switch day and every part is recorded in the history.",
+      "accepted": "The stay was split as planned — the parts are linked as one group booking.",
+      "declineRecorded": "The decision was recorded. Further steps are handled by staff through Booking.com."
+    },
     "guestProfileDesign": {
       "pageTitle": "Guest profile design preview",
       "dashboard": "Dashboard",
@@ -6870,6 +6882,10 @@
     "dashboard": {
       "allRooms": "All ({count})",
       "cleaningAge": "{today} from today · {older} older"
+    },
+    "splitStay": {
+      "banner": "{n} reservation(s) need a guest conversation — split-stay proposal",
+      "bannerCta": "Open the calendar"
     },
     "guests": {
       "inHouseDetail": "people · in {rooms} rooms · {profiles} profiles",

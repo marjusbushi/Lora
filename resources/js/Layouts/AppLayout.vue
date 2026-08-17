@@ -14,7 +14,7 @@ import NotificationBell from '@/Components/NotificationBell.vue';
 import GlobalSearch from '@/Components/GlobalSearch.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
-import { ChevronDown, LogOut, Settings, UserRound } from 'lucide-vue-next';
+import { AlertTriangle, ChevronDown, LogOut, Settings, UserRound } from 'lucide-vue-next';
 
 defineProps({
     immersive: { type: Boolean, default: false },
@@ -35,6 +35,9 @@ const mobileMenuOpen = ref(false);
 const page = usePage();
 const { t } = useI18n();
 const userPermissions = computed(() => page.props.auth.user?.permissions || []);
+// Split-stay proposals awaiting the guest conversation — global by design:
+// the desk must see this on EVERY page, not only the calendar.
+const splitProposalsPending = computed(() => Number(page.props.splitProposalsPending || 0));
 const activeModules = computed(() => page.props.modules || {});
 const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
 const canAccessSettings = computed(() => isAdmin.value);
@@ -325,6 +328,25 @@ const globalSearchLinks = computed(() => navItems.value.flatMap((item) => {
                     </Dropdown>
                 </div>
             </header>
+
+            <!-- Global desk alert: split-stay proposals waiting for the guest
+                 conversation — visible on every PMS page by design. -->
+            <div
+                v-if="splitProposalsPending > 0"
+                class="flex flex-wrap items-center justify-between gap-2 border-b border-warning-200 bg-warning-50 px-4 py-2.5 sm:px-6"
+                role="alert"
+            >
+                <span class="flex min-w-0 items-center gap-2 text-body-sm font-semibold text-warning-800">
+                    <AlertTriangle class="h-4 w-4 shrink-0" />
+                    {{ $t('shared.splitStay.banner', { n: splitProposalsPending }) }}
+                </span>
+                <Link
+                    :href="route('reservations.calendar')"
+                    class="shrink-0 rounded-lg border border-warning-300 bg-white px-3 py-1.5 text-tiny font-bold text-warning-800 no-underline transition hover:bg-warning-100"
+                >
+                    {{ $t('shared.splitStay.bannerCta') }}
+                </Link>
+            </div>
 
             <!-- Page content -->
             <main :class="immersive ? 'min-h-0 flex-1 overflow-hidden p-0' : 'flex-1 p-4 sm:p-6'">

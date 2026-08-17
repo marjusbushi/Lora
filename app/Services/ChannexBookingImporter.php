@@ -6,6 +6,7 @@ use App\Models\ChannelMapping;
 use App\Models\ChannelSyncLog;
 use App\Models\Guest;
 use App\Models\Reservation;
+use App\Models\ReservationSplitProposal;
 use App\Models\Room;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -104,6 +105,22 @@ class ChannexBookingImporter
                 return;
             }
 
+            // A booking the guest AGREED to split is desk-owned from that moment:
+            // re-processing this revision would stretch row 1 back to the full
+            // span and reconcile-cancel the other segment rows — silently undoing
+            // the agreement. Cancellations above still apply; modifications are
+            // flagged for the desk instead.
+            $refReservationIds = Reservation::where('channel', $channel)->where('channel_ref', $ref)->pluck('id');
+            if ($refReservationIds->isNotEmpty()
+                && ReservationSplitProposal::whereIn('reservation_id', $refReservationIds)
+                    ->where('status', ReservationSplitProposal::STATUS_ACCEPTED)
+                    ->exists()) {
+                $summary['flagged'][] = "booking {$ref} ka ndarje qëndrimi të pranuar — revizioni i lihet recepsionit";
+                $this->log($channel, $ref, $revisionId, 'booking.modified_after_split', null, null, 'skipped');
+
+                return;
+            }
+
             $guest = $this->guest($rev['customer'] ?? []);
             $creator = $this->systemUserId();
             $groupId = count($rooms) > 1 ? (string) Str::uuid() : null;
@@ -127,7 +144,7 @@ class ChannexBookingImporter
                     continue;
                 }
 
-                [$physical, $overbooked] = $this->pickRoom($roomTypeId, $channel, $ref, $room['checkin_date'] ?? null, $room['checkout_date'] ?? null, $taken, $revisionId);
+                [$physical, $overbooked, $splitPlan] = $this->pickRoom($roomTypeId, $channel, $ref, $room['checkin_date'] ?? null, $room['checkout_date'] ?? null, $taken, $revisionId);
                 if (! $physical) {
                     $summary['flagged'][] = "no room for type {$roomTypeId}";
                     $this->log($channel, $ref, $revisionId, 'booking.no_room_available', null, $roomTypeId, 'skipped');
@@ -137,6 +154,9 @@ class ChannexBookingImporter
                 $taken[] = $physical->id;
 
                 $existing = Reservation::where('channel', $channel)->where('channel_ref', $ref)->where('room_id', $physical->id)->first();
+                // A re-delivery must not silently erase the desk marker while a
+                // proposal is still waiting for the guest conversation.
+                $splitNoted = $splitPlan !== null || ($existing && $existing->pendingSplitProposal !== null);
                 $existed = $existing !== null;
                 $exchangeRate = $existing && strtoupper((string) $existing->currency) === $bookingCurrency
                     ? (float) $existing->exchange_rate
@@ -164,7 +184,9 @@ class ChannexBookingImporter
                     'children' => max(0, min(255, (int) ($room['occupancy']['children'] ?? 0))),
                     'booking_group_id' => $groupId,
                     'payment_collect' => $paymentCollect,
-                    'notes' => trim(($rev['ota_name'] ?? 'OTA')." #{$ref}".($overbooked ? ' — MBI-BOOKIM (s\'ka dhomë të lirë)' : '')),
+                    'notes' => trim(($rev['ota_name'] ?? 'OTA')." #{$ref}"
+                        .($overbooked ? ' — MBI-BOOKIM (s\'ka dhomë të lirë)' : '')
+                        .($splitNoted ? ' — PROPOZIM NDARJEJE (fol me mysafirin)' : '')),
                 ];
                 if (! $existed) {
                     $values['created_via'] = Reservation::CREATED_VIA_CHANNEL_MANAGER;
@@ -180,6 +202,20 @@ class ChannexBookingImporter
                 $existed ? $summary['updated']++ : $summary['created']++;
                 $firstRoom = false;
                 $kept[] = $res->id;
+
+                if ($splitPlan !== null) {
+                    // Supersede a stale pending proposal (dates may have changed on
+                    // a modification); decided history is never touched. Per-model
+                    // deletes so the banner's cached count invalidates.
+                    ReservationSplitProposal::where('reservation_id', $res->id)
+                        ->where('status', ReservationSplitProposal::STATUS_PENDING)
+                        ->get()->each->delete();
+                    ReservationSplitProposal::create([
+                        'reservation_id' => $res->id,
+                        'segments' => $splitPlan['segments'],
+                    ]);
+                    $this->log($channel, $ref, $revisionId, 'booking.split_proposed', $res->id, $roomTypeId);
+                }
 
                 // Prepaid online via the OTA -> record it as a folio payment so the guest
                 // is NOT asked to pay the room again at checkout (the balance then shows
@@ -259,7 +295,7 @@ class ChannexBookingImporter
     }
 
     /**
-     * @return array{0: ?Room, 1: bool} [room, wasOverbooked]
+     * @return array{0: ?Room, 1: bool, 2: ?array} [room, wasOverbooked, splitPlan]
      */
     private function pickRoom(int $roomTypeId, string $channel, string $ref, ?string $in, ?string $out, array $taken, ?string $revisionId = null): array
     {
@@ -269,7 +305,7 @@ class ChannexBookingImporter
             ->whereHas('room', fn ($q) => $q->where('room_type_id', $roomTypeId))
             ->first();
         if ($existing && $existing->room) {
-            return [$existing->room, false];
+            return [$existing->room, false, null];
         }
 
         // Prefer SERVICEABLE rooms (don't seat a guest in maintenance while a usable
@@ -284,13 +320,13 @@ class ChannexBookingImporter
         // calendar fragments in the first place).
         $best = $this->reshuffler->bestFreeRoom($roomTypeId, $in, $out, $taken);
         if ($best !== null && ($room = $serviceable->firstWhere('id', $best))) {
-            return [$room, false];
+            return [$room, false, null];
         }
         // Spans the planner refuses (missing dates / already started): first free
         // room in order, exactly as before.
         foreach ($serviceable as $room) {
             if ($this->isFree($room->id, $in, $out)) {
-                return [$room, false];
+                return [$room, false, null];
             }
         }
 
@@ -302,19 +338,28 @@ class ChannexBookingImporter
         if ($plan && ($freed = $serviceable->firstWhere('id', $plan['room_id']))) {
             $this->applyReshuffle($plan, $channel, $ref, $revisionId, $roomTypeId);
 
-            return [$freed, false];
+            return [$freed, false, null];
         }
 
-        // 4) truly oversold -> accept the OTA booking anyway (overbooked) on a serviceable room
+        // 4) no single-room answer at all — but if nightly inventory still covers
+        // the span, the stay can be SPLIT across rooms of the type (guest changes
+        // room mid-stay). Never automatic: park on the first segment's room and
+        // raise a desk proposal — the guest decides, the desk records the outcome.
+        $split = $this->reshuffler->splitPlanForIncoming($roomTypeId, $in, $out, $taken);
+        if ($split && ($first = $serviceable->firstWhere('id', $split['segments'][0]['room_id']))) {
+            return [$first, false, $split];
+        }
+
+        // 5) truly oversold -> accept the OTA booking anyway (overbooked) on a serviceable room
         if ($serviceable->isNotEmpty()) {
-            return [$serviceable->first(), true];
+            return [$serviceable->first(), true, null];
         }
 
-        // 5) every room of the type is in maintenance -> STILL never drop the OTA
+        // 6) every room of the type is in maintenance -> STILL never drop the OTA
         // booking: fall back to any room of the type, flagged as overbooked.
         $any = Room::where('room_type_id', $roomTypeId)->whereNotIn('id', $taken ?: [0])->first();
 
-        return [$any, $any !== null];
+        return [$any, $any !== null, null];
     }
 
     /**

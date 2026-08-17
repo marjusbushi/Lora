@@ -341,7 +341,10 @@ class GuestDirectoryTest extends TestCase
 
         // 36 = previous 35 + the single pricing.currency read the shared
         // settings payload performs on a settings-cache miss.
-        $this->assertLessThanOrEqual(36, count(DB::getQueryLog()));
+        // 37 = + the one-off pending split-proposals COUNT the global desk
+        // banner performs on a cache miss (plan #723); rememberForever makes
+        // it zero on every warm request.
+        $this->assertLessThanOrEqual(37, count(DB::getQueryLog()));
     }
 
     private function user(string $role): User
