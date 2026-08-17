@@ -157,6 +157,21 @@ function scheduleRetry(tenantId, attempt) {
     flushing.set(tenantId, timer);
 }
 
+// Ngjarje KALIMTARE (prezencë "po shkruan") — me qëllim JASHTË outbox-it:
+// një tregues i vjetruar që rikthehet pas retry-t është më keq se asnjë.
+// Dërgohet një herë, me timeout të shkurtër; dështimi thjesht harrohet.
+function postEphemeral(tenantId, session, type, payload) {
+    const eventUrl = session.eventUrl || loadMeta(tenantId)?.eventUrl;
+    if (!eventUrl) return;
+
+    fetch(eventUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+        body: JSON.stringify({ tenant_id: tenantId, type, payload }),
+        signal: AbortSignal.timeout(5_000),
+    }).catch(() => {});
+}
+
 // Zbraz outbox-et e mbetura periodikisht (p.sh. pas restart-i të daemon-it).
 setInterval(() => {
     for (const entry of readdirSync(SESSIONS_DIR, { withFileTypes: true })) {
@@ -197,6 +212,8 @@ async function startSession(tenantId, eventUrl) {
         phone: null,
         eventUrl: eventUrl || loadMeta(tenantId)?.eventUrl || null,
         stopping: false,
+        presenceSubs: new Set(), // jid-et ku jemi abonuar për "po shkruan"
+        lastPresence: new Map(), // jid → { state, at } (throttle ~3s)
     };
     sessions.set(tenantId, session);
 
@@ -261,6 +278,15 @@ async function startSession(tenantId, eventUrl) {
                 || '';
             if (!body.trim()) continue; // media: v2 — teksti mjafton për v1
 
+            // "Po shkruan…" (task #344): abonohu në prezencën e bisedës sapo
+            // mysafiri të ketë shkruar një herë — WhatsApp s'i shtyn ngjarjet
+            // 'composing' pa presenceSubscribe për atë jid. Bisedat krejt të
+            // reja e marrin treguesin nga mesazhi i dytë e tutje (v1, mjafton).
+            if (!session.presenceSubs.has(jid)) {
+                session.presenceSubs.add(jid);
+                sock.presenceSubscribe(jid).catch(() => {});
+            }
+
             // Numri i vërtetë (kur adresa është @lid): senderPn/participantPn.
             const pn = msg.key?.senderPn || msg.key?.participantPn
                 || (jid.endsWith('@s.whatsapp.net') ? jid : '');
@@ -274,6 +300,28 @@ async function startSession(tenantId, eventUrl) {
                 timestamp: Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000),
             });
         }
+    });
+
+    // "Po shkruan…" / "po regjistron zë" (task #344): vetëm bisedat private ku
+    // jemi abonuar; throttle 3s për jid që Laravel të mos mbytet me ngjarje —
+    // 'paused' kalon GJITHMONË (fshin treguesin në ekran pa pritur timeout-in).
+    sock.ev.on('presence.update', ({ id, presences }) => {
+        const isPrivate = (id || '').endsWith('@s.whatsapp.net') || (id || '').endsWith('@lid');
+        if (!isPrivate) return;
+
+        const state = (presences?.[id] || Object.values(presences || {})[0])?.lastKnownPresence;
+        if (!['composing', 'recording', 'paused'].includes(state)) return;
+
+        const now = Date.now();
+        const last = session.lastPresence.get(id);
+        if (state !== 'paused' && last?.state === state && now - last.at < 3_000) return;
+        session.lastPresence.set(id, { state, at: now });
+
+        postEphemeral(tenantId, session, 'presence', {
+            jid: id,
+            state,
+            timestamp: Math.floor(now / 1000),
+        });
     });
 
     return session;
