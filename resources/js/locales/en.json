@@ -728,7 +728,15 @@
       "demoApplied": "Demo: the conflict was resolved by choosing room {room}. Refresh the page to restore it.",
       "confirmApply": "Move the reservation to room {room}? The system will check availability again.",
       "realApplied": "Conflict resolved. The reservation was moved to room {room}.",
-      "resolutionFailed": "The conflict could not be resolved. Refresh the calendar and try again."
+      "resolutionFailed": "The conflict could not be resolved. Refresh the calendar and try again.",
+      "reshuffleTitle": "Chain solution — same room type",
+      "reshuffleMove": "Room {from} → {to} · {guest}",
+      "reshuffleLanding": "This reservation lands on room {room}",
+      "reshuffleApply": "Reshuffle automatically ({n} moves)",
+      "confirmReshuffle": "Apply the automatic reshuffle? {n} reservation(s) will change rooms within the same type. Every move is recorded in the history.",
+      "reshuffleApplied": "Reshuffle applied — the conflict is resolved.",
+      "showOtherTypes": "Show other types",
+      "otherTypesWarning": "Careful: these rooms change the product the guest booked (a different room type)."
     },
     "guestProfileDesign": {
       "pageTitle": "Guest profile design preview",
