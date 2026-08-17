@@ -63,12 +63,6 @@ class PokPayments
             return false; // already settled or released — idempotent
         }
 
-        // Realtime (task #349, gjetje e Marjusit live): UPDATE-i atomik i mësipërm
-        // anashkalon observer-in me qëllim (garda e race-it) — kalendari/lista e
-        // hapur njoftohen këtu me dorë, ndryshe konfirmimi i pagesës dukej vetëm
-        // pas reload-it.
-        $this->broadcastChange($reservation);
-
         try {
             Payment::create([
                 'reservation_id' => $reservation->id,
@@ -89,6 +83,12 @@ class PokPayments
             'currency' => $currency,
         ]);
 
+        // Realtime (task #349, gjetje e Marjusit live): UPDATE-i atomik anashkalon
+        // observer-in me qëllim (garda e race-it) — njoftohet me dorë, dhe PAS
+        // regjistrimit të pagesës: një reload i shpejtë s'sheh kurrë status të
+        // konfirmuar me shuma bosh (gjetje Codex #454).
+        $this->broadcastChange($reservation);
+
         return true;
     }
 
@@ -107,10 +107,6 @@ class PokPayments
             return false; // already reversed / never confirmed — idempotent
         }
 
-        // Realtime (task #349): edhe rikthimi (refund/void në POK) duhet të
-        // shfaqet vetiu — dhoma lirohet në kalendarin e hapur pa reload.
-        $this->broadcastChange($reservation);
-
         Payment::where('reservation_id', $reservation->id)
             ->where('method', 'card')
             ->where('pok_order_id', $reservation->pok_order_id)
@@ -119,6 +115,10 @@ class PokPayments
         AuditLog::record('payment.pok_'.$reason, $reservation, [
             'pok_order_id' => $reservation->pok_order_id,
         ]);
+
+        // Realtime (task #349): edhe rikthimi shfaqet vetiu — PAS void-it të
+        // pagesës, që reload-i të mos shohë kurrë gjendje gjysmake (Codex #454).
+        $this->broadcastChange($reservation);
 
         return true;
     }
