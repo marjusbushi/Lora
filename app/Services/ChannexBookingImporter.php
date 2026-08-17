@@ -318,34 +318,23 @@ class ChannexBookingImporter
     }
 
     /**
-     * Apply a reshuffle plan: per-model saves so the observer writes the
-     * reservation.move_room audit row (with room labels) and re-pushes the
-     * type's availability. Each move also leaves a note on the reservation and
-     * a booking.reshuffled sync-log row — IDs only, no guest PII.
+     * Apply a reshuffle plan via the shared engine applier (observer audit rows
+     * + Albanian note per moved stay), then add the importer's own trail: one
+     * booking.reshuffled sync-log row per applied move — IDs only, no guest PII.
      */
     private function applyReshuffle(array $plan, string $channel, string $ref, ?string $revisionId, int $roomTypeId): void
     {
-        $numbers = Room::whereIn('id', collect($plan['moves'])->flatMap(fn (array $m) => [$m['from_room_id'], $m['to_room_id']]))
-            ->pluck('room_number', 'id');
+        $applied = $this->reshuffler->apply(
+            $plan,
+            'Zhvendosur automatikisht nga dhoma {from} në dhomën {to} për të sistemuar një rezervim të ri të të njëjtit tip.',
+        );
 
-        foreach ($plan['moves'] as $move) {
-            $res = Reservation::find($move['reservation_id']);
-            if (! $res || $res->room_id !== $move['from_room_id']) {
-                continue; // plan went stale mid-transaction — leave this stay alone
-            }
-
-            $from = $numbers[$move['from_room_id']] ?? $move['from_room_id'];
-            $to = $numbers[$move['to_room_id']] ?? $move['to_room_id'];
-            $res->room_id = $move['to_room_id'];
-            $res->notes = trim(($res->notes ? $res->notes."\n" : '')
-                ."Zhvendosur automatikisht nga dhoma {$from} në dhomën {$to} për të sistemuar një rezervim të ri të të njëjtit tip.");
-            $res->save();
-
+        foreach ($applied as $move) {
             ChannelSyncLog::record([
                 'channel' => $channel,
                 'direction' => 'pull',
                 'action' => 'booking.reshuffled',
-                'reservation_id' => $res->id,
+                'reservation_id' => $move['reservation_id'],
                 'room_type_id' => $roomTypeId,
                 'status' => 'ok',
                 'request' => [ // the booking whose arrival triggered the move — IDs only

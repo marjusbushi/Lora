@@ -730,7 +730,15 @@
       "demoApplied": "Demo: konflikti u zgjidh duke zgjedhur dhomën {room}. Rifresko faqen për ta rikthyer.",
       "confirmApply": "Ta zhvendos rezervimin në dhomën {room}? Sistemi do ta kontrollojë përsëri disponueshmërinë.",
       "realApplied": "Konflikti u zgjidh. Rezervimi u zhvendos në dhomën {room}.",
-      "resolutionFailed": "Konflikti nuk mund të zgjidhej. Rifresko kalendarin dhe provo përsëri."
+      "resolutionFailed": "Konflikti nuk mund të zgjidhej. Rifresko kalendarin dhe provo përsëri.",
+      "reshuffleTitle": "Zgjidhje me risistemim — i njëjti tip dhome",
+      "reshuffleMove": "Dhoma {from} → {to} · {guest}",
+      "reshuffleLanding": "Ky rezervim kalon te dhoma {room}",
+      "reshuffleApply": "Risistemo automatikisht ({n} lëvizje)",
+      "confirmReshuffle": "Të zbatohet risistemimi automatik? {n} rezervim(e) do të ndërrojnë dhomë brenda të njëjtit tip. Çdo lëvizje shënohet në historik.",
+      "reshuffleApplied": "Risistemimi u zbatua — konflikti u zgjidh.",
+      "showOtherTypes": "Shfaq tipe të tjera",
+      "otherTypesWarning": "Kujdes: këto dhoma ndryshojnë produktin që mysafiri ka rezervuar (tip tjetër dhome)."
     },
     "guestProfileDesign": {
       "pageTitle": "Prototipi i profilit të mysafirit",
