@@ -257,6 +257,24 @@ class ChannexBookingImportTest extends TestCase
         $this->assertStringNotContainsString('kastrioti', $blob);
     }
 
+    public function test_future_booking_packs_against_existing_stays_not_first_free(): void
+    {
+        // Two free rooms: the first in order is completely empty, the second has
+        // a stay ending exactly when the new span starts. Best-fit placement
+        // lands the booking back-to-back on the second — the empty room's long
+        // free run survives for a future long stay. No reshuffle involved.
+        $this->studio(2);
+        [$roomA, $roomB] = Room::orderBy('room_number')->get()->all();
+        $this->directStay($roomB, 1, 3);
+
+        app(ChannexBookingImporter::class)->importRevision($this->futureRevision(3, 6));
+
+        $imported = Reservation::where('channel_ref', 'BK123')->sole();
+        $this->assertSame($roomB->id, $imported->room_id);
+        $this->assertStringNotContainsString('MBI-BOOKIM', (string) $imported->notes);
+        $this->assertSame(0, ChannelSyncLog::where('action', 'booking.reshuffled')->count());
+    }
+
     public function test_checked_in_blocker_still_parks_as_overbooked(): void
     {
         // A guest physically in the room is never moved: with no legal plan the
