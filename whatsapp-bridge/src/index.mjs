@@ -157,6 +157,28 @@ function scheduleRetry(tenantId, attempt) {
     flushing.set(tenantId, timer);
 }
 
+// Abonimet e prezencës ("po shkruan") mbahen edhe në disk: pas restart-it të
+// daemon-it a një rilidhjeje rutinë, socket-i i ri s'i njeh më dhe treguesi
+// vdiste për bisedat ekzistuese derisa mysafiri të shkruante sërish (gjetje
+// Codex PR #449). Tavan 200 jid-et më të fundit — mjafton për bisedat e gjalla.
+const presenceSubsPath = (tenantId) => join(SESSIONS_DIR, `tenant-${tenantId}`, 'presence-subs.json');
+
+function loadPresenceSubs(tenantId) {
+    try {
+        return new Set(JSON.parse(readFileSync(presenceSubsPath(tenantId), 'utf8')).slice(-200));
+    } catch {
+        return new Set();
+    }
+}
+
+function savePresenceSubs(tenantId, subs) {
+    try {
+        writeFileSync(presenceSubsPath(tenantId), JSON.stringify([...subs].slice(-200)), 'utf8');
+    } catch (err) {
+        logger.warn({ tenantId, err: String(err) }, 'S\'u ruajtën dot abonimet e prezencës');
+    }
+}
+
 // Ngjarje KALIMTARE (prezencë "po shkruan") — me qëllim JASHTË outbox-it:
 // një tregues i vjetruar që rikthehet pas retry-t është më keq se asnjë.
 // Dërgohet një herë, me timeout të shkurtër; dështimi thjesht harrohet.
@@ -212,7 +234,7 @@ async function startSession(tenantId, eventUrl) {
         phone: null,
         eventUrl: eventUrl || loadMeta(tenantId)?.eventUrl || null,
         stopping: false,
-        presenceSubs: new Set(), // jid-et ku jemi abonuar për "po shkruan"
+        presenceSubs: loadPresenceSubs(tenantId), // jid-et e abonuara — mbijetojnë restart-in
         lastPresence: new Map(), // jid → { state, at } (throttle ~3s)
     };
     sessions.set(tenantId, session);
@@ -233,6 +255,13 @@ async function startSession(tenantId, eventUrl) {
             session.qrDataUrl = null;
             session.phone = (sock.user?.id || '').split(':')[0] || null;
             postEvent(tenantId, 'status', { status: 'connected', phone: session.phone });
+
+            // Riabonohu në prezencën e bisedave të njohura — socket-i i ri
+            // s'trashëgon asgjë nga i vjetri (gjetje Codex PR #449).
+            for (const jid of session.presenceSubs) {
+                sock.presenceSubscribe(jid).catch(() => {});
+            }
+
             logger.info({ tenantId, phone: session.phone }, 'WhatsApp u lidh');
         }
 
@@ -284,6 +313,7 @@ async function startSession(tenantId, eventUrl) {
             // reja e marrin treguesin nga mesazhi i dytë e tutje (v1, mjafton).
             if (!session.presenceSubs.has(jid)) {
                 session.presenceSubs.add(jid);
+                savePresenceSubs(tenantId, session.presenceSubs);
                 sock.presenceSubscribe(jid).catch(() => {});
             }
 

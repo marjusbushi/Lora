@@ -69,27 +69,35 @@ function onVisibilityChange() {
 }
 
 // "Po shkruan…" (task #344) — vetëm WhatsApp (OTA-t s'e japin fare sinjalin,
-// ndaj s'kanë kurrë flicker). Ngjarje kalimtare pa DB: treguesi zhduket vetiu
-// 4s pas ngjarjes së fundit; 'paused' e fshin menjëherë. Mesazhi i mbërritur
-// e fshin gjithashtu — "po shkruan" + mesazhi bashkë duken si vonesë.
-const typing = ref(null); // { threadId, state: 'composing'|'recording' }
-let typingTimer = null;
+// ndaj s'kanë kurrë flicker). Ngjarje kalimtare pa DB, e mbajtur PËR BISEDË
+// (dy mysafirë që shkruajnë njëkohësisht s'e prishin njëri-tjetrin — gjetje
+// Codex #449): zhduket vetiu 4s pas ngjarjes së fundit; 'paused' dhe mesazhi
+// i mbërritur i asaj bisede e fshijnë menjëherë.
+const typingByThread = ref({}); // threadId → 'composing' | 'recording'
+const typingTimers = new Map(); // threadId → timeout (jo-reaktive)
+
+function clearTypingFor(threadId) {
+    clearTimeout(typingTimers.get(threadId));
+    typingTimers.delete(threadId);
+    if (threadId in typingByThread.value) {
+        const next = { ...typingByThread.value };
+        delete next[threadId];
+        typingByThread.value = next;
+    }
+}
 
 function onGuestTyping(e) {
-    if (e.state === 'paused') {
-        if (typing.value?.threadId === e.thread_id) typing.value = null;
-        return;
-    }
-    typing.value = { threadId: e.thread_id, state: e.state };
-    clearTimeout(typingTimer);
-    typingTimer = setTimeout(() => (typing.value = null), 4000);
+    if (e.state === 'paused') return clearTypingFor(e.thread_id);
+    typingByThread.value = { ...typingByThread.value, [e.thread_id]: e.state };
+    clearTimeout(typingTimers.get(e.thread_id));
+    typingTimers.set(e.thread_id, setTimeout(() => clearTypingFor(e.thread_id), 4000));
 }
 
 onMounted(() => {
     if (rtTenantId) {
         getEcho()?.private(rtChannelName)
             .listen('.message.received', (e) => {
-                if (typing.value?.threadId === e.thread_id) typing.value = null;
+                clearTypingFor(e.thread_id);
                 refreshInbox();
             })
             .listen('.guest.typing', onGuestTyping);
@@ -102,7 +110,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     clearInterval(rtFallbackTimer);
-    clearTimeout(typingTimer);
+    typingTimers.forEach((t) => clearTimeout(t));
+    typingTimers.clear();
     document.removeEventListener('visibilitychange', onVisibilityChange);
     if (rtTenantId) getEcho()?.leave(`private-${rtChannelName}`);
 });
@@ -354,7 +363,7 @@ function statusLabel(s) {
                                 <p class="truncate text-[13px] font-bold tracking-tight text-neutral-900">{{ selected.guest_name || $t('admin.generated.k_769ec202ccd2') }}</p>
                                 <p class="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-400">
                                     <span class="rounded px-1.5 py-0.5 text-[9.5px] font-bold" :class="chan(selected.channel).badge">{{ chan(selected.channel).label }}</span>
-                                    <span v-if="typing && typing.threadId === selected.id" class="animate-pulse font-semibold text-emerald-600">{{ typing.state === 'recording' ? $t('messagesRt.recording') : $t('messagesRt.typing') }}</span>
+                                    <span v-if="typingByThread[selected.id]" class="animate-pulse font-semibold text-emerald-600">{{ typingByThread[selected.id] === 'recording' ? $t('messagesRt.recording') : $t('messagesRt.typing') }}</span>
                                     <span v-if="selected.reservation">· {{ selected.reservation.ref }}</span>
                                     <span v-if="selected.status === 'closed'" class="rounded bg-neutral-200 px-1.5 py-0.5 text-[9.5px] font-bold text-neutral-600">{{ $t('admin.generated.k_3e102da76e23') }}</span>
                                 </p>
