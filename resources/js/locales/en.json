@@ -4,7 +4,7 @@
       "title": "Reset your password",
       "intro": "Enter your account email and we'll send you a link to set a new password.",
       "emailLabel": "Email",
-      "emailPlaceholder": "name@hotel.com",
+      "emailPlaceholder": "name{'@'}hotel.com",
       "submit": "Send the link",
       "submitting": "Sending…",
       "sent": "If an account exists for this address, the link is on its way.",
@@ -5496,7 +5496,7 @@
       "next90": "Next 90 days",
       "expectedArrivals": "Expected to arrive",
       "materialization": "Materialization",
-      "materializationDetail": "{pct}% materialization @ {days}d",
+      "materializationDetail": "{pct}% materialization {'@'} {days}d",
       "sampleDays": "{count} learning days"
     },
     "distribution": {
