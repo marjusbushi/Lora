@@ -280,37 +280,80 @@ function backToList() {
 // e sjellin realin — zëvendësim pa dublim); dështimi (flash.error nga ura/
 // Channex ose gabim validimi) e shënon të dështuar dhe teksti RIKTHEHET me
 // "Riprovo" — kurrë humbje e heshtur e asaj që shkroi operatori.
-function sendReply() {
-    if (!props.selected || !replyForm.body.trim()) return;
-    const body = replyForm.body;
-    const threadId = props.selected.id;
-    const localId = ++replySeq;
-    pendingReplies.value = [...pendingReplies.value, {
-        localId, threadId, body, sent_at: new Date().toISOString(), state: 'sending',
-    }];
-    replyForm.reset('body');
+// Dërgimet SERIALIZOHEN (gjetje Codex #450): dy router.post paralele — i dyti
+// ANULON të parin në Inertia, dhe anulimi s'thërret as onSuccess as onError.
+// Radha mban një vizitë në fluturim; anulimet e mbetura (ndërrim bisede) i
+// zgjidh pajtuesi më poshtë, jo callback-et.
+const sendQueue = [];
+let sendBusy = false;
 
-    const markFailed = () => {
-        const row = pendingReplies.value.find((r) => r.localId === localId);
-        if (row) row.state = 'failed';
-    };
+function markFailed(localId) {
+    const row = pendingReplies.value.find((r) => r.localId === localId);
+    if (row && row.state === 'sending') row.state = 'failed';
+}
+
+function drainSendQueue() {
+    if (sendBusy || !sendQueue.length) return;
+    sendBusy = true;
+    const { localId, threadId, body } = sendQueue.shift();
 
     router.post(route('messages.reply', threadId), { body }, {
         preserveScroll: true,
         onSuccess: () => {
             // Ura/Channex offline kthehet si redirect me flash.error (jo si
             // gabim validimi) — mos e trajto kurrë si të dërguar.
-            if (usePage().props.flash?.error) return markFailed();
+            if (usePage().props.flash?.error) return markFailed(localId);
             pendingReplies.value = pendingReplies.value.filter((r) => r.localId !== localId);
         },
-        onError: markFailed,
+        onError: () => markFailed(localId),
+        // Anulim (u nis vizitë tjetër): fati i panjohur — NUK shënohet dështim
+        // këtu; pajtuesi e heq kur props-et sjellin binjakun real, ose kujdestari
+        // 20s e shënon të dështuar që operatori të ketë gjithmonë "Riprovo".
+        onCancel: () => { sendBusy = false; drainSendQueue(); },
+        onFinish: () => { sendBusy = false; drainSendQueue(); },
     });
 }
 
+function dispatchReply(body) {
+    const threadId = props.selected.id;
+    const localId = ++replySeq;
+    pendingReplies.value = [...pendingReplies.value, {
+        localId, threadId, body, sent_at: new Date().toISOString(), state: 'sending',
+    }];
+    setTimeout(() => markFailed(localId), 20000); // kujdestari kundër "sending" pafund
+    sendQueue.push({ localId, threadId, body });
+    drainSendQueue();
+}
+
+function sendReply() {
+    if (!props.selected || !replyForm.body.trim()) return;
+    const body = replyForm.body;
+    replyForm.reset('body');
+    dispatchReply(body);
+}
+
+// "Riprovo" RIDËRGON direkt — s'e prek kurrë kutinë, se operatori mund të ketë
+// nisur tashmë një draft të ri aty (gjetje Codex #450).
 function retryReply(local) {
     pendingReplies.value = pendingReplies.value.filter((r) => r.localId !== local.localId);
-    replyForm.body = local.body; // teksti kthehet në kuti — Enter e ridërgon
+    dispatchReply(local.body);
 }
+
+// PAJTUESI: sapo props-et e freskëta sjellin një mesazh real hosti me të njëjtin
+// tekst, rreshti optimist bie — edhe kur vizita u ANULUA pasi serveri e kishte
+// kryer (rasti "kopja e vjetruar ngjitur me realen", gjetje Codex #450). Çdo
+// rresht real "konsumohet" vetëm një herë, që dy "Ok" të njëpasnjëshme të mos
+// fshihen me një binjak të vetëm.
+watch(() => props.selected?.messages, (msgs) => {
+    if (!msgs?.length || !pendingReplies.value.length) return;
+    const claimed = new Set();
+    pendingReplies.value = pendingReplies.value.filter((p) => {
+        if (p.threadId !== props.selected?.id) return true;
+        const twin = msgs.find((m) => m.sender === 'host' && m.body === p.body && !claimed.has(m.id));
+        if (twin) claimed.add(twin.id);
+        return !twin;
+    });
+});
 function statusLabel(s) {
     return { confirmed: translate('admin.generated.k_fbcc078dd3d9'), checked_in: translate('admin.generated.k_f6f991a4a716'), checked_out: 'Larguar', pending: translate('admin.generated.k_11b738a1d1e0'), cancelled: 'Anuluar' }[s] || s;
 }
