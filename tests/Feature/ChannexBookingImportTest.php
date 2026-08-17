@@ -296,6 +296,66 @@ class ChannexBookingImportTest extends TestCase
         $this->assertSame(0, ChannelSyncLog::where('action', 'booking.reshuffled')->count());
     }
 
+    public function test_anchored_inventory_produces_a_split_proposal_not_overbooking(): void
+    {
+        // Two checked-in guests anchor a pattern no reshuffle can untangle, yet
+        // every night has a free room: the importer parks on segment 1's room,
+        // raises a desk proposal, and does NOT cry overbooking.
+        $this->studio(2);
+        [$roomA, $roomB] = Room::orderBy('room_number')->get()->all();
+        $this->directStay($roomA, 0, 4, ['status' => 'checked_in']);
+        $this->directStay($roomB, 4, 9, ['status' => 'checked_in']);
+
+        $summary = app(ChannexBookingImporter::class)->importRevision($this->futureRevision(1, 8));
+
+        $this->assertSame(1, $summary['created']);
+        $imported = Reservation::where('channel_ref', 'BK123')->sole();
+        $this->assertSame($roomB->id, $imported->room_id); // segment 1's room
+        $this->assertStringContainsString('PROPOZIM NDARJEJE', $imported->notes);
+        $this->assertStringNotContainsString('MBI-BOOKIM', $imported->notes);
+
+        $proposal = \App\Models\ReservationSplitProposal::sole();
+        $this->assertSame($imported->id, $proposal->reservation_id);
+        $this->assertSame('pending', $proposal->status);
+        $this->assertSame([
+            ['room_id' => $roomB->id, 'check_in' => today()->addDays(1)->toDateString(), 'check_out' => today()->addDays(4)->toDateString()],
+            ['room_id' => $roomA->id, 'check_in' => today()->addDays(4)->toDateString(), 'check_out' => today()->addDays(8)->toDateString()],
+        ], $proposal->segments);
+        $this->assertTrue(ChannelSyncLog::where('action', 'booking.split_proposed')->where('reservation_id', $imported->id)->exists());
+    }
+
+    public function test_uncoverable_span_still_parks_without_a_proposal(): void
+    {
+        // One room, checked-in for the whole span: no split can cover it —
+        // honest MBI-BOOKIM exactly as before, and no proposal is born.
+        $this->studio(1);
+        $room = Room::sole();
+        $this->directStay($room, 0, 9, ['status' => 'checked_in']);
+
+        app(ChannexBookingImporter::class)->importRevision($this->futureRevision(1, 8));
+
+        $imported = Reservation::where('channel_ref', 'BK123')->sole();
+        $this->assertStringContainsString('MBI-BOOKIM', $imported->notes);
+        $this->assertSame(0, \App\Models\ReservationSplitProposal::count());
+    }
+
+    public function test_redelivery_keeps_a_single_proposal_and_the_desk_marker(): void
+    {
+        $this->studio(2);
+        [$roomA, $roomB] = Room::orderBy('room_number')->get()->all();
+        $this->directStay($roomA, 0, 4, ['status' => 'checked_in']);
+        $this->directStay($roomB, 4, 9, ['status' => 'checked_in']);
+        $importer = app(ChannexBookingImporter::class);
+
+        $importer->importRevision($this->futureRevision(1, 8));
+        $importer->importRevision($this->futureRevision(1, 8, ['status' => 'modified']));
+
+        $this->assertSame(1, Reservation::where('channel_ref', 'BK123')->count());
+        $this->assertSame(1, \App\Models\ReservationSplitProposal::count());
+        // The re-delivery rebuilt the notes — the desk marker must survive.
+        $this->assertStringContainsString('PROPOZIM NDARJEJE', Reservation::where('channel_ref', 'BK123')->sole()->notes);
+    }
+
     public function test_multi_room_booking_never_reshuffles_its_own_sibling(): void
     {
         // Second room of the same booking: the sibling's room (taken) may neither

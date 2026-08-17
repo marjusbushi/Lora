@@ -19,6 +19,7 @@ use App\Models\OtaReconciliationIssue;
 use App\Models\Payment;
 use App\Models\PosOrder;
 use App\Models\Reservation;
+use App\Models\ReservationSplitProposal;
 use App\Models\Room;
 use App\Models\Setting;
 use App\Models\Warehouse;
@@ -309,6 +310,28 @@ class ReservationController extends Controller
                     'nationality' => $r->guest->nationality,
                 ] : null,
             ]);
+
+        // Pending split-stay proposals for the visible reservations — the drawer
+        // renders the segment timeline and the accept/decline actions.
+        $splitProposals = ReservationSplitProposal::where('status', ReservationSplitProposal::STATUS_PENDING)
+            ->whereIn('reservation_id', $reservations->pluck('id'))
+            ->get()
+            ->keyBy('reservation_id');
+        $roomNumbersById = $rooms->pluck('room_number', 'id');
+        $reservations = $reservations->map(function (array $r) use ($splitProposals, $roomNumbersById) {
+            $proposal = $splitProposals->get($r['id']);
+            $r['split_proposal'] = $proposal ? [
+                'id' => $proposal->id,
+                'segments' => collect($proposal->segments)->map(fn (array $segment) => [
+                    'room_id' => $segment['room_id'],
+                    'room_number' => $roomNumbersById[$segment['room_id']] ?? (string) $segment['room_id'],
+                    'check_in' => $segment['check_in'],
+                    'check_out' => $segment['check_out'],
+                ])->all(),
+            ] : null;
+
+            return $r;
+        });
 
         $guests = Guest::select('id', 'first_name', 'last_name', 'email', 'phone')
             ->orderBy('last_name')
@@ -1293,6 +1316,157 @@ class ReservationController extends Controller
         });
 
         return back()->with('success', "Konflikti u zgjidh me risistemim automatik — rezervimi kaloi te dhoma {$freedRoomNumber}.");
+    }
+
+    /**
+     * The guest AGREED to the mid-stay room change: split the reservation into
+     * linked rows per segment (same booking_group_id), prorate the room total by
+     * nights, keep payments and commission on the first row (multi-room booking
+     * convention), and close the proposal as accepted. Everything under one
+     * transaction — a stale plan rolls the whole thing back.
+     */
+    public function acceptSplitProposal(Reservation $reservation): RedirectResponse
+    {
+        if (! auth()->user()->can('update_reservations')) {
+            abort(403);
+        }
+
+        DB::transaction(function () use ($reservation) {
+            $locked = Reservation::query()->lockForUpdate()->findOrFail($reservation->id);
+            $proposal = ReservationSplitProposal::query()->lockForUpdate()
+                ->where('reservation_id', $locked->id)
+                ->where('status', ReservationSplitProposal::STATUS_PENDING)
+                ->latest('id')
+                ->first();
+            if (! $proposal) {
+                throw ValidationException::withMessages(['proposal' => 'Nuk ka propozim aktiv ndarjeje per kete rezervim.']);
+            }
+            if (! in_array($locked->status, ['pending', 'confirmed', 'checked_in'], true)) {
+                throw ValidationException::withMessages(['proposal' => 'Rezervimi nuk eshte me aktiv.']);
+            }
+
+            $segments = $proposal->segments;
+            $valid = count($segments) >= 2
+                && (int) $segments[0]['room_id'] === (int) $locked->room_id
+                && $segments[0]['check_in'] === $locked->check_in_date->toDateString()
+                && end($segments)['check_out'] === $locked->check_out_date->toDateString();
+            for ($i = 0; $valid && $i < count($segments); $i++) {
+                if ($i > 0 && $segments[$i]['check_in'] !== $segments[$i - 1]['check_out']) {
+                    $valid = false;
+                    break;
+                }
+                if (! Reservation::isRoomAvailable((int) $segments[$i]['room_id'], $segments[$i]['check_in'], $segments[$i]['check_out'], $locked->id)) {
+                    $valid = false;
+                }
+            }
+            if (! $valid) {
+                throw ValidationException::withMessages([
+                    'proposal' => 'Plani i ndarjes nuk eshte me i vlefshem. Rifresko faqen — nje dorezim i ri nga kanali e rillogarit propozimin.',
+                ]);
+            }
+
+            $totalNights = max($locked->check_in_date->diffInDays($locked->check_out_date), 1);
+            $groupId = $locked->booking_group_id ?: (string) Str::uuid();
+            $stripMarker = fn (?string $notes) => trim((string) str_replace(' — PROPOZIM NDARJEJE (fol me mysafirin)', '', (string) $notes));
+
+            // Prorate by nights; the last segment absorbs rounding so the parts
+            // always sum to the original total.
+            $amounts = [];
+            $allocated = 0.0;
+            foreach ($segments as $i => $segment) {
+                if ($i === count($segments) - 1) {
+                    $amounts[$i] = round((float) $locked->total_amount - $allocated, 2);
+                    break;
+                }
+                $nights = now()->parse($segment['check_in'])->diffInDays($segment['check_out']);
+                $amounts[$i] = round((float) $locked->total_amount * $nights / $totalNights, 2);
+                $allocated += $amounts[$i];
+            }
+
+            foreach ($segments as $i => $segment) {
+                if ($i === 0) {
+                    continue;
+                }
+                Reservation::create([
+                    'room_id' => $segment['room_id'],
+                    'guest_id' => $locked->guest_id,
+                    'created_by' => auth()->id(),
+                    'created_via' => $locked->created_via,
+                    'check_in_date' => $segment['check_in'],
+                    'check_out_date' => $segment['check_out'],
+                    'status' => 'confirmed',
+                    'total_amount' => $amounts[$i],
+                    'currency' => $locked->currency,
+                    'exchange_rate' => $locked->exchange_rate,
+                    'adults' => $locked->adults,
+                    'children' => $locked->children,
+                    'channel' => $locked->channel,
+                    'channel_ref' => $locked->channel_ref,
+                    'booking_group_id' => $groupId,
+                    'payment_collect' => $locked->payment_collect,
+                    'booked_at' => $locked->booked_at,
+                    'notes' => trim($stripMarker($locked->notes)."\nQëndrim i ndarë me pëlqim të mysafirit — pjesa ".($i + 1).'/'.count($segments).'.'),
+                ]);
+            }
+
+            $locked->update([
+                'check_out_date' => $segments[0]['check_out'],
+                'total_amount' => $amounts[0],
+                'booking_group_id' => $groupId,
+                'notes' => trim($stripMarker($locked->notes)."\nQëndrim i ndarë me pëlqim të mysafirit — pjesa 1/".count($segments).'.'),
+            ]);
+
+            $proposal->update([
+                'status' => ReservationSplitProposal::STATUS_ACCEPTED,
+                'outcome' => 'accepted',
+                'decided_by' => auth()->id(),
+                'decided_at' => now(),
+            ]);
+        });
+
+        return back()->with('success', 'Qëndrimi u nda sipas planit — mysafiri ndërron dhomë ditën e kalimit.');
+    }
+
+    /**
+     * The guest REFUSED the mid-stay change: record what the desk did next and
+     * close the proposal. Deliberately nothing else — any cancellation happens
+     * BY STAFF through Booking.com's own flows, never through Lora.
+     */
+    public function declineSplitProposal(Request $request, Reservation $reservation): RedirectResponse
+    {
+        if (! auth()->user()->can('update_reservations')) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'outcome' => ['required', 'in:declined_upgraded,declined_escalated'],
+        ]);
+
+        DB::transaction(function () use ($reservation, $data) {
+            $locked = Reservation::query()->lockForUpdate()->findOrFail($reservation->id);
+            $proposal = ReservationSplitProposal::query()->lockForUpdate()
+                ->where('reservation_id', $locked->id)
+                ->where('status', ReservationSplitProposal::STATUS_PENDING)
+                ->latest('id')
+                ->first();
+            if (! $proposal) {
+                throw ValidationException::withMessages(['proposal' => 'Nuk ka propozim aktiv ndarjeje per kete rezervim.']);
+            }
+
+            $stripped = trim((string) str_replace(' — PROPOZIM NDARJEJE (fol me mysafirin)', '', (string) $locked->notes));
+            if ($stripped !== (string) $locked->notes) {
+                $locked->update(['notes' => $stripped]);
+            }
+
+            $proposal->update([
+                'status' => ReservationSplitProposal::STATUS_DECLINED,
+                'outcome' => $data['outcome'],
+                'decided_by' => auth()->id(),
+                'decided_at' => now(),
+            ]);
+        });
+
+        return back()->with('success', 'Vendimi u regjistrua. Hapat e mëtejshëm kryhen nga stafi përmes Booking.com.');
     }
 
     public function checkOut(Request $request, Reservation $reservation): RedirectResponse

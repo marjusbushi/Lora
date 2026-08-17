@@ -342,7 +342,10 @@ class GuestDirectoryTest extends TestCase
         // 37 = previous 36 + the single hotel.whatsapp_number read the shared
         // settings payload performs on a settings-cache miss (public WhatsApp
         // button, task #338).
-        $this->assertLessThanOrEqual(37, count(DB::getQueryLog()));
+        // 38 = + the one-off pending split-proposals COUNT the global desk
+        // banner performs on a cache miss (plan #723); rememberForever makes
+        // it zero on every warm request.
+        $this->assertLessThanOrEqual(38, count(DB::getQueryLog()));
     }
 
     private function user(string $role): User

@@ -216,6 +216,7 @@ function goToToday() {
 async function openDetail(reservation) {
     selectedReservation.value = reservation;
     showDetailModal.value = true;
+    showDeclineChoices.value = false;
     await nextTick();
     if (detailScroll.value) detailScroll.value.scrollTop = 0;
     detailCloseButton.value?.focus({ preventScroll: true });
@@ -247,6 +248,37 @@ function applyConflictSuggestion({ conflictId, reservationId, room }) {
         },
         onError: (errors) => toasts.value?.error(Object.values(errors)[0] || translate('admin.calendarConflicts.resolutionFailed')),
         onFinish: () => { resolvingReservationId.value = null; },
+    });
+}
+
+const splitActionBusy = ref(false);
+const showDeclineChoices = ref(false);
+
+function acceptSplit() {
+    if (!confirm(translate('admin.splitStay.confirmAccept', { n: selectedReservation.value.split_proposal.segments.length }))) return;
+    splitActionBusy.value = true;
+    router.post(route('reservations.split-proposal.accept', selectedReservation.value.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => {
+            showDetailModal.value = false;
+            toasts.value?.success(translate('admin.splitStay.accepted'));
+        },
+        onError: (errors) => toasts.value?.error(Object.values(errors)[0] || translate('admin.calendarConflicts.resolutionFailed')),
+        onFinish: () => { splitActionBusy.value = false; },
+    });
+}
+
+function declineSplit(outcome) {
+    splitActionBusy.value = true;
+    router.post(route('reservations.split-proposal.decline', selectedReservation.value.id), { outcome }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            showDetailModal.value = false;
+            showDeclineChoices.value = false;
+            toasts.value?.success(translate('admin.splitStay.declineRecorded'));
+        },
+        onError: (errors) => toasts.value?.error(Object.values(errors)[0] || translate('admin.calendarConflicts.resolutionFailed')),
+        onFinish: () => { splitActionBusy.value = false; },
     });
 }
 
@@ -703,6 +735,36 @@ function doCheckOut(res) {
                     </header>
 
                     <div ref="detailScroll" class="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+                        <!-- Split-stay proposal: the desk talks to the guest, then records
+                             the outcome. Lora never cancels — a refusal is handled by staff
+                             through Booking.com and only recorded here. -->
+                        <section v-if="selectedReservation.split_proposal" class="rounded-xl border border-warning-200 bg-warning-50 p-3" role="alert">
+                            <div class="mb-1.5 flex items-center gap-2 text-body-sm font-bold text-warning-800">
+                                <AlertTriangle class="h-4 w-4 shrink-0" /> {{ $t('admin.splitStay.title') }}
+                            </div>
+                            <p class="mb-2 text-tiny text-warning-800">{{ $t('admin.splitStay.explain') }}</p>
+                            <ul class="mb-3 space-y-1">
+                                <li v-for="(segment, index) in selectedReservation.split_proposal.segments" :key="index" class="rounded-lg border border-warning-200 bg-white px-2.5 py-1.5 text-body-sm text-primary-900">
+                                    <strong>{{ $t('admin.calendarConflicts.room') }} {{ segment.room_number }}</strong> · {{ formatDate(segment.check_in) }} → {{ formatDate(segment.check_out) }}
+                                </li>
+                            </ul>
+                            <div v-if="canUpdate" class="flex flex-wrap gap-2">
+                                <Button size="sm" variant="primary" :loading="splitActionBusy" :disabled="splitActionBusy" @click="acceptSplit">
+                                    {{ $t('admin.splitStay.accept') }}
+                                </Button>
+                                <Button size="sm" variant="outline" :disabled="splitActionBusy" :aria-expanded="showDeclineChoices" @click="showDeclineChoices = !showDeclineChoices">
+                                    {{ $t('admin.splitStay.decline') }}
+                                </Button>
+                            </div>
+                            <div v-if="canUpdate && showDeclineChoices" class="mt-2 rounded-lg border border-warning-200 bg-white p-2.5">
+                                <p class="mb-2 text-tiny font-semibold text-neutral-600">{{ $t('admin.splitStay.declineWhat') }}</p>
+                                <div class="flex flex-wrap gap-2">
+                                    <Button size="sm" variant="outline" :loading="splitActionBusy" :disabled="splitActionBusy" @click="declineSplit('declined_upgraded')">{{ $t('admin.splitStay.declinedUpgraded') }}</Button>
+                                    <Button size="sm" variant="outline" :loading="splitActionBusy" :disabled="splitActionBusy" @click="declineSplit('declined_escalated')">{{ $t('admin.splitStay.declinedEscalated') }}</Button>
+                                </div>
+                            </div>
+                        </section>
+
                         <section>
                             <div class="mb-2 flex items-center justify-between gap-3">
                                 <h3 class="text-body-sm font-bold text-primary-900">{{ $t('admin.calendarPreview.guestDetails') }}</h3>

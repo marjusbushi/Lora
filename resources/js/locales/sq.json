@@ -740,6 +740,18 @@
       "showOtherTypes": "Shfaq tipe të tjera",
       "otherTypesWarning": "Kujdes: këto dhoma ndryshojnë produktin që mysafiri ka rezervuar (tip tjetër dhome)."
     },
+    "splitStay": {
+      "title": "Propozim ndarjeje qëndrimi — fol me mysafirin",
+      "explain": "Ka vend për gjithë qëndrimin brenda të njëjtit tip, por vetëm me ndërrim dhome gjatë qëndrimit. Bisedo me mysafirin: nëse pranon, ndarja zbatohet me një klik; nëse jo, veprimet kryhen nga stafi përmes Booking.com dhe këtu regjistrohet vetëm vendimi.",
+      "accept": "Mysafiri pranoi — ndaje qëndrimin",
+      "decline": "Mysafiri refuzoi",
+      "declineWhat": "Çfarë u bë më tej?",
+      "declinedUpgraded": "U ofrua përmirësim (tip tjetër)",
+      "declinedEscalated": "U eskalua te Booking.com",
+      "confirmAccept": "Të ndahet qëndrimi në {n} pjesë sipas planit? Mysafiri do të ndërrojë dhomë ditën e kalimit dhe çdo pjesë shënohet në historik.",
+      "accepted": "Qëndrimi u nda sipas planit — pjesët u lidhën si një rezervim grupi.",
+      "declineRecorded": "Vendimi u regjistrua. Hapat e mëtejshëm kryhen nga stafi përmes Booking.com."
+    },
     "guestProfileDesign": {
       "pageTitle": "Prototipi i profilit të mysafirit",
       "dashboard": "Paneli",
@@ -7152,6 +7164,10 @@
     "dashboard": {
       "allRooms": "Të gjitha ({count})",
       "cleaningAge": "{today} të sotme · {older} të vjetra"
+    },
+    "splitStay": {
+      "banner": "{n} rezervim(e) kanë nevojë për bisedë me mysafirin — propozim ndarjeje qëndrimi",
+      "bannerCta": "Hap kalendarin"
     },
     "guests": {
       "inHouseDetail": "persona · në {rooms} dhoma · {profiles} profile",
