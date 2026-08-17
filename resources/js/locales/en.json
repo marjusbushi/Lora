@@ -7550,6 +7550,8 @@
   },
   "messagesRt": {
     "typing": "typing…",
-    "recording": "recording a voice note…"
+    "recording": "recording a voice note…",
+    "failed": "Not sent",
+    "retry": "Retry"
   }
 }

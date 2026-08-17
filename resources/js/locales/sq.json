@@ -7550,6 +7550,8 @@
   },
   "messagesRt": {
     "typing": "po shkruan…",
-    "recording": "po dërgon një zë…"
+    "recording": "po dërgon një zë…",
+    "failed": "S'u dërgua",
+    "retry": "Riprovo"
   }
 }
