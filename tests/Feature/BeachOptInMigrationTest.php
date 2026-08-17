@@ -48,6 +48,17 @@ class BeachOptInMigrationTest extends TestCase
         $meta = json_decode((string) DB::table('tenants')->where('id', $tenant->id)->value('metadata'), true);
         $this->assertFalse($meta['billing_access']['modules']['beach']);
 
+        // Rollback EKZAKT (gate-i mysql-upgrade): down() rikthen gjendjen e
+        // mëparshme nga rezerva dhe e fshin tabelën e saj.
+        $migration = require database_path('migrations/2026_08_17_230000_beach_entitlements_opt_in_only.php');
+        $migration->down();
+        $row = DB::table('tenant_module_entitlements')
+            ->where('tenant_id', $tenant->id)->where('module_code', 'beach')->first();
+        $this->assertSame(1, (int) $row->enabled);
+        $meta = json_decode((string) DB::table('tenants')->where('id', $tenant->id)->value('metadata'), true);
+        $this->assertTrue($meta['billing_access']['modules']['beach']);
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasTable('beach_opt_in_backup_20260817'));
+
         // Me zona → ri-ndezur nga paneli, korrigjimi NUK e prek më (idempotent
         // + rasti i staging-ut ku plazhi përdoret realisht).
         $this->enableBeach($tenant->id);
