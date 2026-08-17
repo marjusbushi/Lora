@@ -18,6 +18,11 @@ import StayExtensionModal from '@/Components/Reservations/StayExtensionModal.vue
 import ReservationDetailsDrawer from './Components/ReservationDetailsDrawer.vue';
 import { channelOptions } from '@/channels';
 import { getIntlLocale, translate } from '@/i18n';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
+
+// Realtime (task #345): lista merr ndryshimet vetiu — vetëm props-et e të
+// dhënave, modalet/format e hapura mbeten të paprekura (gjendje lokale).
+useRealtimeReload('reservations', '.reservation.changed', ['reservations', 'guests', 'stats']);
 
 const props = defineProps({
     reservations: Object,
