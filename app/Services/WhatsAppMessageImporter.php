@@ -29,11 +29,18 @@ class WhatsAppMessageImporter
             $thread = MessageThread::query()->where('whatsapp_jid', $jid)->first();
 
             if (! $thread) {
+                // Rezerva e emrit: numri real (payload.phone — për adresat @lid
+                // vjen nga senderPn, se pjesa para @ e jid-it NUK është numër),
+                // pastaj jid-i klasik, në fund etiketa neutrale.
+                $phoneDigits = preg_replace('/\D/', '', (string) ($payload['phone'] ?? ''));
+                $fallback = $phoneDigits !== ''
+                    ? '+'.$phoneDigits
+                    : (str_ends_with($jid, '@s.whatsapp.net') ? '+'.strstr($jid, '@', true) : 'WhatsApp');
+
                 $thread = MessageThread::create([
                     'whatsapp_jid' => $jid,
                     'channel' => 'whatsapp',
-                    // Emri i profilit (pushName) ose numri nga jid-i si rezervë.
-                    'guest_name' => trim((string) ($payload['name'] ?? '')) ?: '+'.strstr($jid, '@', true),
+                    'guest_name' => trim((string) ($payload['name'] ?? '')) ?: $fallback,
                     'status' => 'open',
                 ]);
             }

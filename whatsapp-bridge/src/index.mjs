@@ -250,15 +250,24 @@ async function startSession(tenantId, eventUrl) {
         for (const msg of messages) {
             const jid = msg.key?.remoteJid || '';
             // Vetëm biseda private 1-me-1 — kurrë grupe, statuse a newsletter.
-            if (msg.key?.fromMe || !jid.endsWith('@s.whatsapp.net')) continue;
+            // KUJDES: WhatsApp-i i ri adreson bisedat private edhe me '@lid'
+            // (fshehja e numrit — LID); pa të, mesazhet e mysafirëve injorohen
+            // në heshtje (gjetur live, task #341). Numri real vjen te senderPn.
+            const isPrivate = jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
+            if (msg.key?.fromMe || !isPrivate) continue;
 
             const body = msg.message?.conversation
                 || msg.message?.extendedTextMessage?.text
                 || '';
             if (!body.trim()) continue; // media: v2 — teksti mjafton për v1
 
+            // Numri i vërtetë (kur adresa është @lid): senderPn/participantPn.
+            const pn = msg.key?.senderPn || msg.key?.participantPn
+                || (jid.endsWith('@s.whatsapp.net') ? jid : '');
+
             postEvent(tenantId, 'message', {
                 jid,
+                phone: String(pn).split('@')[0].replace(/\D/g, ''),
                 message_id: msg.key.id,
                 name: msg.pushName || '',
                 body,
@@ -342,7 +351,8 @@ const server = createServer(async (req, res) => {
                 }
                 const jid = String(body.jid || '');
                 const text = String(body.text || '');
-                if (!jid.endsWith('@s.whatsapp.net') || !text.trim()) {
+                // Përgjigja shkon te i njëjti jid ku erdhi biseda — edhe @lid.
+                if (!(jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) || !text.trim()) {
                     return json(res, 422, { error: 'invalid jid or text' });
                 }
                 const sent = await session.sock.sendMessage(jid, { text });
