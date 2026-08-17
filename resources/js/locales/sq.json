@@ -7007,7 +7007,9 @@
     },
     "hotel": {
       "pricingCurrencyLabel": "Monedha e çmimeve",
-      "pricingCurrencyHint": "Smart Pricing, web, OTA dhe rezervimet."
+      "pricingCurrencyHint": "Smart Pricing, web, OTA dhe rezervimet.",
+      "whatsappNumberLabel": "Numri WhatsApp (butoni në faqen publike)",
+      "whatsappNumberHint": "Bosh = butoni s'shfaqet në web. Vendos numrin e dedikuar të hotelit — vizitorët të shkruajnë direkt në WhatsApp."
     },
     "roomTypes": {
       "uploadInterrupted": "Serveri e ndërpreu ngarkimin — provo përsëri ose ngarko më pak foto njëherësh.",
@@ -7245,7 +7247,9 @@
     "step2": "Shto një connector të ri dhe vendos URL-në.",
     "step3": "Hyr me llogarinë Lora dhe aprovo vetëm hotelin e shfaqur.",
     "recentAiActivity": "Aktiviteti i fundit AI",
-    "noAiActions": "Nuk ka ende veprime të ekzekutuara nga AI."
+    "noAiActions": "Nuk ka ende veprime të ekzekutuara nga AI.",
+    "actionWhatsAppAutoReply": "Përgjigje automatike në WhatsApp",
+    "actionWhatsAppAutoReplyDesc": "I FIKUR në nisje, me vetëdije: WhatsApp-i lidhet me rrugën jo-zyrtare dhe një robot me volum rrit rrezikun e bllokimit nga Meta. Ndize vetëm kur të kesh testuar me numrin e dedikuar. Pa këtë çelës, Lora vetëm përgatit drafte për stafin."
   },
   "posBeach": {
     "title": "Plazhi",
@@ -7531,5 +7535,9 @@
       "statusCancelled": "E anuluar",
       "refresh": "Rifresko statusin"
     }
+  },
+  "website": {
+    "whatsappCta": "Na shkruaj në WhatsApp",
+    "whatsappPrefill": "Përshëndetje {hotel}! Kam një pyetje."
   }
 }

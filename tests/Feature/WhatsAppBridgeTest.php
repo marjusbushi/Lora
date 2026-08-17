@@ -29,6 +29,11 @@ class WhatsAppBridgeTest extends TestCase
         $this->tenant = Tenant::query()->sole();
         app(TenantContext::class)->set($this->tenant);
         config(['services.whatsapp_bridge.token' => 'bridge-secret']);
+
+        // Importuesi dispatch-on GenerateAiGuestReply (afterCommit EKZEKUTOHET
+        // nën RefreshDatabase) — pa këtë mock, .env lokal me çelës Gemini bën
+        // thirrje REALE në teste. Testet e AI e ri-mock-ojnë sipas nevojës.
+        $this->mock(\App\Services\GeminiClient::class, fn ($mock) => $mock->shouldReceive('configured')->andReturn(false));
     }
 
     protected function tearDown(): void
@@ -271,6 +276,106 @@ class WhatsAppBridgeTest extends TestCase
             'status' => \App\Models\HotelFaqSuggestion::STATUS_PENDING,
         ]);
         $this->assertNull($thread->refresh()->ai_unanswered_question);
+    }
+
+    private function fakeGemini(bool $confident, string $reply = 'Përgjigje AI.'): void
+    {
+        $this->mock(\App\Services\GeminiClient::class, function ($mock) use ($confident, $reply) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('structured')->andReturn(['confident' => $confident, 'reply' => $reply]);
+        });
+    }
+
+    private function runAiJob(MessageThread $thread, int $messageId): void
+    {
+        app()->call([new \App\Jobs\GenerateAiGuestReply($thread->id, $messageId), 'handle']);
+    }
+
+    public function test_whatsapp_auto_reply_default_off_leaves_draft_only(): void
+    {
+        \App\Models\HotelFaq::create(['question' => 'Parkim?', 'answer' => 'Po.']);
+        $thread = $this->makeWhatsAppThread();
+        $message = $thread->messages()->create([
+            'sender' => \App\Models\Message::SENDER_GUEST,
+            'body' => 'A keni parkim?',
+            'sent_at' => now(),
+        ]);
+
+        $this->fakeGemini(true);
+        $this->mock(WhatsAppBridgeClient::class, fn ($mock) => $mock->shouldReceive('send')->never());
+
+        $this->runAiJob($thread, $message->id);
+
+        // Confident + FAQ + çelësi OTA ndezur — por whatsapp ka çelësin e VET,
+        // default FIKUR → vetëm draft, kurrë dërgim.
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    public function test_whatsapp_auto_reply_sends_via_bridge_when_its_own_switch_is_on(): void
+    {
+        \App\Models\Setting::set('ai_mcp.whatsapp_auto_reply_enabled', true, 'boolean');
+        \App\Models\HotelFaq::create(['question' => 'Parkim?', 'answer' => 'Po.']);
+        $thread = $this->makeWhatsAppThread();
+        $message = $thread->messages()->create([
+            'sender' => \App\Models\Message::SENDER_GUEST,
+            'body' => 'A keni parkim?',
+            'sent_at' => now(),
+        ]);
+
+        $this->fakeGemini(true);
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) use ($thread) {
+            $mock->shouldReceive('send')->once()
+                ->with($this->tenant->id, $thread->whatsapp_jid, 'Përgjigje AI.')
+                ->andReturn(['id' => 'WA-AI-1']);
+        });
+        $this->mock(\App\Services\ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runAiJob($thread, $message->id);
+
+        $this->assertDatabaseHas('messages', [
+            'message_thread_id' => $thread->id,
+            'sender' => \App\Models\Message::SENDER_HOST,
+            'sent_by_ai' => true,
+            'whatsapp_message_id' => 'WA-AI-1',
+        ]);
+        $this->assertNull($thread->refresh()->ai_suggestion);
+    }
+
+    public function test_whatsapp_bridge_failure_on_auto_reply_falls_back_to_draft(): void
+    {
+        \App\Models\Setting::set('ai_mcp.whatsapp_auto_reply_enabled', true, 'boolean');
+        \App\Models\HotelFaq::create(['question' => 'Parkim?', 'answer' => 'Po.']);
+        $thread = $this->makeWhatsAppThread();
+        $message = $thread->messages()->create([
+            'sender' => \App\Models\Message::SENDER_GUEST,
+            'body' => 'A keni parkim?',
+            'sent_at' => now(),
+        ]);
+
+        $this->fakeGemini(true);
+        $this->mock(WhatsAppBridgeClient::class, fn ($mock) => $mock->shouldReceive('send')->once()->andThrow(new \RuntimeException('Ura offline')));
+
+        $this->runAiJob($thread, $message->id);
+
+        $thread->refresh();
+        $this->assertSame('Përgjigje AI.', $thread->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    public function test_incoming_whatsapp_event_dispatches_the_ai_job(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+
+        $this->postJson('/whatsapp/bridge/event', $this->messageEvent(),
+            ['Authorization' => 'Bearer bridge-secret'])->assertOk();
+
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\GenerateAiGuestReply::class, 1);
+
+        // Dublikata NUK e ri-dispatch-on job-in.
+        $this->postJson('/whatsapp/bridge/event', $this->messageEvent(),
+            ['Authorization' => 'Bearer bridge-secret'])->assertOk();
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\GenerateAiGuestReply::class, 1);
     }
 
     public function test_db_unique_index_blocks_duplicate_whatsapp_message_even_past_the_exists_check(): void

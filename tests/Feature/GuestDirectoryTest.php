@@ -339,9 +339,10 @@ class GuestDirectoryTest extends TestCase
 
         $this->actingAs($admin)->get(route('guests.index'))->assertOk();
 
-        // 36 = previous 35 + the single pricing.currency read the shared
-        // settings payload performs on a settings-cache miss.
-        $this->assertLessThanOrEqual(36, count(DB::getQueryLog()));
+        // 37 = previous 36 + the single hotel.whatsapp_number read the shared
+        // settings payload performs on a settings-cache miss (public WhatsApp
+        // button, task #338).
+        $this->assertLessThanOrEqual(37, count(DB::getQueryLog()));
     }
 
     private function user(string $role): User
