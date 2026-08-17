@@ -118,6 +118,45 @@ class WhatsAppBridgeTest extends TestCase
         $this->assertSame(2, $thread->messages()->count());
     }
 
+    public function test_lid_addressed_message_imports_with_the_real_phone_as_name(): void
+    {
+        // WhatsApp-i i ri adreson bisedat private me '@lid' (fshehja e numrit);
+        // numri real vjen më vete te payload.phone (gjetur live, task #341).
+        $this->postJson('/whatsapp/bridge/event', $this->messageEvent([
+            'jid' => '123935760896232@lid',
+            'phone' => '355675081249',
+            'name' => '',
+            'message_id' => 'WA-LID-1',
+        ]), ['Authorization' => 'Bearer bridge-secret'])->assertOk();
+
+        $thread = MessageThread::query()->sole();
+        $this->assertSame('123935760896232@lid', $thread->whatsapp_jid);
+        $this->assertSame('+355675081249', $thread->guest_name);
+        $this->assertSame(1, $thread->messages()->count());
+    }
+
+    public function test_lid_message_reuses_the_legacy_phone_thread_of_the_same_guest(): void
+    {
+        // Biseda ekzistuese me jid klasik + mesazh i ri @lid me të njëjtin numër
+        // = i njëjti mysafir — një thread i vetëm, jid i migruar (Codex #441).
+        $this->postJson('/whatsapp/bridge/event', $this->messageEvent([
+            'jid' => '355675081249@s.whatsapp.net',
+            'phone' => '355675081249',
+            'message_id' => 'WA-OLD-1',
+        ]), ['Authorization' => 'Bearer bridge-secret'])->assertOk();
+
+        $this->postJson('/whatsapp/bridge/event', $this->messageEvent([
+            'jid' => '123935760896232@lid',
+            'phone' => '355675081249',
+            'message_id' => 'WA-NEW-1',
+            'body' => 'Mesazhi i dytë',
+        ]), ['Authorization' => 'Bearer bridge-secret'])->assertOk();
+
+        $thread = MessageThread::query()->sole();
+        $this->assertSame('123935760896232@lid', $thread->whatsapp_jid);
+        $this->assertSame(2, $thread->messages()->count());
+    }
+
     public function test_status_event_upserts_the_connection_row(): void
     {
         $this->postJson('/whatsapp/bridge/event', [
