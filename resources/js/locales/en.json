@@ -7007,7 +7007,9 @@
     },
     "hotel": {
       "pricingCurrencyLabel": "Pricing currency",
-      "pricingCurrencyHint": "Smart Pricing, web, OTA and reservations."
+      "pricingCurrencyHint": "Smart Pricing, web, OTA and reservations.",
+      "whatsappNumberLabel": "WhatsApp number (public site button)",
+      "whatsappNumberHint": "Empty = the button is hidden on the website. Use the hotel's dedicated number — visitors message you directly on WhatsApp."
     },
     "roomTypes": {
       "uploadInterrupted": "The server interrupted the upload — try again or upload fewer photos at once.",
@@ -7245,7 +7247,9 @@
     "step2": "Add a new connector and paste the URL.",
     "step3": "Sign in with your Lora account and approve only the hotel shown.",
     "recentAiActivity": "Recent AI activity",
-    "noAiActions": "No AI-executed actions yet."
+    "noAiActions": "No AI-executed actions yet.",
+    "actionWhatsAppAutoReply": "Auto-reply on WhatsApp",
+    "actionWhatsAppAutoReplyDesc": "OFF by default, deliberately: WhatsApp uses the unofficial route and a high-volume bot increases the risk of Meta blocking the number. Enable it only after testing with the dedicated number. Without this switch, Lora only prepares drafts for staff."
   },
   "posBeach": {
     "title": "Beach",
@@ -7531,5 +7535,9 @@
       "statusCancelled": "Cancelled",
       "refresh": "Refresh status"
     }
+  },
+  "website": {
+    "whatsappCta": "Message us on WhatsApp",
+    "whatsappPrefill": "Hello {hotel}! I have a question."
   }
 }

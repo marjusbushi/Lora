@@ -42,7 +42,7 @@ class GenerateAiGuestReply implements ShouldQueue
         $this->captureTenant();
     }
 
-    public function handle(GeminiClient $gemini, ChannexClient $channex, TenantBillingService $billing, TenantContext $context): void
+    public function handle(GeminiClient $gemini, ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, TenantBillingService $billing, TenantContext $context): void
     {
         $tenant = $context->tenant();
         if (! $tenant || ! $billing->enabled(TenantBillingService::MESSAGES, $tenant)) {
@@ -98,12 +98,17 @@ class GenerateAiGuestReply implements ShouldQueue
             return;
         }
 
-        $autoEnabled = filter_var(Setting::get('ai_mcp.guest_auto_reply_enabled', true), FILTER_VALIDATE_BOOL);
+        // Çelësi i auto-dërgimit është PER-KANAL: WhatsApp (QR-lite, risk
+        // bllokimi nga Meta) ka çelësin e vet me default FIKUR — roboti aty
+        // ndizet vetëm me dorën e pronarit (task #337). OTA mbetet si ishte.
+        $autoEnabled = $thread->channel === 'whatsapp'
+            ? filter_var(Setting::get('ai_mcp.whatsapp_auto_reply_enabled', false), FILTER_VALIDATE_BOOL)
+            : filter_var(Setting::get('ai_mcp.guest_auto_reply_enabled', true), FILTER_VALIDATE_BOOL);
 
         // Niveli 2 VETËM me FAQ aktive — hotel pa FAQ s'e lëshon kurrë AI-në
         // te klientët (de-facto Niveli 1, vendim i ratifikuar i Marjusit).
         if ($confident && $autoEnabled && $faqs->isNotEmpty()) {
-            $this->sendAutoReply($channex, $thread, $reply, $rateKey);
+            $this->sendAutoReply($channex, $whatsapp, $thread, $reply, $rateKey);
 
             return;
         }
@@ -187,27 +192,50 @@ PROMPT;
         }
     }
 
-    private function sendAutoReply(ChannexClient $channex, MessageThread $thread, string $reply, string $rateKey): void
+    private function sendAutoReply(ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, MessageThread $thread, string $reply, string $rateKey): void
     {
-        if (! $thread->channex_thread_id) {
-            return;
-        }
+        $channexMessageId = null;
+        $whatsappMessageId = null;
 
-        try {
-            $sent = $channex->sendThreadMessage($thread->channex_thread_id, $reply);
-        } catch (\Throwable $e) {
-            report($e);
+        if ($thread->channel === 'whatsapp') {
+            if (! $thread->whatsapp_jid) {
+                return;
+            }
 
-            // Dërgimi dështoi — mos e humb punën: lëre si draft për stafin.
-            $thread->forceFill(['ai_suggestion' => mb_substr($reply, 0, 2000), 'ai_suggested_at' => now()])->save();
+            try {
+                $sent = $whatsapp->send($thread->tenant_id, $thread->whatsapp_jid, $reply);
+                $whatsappMessageId = (string) ($sent['id'] ?? '') ?: null;
+            } catch (\Throwable $e) {
+                report($e);
 
-            return;
+                // Ura offline — mos e humb punën: lëre si draft për stafin.
+                $thread->forceFill(['ai_suggestion' => mb_substr($reply, 0, 2000), 'ai_suggested_at' => now()])->save();
+
+                return;
+            }
+        } else {
+            if (! $thread->channex_thread_id) {
+                return;
+            }
+
+            try {
+                $sent = $channex->sendThreadMessage($thread->channex_thread_id, $reply);
+                $channexMessageId = (string) ($sent['id'] ?? '') ?: null;
+            } catch (\Throwable $e) {
+                report($e);
+
+                // Dërgimi dështoi — mos e humb punën: lëre si draft për stafin.
+                $thread->forceFill(['ai_suggestion' => mb_substr($reply, 0, 2000), 'ai_suggested_at' => now()])->save();
+
+                return;
+            }
         }
 
         $thread->messages()->create([
-            // ID-ja e Channex ruhet që echo e webhook-ut të deduplikohet dhe
+            // ID-të ruhen që echo (webhook Channex / urë) të deduplikohet dhe
             // të mos futet kopje e dytë pa etiketë (gjetje Codex, PR #433).
-            'channex_message_id' => (string) ($sent['id'] ?? '') ?: null,
+            'channex_message_id' => $channexMessageId,
+            'whatsapp_message_id' => $whatsappMessageId,
             'sender' => Message::SENDER_HOST,
             'sent_by_ai' => true,
             'body' => $reply,
