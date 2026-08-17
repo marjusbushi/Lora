@@ -10,10 +10,14 @@ import Modal from '@/Components/UI/Modal.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import PosSalespersonSwitcher from '@/Components/Pos/PosSalespersonSwitcher.vue';
 import OutletSwitcher from '@/Components/Pos/OutletSwitcher.vue';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import {
     ArrowRightLeft, Banknote, Check, FileText,
     Plus, Printer, ReceiptText,
 } from 'lucide-vue-next';
+
+// Realtime (task #346): rounds/porositë e kolegëve rifreskojnë tavolinat vetiu.
+useRealtimeReload('pos', '.pos.order.changed', ['tables']);
 
 const props = defineProps({
     tables: { type: Array, default: () => [] },

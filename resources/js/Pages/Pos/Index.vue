@@ -13,9 +13,14 @@ import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ShiftBanner from '@/Components/Pos/ShiftBanner.vue';
 import PosSalespersonSwitcher from '@/Components/Pos/PosSalespersonSwitcher.vue';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import OutletSwitcher from '@/Components/Pos/OutletSwitcher.vue';
 import PosReceipt from '@/Components/Invoices/PosReceipt.vue';
 import { ArrowLeft, Banknote, BedDouble, Clock3, CreditCard, Expand, Maximize2, Minimize2, Minus, Pencil, Plus, Printer, ReceiptText, RotateCcw, Search, ShoppingCart, Shrink, Split, Star, Trash2, X } from 'lucide-vue-next';
+
+// Realtime (task #346): porosia e re (staf, tavolina, QR nga çadrat) shfaqet
+// vetiu — vetëm lista e porosive, pa prekur porosinë/formën e hapur në kasë.
+useRealtimeReload('pos', '.pos.order.changed', ['orders']);
 
 const props = defineProps({
     view: { type: String, default: 'sale' },

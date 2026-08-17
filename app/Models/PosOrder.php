@@ -2,6 +2,10 @@
 
 namespace App\Models;
 
+use App\Observers\PosOrderObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+
+#[ObservedBy([PosOrderObserver::class])]
 class PosOrder extends TenantModel
 {
     protected $fillable = [
