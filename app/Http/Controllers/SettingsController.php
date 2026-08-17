@@ -254,6 +254,8 @@ class SettingsController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'address' => ['nullable', 'string', 'max:500'],
             'phone' => ['nullable', 'string', 'max:30'],
+            // Butoni WhatsApp në webin publik (bosh = butoni s'shfaqet).
+            'whatsapp_number' => ['nullable', 'string', 'max:30', 'regex:/^[+\d][\d\s\-()]*$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'timezone' => ['required', 'string', 'max:50'],
             'currency' => ['required', 'string', Rule::in(config('lora.tenant_currencies'))],
@@ -290,7 +292,7 @@ class SettingsController extends Controller
 
         DB::transaction(function () use ($request, $tenant, $currency, $pricingCurrency) {
             foreach ([
-                'name', 'address', 'phone', 'email', 'timezone', 'check_in_time', 'check_out_time',
+                'name', 'address', 'phone', 'whatsapp_number', 'email', 'timezone', 'check_in_time', 'check_out_time',
                 'hero_eyebrow_sq', 'hero_eyebrow_en',
                 'hero_title_sq', 'hero_title_en',
                 'hero_subtitle_sq', 'hero_subtitle_en',

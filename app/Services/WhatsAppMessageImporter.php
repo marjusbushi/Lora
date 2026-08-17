@@ -47,7 +47,7 @@ class WhatsAppMessageImporter
                 : now();
 
             try {
-                $thread->messages()->create([
+                $message = $thread->messages()->create([
                     'whatsapp_message_id' => $messageId,
                     'sender' => Message::SENDER_GUEST,
                     'body' => mb_substr($body, 0, 4000),
@@ -72,8 +72,10 @@ class WhatsAppMessageImporter
             $thread->ai_unanswered_question = null;
             $thread->save();
 
-            // AI auto-reply për whatsapp vjen me pjesën 3 (task #337) — me çelës
-            // më vete, default i fikur (vendimi i riskut të Metës).
+            // Lora AI — si te webhook-u Channex: VETËM ngjarjet e gjalla të urës
+            // (whatsapp s'ka fare rrugë historiku). Auto-dërgimi aty varet nga
+            // çelësi më vete whatsapp_auto_reply_enabled (default FIKUR).
+            \App\Jobs\GenerateAiGuestReply::dispatch($thread->id, $message->id)->afterCommit();
 
             return ['status' => 'ok', 'thread_id' => $thread->id];
         });
