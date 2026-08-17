@@ -132,9 +132,14 @@ function togglePanel() {
 
 // The page is a fixed frame; only the chat scrolls — so jump to the latest
 // message whenever a thread opens or a new message lands.
+const pendingReplies = ref([]); // { localId, threadId, body, sent_at, state: 'sending'|'failed' } — task #347
+let replySeq = 0;
+
 const chatBox = ref(null);
 watch(
-    () => [props.selected?.id, props.selected?.messages?.length],
+    // Edhe rreshtat optimistë (task #347) e zbresin scroll-in — mesazhi i sapo
+    // shtypur duhet parë në çast, jo pas kthimit të serverit.
+    () => [props.selected?.id, props.selected?.messages?.length, pendingReplies.value.length],
     () => {
         if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
     },
@@ -246,7 +251,15 @@ function money(v) {
 const messageRows = computed(() => {
     const rows = [];
     let last = null;
-    for (const m of props.selected?.messages || []) {
+    // Rreshtat optimistë (task #347) hyjnë pas mesazheve reale të bisedës së
+    // hapur — ndarësi i ditës del nga i njëjti tur, pa logjikë të dyfishtë.
+    const pending = pendingReplies.value
+        .filter((p) => p.threadId === props.selected?.id)
+        .map((p) => ({
+            id: 'p' + p.localId, sender: 'host', body: p.body, sent_at: p.sent_at,
+            pending: p.state === 'sending', failed: p.state === 'failed', local: p,
+        }));
+    for (const m of [...(props.selected?.messages || []), ...pending]) {
         const day = m.sent_at ? new Date(m.sent_at).toDateString() : '';
         if (day !== last) { rows.push({ sep: dayLabel(m.sent_at), key: 's' + m.id }); last = day; }
         rows.push({ ...m, key: 'm' + m.id });
@@ -261,12 +274,42 @@ function openThread(id) {
 function backToList() {
     mobileChatOpen.value = false;
 }
+// Dërgim OPTIMIST (task #347, raport i Marjusit): mesazhi futet në bisedë NË
+// ÇAST dhe kutia zbrazet — rrugëtimi server → urë → WhatsApp (~0.5s) vazhdon
+// në sfond. Kur POST-i mbaron pa gabim, rreshti lokal hiqet (props-et e freskëta
+// e sjellin realin — zëvendësim pa dublim); dështimi (flash.error nga ura/
+// Channex ose gabim validimi) e shënon të dështuar dhe teksti RIKTHEHET me
+// "Riprovo" — kurrë humbje e heshtur e asaj që shkroi operatori.
 function sendReply() {
     if (!props.selected || !replyForm.body.trim()) return;
-    replyForm.post(route('messages.reply', props.selected.id), {
+    const body = replyForm.body;
+    const threadId = props.selected.id;
+    const localId = ++replySeq;
+    pendingReplies.value = [...pendingReplies.value, {
+        localId, threadId, body, sent_at: new Date().toISOString(), state: 'sending',
+    }];
+    replyForm.reset('body');
+
+    const markFailed = () => {
+        const row = pendingReplies.value.find((r) => r.localId === localId);
+        if (row) row.state = 'failed';
+    };
+
+    router.post(route('messages.reply', threadId), { body }, {
         preserveScroll: true,
-        onSuccess: () => replyForm.reset('body'),
+        onSuccess: () => {
+            // Ura/Channex offline kthehet si redirect me flash.error (jo si
+            // gabim validimi) — mos e trajto kurrë si të dërguar.
+            if (usePage().props.flash?.error) return markFailed();
+            pendingReplies.value = pendingReplies.value.filter((r) => r.localId !== localId);
+        },
+        onError: markFailed,
     });
+}
+
+function retryReply(local) {
+    pendingReplies.value = pendingReplies.value.filter((r) => r.localId !== local.localId);
+    replyForm.body = local.body; // teksti kthehet në kuti — Enter e ridërgon
 }
 function statusLabel(s) {
     return { confirmed: translate('admin.generated.k_fbcc078dd3d9'), checked_in: translate('admin.generated.k_f6f991a4a716'), checked_out: 'Larguar', pending: translate('admin.generated.k_11b738a1d1e0'), cancelled: 'Anuluar' }[s] || s;
@@ -393,12 +436,19 @@ function statusLabel(s) {
                                 </div>
                                 <div v-else class="flex" :class="row.sender === 'host' ? 'justify-end' : 'justify-start'">
                                     <div class="max-w-[78%] rounded-2xl px-3 py-2 text-[13px] leading-relaxed"
-                                        :class="row.sender === 'host' ? 'rounded-br-md bg-[#15855c] text-white shadow-[0_4px_12px_-4px_rgba(21,133,92,0.5)]' : 'rounded-bl-md border border-neutral-200 bg-white text-neutral-800'">
+                                        :class="[row.sender === 'host' ? 'rounded-br-md bg-[#15855c] text-white shadow-[0_4px_12px_-4px_rgba(21,133,92,0.5)]' : 'rounded-bl-md border border-neutral-200 bg-white text-neutral-800', row.pending ? 'opacity-70' : '', row.failed ? '!bg-rose-600' : '']">
                                         <p class="whitespace-pre-wrap break-words">{{ row.body }}</p>
                                         <p class="mt-1 flex items-center gap-1 text-[9.5px]" :class="row.sender === 'host' ? 'justify-end text-emerald-100' : 'text-neutral-400'">
                                             <span v-if="row.sent_by_ai" class="font-bold">✨ Lora AI ·</span>
-                                            {{ clock(row.sent_at) }}
-                                            <svg v-if="row.sender === 'host'" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.2a.75.75 0 01.1 1.05l-8 10.5a.75.75 0 01-1.13.07l-4.5-4.5a.75.75 0 011.06-1.06l3.9 3.9 7.48-9.82a.75.75 0 011.05-.14z" clip-rule="evenodd" /></svg>
+                                            <template v-if="row.failed">
+                                                <span class="font-bold text-white">{{ $t('messagesRt.failed') }}</span>
+                                                <button type="button" @click="retryReply(row.local)" class="rounded bg-white/20 px-1.5 py-0.5 font-bold text-white transition hover:bg-white/30">{{ $t('messagesRt.retry') }}</button>
+                                            </template>
+                                            <template v-else>
+                                                {{ clock(row.sent_at) }}
+                                                <svg v-if="row.pending" class="h-3 w-3 animate-spin" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="7" class="opacity-25" /><path d="M10 3a7 7 0 017 7" stroke-linecap="round" /></svg>
+                                                <svg v-else-if="row.sender === 'host'" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.2a.75.75 0 01.1 1.05l-8 10.5a.75.75 0 01-1.13.07l-4.5-4.5a.75.75 0 011.06-1.06l3.9 3.9 7.48-9.82a.75.75 0 011.05-.14z" clip-rule="evenodd" /></svg>
+                                            </template>
                                         </p>
                                     </div>
                                 </div>
