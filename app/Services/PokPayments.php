@@ -63,6 +63,12 @@ class PokPayments
             return false; // already settled or released — idempotent
         }
 
+        // Realtime (task #349, gjetje e Marjusit live): UPDATE-i atomik i mësipërm
+        // anashkalon observer-in me qëllim (garda e race-it) — kalendari/lista e
+        // hapur njoftohen këtu me dorë, ndryshe konfirmimi i pagesës dukej vetëm
+        // pas reload-it.
+        $this->broadcastChange($reservation);
+
         try {
             Payment::create([
                 'reservation_id' => $reservation->id,
@@ -101,6 +107,10 @@ class PokPayments
             return false; // already reversed / never confirmed — idempotent
         }
 
+        // Realtime (task #349): edhe rikthimi (refund/void në POK) duhet të
+        // shfaqet vetiu — dhoma lirohet në kalendarin e hapur pa reload.
+        $this->broadcastChange($reservation);
+
         Payment::where('reservation_id', $reservation->id)
             ->where('method', 'card')
             ->where('pok_order_id', $reservation->pok_order_id)
@@ -111,5 +121,22 @@ class PokPayments
         ]);
 
         return true;
+    }
+
+    /**
+     * Njofto ekranet e hapura pas një UPDATE-i atomik të suksesshëm — i njëjti
+     * patern si ReservationObserver (memoria #136). Dështimi i transmetimit
+     * (Reverb offline) s'guxon të prishë kurrë rrjedhën e pagesës.
+     */
+    private function broadcastChange(Reservation $reservation): void
+    {
+        try {
+            event(new \App\Events\ReservationChanged(
+                (int) $reservation->tenant_id,
+                (int) $reservation->id,
+            ));
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }
