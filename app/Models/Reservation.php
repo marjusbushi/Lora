@@ -221,6 +221,16 @@ class Reservation extends TenantModel
         return $this->belongsTo(RoomType::class, 'booked_room_type_id');
     }
 
+    public function splitProposals()
+    {
+        return $this->hasMany(ReservationSplitProposal::class);
+    }
+
+    public function pendingSplitProposal()
+    {
+        return $this->hasOne(ReservationSplitProposal::class)->where('status', ReservationSplitProposal::STATUS_PENDING)->latest('id');
+    }
+
     public function guest()
     {
         return $this->belongsTo(Guest::class);
