@@ -83,6 +83,12 @@ class PokPayments
             'currency' => $currency,
         ]);
 
+        // Realtime (task #349, gjetje e Marjusit live): UPDATE-i atomik anashkalon
+        // observer-in me qëllim (garda e race-it) — njoftohet me dorë, dhe PAS
+        // regjistrimit të pagesës: një reload i shpejtë s'sheh kurrë status të
+        // konfirmuar me shuma bosh (gjetje Codex #454).
+        $this->broadcastChange($reservation);
+
         return true;
     }
 
@@ -110,6 +116,27 @@ class PokPayments
             'pok_order_id' => $reservation->pok_order_id,
         ]);
 
+        // Realtime (task #349): edhe rikthimi shfaqet vetiu — PAS void-it të
+        // pagesës, që reload-i të mos shohë kurrë gjendje gjysmake (Codex #454).
+        $this->broadcastChange($reservation);
+
         return true;
+    }
+
+    /**
+     * Njofto ekranet e hapura pas një UPDATE-i atomik të suksesshëm — i njëjti
+     * patern si ReservationObserver (memoria #136). Dështimi i transmetimit
+     * (Reverb offline) s'guxon të prishë kurrë rrjedhën e pagesës.
+     */
+    private function broadcastChange(Reservation $reservation): void
+    {
+        try {
+            event(new \App\Events\ReservationChanged(
+                (int) $reservation->tenant_id,
+                (int) $reservation->id,
+            ));
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }
