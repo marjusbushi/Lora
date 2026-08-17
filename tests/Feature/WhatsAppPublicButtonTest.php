@@ -66,6 +66,21 @@ class WhatsAppPublicButtonTest extends TestCase
         );
     }
 
+    public function test_double_zero_prefix_is_normalized_to_plus_on_save(): void
+    {
+        // wa.me/00355… hap faqe bosh (gjetur live, task #340) — ruajtja e
+        // kthen 00-shen në '+' që çdo konsumator të marrë vlerë të vlefshme.
+        $this->seed(RolePermissionSeeder::class);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)->put(route('settings.hotel'), $this->hotelPayload([
+            'whatsapp_number' => '00355 69 203 0020',
+        ]))->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertEquals('+355 69 203 0020', Setting::get('hotel.whatsapp_number'));
+    }
+
     public function test_garbage_whatsapp_number_is_rejected(): void
     {
         $this->seed(RolePermissionSeeder::class);
