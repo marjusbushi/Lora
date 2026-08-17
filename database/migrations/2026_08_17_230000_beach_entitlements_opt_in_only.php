@@ -17,11 +17,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::table('tenant_module_entitlements')
+        // Snapshot i plotë PARA iterimit: each() paginon me offset dhe update-i
+        // i kolonës së filtrit (enabled) do kapërcente rreshta mbi faqen e parë
+        // (gjetje Codex #458).
+        $rows = DB::table('tenant_module_entitlements')
             ->where('module_code', 'beach')
             ->where('enabled', true)
             ->orderBy('tenant_id')
-            ->each(function (object $row) {
+            ->get(['id', 'tenant_id']);
+
+        $rows->each(function (object $row) {
                 $usesBeach = DB::table('beach_zones')
                     ->where('tenant_id', $row->tenant_id)
                     ->exists();
