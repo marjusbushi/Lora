@@ -278,7 +278,16 @@ class ChannexBookingImporter
             ->where('status', '!=', 'maintenance')
             ->whereNotIn('id', $taken ?: [0])->get();
 
-        // 2) a free serviceable room for these dates
+        // 2) a free serviceable room for these dates — the TIGHTEST fit, not the
+        // first in room order: packing new stays against existing ones keeps long
+        // free runs alive for long bookings (first-free placement is how the
+        // calendar fragments in the first place).
+        $best = $this->reshuffler->bestFreeRoom($roomTypeId, $in, $out, $taken);
+        if ($best !== null && ($room = $serviceable->firstWhere('id', $best))) {
+            return [$room, false];
+        }
+        // Spans the planner refuses (missing dates / already started): first free
+        // room in order, exactly as before.
         foreach ($serviceable as $room) {
             if ($this->isFree($room->id, $in, $out)) {
                 return [$room, false];

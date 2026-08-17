@@ -260,6 +260,40 @@ class RoomReshuffleServiceTest extends TestCase
         $this->assertPlanIsSound($plan, 1, 8);
     }
 
+    public function test_best_free_room_prefers_the_tightest_gap(): void
+    {
+        // Between a completely empty room and one whose stay ends exactly when
+        // the span starts, the snug room wins — the empty room's long free run
+        // is preserved for a future long booking.
+        $roomA = $this->room('A1');
+        $roomB = $this->room('B1');
+        $this->stay($roomB, 1, 3);
+
+        $best = app(RoomReshuffleService::class)->bestFreeRoom(
+            $this->type->id,
+            today()->addDays(3)->toDateString(),
+            today()->addDays(5)->toDateString(),
+        );
+
+        $this->assertSame($roomB->id, $best);
+    }
+
+    public function test_best_free_room_returns_null_when_nothing_fits_or_span_started(): void
+    {
+        $roomA = $this->room('A1');
+        $this->stay($roomA, 2, 4);
+        $service = app(RoomReshuffleService::class);
+
+        // The only room overlaps the span — a best fit would need moves.
+        $this->assertNull($service->bestFreeRoom(
+            $this->type->id, today()->addDays(1)->toDateString(), today()->addDays(8)->toDateString(),
+        ));
+        // A started span is refused even though a slot exists (days 5-6 are free).
+        $this->assertNull($service->bestFreeRoom(
+            $this->type->id, today()->subDay()->toDateString(), today()->addDays(1)->toDateString(),
+        ));
+    }
+
     public function test_cancelled_and_checked_out_stays_do_not_occupy_rooms(): void
     {
         $roomA = $this->room('A1');
