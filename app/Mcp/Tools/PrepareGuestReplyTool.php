@@ -30,7 +30,7 @@ class PrepareGuestReplyTool extends LoraTool
         $user = $this->user($request, 'view_reservations');
         abort_unless($this->enabled('messages_enabled')
             && $this->enabled('guest_reply_enabled')
-            && $this->moduleEnabled(TenantBillingService::CHANNEL_MANAGER), 403);
+            && $this->moduleEnabled(TenantBillingService::MESSAGES), 403);
         $data = $request->validate([
             'thread_id' => ['required', 'integer', 'min:1'],
             'body' => ['required', 'string', 'max:2000'],

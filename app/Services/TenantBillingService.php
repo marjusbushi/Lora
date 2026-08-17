@@ -15,6 +15,10 @@ class TenantBillingService
 
     public const CHANNEL_MANAGER = 'channel_manager';
 
+    public const MESSAGES = 'messages';
+
+    public const MAINTENANCE = 'maintenance';
+
     public const BOOKING_ENGINE = 'booking_engine';
 
     public const HOUSEKEEPING = 'housekeeping';
@@ -25,9 +29,11 @@ class TenantBillingService
 
     public const SMART_PRICING = 'smart_pricing';
 
+    public const BEACH = 'beach';
+
     public function catalog(): array
     {
-        return config('lora_modules.modules', []);
+        return ModuleCatalog::modules();
     }
 
     public function enabled(string $module, ?Tenant $tenant): bool
@@ -74,7 +80,9 @@ class TenantBillingService
                 'billing_cycle' => 'monthly',
                 'billing_anchor_day' => now()->day,
                 'currency' => $tenant->currency,
-                'annual_discount_percent' => (int) config('lora_modules.annual_discount_percent', 20),
+                // Zbritja vjen nga shkalla e kontratës (contract_years);
+                // discount_override_percent mbetet vetëm për negociata të veçanta.
+                'contract_years' => 1,
                 'starts_at' => now(),
                 'next_billing_at' => now()->startOfDay(),
             ]);
@@ -111,6 +119,7 @@ class TenantBillingService
             $subscription->fill([
                 'status' => $data['status'],
                 'billing_cycle' => $data['billing_cycle'],
+                'contract_years' => (int) ($data['contract_years'] ?? $subscription->contract_years ?? 1),
                 'currency' => $tenant->currency,
                 'starts_at' => $subscription->starts_at ?? now(),
                 'current_period_ends_at' => $periodEndsAt,
@@ -127,19 +136,28 @@ class TenantBillingService
             }
             $subscription->save();
 
+            $existing = $tenant->moduleEntitlements()->get()->keyBy('module_code');
+
             foreach ($this->catalog() as $code => $module) {
                 $input = Arr::get($data, "modules.{$code}", []);
                 $enabled = $code === self::CORE || (bool) ($input['enabled'] ?? false);
                 $quantity = max(1, (int) ($input['quantity'] ?? 1));
+
+                // Çmimi i klientit NGRIHET në aktivizim: një modul tashmë aktiv
+                // mban snapshot-in e vet edhe kur katalogu ndryshon — katalogu i
+                // freskët hyn VETËM kur moduli aktivizohet rishtas (gjetje Codex,
+                // PR #428; rregulli i ratifikuar i çmimeve të kontratës).
+                $current = $existing->get($code);
+                $keepFrozen = $current && $current->enabled && $enabled;
 
                 $tenant->moduleEntitlements()->updateOrCreate(
                     ['module_code' => $code],
                     [
                         'enabled' => $enabled,
                         'quantity' => $quantity,
-                        'unit_price_cents' => $module['unit_price_cents'] ?? null,
-                        'percentage_bps' => $module['percentage_bps'] ?? null,
-                        'pricing_snapshot' => $module,
+                        'unit_price_cents' => $keepFrozen ? $current->unit_price_cents : ($module['unit_price_cents'] ?? null),
+                        'percentage_bps' => $keepFrozen ? $current->percentage_bps : ($module['percentage_bps'] ?? null),
+                        'pricing_snapshot' => $keepFrozen ? ($current->pricing_snapshot ?? $module) : $module,
                     ],
                 );
             }
@@ -177,15 +195,31 @@ class TenantBillingService
                 'accessible' => $subscriptionAllowsAccess && $enabled,
                 'quantity' => $quantity,
                 'unit_price_cents' => $pricing['unit_price_cents'] ?? null,
+                'first_unit_price_cents' => $pricing['first_unit_price_cents'] ?? null,
+                'tier_limit' => $pricing['tier_limit'] ?? null,
+                'excess_unit_price_cents' => $pricing['excess_unit_price_cents'] ?? null,
                 'percentage_bps' => $pricing['percentage_bps'] ?? null,
                 'monthly_cents' => $monthlyCents,
                 'locked' => $code === self::CORE,
             ];
         }
 
-        $discount = (int) ($subscription?->annual_discount_percent
-            ?? config('lora_modules.annual_discount_percent', 20));
+        // Zbritja sipas gjatësisë së kontratës (1/2/3/5 vjet); discount_override_percent
+        // është negociatë e veçantë per-tenant dhe fiton mbi shkallën.
+        $ladder = config('lora_modules.contract_discounts', [1 => 10, 2 => 15, 3 => 20, 5 => 30]);
+        $contractYears = (int) ($subscription?->contract_years ?? 1);
+        $override = $subscription?->discount_override_percent;
+        $discount = (int) ($override ?? ($ladder[$contractYears] ?? 0));
         $annualCents = (int) round($monthlyFixedCents * 12 * ((100 - $discount) / 100));
+
+        $contractOptions = [];
+        foreach ($ladder as $years => $percent) {
+            $contractOptions[] = [
+                'years' => (int) $years,
+                'discount_percent' => (int) $percent,
+                'annual_cents' => (int) round($monthlyFixedCents * 12 * ((100 - $percent) / 100)),
+            ];
+        }
 
         return [
             'status' => $subscription?->status ?? 'inactive',
@@ -196,6 +230,9 @@ class TenantBillingService
             'last_billed_at' => $subscription?->last_billed_at?->toIso8601String(),
             'notes' => $subscription?->notes,
             'monthly_fixed_cents' => $monthlyFixedCents,
+            'contract_years' => $contractYears,
+            'contract_options' => $contractOptions,
+            'discount_override_percent' => $override !== null ? (int) $override : null,
             'annual_cents' => $annualCents,
             'annual_discount_percent' => $discount,
             'modules' => $modules,
@@ -206,10 +243,20 @@ class TenantBillingService
     {
         return match ($module['billing_model']) {
             'flat' => (int) ($module['unit_price_cents'] ?? 0),
-            'per_user', 'per_pos' => $quantity * (int) ($module['unit_price_cents'] ?? 0),
+            'per_user' => $quantity * (int) ($module['unit_price_cents'] ?? 0),
+            'per_pos' => $this->perPosPrice($module, $quantity),
             'tiered_per_room' => $this->tieredRoomPrice($module, $quantity),
             default => 0,
         };
+    }
+
+    /** Pika e parë me çmimin bazë (fiskalizimi brenda), çdo pikë shtesë më lirë. */
+    private function perPosPrice(array $module, int $quantity): int
+    {
+        $extra = (int) ($module['unit_price_cents'] ?? 0);
+        $first = (int) ($module['first_unit_price_cents'] ?? $extra);
+
+        return $quantity < 1 ? 0 : $first + ($quantity - 1) * $extra;
     }
 
     private function tieredRoomPrice(array $module, int $quantity): int

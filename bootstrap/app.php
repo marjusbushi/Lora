@@ -73,7 +73,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Channex + POK post webhooks server-to-server (no CSRF token). Channex uses a
         // shared-secret header; POK re-verifies every event via getOrder (never trusts the body).
-        $middleware->validateCsrfTokens(except: ['channex/webhook', 'pok/webhook']);
+        $middleware->validateCsrfTokens(except: ['channex/webhook', 'pok/webhook', 'whatsapp/bridge/event']);
 
         $middleware->alias([
             'role' => RoleMiddleware::class,

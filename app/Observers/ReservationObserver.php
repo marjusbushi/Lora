@@ -72,6 +72,28 @@ class ReservationObserver
     public function saved(Reservation $reservation): void
     {
         $this->syncChannel($reservation);
+        $this->broadcastChange($reservation);
+    }
+
+    /**
+     * Realtime (task #345): njofto kalendarin/listën e hapur PAS commit-it —
+     * observer-i është pika e vetme që mbulon çdo burim shkrimi (recepsion,
+     * web publik, importues Channex, komanda). Tenant-i merret nga vetë
+     * rreshti (jo nga konteksti) — funksionon edhe në job/komanda. Dështimi
+     * i transmetimit (Reverb offline) s'guxon të prishë kurrë shkrimin.
+     */
+    private function broadcastChange(Reservation $reservation): void
+    {
+        \Illuminate\Support\Facades\DB::afterCommit(function () use ($reservation) {
+            try {
+                event(new \App\Events\ReservationChanged(
+                    (int) $reservation->tenant_id,
+                    (int) $reservation->id,
+                ));
+            } catch (\Throwable $e) {
+                Log::warning('Reservation broadcast failed: '.$e->getMessage());
+            }
+        });
     }
 
     /** Best-effort: an audit-log failure must never break a booking write. */
@@ -96,6 +118,7 @@ class ReservationObserver
             'changes' => $this->changes($reservation, true),
         ]);
         $this->syncChannel($reservation);
+        $this->broadcastChange($reservation);
     }
 
     /** @return array<string, array{from:mixed,to:mixed,from_label?:string,to_label?:string}> */

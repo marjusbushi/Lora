@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { MapPin, Phone, Mail, Instagram, Facebook } from 'lucide-vue-next';
 import LanguageSwitcher from '@/Components/LanguageSwitcher.vue';
+import { translate } from '@/i18n';
 
 const props = defineProps({
     // When true the header floats transparent over a full-bleed hero and
@@ -23,6 +24,7 @@ function closeMenu() {
 const page = usePage();
 const settings = computed(() => page.props.settings || {});
 const bookingEnabled = computed(() => page.props.modules?.booking_engine === true);
+const beachEnabled = computed(() => page.props.modules?.beach === true);
 const hotelName = computed(() => settings.value.hotel_name || 'Hotel');
 const logo = computed(() => settings.value.logo ? `/storage/${settings.value.logo}` : null);
 
@@ -32,6 +34,15 @@ const phone = computed(() => settings.value.phone || '+355 69 000 0000');
 const email = computed(() => settings.value.email || 'info@villamucho.com');
 const telHref = computed(() => 'tel:' + phone.value.replace(/[^+\d]/g, ''));
 const mailHref = computed(() => 'mailto:' + email.value);
+
+// Butoni WhatsApp: shfaqet VETËM kur pronari ka vendosur numër te Cilësimet
+// (hotel.whatsapp_number). wa.me kërkon vetëm shifra pa '+' DHE pa prefiksin
+// ndërkombëtar '00' — 'wa.me/00355…' hap faqe bosh (gjetur live nga Marjusi,
+// task #340); teksti paraplotësohet sipas gjuhës së vizitorit.
+const whatsappDigits = computed(() => (settings.value.whatsapp_number || '').replace(/\D/g, '').replace(/^00/, ''));
+const whatsappHref = computed(() => whatsappDigits.value
+    ? `https://wa.me/${whatsappDigits.value}?text=${encodeURIComponent(translate('website.whatsappPrefill', { hotel: hotelName.value }))}`
+    : null);
 const mapsDest = computed(() => {
     const m = (settings.value.maps_url || '').trim();
     return (m && !/^https?:|output=embed|\/maps\/embed/i.test(m)) ? m : addr.value;
@@ -55,10 +66,12 @@ const allNavLinks = [
     { key: 'home', href: '/' },
     { key: 'rooms', href: '/rooms' },
     { key: 'book', href: '/book' },
+    { key: 'sunbeds', href: '/book-sunbeds' },
     { key: 'about', href: '/about' },
     { key: 'contact', href: '/contact' },
 ];
-const navLinks = computed(() => allNavLinks.filter((link) => link.key !== 'book' || bookingEnabled.value));
+const navLinks = computed(() => allNavLinks.filter((link) =>
+    (link.key !== 'book' || bookingEnabled.value) && (link.key !== 'sunbeds' || beachEnabled.value)));
 
 function isActive(href) {
     if (href === '/') return page.url === '/';
@@ -216,5 +229,21 @@ function isActive(href) {
                 </div>
             </div>
         </footer>
+
+        <!-- Butoni WhatsApp — vetëm kur hoteli ka vendosur numër te Cilësimet.
+             Hap bisedën në aplikacionin e vizitorit; mesazhet i mbërrijnë
+             hotelit te Mesazhet kur numri është i lidhur me urën (ose në
+             telefon, kur s'është). -->
+        <a
+            v-if="whatsappHref"
+            :href="whatsappHref"
+            target="_blank"
+            rel="noopener"
+            :aria-label="$t('website.whatsappCta')"
+            :title="$t('website.whatsappCta')"
+            class="fixed bottom-5 right-5 z-40 grid h-14 w-14 place-items-center rounded-full bg-[#25D366] text-white shadow-lg transition hover:scale-105 hover:shadow-xl focus-visible:outline-offset-4"
+        >
+            <svg class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2c-5.46 0-9.9 4.44-9.9 9.9 0 1.75.46 3.45 1.32 4.95L2.05 22l5.27-1.38c1.45.79 3.08 1.21 4.72 1.21 5.46 0 9.9-4.44 9.9-9.9 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm0 18.15c-1.48 0-2.93-.4-4.19-1.15l-.3-.18-3.12.82.83-3.05-.2-.31a8.26 8.26 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24 2.2 0 4.27.86 5.82 2.42a8.18 8.18 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.23 8.24Zm4.52-6.16c-.25-.13-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.25-.64.81-.78.97-.14.17-.29.19-.54.06-.25-.12-1.05-.38-1.99-1.23a7.4 7.4 0 0 1-1.38-1.72c-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.42-.14-.01-.31-.01-.48-.01-.17 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28Z"/></svg>
+        </a>
     </div>
 </template>

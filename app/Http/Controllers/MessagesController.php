@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\HotelFaqSuggestion;
 use App\Models\Message;
 use App\Models\MessageThread;
 use App\Models\Setting;
@@ -49,7 +50,7 @@ class MessagesController extends Controller
                     'guest_email' => $r?->guest?->email,
                     'channel' => $thread->channel,
                     'status' => $thread->status,
-                    'can_reply' => (bool) $thread->channex_thread_id,
+                    'can_reply' => (bool) ($thread->channex_thread_id || $thread->whatsapp_jid),
                     'reservation' => $r ? [
                         'id' => $r->id,
                         'ref' => $r->channel_ref,
@@ -63,9 +64,19 @@ class MessagesController extends Controller
                         'adults' => $r->adults,
                         'total' => (float) $r->total_amount,
                     ] : null,
+                    'ai_suggestion' => $thread->ai_suggestion,
+                    // Cikli i mësimit: sugjerimi pending i kësaj bisede — vetëm
+                    // për userat që kanë të drejtë ta ruajnë te FAQ (view_settings).
+                    'faq_suggestion' => $request->user()->can('view_settings')
+                        ? HotelFaqSuggestion::query()->pending()
+                            ->where('message_thread_id', $thread->id)
+                            ->latest('id')
+                            ->first(['id', 'question', 'suggested_answer'])
+                        : null,
                     'messages' => $thread->messages->map(fn (Message $m) => [
                         'id' => $m->id,
                         'sender' => $m->sender,
+                        'sent_by_ai' => (bool) $m->sent_by_ai,
                         'body' => $m->body,
                         'sent_at' => $m->sent_at?->toIso8601String(),
                     ]),
@@ -153,35 +164,71 @@ class MessagesController extends Controller
         return response()->json(['count' => (int) MessageThread::sum('unread_count')]);
     }
 
-    public function reply(Request $request, MessageThread $thread, ChannexClient $channex): RedirectResponse
+    public function reply(Request $request, MessageThread $thread, ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp): RedirectResponse
     {
         $data = $request->validate([
             'body' => ['required', 'string', 'max:2000'],
         ]);
 
-        if (! $thread->channex_thread_id) {
-            return back()->with('error', 'Kjo bisedë s\'ka lidhje aktive me Channex.');
-        }
+        $whatsappMessageId = null;
 
-        try {
-            $channex->sendThreadMessage($thread->channex_thread_id, $data['body']);
-        } catch (\Throwable $e) {
-            report($e);
+        if ($thread->channel === 'whatsapp') {
+            // Biseda WhatsApp dërgon përmes urës lokale — kurrë Channex.
+            if (! $thread->whatsapp_jid) {
+                return back()->with('error', 'Kjo bisedë s\'ka numër WhatsApp të lidhur.');
+            }
 
-            return back()->with('error', 'Nuk u dërgua dot mesazhi. Provo sërish.');
+            try {
+                $sent = $whatsapp->send($thread->tenant_id, $thread->whatsapp_jid, $data['body']);
+                $whatsappMessageId = (string) ($sent['id'] ?? '') ?: null;
+            } catch (\RuntimeException $e) {
+                return back()->with('error', $e->getMessage());
+            }
+        } else {
+            if (! $thread->channex_thread_id) {
+                return back()->with('error', 'Kjo bisedë s\'ka lidhje aktive me Channex.');
+            }
+
+            try {
+                $channex->sendThreadMessage($thread->channex_thread_id, $data['body']);
+            } catch (\Throwable $e) {
+                report($e);
+
+                return back()->with('error', 'Nuk u dërgua dot mesazhi. Provo sërish.');
+            }
         }
 
         // Mirror the sent reply locally so it shows immediately (Channex may also
-        // echo it back via webhook — deduped on channex_message_id, null here).
+        // echo it back via webhook — deduped on channex_message_id, null here;
+        // ura e WhatsApp e injoron echo-n fromMe, id-ja ruhet për çdo rast).
         $thread->messages()->create([
             'channex_message_id' => null,
+            'whatsapp_message_id' => $whatsappMessageId,
             'sender' => Message::SENDER_HOST,
             'body' => $data['body'],
             'sent_at' => now(),
         ]);
+
+        // Cikli i mësimit (task #334): Lora s'e dinte këtë pyetje dhe stafi
+        // sapo dha përgjigjen — kapet çifti si sugjerim FAQ (pa dublikata
+        // pending me të njëjtën pyetje), që pronari ta ruajë me një klik.
+        if ($thread->ai_unanswered_question) {
+            HotelFaqSuggestion::query()->pending()->firstOrCreate(
+                ['question' => $thread->ai_unanswered_question],
+                [
+                    'message_thread_id' => $thread->id,
+                    'suggested_answer' => mb_substr($data['body'], 0, 2000),
+                ],
+            );
+        }
+
         $thread->forceFill([
             'last_message_preview' => mb_substr($data['body'], 0, 280),
             'last_message_at' => now(),
+            // Stafi foli — drafti i AI-t (nëse kishte) s'ka më vlerë.
+            'ai_suggestion' => null,
+            'ai_suggested_at' => null,
+            'ai_unanswered_question' => null,
         ])->save();
 
         return back()->with('success', 'Mesazhi u dërgua.');

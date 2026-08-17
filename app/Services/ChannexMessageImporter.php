@@ -40,7 +40,7 @@ class ChannexMessageImporter
         $body = (string) ($payload['message'] ?? '');
         $hasAttachment = (bool) ($payload['have_attachment'] ?? false);
 
-        return DB::transaction(function () use ($threadId, $messageId, $sender, $body, $hasAttachment, $payload, $expectedPropertyId, $property) {
+        $result = DB::transaction(function () use ($threadId, $messageId, $sender, $body, $hasAttachment, $payload, $expectedPropertyId, $property) {
             $thread = MessageThread::where('channex_thread_id', $threadId)->first();
 
             if (! $thread) {
@@ -85,7 +85,7 @@ class ChannexMessageImporter
 
             $duplicate = $messageId !== '' && Message::where('channex_message_id', $messageId)->exists();
             if (! $duplicate) {
-                $thread->messages()->create([
+                $message = $thread->messages()->create([
                     'channex_message_id' => $messageId ?: null,
                     'sender' => $sender,
                     'body' => $body,
@@ -102,12 +102,44 @@ class ChannexMessageImporter
                     if ($thread->status === 'closed') {
                         $thread->status = 'open';
                     }
+
+                    // Pyetje e re = drafti i vjetër i AI-t s'vlen më — pastrohet
+                    // që stafi të mos dërgojë përgjigje të mesazhit të kaluar
+                    // edhe kur job-i i ri nuk prodhon dot (gjetje Codex).
+                    $thread->ai_suggestion = null;
+                    $thread->ai_suggested_at = null;
+                    // Edhe flamuri "s'e dinte" i mesazhit të kaluar: përndryshe
+                    // përgjigjja e stafit për KËTË mesazh çiftohet me pyetjen e
+                    // vjetër dhe çifti i gabuar bëhet FAQ (gjetje Codex, PR #434).
+                    // Job-i i ri e rivendos për këtë mesazh nëse s'e di as këtë.
+                    $thread->ai_unanswered_question = null;
+
+                    // Lora AI Chat — VETËM nga webhook-u (koha reale); pull-i i
+                    // historikut s'duhet t'i përgjigjet kurrë mesazheve të vjetra.
+                    \App\Jobs\GenerateAiGuestReply::dispatch($thread->id, $message->id)->afterCommit();
                 }
                 $thread->save();
             }
 
-            return ['status' => 'ok', 'thread_id' => $thread->id];
+            return ['status' => 'ok', 'thread_id' => $thread->id, 'imported' => ! $duplicate];
         });
+
+        // Realtime (task #343): pas commit-it, njofto inbox-in e hapur — VETËM
+        // kur u fut realisht mesazh (retry-t e webhook-ut mbeten 200/ok por pa
+        // emetim, që inbox-et të mos rifreskohen kot — gjetje Codex #446).
+        // Dështimi i transmetimit (Reverb offline) s'e prish kurrë importin.
+        if (($result['status'] ?? null) === 'ok' && ($result['imported'] ?? false)) {
+            try {
+                event(new \App\Events\MessageReceived(
+                    app(\App\Tenancy\TenantContext::class)->tenant()->id,
+                    $result['thread_id'],
+                ));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $result;
     }
 
     /**

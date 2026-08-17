@@ -12,6 +12,7 @@ use App\Models\PosFiscalDocument;
 use App\Models\PosOrder;
 use App\Models\PosOrderItem;
 use App\Models\PosOrderPayment;
+use App\Models\PosOutlet;
 use App\Models\PosShift;
 use App\Models\PosTable;
 use App\Models\Reservation;
@@ -57,6 +58,8 @@ class PosController extends Controller
             default => 'sale',
         };
         $posSettings = $this->posSalespeople->settings();
+        $outlets = PosOutlet::active()->ordered()->get(['id', 'name', 'warehouse_id']);
+        $currentOutlet = $this->resolveOutlet($request, $outlets);
         if ($view === 'sale' && ! $request->integer('table') && ! $request->boolean('direct')) {
             if ($posSettings['service_mode'] === 'tables'
                 || ($posSettings['service_mode'] === 'hybrid' && $posSettings['opening_view'] === 'tables')) {
@@ -75,15 +78,29 @@ class PosController extends Controller
                 'area' => $table->area,
                 'seats' => $table->seats,
             ];
+            // Serving a table means serving ITS outlet: the menu must match
+            // what storeRound will stamp, even if the device last remembered
+            // another outlet (back-navigation, shared handhelds).
+            if ($table->outlet_id && ($tableOutlet = $outlets->firstWhere('id', $table->outlet_id))) {
+                $currentOutlet = $tableOutlet;
+            }
         }
+        $request->validate([
+            'outlet' => ['nullable', TenantRule::exists('pos_outlets')],
+        ]);
+
         $query = PosOrder::select(
-            'id', 'reservation_id', 'table_number', 'pos_table_id', 'status',
+            'id', 'reservation_id', 'table_number', 'pos_table_id', 'outlet_id', 'beach_unit_id', 'status',
             'payment_method', 'subtotal_amount', 'discount_amount', 'discount_reason', 'is_complimentary',
             'total_amount', 'created_by', 'salesperson_id', 'cashier_id', 'paid_at', 'business_date', 'cancelled_at', 'cancellation_reason',
             'refunded_at', 'refund_reason', 'created_at'
         )
-            ->with(['createdBy:id,name', 'salesperson:id,name', 'cashier:id,name', 'items.menuItem:id,name', 'payments', 'fiscalDocument'])
+            ->with(['createdBy:id,name', 'salesperson:id,name', 'cashier:id,name', 'items.menuItem:id,name', 'payments', 'fiscalDocument', 'beachUnit:id,beach_zone_id,number', 'beachUnit.zone:id,name'])
             ->orderByDesc('created_at');
+
+        if ($request->filled('outlet')) {
+            $query->where('outlet_id', $request->integer('outlet'));
+        }
 
         if (! $request->filled('status') && ! $request->integer('order_id')) {
             if ($view === 'orders') {
@@ -199,6 +216,9 @@ class PosController extends Controller
 
         $warehouses = Warehouse::where('is_active', true)->get()->keyBy('id');
         $defaultWarehouse = $warehouses->firstWhere('is_default', true) ?? $warehouses->first();
+        // The active outlet's own warehouse wins the stock display, mirroring
+        // the deduction order in InventoryLedger::consumePosOrderItem.
+        $outletWarehouse = $currentOutlet?->warehouse_id ? $warehouses->get($currentOutlet->warehouse_id) : null;
         $warehouseStocks = InventoryMovement::query()
             ->selectRaw('warehouse_id, inventory_item_id, SUM(quantity) as quantity')
             ->groupBy('warehouse_id', 'inventory_item_id')->get()
@@ -206,14 +226,16 @@ class PosController extends Controller
 
         $menu = MenuCategory::with(['items' => fn ($query) => $query
             ->where('is_available', true)->with(['inventoryComponents', 'warehouse'])])
+            ->visibleForOutlet($currentOutlet?->id)
             ->orderBy('sort_order')
             ->get()
-            ->each(function (MenuCategory $category) use ($salesCounts, $warehouses, $defaultWarehouse, $warehouseStocks) {
-                $warehouse = $warehouses->get($category->warehouse_id)
+            ->each(function (MenuCategory $category) use ($salesCounts, $warehouses, $defaultWarehouse, $warehouseStocks, $outletWarehouse) {
+                $warehouse = $outletWarehouse
+                    ?? $warehouses->get($category->warehouse_id)
                     ?? $warehouses->firstWhere('type', $category->outlet)
                     ?? $defaultWarehouse;
-                $category->items->each(function (MenuItem $item) use ($salesCounts, $warehouse, $warehouseStocks) {
-                    $itemWarehouse = $item->warehouse?->is_active ? $item->warehouse : $warehouse;
+                $category->items->each(function (MenuItem $item) use ($salesCounts, $warehouse, $warehouseStocks, $outletWarehouse) {
+                    $itemWarehouse = $outletWarehouse ?? ($item->warehouse?->is_active ? $item->warehouse : $warehouse);
                     $components = $item->inventoryComponents;
                     $available = $components->isEmpty() || ! $itemWarehouse
                         ? null
@@ -236,6 +258,11 @@ class PosController extends Controller
             'reservation_id' => $order->reservation_id,
             'table_number' => $order->table_number,
             'pos_table_id' => $order->pos_table_id,
+            'outlet_id' => $order->outlet_id,
+            'beach_unit' => $order->beachUnit ? [
+                'number' => $order->beachUnit->number,
+                'zone_name' => $order->beachUnit->zone?->name,
+            ] : null,
             'status' => $order->status,
             'payment_method' => $order->payment_method,
             'subtotal_amount' => (float) $order->subtotal_amount,
@@ -277,7 +304,7 @@ class PosController extends Controller
             'menuTree' => $this->menuTreePayload($menu),
             'payCurrencies' => CurrencyRates::payable(),
             'activeReservations' => $activeReservations,
-            'filters' => $request->only('status', 'order_id'),
+            'filters' => $request->only('status', 'order_id', 'outlet'),
             'shiftHistory' => $shiftHistory,
             'currentShift' => $currentShift,
             'canOpenShift' => $request->user()->can('open_pos_shift'),
@@ -289,6 +316,9 @@ class PosController extends Controller
             'currentSalesperson' => ($salesperson = $this->posSalespeople->current($request))->only(['id', 'name']),
             'salespeople' => $this->posSalespeople->staff()->where('enabled', true)->values(),
             'posSettings' => $posSettings,
+            'outlets' => $outlets->map(fn (PosOutlet $outlet) => ['id' => $outlet->id, 'name' => $outlet->name])->values(),
+            'currentOutletId' => $currentOutlet?->id,
+            'outletCounts' => $this->openOrderCountsByOutlet($outlets),
             'stats' => [
                 'open' => PosOrder::where('status', 'open')->count(),
                 'today_completed' => PosOrder::where('status', 'completed')->whereNull('refunded_at')->where(function ($today) {
@@ -348,10 +378,38 @@ class PosController extends Controller
         return $flat;
     }
 
+    /**
+     * The device's active outlet: an explicit ?outlet= switch wins and is
+     * remembered in the session; otherwise the remembered one — both checked
+     * against the tenant's ACTIVE outlets on every request, so a stale or
+     * foreign id silently falls back. Null only when the property has no
+     * outlets at all (single-POS behaviour, unchanged).
+     */
+    private function resolveOutlet(Request $request, $activeOutlets): ?PosOutlet
+    {
+        if ($activeOutlets->isEmpty()) {
+            $request->session()->forget('pos.outlet_id');
+
+            return null;
+        }
+
+        $outlet = $request->integer('outlet') ? $activeOutlets->firstWhere('id', $request->integer('outlet')) : null;
+        $outlet ??= $activeOutlets->firstWhere('id', (int) $request->session()->get('pos.outlet_id'));
+        $outlet ??= $activeOutlets->first();
+        $request->session()->put('pos.outlet_id', $outlet->id);
+
+        return $outlet;
+    }
+
     public function store(Request $request): RedirectResponse
     {
+        // NOTE (deliberate): items are validated as the tenant's, NOT against the
+        // outlet's visible categories — visibility is merchandising filtering for
+        // the till; price and stock stay server-side, so a stale tab ordering a
+        // hidden item is acceptable.
         $request->validate([
             'table_number' => ['nullable', 'string', 'max:10'],
+            'outlet_id' => ['nullable', 'integer', TenantRule::exists('pos_outlets')->where('is_active', true)],
             'reservation_id' => ['nullable', TenantRule::exists('reservations')],
             'items' => ['required', 'array', 'min:1'],
             'items.*.menu_item_id' => ['required', TenantRule::exists('menu_items')],
@@ -367,11 +425,19 @@ class PosController extends Controller
             return back()->with('error', 'Hap nje turn para se te krijosh porosi.');
         }
 
-        $order = DB::transaction(function () use ($request, $shift) {
+        // Stamp the order with the device's outlet: the validated request value
+        // first, else the session's remembered outlet (re-checked as active).
+        $outletId = $request->integer('outlet_id') ?: null;
+        if (! $outletId && ($remembered = (int) $request->session()->get('pos.outlet_id'))) {
+            $outletId = PosOutlet::active()->whereKey($remembered)->value('id');
+        }
+
+        $order = DB::transaction(function () use ($request, $shift, $outletId) {
             $order = PosOrder::create([
                 'table_number' => $request->table_number,
                 'reservation_id' => $request->reservation_id,
                 'pos_shift_id' => $shift->id,
+                'outlet_id' => $outletId,
                 'status' => 'open',
                 'created_by' => auth()->id(),
                 'salesperson_id' => $this->posSalespeople->current($request)->id,
@@ -493,7 +559,7 @@ class PosController extends Controller
             'discount_amount' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'discount_reason' => ['nullable', 'string', 'max:255'],
             'complimentary' => ['nullable', 'boolean'],
-            'return_to' => ['nullable', 'in:tables'],
+            'return_to' => ['nullable', 'in:tables,beach'],
             'table_id' => ['nullable', 'required_if:return_to,tables', TenantRule::exists('pos_tables')],
         ]);
 
@@ -679,6 +745,10 @@ class PosController extends Controller
             return redirect()->route('pos.tables', ['table' => $data['table_id'] ?? null])
                 ->with('success', 'Pagesa u regjistrua dhe tavolina u lirua.');
         }
+        if (($data['return_to'] ?? null) === 'beach') {
+            return redirect()->route('pos.beach')
+                ->with('success', "Porosia #{$posOrder->id} u dorëzua dhe u pagua.");
+        }
 
         return redirect()->route('pos.index', ['order_id' => $posOrder->id, 'action' => 'receipt'])
             ->with('success', 'Pagesa u regjistrua. Fatura mund të printohet ose fiskalizohet veçmas.');
@@ -818,6 +888,157 @@ class PosController extends Controller
         ]);
 
         return back()->with('success', "Porosia #{$posOrder->id} u rimbursua dhe stoku u kthye.");
+    }
+
+    /**
+     * Paneli live i plazhit: porositë e hapura të pikës së plazhit
+     * (beach.pos_outlet_id) të grupuara per çadër, që kamarieri t'i shohë
+     * dhe t'i mbyllë me një prekje kur i dorëzon.
+     */
+    public function beachPanel(Request $request): Response
+    {
+        $outlet = $this->beachOrderingOutlet();
+        $shared = [
+            'configured' => (bool) $outlet,
+            'outletName' => $outlet?->name,
+            'hasOpenShift' => (bool) PosShift::currentFor(auth()->id()),
+            'canSettle' => $request->user()->can('update_pos_orders'),
+            'isAdmin' => $request->user()->hasRole('admin'),
+            'currency' => strtoupper((string) ($this->tenantContext->tenant()?->currency ?: 'EUR')),
+        ];
+
+        if (! $outlet) {
+            return Inertia::render('Pos/BeachPanel', $shared + [
+                'groups' => [],
+                'forgotten' => [],
+                'stats' => ['today_count' => 0, 'today_revenue' => 0.0, 'open_count' => 0],
+            ]);
+        }
+
+        $open = PosOrder::query()
+            ->select('id', 'table_number', 'beach_unit_id', 'outlet_id', 'status', 'total_amount', 'business_date', 'created_at', 'created_by')
+            ->where('status', 'open')
+            ->where('outlet_id', $outlet->id)
+            ->with(['items.menuItem:id,name', 'beachUnit:id,beach_zone_id,number', 'beachUnit.zone:id,name', 'createdBy:id,name'])
+            ->orderByDesc('created_at')
+            ->get();
+
+        $present = fn (PosOrder $order) => [
+            'id' => $order->id,
+            'unit_number' => $order->beachUnit?->number,
+            'zone_name' => $order->beachUnit?->zone?->name,
+            'total_amount' => (float) $order->total_amount,
+            'created_at' => $order->created_at?->toIso8601String(),
+            'business_date' => $order->business_date?->toDateString(),
+            'created_by' => $order->createdBy?->name,
+            'items' => $order->items->map(fn ($item) => [
+                'name' => $item->menuItem?->name ?: 'Artikull POS',
+                'quantity' => (int) $item->quantity,
+                'unit_price' => (float) $item->unit_price,
+                'total_price' => (float) $item->total_price,
+            ])->values(),
+        ];
+
+        // Një porosi ditësh më parë s'është më "në pritje" — është e harruar
+        // dhe do vëmendje më vete (mbyllje ose anulim), jo vend në radhë.
+        [$forgotten, $fresh] = $open->partition(
+            fn (PosOrder $order) => $order->business_date
+                ? $order->business_date->lt(today())
+                : ($order->created_at && $order->created_at->lt(today()->startOfDay()))
+        );
+
+        $groups = $fresh->groupBy(fn (PosOrder $order) => $order->beach_unit_id ?? 0)
+            ->map(fn ($orders) => [
+                'unit_id' => $orders->first()->beach_unit_id,
+                'unit_number' => $orders->first()->beachUnit?->number,
+                'zone_name' => $orders->first()->beachUnit?->zone?->name,
+                'orders' => $orders->sortByDesc('created_at')->map($present)->values(),
+            ])
+            ->sortByDesc(fn (array $group) => $group['orders'][0]['created_at'])
+            ->values();
+
+        return Inertia::render('Pos/BeachPanel', $shared + [
+            'groups' => $groups,
+            'forgotten' => $forgotten->sortBy('created_at')->map($present)->values(),
+            'stats' => [
+                'today_count' => PosOrder::where('outlet_id', $outlet->id)
+                    ->where('status', '!=', 'cancelled')
+                    ->whereDate('business_date', today())
+                    ->count(),
+                'today_revenue' => (float) PosOrder::where('outlet_id', $outlet->id)
+                    ->where('status', 'completed')
+                    ->whereNull('refunded_at')
+                    ->whereDate('business_date', today())
+                    ->sum('total_amount'),
+                'open_count' => $open->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * "U dorëzua & u pagua" — mbyllja 1-prekje nga paneli i plazhit: i gjithë
+     * totali cash, përmes rrjedhës normale complete() (turni, gardhi i
+     * dopio-pagesës, libri i financës, stoku — asgjë e dyfishuar këtu).
+     */
+    public function beachDeliver(Request $request, PosOrder $posOrder): RedirectResponse
+    {
+        $outlet = $this->beachOrderingOutlet();
+        if (! $outlet || ((int) $posOrder->outlet_id !== $outlet->id && ! $posOrder->beach_unit_id)) {
+            return back()->with('error', 'Kjo porosi nuk i përket pikës së plazhit.');
+        }
+        if ($posOrder->status !== 'open') {
+            return back()->with('error', 'Kjo porosi nuk eshte e hapur.');
+        }
+
+        $subtotal = round((float) $posOrder->items()->sum('total_price'), 2);
+        if ($subtotal === 0.0 && (float) $posOrder->total_amount > 0) {
+            $subtotal = round((float) $posOrder->total_amount, 2);
+        }
+        $discount = (bool) $posOrder->is_complimentary
+            ? $subtotal
+            : min(round((float) $posOrder->discount_amount, 2), $subtotal);
+        $due = round($subtotal - $discount, 2);
+
+        $request->merge([
+            'payments' => $due > 0 ? [['method' => 'cash', 'amount' => $due]] : [],
+            'payment_method' => null,
+            'discount_amount' => $discount > 0 && ! $posOrder->is_complimentary ? $discount : null,
+            'discount_reason' => $posOrder->discount_reason,
+            'complimentary' => (bool) $posOrder->is_complimentary,
+            'reservation_id' => null,
+            'return_to' => 'beach',
+            'table_id' => null,
+        ]);
+
+        return $this->complete($request, $posOrder);
+    }
+
+    private function beachOrderingOutlet(): ?PosOutlet
+    {
+        $outletId = (int) Setting::get('beach.pos_outlet_id', 0);
+
+        return $outletId > 0 ? PosOutlet::active()->find($outletId) : null;
+    }
+
+    /**
+     * Numëruesit e chips-ave të filtrit te "Porositë": porositë e hapura
+     * per pikë + totali (porositë pa pikë hyjnë vetëm te "Të gjitha").
+     */
+    private function openOrderCountsByOutlet($outlets): array
+    {
+        if ($outlets->isEmpty()) {
+            return ['all' => 0, 'byOutlet' => []];
+        }
+
+        $counts = PosOrder::where('status', 'open')
+            ->selectRaw('outlet_id, COUNT(*) as total')
+            ->groupBy('outlet_id')
+            ->pluck('total', 'outlet_id');
+
+        return [
+            'all' => (int) $counts->sum(),
+            'byOutlet' => $counts->mapWithKeys(fn ($total, $outletId) => [(string) ($outletId ?: 0) => (int) $total])->all(),
+        ];
     }
 
     private function receiptSettings(): array

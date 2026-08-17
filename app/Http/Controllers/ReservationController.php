@@ -775,13 +775,28 @@ class ReservationController extends Controller
                 ]);
             }
 
-            return $lockedReservation->payments()->create([
+            $created = $lockedReservation->payments()->create([
                 'amount' => $data['amount'],
                 'method' => $data['method'],
                 'currency' => ReservationMoney::currency($lockedReservation),
                 'exchange_rate' => ReservationMoney::exchangeRate($lockedReservation),
                 'created_by' => auth()->id(),
             ]);
+
+            // PAGESA E KONFIRMON REZERVIMIN — e njëjta gjendje si te pagesa online
+            // (PokPayments::settle). Pa këtë, një rezervim i paguar në sportel mbetej
+            // përgjithmonë "Në pritje" dhe Check-in nuk shfaqej kurrë.
+            // Edhe një KAPAR i pjesshëm konfirmon: kapari është shenja që rezervimi
+            // është i vërtetë; mbetja mblidhet në check-out (vendim i Marjusit).
+            // MBI MODELIN, jo update bulk: kalimi i statusit duhet të ndezë
+            // ReservationObserver — reservation_status_logs (ushqimi i analitikës së
+            // çmimeve), AuditLog dhe ri-push-i i disponueshmërisë te Channex.
+            // Roja e konkurrencës është rreshti i kyçur më lart (lockForUpdate).
+            if ($lockedReservation->status === 'pending') {
+                $lockedReservation->update(['status' => 'confirmed']);
+            }
+
+            return $created;
         });
 
         AuditLog::record('payment.record', $reservation, ['amount' => $data['amount'], 'method' => $data['method']]);
@@ -1040,6 +1055,32 @@ class ReservationController extends Controller
         $pct = isset($fees[$channel]) && is_numeric($fees[$channel]) ? (float) $fees[$channel] : 0.0;
 
         return round($total * $pct / 100, 2);
+    }
+
+    /**
+     * Konfirmim me dorë i një rezervimi "Në pritje" — për rastet ku paraja s'ka hyrë
+     * ende por rezervimi është i sigurt: telefonatë, grup, agjenci. Pagesa e bën vetë
+     * këtë (recordPayment); ky është rruga kur pagesa vjen më vonë.
+     */
+    public function confirm(Reservation $reservation): RedirectResponse
+    {
+        // Si checkIn: rreshti kyçet, statusi rilexohet nën kyç, dhe kalimi shkruhet
+        // MBI MODELIN — që ReservationObserver të ndizet (reservation_status_logs,
+        // AuditLog, ri-push i disponueshmërisë te Channex). Një update bulk do t'i
+        // kapërcente të treja në heshtje.
+        DB::transaction(function () use ($reservation) {
+            $lockedReservation = Reservation::query()->lockForUpdate()->findOrFail($reservation->id);
+
+            if ($lockedReservation->status !== 'pending') {
+                throw ValidationException::withMessages([
+                    'confirm' => 'Vetëm rezervimet në pritje mund të konfirmohen.',
+                ]);
+            }
+
+            $lockedReservation->update(['status' => 'confirmed']);
+        });
+
+        return back()->with('success', 'Rezervimi u konfirmua.');
     }
 
     public function checkIn(Reservation $reservation): RedirectResponse

@@ -14,133 +14,166 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  classify:
-    name: Classify main change
-    runs-on: ubuntu-latest
-    outputs:
-      should_deploy: ${{ steps.change.outputs.should_deploy }}
-    steps:
-      - name: Checkout exact tested main commit
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 2
-          persist-credentials: false
-
-      - name: Skip a control-plane-only bootstrap
-        id: change
-        env:
-          CANDIDATE_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -Eeuo pipefail
-          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$(git rev-parse HEAD)" == "$CANDIDATE_SHA" ]]
-          parent="$(git rev-parse "${CANDIDATE_SHA}^")"
-          [[ "$parent" =~ ^[0-9a-f]{40}$ ]]
-          should_deploy=false
-          changed=0
-          while IFS= read -r path; do
-            [[ -n "$path" ]] || continue
-            changed=$((changed + 1))
-            case "$path" in
-              .github/CODEOWNERS | \
-              .github/workflows/deploy.yml | \
-              .github/workflows/production-release-rehearsal.yml | \
-              .github/workflows/tests.yml | \
-              deploy/scripts/deploy-production.sh | \
-              deploy/scripts/configure-control-panel-domain.sh | \
-              ops/backup/lora-backup.service | \
-              ops/backup/run-offsite-backup.sh | \
-              ops/backup/run-release-rehearsal.sh) ;;
-              *) should_deploy=true ;;
-            esac
-          done < <(git diff --name-only "$parent" "$CANDIDATE_SHA")
-          (( changed > 0 ))
-          printf 'should_deploy=%s\n' "$should_deploy" >> "$GITHUB_OUTPUT"
-
   deploy:
-    needs: classify
     if: >-
-      needs.classify.outputs.should_deploy == 'true' &&
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 360
     environment: production
     steps:
-      - name: Validate pinned deployment credentials
-        env:
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_FINGERPRINT: ${{ secrets.SERVER_FINGERPRINT }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        run: |
-          set -Eeuo pipefail
-          [[ -n "$SERVER_IP" ]]
-          [[ "$SERVER_IP" =~ ^[A-Za-z0-9.:-]+$ ]]
-          [[ "$SERVER_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}=?$ ]]
-          [[ -n "$SSH_PRIVATE_KEY" ]]
-
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
-          command_timeout: 350m
           script: |
             set -Eeuo pipefail
+            cd /var/www/villamucho
 
-            app_dir=/var/www/villamucho
-            tested_sha="${{ github.event.workflow_run.head_sha }}"
-            deploy_script_sha="706db34a42e6fbb52425876e3c7260acce2f94bb66d402c225b9a27d95e0da68"
-            deploy_script_tmp=
-
-            fail() {
-              echo "Production deploy bootstrap refused: $*" >&2
-              exit 1
-            }
-
-            cleanup() {
-              if [ -n "$deploy_script_tmp" ]; then
-                rm -f -- "$deploy_script_tmp"
-              fi
-            }
-            trap cleanup EXIT HUP INT TERM
-
+            tested_sha='${{ github.event.workflow_run.head_sha }}'
             case "$tested_sha" in
-              ""|*[!0-9a-f]*) fail "tested commit is not lowercase hexadecimal" ;;
+              ''|*[!0-9a-f]*)
+                echo "Invalid tested commit SHA: $tested_sha" >&2
+                exit 1
+                ;;
             esac
-            [ "${#tested_sha}" -eq 40 ] || fail "tested commit must contain exactly 40 characters"
-            [ -d "$app_dir/.git" ] && [ ! -L "$app_dir/.git" ] \
-              || fail "production Git metadata is missing or unsafe"
-            if find "$app_dir/.git" -xdev \
-              \( ! -user root -o -perm /022 \) -print -quit | grep -q .; then
-              fail "production Git metadata must be root-owned and immutable"
+            if [ "${#tested_sha}" -ne 40 ]; then
+              echo "Expected a full 40-character tested commit SHA." >&2
+              exit 1
             fi
-            cd "$app_dir"
-            origin_url="$(git remote get-url origin)"
-            case "$origin_url" in
-              "https://github.com/marjusbushi/Lora.git"|"git@github.com:marjusbushi/Lora.git") ;;
-              *) fail "production origin remote is not the trusted repository" ;;
-            esac
+
+            pre_deploy_commit="$(git rev-parse HEAD)"
             git fetch --no-tags origin \
-              "+refs/heads/main:refs/remotes/origin/main" --quiet
-            main_sha="$(git rev-parse origin/main)"
-            [ "$main_sha" = "$tested_sha" ] \
-              || fail "tested commit is not the current origin/main"
+              '+refs/heads/main:refs/remotes/origin/main' --quiet
             git cat-file -e "$tested_sha^{commit}"
-            deploy_script_tmp="$(mktemp /run/lora-production-deploy.XXXXXXXX)"
-            install -o root -g root -m 0700 /dev/null "$deploy_script_tmp"
-            git show "$tested_sha:deploy/scripts/deploy-production.sh" > "$deploy_script_tmp"
-            [ -s "$deploy_script_tmp" ] && [ ! -L "$deploy_script_tmp" ] \
-              || fail "versioned production deploy script is missing"
-            [ "$(stat -c %s "$deploy_script_tmp")" -le 1048576 ] \
-              || fail "versioned production deploy script exceeds its size limit"
-            [ "$(sha256sum "$deploy_script_tmp" | awk '{print $1}')" = "$deploy_script_sha" ] \
-              || fail "versioned production deploy script hash does not match"
-            bash -n "$deploy_script_tmp"
-            # /run is intentionally mounted noexec. The exact root-owned script
-            # has already passed its pinned hash and syntax checks.
-            bash "$deploy_script_tmp" "$tested_sha"
+            if ! git merge-base --is-ancestor "$tested_sha" origin/main; then
+              echo "Tested commit is no longer reachable from origin/main." >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$pre_deploy_commit" "$tested_sha"; then
+              echo "Refusing a non-fast-forward or stale production deploy." >&2
+              exit 1
+            fi
+
+            # Fail closed: a partial deploy must remain in maintenance until it is
+            # explicitly repaired or rolled back.
+            maintenance_secret="$(php -r 'echo bin2hex(random_bytes(32));')"
+            php artisan down --retry=15 --secret="$maintenance_secret" --quiet
+            deploy_succeeded=false
+            smoke_cookie="/tmp/lora-deploy-smoke-$$.cookie"
+            queue_service=villamucho-queue.service
+            scheduler_file=/etc/cron.d/villamucho-scheduler
+            scheduler_hold=/var/lib/lora-backup/villamucho-scheduler.deploy-paused
+            trap 'rm -f "$smoke_cookie"; if [ "$deploy_succeeded" != true ]; then echo "Deploy failed; production remains in maintenance mode with queue/scheduler paused." >&2; fi' EXIT
+
+            # Maintenance mode only blocks HTTP. Quiesce every old-code writer
+            # before the shadow-key backfill and trigger/FK replacement.
+            systemctl stop "$queue_service"
+            if systemctl is-active --quiet "$queue_service"; then
+              echo "Queue workers did not stop cleanly." >&2
+              exit 1
+            fi
+            if [ ! -f "$scheduler_file" ]; then
+              echo "Expected scheduler file $scheduler_file is missing." >&2
+              exit 1
+            fi
+            mv "$scheduler_file" "$scheduler_hold"
+            php artisan schedule:interrupt --quiet
+            for attempt in $(seq 1 30); do
+              if ! pgrep -f '[p]hp artisan schedule:(run|work)' > /dev/null; then
+                break
+              fi
+              if [ "$attempt" -eq 30 ]; then
+                echo "Scheduler is still running after 30 seconds." >&2
+                exit 1
+              fi
+              sleep 1
+            done
+
+            state_dir=/var/lib/lora-backup/releases
+            state_file="$state_dir/$(date --utc +%Y%m%dT%H%M%SZ)-deploy.env"
+            install -d -m 0700 "$state_dir"
+            previous_batch="$(php artisan tinker --execute='echo DB::table("migrations")->max("batch");')"
+            (
+              umask 077
+              printf 'PRE_DEPLOY_COMMIT=%q\nPREVIOUS_BATCH=%q\n' \
+                "$pre_deploy_commit" "$previous_batch" > "$state_file"
+            )
+
+            git reset --hard "$tested_sha"
+            if [ "$(git rev-parse HEAD)" != "$tested_sha" ]; then
+              echo "Checked-out release does not match the tested commit." >&2
+              exit 1
+            fi
+            export COMPOSER_ALLOW_SUPERUSER=1
+            composer install --no-dev --optimize-autoloader -q
+            npm ci --no-audit --no-fund
+            npm run build
+            # Fail before DDL if the production DB account cannot create the
+            # validation triggers required by this release.
+            php artisan tinker --execute='
+              $grants = collect(DB::select("SHOW GRANTS FOR CURRENT_USER"))->flatMap(fn ($row) => (array) $row)->implode(" ");
+              if (! str_contains($grants, "ALL PRIVILEGES") && ! preg_match("/\\bTRIGGER\\b/i", $grants)) {
+                  throw new RuntimeException("Database account is missing TRIGGER privilege.");
+              }
+              if ((int) DB::selectOne("SELECT @@global.log_bin AS enabled")->enabled === 1
+                  && (int) DB::selectOne("SELECT @@global.log_bin_trust_function_creators AS trusted")->trusted === 0
+                  && ! preg_match("/\\bSUPER\\b/i", $grants)) {
+                  throw new RuntimeException("Binary logging policy may reject CREATE TRIGGER; enable log_bin_trust_function_creators or grant the required admin privilege.");
+              }
+            '
+            php artisan tenants:verify-integrity \
+              --snapshot=/var/lib/lora-backup/pre-release.json
+            php artisan migrate --force
+            release_batch="$(php artisan tinker --execute='echo DB::table("migrations")->max("batch");')"
+            printf 'RELEASE_COMMIT=%q\nRELEASE_BATCH=%q\n' \
+              "$tested_sha" "$release_batch" >> "$state_file"
+            php artisan tenants:verify-integrity \
+              --compare=/var/lib/lora-backup/pre-release.json \
+              --allow-additive-schema \
+              --allow-additive-settings
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            # A cache/backend failure here means workers cannot safely receive
+            # the new-code signal, so it must fail the release.
+            php artisan queue:restart
+            chown -R www-data:www-data storage bootstrap/cache
+            # Clear stale OPcache after atomic code/cache replacement. Discover the
+            # running service instead of hard-coding the server's PHP minor version.
+            php_fpm_service="$(systemctl list-units --type=service --state=running 'php*-fpm.service' --no-legend | awk 'NR == 1 { print $1 }')"
+            if [ -n "$php_fpm_service" ]; then
+              systemctl reload "$php_fpm_service"
+            fi
+            # Inertia/Vite preload headers can exceed Nginx's small defaults.
+            install -m 0644 deploy/nginx/fastcgi-buffers.conf /etc/nginx/conf.d/villamucho-fastcgi-buffers.conf
+            nginx -t
+            systemctl reload nginx
+
+            # Exercise the deployed PHP/Nginx stack while maintenance is still
+            # active. The one-release bypass cookie reaches /up without exposing
+            # the application to normal traffic before the smoke check passes.
+            app_url="$(php -r 'require "vendor/autoload.php"; $app = require "bootstrap/app.php"; $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); echo rtrim((string) config("app.url"), "/");')"
+            case "$app_url" in
+              http://*|https://*) ;;
+              *) echo "APP_URL is not a valid HTTP(S) URL." >&2; exit 1 ;;
+            esac
+            curl --fail --silent --show-error --location \
+              --connect-timeout 5 --max-time 20 \
+              --cookie-jar "$smoke_cookie" \
+              "$app_url/$maintenance_secret" > /dev/null
+            curl --fail --silent --show-error \
+              --connect-timeout 5 --max-time 20 \
+              --cookie "$smoke_cookie" \
+              "$app_url/up?release=$tested_sha" > /dev/null
+            rm -f "$smoke_cookie"
+
+            systemctl start "$queue_service"
+            systemctl is-active --quiet "$queue_service"
+            mv "$scheduler_hold" "$scheduler_file"
+
+            php artisan up
+            deploy_succeeded=true
+            trap - EXIT
+            echo "Deployed tested commit $tested_sha at $(date)"

@@ -1,0 +1,194 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Message;
+use App\Models\MessageThread;
+use App\Models\WhatsAppConnection;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Fut ngjarjet e urës WhatsApp në inbox-in e hotelit. Thirret VETËM nga
+ * endpoint-i i ngjarjeve pasi token-i + tenant-i janë verifikuar (kryqëzim
+ * host ↔ payload.tenant_id) — këtu konteksti i tenant-it është vendosur.
+ */
+class WhatsAppMessageImporter
+{
+    /** @param array<string,mixed> $payload */
+    public function importMessage(array $payload): array
+    {
+        $jid = trim((string) ($payload['jid'] ?? ''));
+        $messageId = trim((string) ($payload['message_id'] ?? ''));
+        $body = trim((string) ($payload['body'] ?? ''));
+
+        if ($jid === '' || $messageId === '' || $body === '') {
+            return ['status' => 'skipped'];
+        }
+
+        $result = DB::transaction(function () use ($payload, $jid, $messageId, $body) {
+            $phoneDigits = preg_replace('/\D/', '', (string) ($payload['phone'] ?? ''));
+
+            $thread = MessageThread::query()->where('whatsapp_jid', $jid)->first();
+
+            // Migrimi phone→lid i WhatsApp: biseda e vjetër me jid klasik të të
+            // njëjtit numër është i NJËJTI mysafir — mos e ndaj bisedën më dysh
+            // (gjetje Codex #441). Jid-i i thread-it përditësohet te i riu, që
+            // përgjigjet të shkojnë aty ku erdhi mesazhi i fundit.
+            if (! $thread && $phoneDigits !== '') {
+                $thread = MessageThread::query()
+                    ->where('whatsapp_jid', $phoneDigits.'@s.whatsapp.net')
+                    ->first();
+                $thread?->forceFill(['whatsapp_jid' => $jid])->save();
+            }
+
+            if (! $thread) {
+                // Rezerva e emrit: numri real (payload.phone — për adresat @lid
+                // vjen nga senderPn, se pjesa para @ e jid-it NUK është numër),
+                // pastaj jid-i klasik, në fund etiketa neutrale.
+                $fallback = $phoneDigits !== ''
+                    ? '+'.$phoneDigits
+                    : (str_ends_with($jid, '@s.whatsapp.net') ? '+'.strstr($jid, '@', true) : 'WhatsApp');
+
+                $thread = MessageThread::create([
+                    'whatsapp_jid' => $jid,
+                    'channel' => 'whatsapp',
+                    'guest_name' => trim((string) ($payload['name'] ?? '')) ?: $fallback,
+                    'status' => 'open',
+                ]);
+            }
+
+            if ($thread->messages()->where('whatsapp_message_id', $messageId)->exists()) {
+                return ['status' => 'duplicate', 'thread_id' => $thread->id];
+            }
+
+            $sentAt = is_numeric($payload['timestamp'] ?? null)
+                ? now()->setTimestamp((int) $payload['timestamp'])
+                : now();
+
+            try {
+                $message = $thread->messages()->create([
+                    'whatsapp_message_id' => $messageId,
+                    'sender' => Message::SENDER_GUEST,
+                    'body' => mb_substr($body, 0, 4000),
+                    'sent_at' => $sentAt,
+                ]);
+            } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                // Dy dorëzime paralele kaluan exists() njëkohësisht — indeksi
+                // unik (message_thread_id, whatsapp_message_id) e ndal të dytin.
+                return ['status' => 'duplicate', 'thread_id' => $thread->id];
+            }
+
+            $thread->unread_count++;
+            if ($thread->status === 'closed') {
+                $thread->status = 'open';
+            }
+            $thread->last_message_preview = mb_substr($body, 0, 280);
+            $thread->last_message_at = now();
+            // Rregulli anti-çift-i-gabuar (si te Channex): mesazh i ri = drafti
+            // dhe flamuri "s'e dinte" i mesazhit të kaluar s'vlejnë më.
+            $thread->ai_suggestion = null;
+            $thread->ai_suggested_at = null;
+            $thread->ai_unanswered_question = null;
+            $thread->save();
+
+            // Lora AI — si te webhook-u Channex: VETËM ngjarjet e gjalla të urës
+            // (whatsapp s'ka fare rrugë historiku). Auto-dërgimi aty varet nga
+            // çelësi më vete whatsapp_auto_reply_enabled (default FIKUR).
+            \App\Jobs\GenerateAiGuestReply::dispatch($thread->id, $message->id)->afterCommit();
+
+            return ['status' => 'ok', 'thread_id' => $thread->id];
+        });
+
+        // Realtime (task #343): pas commit-it, njofto inbox-in e hapur. Dështimi
+        // i transmetimit (Reverb offline) s'guxon ta prishë kurrë importin.
+        if (($result['status'] ?? null) === 'ok') {
+            try {
+                event(new \App\Events\MessageReceived(
+                    app(\App\Tenancy\TenantContext::class)->tenant()->id,
+                    $result['thread_id'],
+                ));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * "Po shkruan / po regjistron zë" nga ura (task #344) — ngjarje KALIMTARE:
+     * asnjë shkrim në DB, asnjë unread; vetëm broadcast te inbox-i i hapur.
+     * Bisedat OTA s'kanë whatsapp_jid, ndaj s'gjenden dot — kriteri "kurrë
+     * për OTA" mbahet nga vetë kërkimi, jo nga një flamur.
+     *
+     * @param array<string,mixed> $payload
+     */
+    public function applyPresence(array $payload): void
+    {
+        $state = (string) ($payload['state'] ?? '');
+        $jid = trim((string) ($payload['jid'] ?? ''));
+
+        if ($jid === '' || ! in_array($state, ['composing', 'recording', 'paused'], true)) {
+            return;
+        }
+
+        $threadId = MessageThread::query()->where('whatsapp_jid', $jid)->value('id');
+        if ($threadId === null) {
+            return; // bisedë e panjohur — asgjë për të treguar, asnjë krijim
+        }
+
+        // Dështimi i transmetimit (Reverb offline) s'guxon të kthejë 500 tek
+        // ura — treguesi është "nice to have", jo ngjarje që riprovohet.
+        try {
+            event(new \App\Events\GuestTyping(
+                app(\App\Tenancy\TenantContext::class)->tenant()->id,
+                (int) $threadId,
+                $state,
+            ));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /** @param array<string,mixed> $payload */
+    public function applyStatus(array $payload): void
+    {
+        $status = in_array($payload['status'] ?? null, [
+            WhatsAppConnection::STATUS_CONNECTED,
+            WhatsAppConnection::STATUS_PAIRING,
+            WhatsAppConnection::STATUS_DISCONNECTED,
+        ], true) ? $payload['status'] : WhatsAppConnection::STATUS_DISCONNECTED;
+
+        $phone = trim((string) ($payload['phone'] ?? ''));
+
+        WhatsAppConnection::updateOrCreate([], [
+            'status' => $status,
+            'phone_number' => $phone ?: null,
+            'last_event_at' => now(),
+        ]);
+
+        // Një numër, jo dy konfigurime (kërkesë e Marjusit, task #342): lidhja
+        // QR mbush vetë numrin e butonit publik — VETËM kur fusha është bosh,
+        // kurrë mbi vlerën e vendosur nga pronari (ai mund ta fshijë/ndryshojë
+        // te Të dhënat e hotelit). Setting::set pastron cache-in e shared
+        // settings, kështu butoni në web shfaqet vetiu.
+        if ($status === WhatsAppConnection::STATUS_CONNECTED && $phone !== '') {
+            $digits = preg_replace('/\D/', '', $phone);
+
+            if ($digits !== '') {
+                // Kontrolli "bosh" + shkrimi janë ATOMIKE (lockForUpdate në
+                // transaksion): pa të, ruajtja e njëkohshme e pronarit mund të
+                // mbishkruhej nga webhook-u i lidhjes (gjetje Codex #443).
+                DB::transaction(function () use ($digits) {
+                    $row = \App\Models\Setting::query()
+                        ->where('group', 'hotel')->where('key', 'whatsapp_number')
+                        ->lockForUpdate()->first();
+
+                    if ($row === null || trim((string) $row->value) === '') {
+                        \App\Models\Setting::set('hotel.whatsapp_number', '+'.$digits);
+                    }
+                });
+            }
+        }
+    }
+}

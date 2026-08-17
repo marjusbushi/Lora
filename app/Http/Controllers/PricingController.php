@@ -6,6 +6,7 @@ use App\Jobs\PushRoomTypeAri;
 use App\Models\RoomType;
 use App\Models\Season;
 use App\Models\SeasonRate;
+use App\Services\ModuleCatalog;
 use App\Services\OtaSellWindow;
 use App\Services\PricingRulesVersion;
 use Illuminate\Http\RedirectResponse;
@@ -46,6 +47,11 @@ class PricingController extends Controller
                 'source_years' => $sourceYears,
                 'default_source_year' => $defaultSourceYear,
                 'default_target_year' => $defaultSourceYear + 1,
+            ],
+            // Catalog price for the locked "Kalendari" tab (PricingTabs) — read
+            // from the live catalog so a price change never leaves stale UI.
+            'smartModule' => [
+                'priceCents' => (int) (ModuleCatalog::module('smart_pricing')['unit_price_cents'] ?? 0),
             ],
         ]);
     }

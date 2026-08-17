@@ -2,6 +2,10 @@
 
 namespace App\Models;
 
+use App\Observers\PosOrderObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+
+#[ObservedBy([PosOrderObserver::class])]
 class PosOrder extends TenantModel
 {
     protected $fillable = [
@@ -20,6 +24,9 @@ class PosOrder extends TenantModel
         'salesperson_id',
         'cashier_id',
         'pos_shift_id',
+        'outlet_id',
+        'beach_unit_id',
+        'guest_token',
         'paid_at',
         'business_date',
         'covers',
@@ -84,6 +91,16 @@ class PosOrder extends TenantModel
     public function shift()
     {
         return $this->belongsTo(PosShift::class, 'pos_shift_id');
+    }
+
+    public function outlet()
+    {
+        return $this->belongsTo(PosOutlet::class, 'outlet_id');
+    }
+
+    public function beachUnit()
+    {
+        return $this->belongsTo(BeachUnit::class, 'beach_unit_id');
     }
 
     public function fiscalDocument()

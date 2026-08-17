@@ -12,9 +12,11 @@ class TenantSubscription extends Model
         'tenant_id',
         'status',
         'billing_cycle',
+        'contract_years',
         'billing_anchor_day',
         'currency',
         'annual_discount_percent',
+        'discount_override_percent',
         'starts_at',
         'trial_ends_at',
         'current_period_ends_at',
@@ -28,7 +30,9 @@ class TenantSubscription extends Model
     {
         return [
             'starts_at' => 'datetime',
+            'contract_years' => 'integer',
             'annual_discount_percent' => 'integer',
+            'discount_override_percent' => 'integer',
             'billing_anchor_day' => 'integer',
             'trial_ends_at' => 'datetime',
             'current_period_ends_at' => 'datetime',

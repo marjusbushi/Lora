@@ -7,6 +7,7 @@ use App\Models\MenuItem;
 use App\Models\PosOrder;
 use App\Models\PosOrderItem;
 use App\Models\PosOrderRound;
+use App\Models\PosOutlet;
 use App\Models\PosShift;
 use App\Models\PosTable;
 use App\Models\Reservation;
@@ -41,16 +42,48 @@ class PosTableServiceController extends Controller
 
         $this->ensureDefaultTables();
 
+        // Same device-outlet contract as PosController::resolveOutlet — the
+        // session key is shared so the waiter's pick follows them across the
+        // sale and tables screens.
+        $outlets = PosOutlet::active()->ordered()->get(['id', 'name']);
+        $currentOutlet = null;
+        if ($outlets->isNotEmpty()) {
+            $currentOutlet = ($request->integer('outlet') ? $outlets->firstWhere('id', $request->integer('outlet')) : null)
+                ?? $outlets->firstWhere('id', (int) $request->session()->get('pos.outlet_id'))
+                ?? $outlets->first();
+            $request->session()->put('pos.outlet_id', $currentOutlet->id);
+        } else {
+            $request->session()->forget('pos.outlet_id');
+        }
+
+        // A deep-linked table (edit/pay redirects from the sale screen) wins
+        // over the remembered outlet — otherwise a table from another outlet
+        // stays filtered out and its payment modal can never open (mirror of
+        // PosController::index()'s table-context rule).
+        if ($outlets->isNotEmpty() && $request->integer('table')) {
+            $requestedTable = PosTable::query()->find($request->integer('table'));
+            if ($requestedTable?->outlet_id && ($tableOutlet = $outlets->firstWhere('id', $requestedTable->outlet_id))) {
+                $currentOutlet = $tableOutlet;
+                $request->session()->put('pos.outlet_id', $tableOutlet->id);
+            }
+        }
+
         $tables = PosTable::query()
             ->where('is_active', true)
+            ->when($currentOutlet, fn ($query) => $query->where(fn ($q) => $q
+                ->whereNull('outlet_id')
+                ->orWhere('outlet_id', $currentOutlet->id)))
             ->orderBy('area')
             ->orderBy('sort_order')
             ->orderBy('number')
             ->get();
 
+        // Only the displayed tables' accounts — the occupied counts AND the
+        // open_total legend must describe the outlet on screen, not the tenant.
         $openOrders = PosOrder::query()
             ->where('status', 'open')
             ->whereNotNull('pos_table_id')
+            ->whereIn('pos_table_id', $tables->pluck('id'))
             ->with([
                 'createdBy:id,name',
                 'salesperson:id,name',
@@ -87,6 +120,8 @@ class PosTableServiceController extends Controller
         return Inertia::render('Pos/Tables', [
             'tables' => $payload,
             'areas' => $tables->pluck('area')->unique()->values(),
+            'outlets' => $outlets->map(fn (PosOutlet $outlet) => ['id' => $outlet->id, 'name' => $outlet->name])->values(),
+            'currentOutletId' => $currentOutlet?->id,
             'activeReservations' => $activeReservations,
             'currentShift' => ($shift = PosShift::currentFor($request->user()->id)) ? [
                 'id' => $shift->id,
@@ -130,10 +165,19 @@ class PosTableServiceController extends Controller
             $order = PosOrder::query()->where('pos_table_id', $table->id)->where('status', 'open')->lockForUpdate()->first();
 
             if (! $order) {
+                // A table's own outlet is the truth for table service; a
+                // shared (outlet-less) table falls back to the device outlet.
+                // Both values are re-validated as ACTIVE outlets of this
+                // tenant — a table pinned to a deactivated outlet must not
+                // stamp fresh orders with it.
+                $outletId = ($table->outlet_id ? PosOutlet::active()->whereKey($table->outlet_id)->value('id') : null)
+                    ?: PosOutlet::active()->whereKey((int) $request->session()->get('pos.outlet_id'))->value('id');
+
                 $order = PosOrder::create([
                     'pos_table_id' => $table->id,
                     'table_number' => $table->number,
                     'pos_shift_id' => $shift->id,
+                    'outlet_id' => $outletId,
                     'status' => 'open',
                     'service_status' => 'open',
                     'covers' => $data['covers'] ?? null,
@@ -207,7 +251,10 @@ class PosTableServiceController extends Controller
             'sent_at' => now(),
             'printed_at' => now(),
         ]);
-        $posOrderRound->order()->update(['service_status' => 'open']);
+        // Mbi MODELIN, jo mbi query-n e relacionit: update-i bulk anashkalon
+        // ngjarjet e Eloquent dhe ekranet e tjera s'e merrnin kurrë raundin e
+        // dërguar live (gjetje Codex #453).
+        $posOrderRound->order->update(['service_status' => 'open']);
 
         AuditLog::record('pos.round.sent', $posOrderRound->order, ['round_id' => $posOrderRound->id]);
         $request->session()->flash('pos_print_round_id', $posOrderRound->id);
@@ -229,6 +276,9 @@ class PosTableServiceController extends Controller
         return redirect()->route('pos.tables', ['table' => $posTable->id]);
     }
 
+    // OUTLET CONTRACT (deliberate, board-reviewed): a transferred order KEEPS the
+    // outlet where it was opened — revenue and stock stay attributed to the
+    // origin outlet even if the destination table belongs to another one.
     public function transfer(Request $request, PosTable $posTable): RedirectResponse
     {
         $data = $request->validate(['destination_table_id' => ['required', 'integer', 'different:'.$posTable->id, TenantRule::exists('pos_tables')]]);

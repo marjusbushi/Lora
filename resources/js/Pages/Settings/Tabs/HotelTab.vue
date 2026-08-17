@@ -13,6 +13,7 @@ const form = useForm({
     name: props.settings.name || '',
     address: props.settings.address || '',
     phone: props.settings.phone || '',
+    whatsapp_number: props.settings.whatsapp_number || '',
     email: props.settings.email || '',
     timezone: props.settings.timezone || 'Europe/Tirane',
     currency: props.settings.currency || 'EUR',
@@ -71,6 +72,10 @@ function submit() {
                 </FormGroup>
                 <FormGroup :label="$t('admin.generated.k_e9f7f48f4515')" :error="form.errors.phone">
                     <TextInput v-model="form.phone" placeholder="+355 4 234 5678" :error="form.errors.phone" />
+                </FormGroup>
+                <FormGroup :label="$t('settingsTabs.hotel.whatsappNumberLabel')" :error="form.errors.whatsapp_number">
+                    <TextInput v-model="form.whatsapp_number" placeholder="+355 69 123 4567" :error="form.errors.whatsapp_number" />
+                    <p class="mt-1 text-tiny text-neutral-400">{{ $t('settingsTabs.hotel.whatsappNumberHint') }}</p>
                 </FormGroup>
                 <FormGroup :label="$t('currencySettings.baseCurrencyLabel')" :error="form.errors.currency" required>
                     <Select v-model="form.currency" :options="currencyOptions" :error="form.errors.currency" :disabled="settings.base_currency_locked" />
