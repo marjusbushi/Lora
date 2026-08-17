@@ -40,7 +40,7 @@ class ChannexMessageImporter
         $body = (string) ($payload['message'] ?? '');
         $hasAttachment = (bool) ($payload['have_attachment'] ?? false);
 
-        return DB::transaction(function () use ($threadId, $messageId, $sender, $body, $hasAttachment, $payload, $expectedPropertyId, $property) {
+        $result = DB::transaction(function () use ($threadId, $messageId, $sender, $body, $hasAttachment, $payload, $expectedPropertyId, $property) {
             $thread = MessageThread::where('channex_thread_id', $threadId)->first();
 
             if (! $thread) {
@@ -123,6 +123,21 @@ class ChannexMessageImporter
 
             return ['status' => 'ok', 'thread_id' => $thread->id];
         });
+
+        // Realtime (task #343): pas commit-it, njofto inbox-in e hapur. Dështimi
+        // i transmetimit (Reverb offline) s'guxon ta prishë kurrë importin.
+        if (($result['status'] ?? null) === 'ok') {
+            try {
+                event(new \App\Events\MessageReceived(
+                    app(\App\Tenancy\TenantContext::class)->tenant()->id,
+                    $result['thread_id'],
+                ));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $result;
     }
 
     /**

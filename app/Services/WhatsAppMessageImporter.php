@@ -25,7 +25,7 @@ class WhatsAppMessageImporter
             return ['status' => 'skipped'];
         }
 
-        return DB::transaction(function () use ($payload, $jid, $messageId, $body) {
+        $result = DB::transaction(function () use ($payload, $jid, $messageId, $body) {
             $phoneDigits = preg_replace('/\D/', '', (string) ($payload['phone'] ?? ''));
 
             $thread = MessageThread::query()->where('whatsapp_jid', $jid)->first();
@@ -98,6 +98,21 @@ class WhatsAppMessageImporter
 
             return ['status' => 'ok', 'thread_id' => $thread->id];
         });
+
+        // Realtime (task #343): pas commit-it, njofto inbox-in e hapur. Dështimi
+        // i transmetimit (Reverb offline) s'guxon ta prishë kurrë importin.
+        if (($result['status'] ?? null) === 'ok') {
+            try {
+                event(new \App\Events\MessageReceived(
+                    app(\App\Tenancy\TenantContext::class)->tenant()->id,
+                    $result['thread_id'],
+                ));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $result;
     }
 
     /** @param array<string,mixed> $payload */

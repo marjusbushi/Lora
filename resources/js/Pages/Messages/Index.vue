@@ -1,7 +1,8 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
+import { getEcho, echoConnected } from '@/echo';
 import { useCurrency } from '@/composables/useCurrency';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -47,6 +48,31 @@ function dismissFaqSuggestion() {
     router.post(route('settings.faqs.suggestions.dismiss', s.id), {}, { preserveScroll: true });
 }
 const filter = ref('all'); // all | unread | booking.com | airbnb
+
+// Realtime (task #343): mesazhi i ri shfaqet pa refresh — reload i pjesshëm
+// që NUK prek bisedën e hapur, scroll-in a tekstin që po shkruan operatori.
+// Kur lidhja live mungon a bie, faqja kalon vetiu në kontroll çdo 20s.
+const rtTenantId = usePage().props.tenant?.id;
+const rtChannelName = `tenant.${rtTenantId}.messages`;
+let rtFallbackTimer = null;
+
+function refreshInbox() {
+    router.reload({ only: ['threads', 'selected'], preserveScroll: true });
+}
+
+onMounted(() => {
+    if (rtTenantId) {
+        getEcho()?.private(rtChannelName).listen('.message.received', refreshInbox);
+    }
+    rtFallbackTimer = setInterval(() => {
+        if (!echoConnected()) refreshInbox();
+    }, 20000);
+});
+
+onBeforeUnmount(() => {
+    clearInterval(rtFallbackTimer);
+    if (rtTenantId) getEcho()?.leave(`private-${rtChannelName}`);
+});
 
 // Sound alert on/off (read by AppLayout's poll via localStorage).
 const soundMuted = ref(typeof window !== 'undefined' && localStorage.getItem('msgSoundMuted') === '1');
