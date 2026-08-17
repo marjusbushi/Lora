@@ -45,6 +45,12 @@ const page = usePage();
 const activeModules = computed(() => page.props.modules || {});
 const hasModule = (module) => !module || activeModules.value[module] === true;
 
+// Sector visibility (plan #724): a card renders only when the user holds its
+// sector permission — 'view_reports' is the legacy umbrella during rollout.
+const userPermissions = computed(() => page.props.auth.user?.permissions || []);
+const can = (permission) => userPermissions.value.includes(permission);
+const canSector = (sector) => can('view_reports') || can(`view_reports_${sector}`);
+
 const allCategories = [
     { key: 'all', label: translate('admin.reports.catalog.all') },
     { key: 'finance', label: translate('admin.reports.catalog.finance') },
@@ -60,6 +66,7 @@ const groups = [
         key: 'revenue',
         name: translate('admin.generated.k_9487e3b868dd'),
         category: 'finance',
+        sector: 'revenue',
         icon: ChartNoAxesCombined,
         reports: [
             { name: translate('admin.reports.catalog.executive'), desc: translate('admin.generated.k_ae504df14db4'), to: 'reports.executive', icon: BarChart3 },
@@ -71,17 +78,19 @@ const groups = [
         key: 'channels',
         name: translate('admin.generated.k_bddfc1890264'),
         category: 'reservations',
+        sector: 'revenue',
         icon: CalendarCheck,
         reports: [
             { name: translate('admin.reports.catalog.channels'), desc: translate('admin.generated.k_6d6dfc8c5f41'), to: 'reports.channels', icon: ChartNoAxesCombined },
             { name: translate('admin.reports.catalog.cancellations'), desc: translate('admin.generated.k_c895712ad4ee'), to: 'reports.cancellations', icon: CalendarX },
-            { name: translate('admin.reports.catalog.bookingBehavior'), desc: translate('admin.generated.k_2d1fcb13fa71'), to: 'reports.bookingBehavior', icon: ClipboardList },
+            { name: translate('admin.reports.catalog.bookingBehavior'), desc: translate('admin.generated.k_2d1fcb13fa71'), to: 'reports.bookingBehavior', icon: ClipboardList, sector: 'guests' },
         ],
     },
     {
         key: 'operations',
         name: translate('admin.reports.catalog.operations'),
         category: 'operations',
+        sector: 'operations',
         icon: BedDouble,
         reports: [
             { name: translate('reports360.operationsExecutive.title'), desc: translate('reports360.operationsExecutive.short'), to: 'reports.operationsExecutive', icon: Gauge },
@@ -97,12 +106,13 @@ const groups = [
         key: 'finance',
         name: translate('admin.generated.k_e4080b3d1c44'),
         category: 'finance',
+        sector: 'finance',
         icon: Banknote,
         reports: [
             { name: translate('admin.generated.k_9510fd30116d'), desc: translate('admin.generated.k_958f73cee249'), to: 'reports.outstanding', icon: ReceiptText },
             { name: translate('admin.reports.catalog.zReport'), desc: translate('admin.generated.k_bf9a4f411063'), to: 'reports.shifts', icon: WalletCards },
             { name: translate('reports360.paymentReconciliation.title'), desc: translate('reports360.paymentReconciliation.short'), to: 'reports.payments', icon: HandCoins },
-            { name: translate('reportsBank.title'), desc: translate('reportsBank.short'), to: 'reports.bankPayments', icon: Landmark, module: 'finance' },
+            { name: translate('reportsBank.title'), desc: translate('reportsBank.short'), to: 'reports.bankPayments', icon: Landmark, module: 'finance', permission: 'view_bank_accounts' },
             { name: translate('reports360.fiscalVat.title'), desc: translate('reports360.fiscalVat.short'), to: 'reports.vat', icon: Percent },
             { name: translate('reports360.discountCashFlow.title'), desc: translate('reports360.discountCashFlow.short'), to: 'reports.discounts', icon: CircleDollarSign },
             { name: translate('reports360.departmentRevenue.title'), desc: translate('reports360.departmentRevenue.short'), to: 'reports.departmentRevenue', icon: Building2 },
@@ -112,6 +122,7 @@ const groups = [
         key: 'guests',
         name: translate('admin.generated.k_86478512913f'),
         category: 'guests',
+        sector: 'guests',
         icon: Users,
         reports: [
             { name: translate('admin.generated.k_584ca6441f0e'), desc: translate('admin.generated.k_b87974bf40e5'), to: 'reports.guests', icon: Users },
@@ -124,6 +135,7 @@ const groups = [
         key: 'pos',
         name: translate('admin.reports.catalog.barRestaurant'),
         category: 'pos',
+        sector: 'revenue',
         module: 'pos',
         icon: Utensils,
         reports: [
@@ -135,6 +147,7 @@ const groups = [
         key: 'inventory',
         name: translate('reports360.stockValuation.group'),
         category: 'operations',
+        sector: 'finance',
         module: 'finance',
         icon: Warehouse,
         reports: [
@@ -149,6 +162,8 @@ const allReports = computed(() => groups
     .filter((group) => hasModule(group.module))
     .flatMap((group) => group.reports
         .filter((report) => hasModule(report.module))
+        .filter((report) => canSector(report.sector || group.sector))
+        .filter((report) => !report.permission || can(report.permission))
         .map((report) => ({ ...report, category: group.category }))));
 const quickRouteNames = ['reports.executive', 'reports.arrivalsManifest', 'reports.departuresManifest', 'reports.outstanding'];
 const query = ref('');
@@ -164,6 +179,8 @@ const visibleGroups = computed(() => groups
         ...group,
         reports: group.reports.filter((report) => {
             if (!hasModule(report.module)) return false;
+            if (!canSector(report.sector || group.sector)) return false;
+            if (report.permission && !can(report.permission)) return false;
             if (!normalizedQuery.value) return true;
             return `${report.name} ${report.desc}`.toLocaleLowerCase(getIntlLocale()).includes(normalizedQuery.value);
         }),

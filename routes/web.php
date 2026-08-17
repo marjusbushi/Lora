@@ -417,45 +417,65 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     });
 
     // Reports
-    Route::middleware('permission:view_reports')->group(function () {
+    // Reports are gated BY SECTOR (plan #724) so each role sees only its work.
+    // 'view_reports' is the LEGACY umbrella, still accepted on every sector so
+    // tenants keep working until roles:sync-definitions re-provisions them; a
+    // later cleanup round removes it from these expressions.
+    Route::middleware('permission:view_reports|view_reports_operations|view_reports_guests|view_reports_revenue|view_reports_finance')->group(function () {
         Route::get('/reports', [ReportsController::class, 'index'])->name('reports.index');
         Route::get('/reports/saved/list', [SavedReportController::class, 'index'])->name('reports.saved.index');
         Route::post('/reports/saved', [SavedReportController::class, 'store'])->name('reports.saved.store');
         Route::delete('/reports/saved/{savedReport}', [SavedReportController::class, 'destroy'])->name('reports.saved.destroy');
-        Route::get('/reports/executive', [ReportsController::class, 'executive'])->name('reports.executive');
-        Route::get('/reports/channels', [ReportsController::class, 'channels'])->name('reports.channels');
-        Route::get('/reports/outstanding', [ReportsController::class, 'outstanding'])->name('reports.outstanding');
-        Route::get('/reports/shifts', [ReportsController::class, 'shifts'])->name('reports.shifts');
-        Route::get('/reports/guests', [ReportsController::class, 'guests'])->name('reports.guests');
-        Route::get('/reports/pos-sales', [ReportsController::class, 'posSales'])->middleware('module:pos')->name('reports.posSales');
+    });
+
+    // Sector: OPERATIONS — the desk/housekeeping day-to-day, no money.
+    Route::middleware('permission:view_reports|view_reports_operations')->group(function () {
         Route::get('/reports/arrivals', [ReportsController::class, 'arrivalsManifest'])->name('reports.arrivalsManifest');
         Route::get('/reports/departures', [ReportsController::class, 'departuresManifest'])->name('reports.departuresManifest');
-        Route::get('/reports/pace', [ReportsController::class, 'pace'])->name('reports.pace');
-        Route::get('/reports/cancellations', [ReportsController::class, 'cancellations'])->name('reports.cancellations');
-        Route::get('/reports/payments', [ReportsController::class, 'payments'])->name('reports.payments');
-        Route::get('/reports/bank-payments', [ReportsController::class, 'bankPayments'])->middleware('module:finance')->name('reports.bankPayments');
-        Route::get('/reports/vat', [ReportsController::class, 'vat'])->name('reports.vat');
-        Route::get('/reports/performance', [ReportsController::class, 'performance'])->name('reports.performance');
+        Route::get('/reports/room-status', [ReportsController::class, 'roomStatus'])->name('reports.roomStatus');
+        Route::get('/reports/room-readiness', [ReportsController::class, 'roomReadiness'])->name('reports.roomReadiness');
+        Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->middleware('module:housekeeping')->name('reports.housekeepingReport');
+        Route::get('/reports/maintenance-sla', [ReportsController::class, 'maintenanceSla'])->middleware('module:maintenance')->name('reports.maintenanceSla');
+        Route::get('/reports/recurring-maintenance', [ReportsController::class, 'recurringMaintenance'])->middleware('module:maintenance')->name('reports.recurringMaintenance');
+        Route::get('/reports/operations-executive', [ReportsController::class, 'operationsExecutive'])->name('reports.operationsExecutive');
+        Route::get('/reports/guest-movements', [ReportsController::class, 'guestMovements'])->name('reports.guestMovements');
+        Route::get('/reports/in-house', [ReportsController::class, 'inHouse'])->name('reports.inHouse');
+    });
+
+    // Sector: GUESTS — profiles and behavior, no money.
+    Route::middleware('permission:view_reports|view_reports_guests')->group(function () {
+        Route::get('/reports/guests', [ReportsController::class, 'guests'])->name('reports.guests');
         Route::get('/reports/repeat-guests', [ReportsController::class, 'repeatGuests'])->name('reports.repeatGuests');
         Route::get('/reports/guest-segments', [ReportsController::class, 'guestSegments'])->name('reports.guestSegments');
         Route::get('/reports/nationality', [ReportsController::class, 'nationality'])->name('reports.nationality');
         Route::get('/reports/booking-behavior', [ReportsController::class, 'bookingBehavior'])->name('reports.bookingBehavior');
+    });
+
+    // Sector: REVENUE — performance and sales analytics.
+    Route::middleware('permission:view_reports|view_reports_revenue')->group(function () {
+        Route::get('/reports/executive', [ReportsController::class, 'executive'])->name('reports.executive');
+        Route::get('/reports/channels', [ReportsController::class, 'channels'])->name('reports.channels');
+        Route::get('/reports/pace', [ReportsController::class, 'pace'])->name('reports.pace');
+        Route::get('/reports/performance', [ReportsController::class, 'performance'])->name('reports.performance');
+        Route::get('/reports/cancellations', [ReportsController::class, 'cancellations'])->name('reports.cancellations');
+        Route::get('/reports/pos-sales', [ReportsController::class, 'posSales'])->middleware('module:pos')->name('reports.posSales');
         Route::get('/reports/pos-hourly', [ReportsController::class, 'posHourly'])->middleware('module:pos')->name('reports.posHourly');
         Route::get('/reports/pos-payment-mix', [ReportsController::class, 'posPaymentMix'])->middleware('module:pos')->name('reports.posPaymentMix');
         Route::get('/reports/pos-voids', [ReportsController::class, 'posVoids'])->middleware('module:pos')->name('reports.posVoids');
+    });
+
+    // Sector: FINANCE — money, debts, fiscal, purchasing.
+    Route::middleware('permission:view_reports|view_reports_finance')->group(function () {
+        Route::get('/reports/outstanding', [ReportsController::class, 'outstanding'])->name('reports.outstanding');
+        Route::get('/reports/shifts', [ReportsController::class, 'shifts'])->name('reports.shifts');
+        Route::get('/reports/payments', [ReportsController::class, 'payments'])->name('reports.payments');
+        Route::get('/reports/bank-payments', [ReportsController::class, 'bankPayments'])->middleware(['module:finance', 'permission:view_bank_accounts'])->name('reports.bankPayments');
+        Route::get('/reports/vat', [ReportsController::class, 'vat'])->name('reports.vat');
+        Route::get('/reports/discounts', [ReportsController::class, 'discounts'])->name('reports.discounts');
+        Route::get('/reports/department-revenue', [ReportsController::class, 'departmentRevenue'])->name('reports.departmentRevenue');
         Route::get('/reports/stock-valuation', [ReportsController::class, 'stockValuation'])->middleware('module:finance')->name('reports.stockValuation');
         Route::get('/reports/supplier-performance', [ReportsController::class, 'supplierPerformance'])->middleware('module:finance')->name('reports.supplierPerformance');
         Route::get('/reports/purchases-by-category', [ReportsController::class, 'purchasesByCategory'])->middleware('module:finance')->name('reports.purchasesByCategory');
-        Route::get('/reports/room-status', [ReportsController::class, 'roomStatus'])->name('reports.roomStatus');
-        Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->middleware('module:housekeeping')->name('reports.housekeepingReport');
-        Route::get('/reports/maintenance-sla', [ReportsController::class, 'maintenanceSla'])->middleware('module:maintenance')->name('reports.maintenanceSla');
-        Route::get('/reports/recurring-maintenance', [ReportsController::class, 'recurringMaintenance'])->middleware('module:maintenance')->name('reports.recurringMaintenance');
-        Route::get('/reports/room-readiness', [ReportsController::class, 'roomReadiness'])->name('reports.roomReadiness');
-        Route::get('/reports/operations-executive', [ReportsController::class, 'operationsExecutive'])->name('reports.operationsExecutive');
-        Route::get('/reports/guest-movements', [ReportsController::class, 'guestMovements'])->name('reports.guestMovements');
-        Route::get('/reports/in-house', [ReportsController::class, 'inHouse'])->name('reports.inHouse');
-        Route::get('/reports/discounts', [ReportsController::class, 'discounts'])->name('reports.discounts');
-        Route::get('/reports/department-revenue', [ReportsController::class, 'departmentRevenue'])->name('reports.departmentRevenue');
     });
 
     // Finance (module #11): NOT admin-only — the view gate is view_finance and
@@ -468,19 +488,19 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/accounts/{account}/toggle', [FinanceController::class, 'toggleAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.toggle');
         Route::put('/accounts/pos-mode', [FinanceController::class, 'updatePosAccountMode'])->middleware('permission:manage_finance_settings')->name('finance.accounts.pos-mode');
         Route::put('/accounts/beach-mode', [FinanceController::class, 'updateBeachAccountMode'])->middleware(['permission:manage_finance_settings', 'module:beach'])->name('finance.accounts.beach-mode');
-        Route::get('/payments', [FinanceController::class, 'payments'])->name('finance.payments');
-        Route::get('/payments/export', [FinanceController::class, 'exportPayments'])->name('finance.payments.export');
+        Route::get('/payments', [FinanceController::class, 'payments'])->middleware('permission:create_payment|view_financials')->name('finance.payments');
+        Route::get('/payments/export', [FinanceController::class, 'exportPayments'])->middleware('permission:create_payment|view_financials')->name('finance.payments.export');
         Route::post('/payments', [FinanceController::class, 'storePayment'])->middleware('permission:create_payment')->name('finance.payments.store');
         Route::post('/transfers', [FinanceController::class, 'storeTransfer'])->middleware('permission:manage_transfers')->name('finance.transfers.store');
         Route::get('/movements', [FinanceController::class, 'movements'])->middleware('permission:manage_deposits|manage_withdrawals')->name('finance.movements');
         Route::post('/movements', [FinanceController::class, 'storeMovement'])->middleware('permission:manage_deposits|manage_withdrawals')->name('finance.movements.store');
-        Route::get('/invoices', [FinanceController::class, 'invoices'])->name('finance.invoices');
+        Route::get('/invoices', [FinanceController::class, 'invoices'])->middleware('permission:manage_invoices|view_financials')->name('finance.invoices');
 
         // Phase 2: Blerjet (Bills) + Furnitorët
         Route::get('/bills/create', [FinanceController::class, 'createBill'])->middleware('permission:manage_bills')->name('finance.bills.create');
-        Route::get('/bills', [FinanceController::class, 'bills'])->name('finance.bills');
+        Route::get('/bills', [FinanceController::class, 'bills'])->middleware('permission:manage_bills|view_financials')->name('finance.bills');
         Route::get('/bills/{bill}/edit', [FinanceController::class, 'editBill'])->middleware('permission:manage_bills')->name('finance.bills.edit');
-        Route::get('/bills/{bill}', [FinanceController::class, 'showBill'])->name('finance.bills.show');
+        Route::get('/bills/{bill}', [FinanceController::class, 'showBill'])->middleware('permission:manage_bills|view_financials')->name('finance.bills.show');
         Route::post('/bills/import-ai/analyze', [FinanceController::class, 'analyzeBillDocument'])->middleware('permission:manage_bills')->name('finance.bills.import-ai.analyze');
         Route::post('/bills', [FinanceController::class, 'storeBill'])->middleware('permission:manage_bills')->name('finance.bills.store');
         Route::put('/bills/{bill}', [FinanceController::class, 'updateBill'])->middleware('permission:manage_bills')->name('finance.bills.update');
@@ -489,7 +509,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/bills/categories/{category}', [FinanceController::class, 'updateBillCategory'])->where('category', '.*')->middleware('permission:manage_bills|manage_suppliers')->name('finance.bill-categories.update');
         Route::delete('/bills/categories/{category}', [FinanceController::class, 'destroyBillCategory'])->where('category', '.*')->middleware('permission:manage_bills|manage_suppliers')->name('finance.bill-categories.destroy');
         Route::post('/bills/{bill}/pay', [FinanceController::class, 'payBill'])->middleware('permission:pay_bills')->name('finance.bills.pay');
-        Route::get('/suppliers', [FinanceController::class, 'suppliers'])->name('finance.suppliers');
+        Route::get('/suppliers', [FinanceController::class, 'suppliers'])->middleware('permission:manage_suppliers|view_financials')->name('finance.suppliers');
         Route::post('/suppliers', [FinanceController::class, 'storeSupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.store');
         Route::put('/suppliers/{supplier}', [FinanceController::class, 'updateSupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.update');
         Route::delete('/suppliers/{supplier}', [FinanceController::class, 'destroySupplier'])->middleware('permission:manage_suppliers')->name('finance.suppliers.destroy');

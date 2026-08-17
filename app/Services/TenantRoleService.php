@@ -28,7 +28,10 @@ class TenantRoleService
                 'open_pos_shift', 'close_pos_shift', 'close_any_pos_shift',
                 'view_beach', 'create_beach', 'update_beach',
                 'open_beach_shift', 'close_beach_shift', 'close_any_beach_shift',
-                'view_reports',
+                // Reports: all four sectors + the dashboard's money strip.
+                'view_reports_operations', 'view_reports_guests',
+                'view_reports_revenue', 'view_reports_finance',
+                'view_financials',
                 // Finance: everything operational EXCEPT bank visibility,
                 // finance settings and deleting records (owner-only).
                 'view_finance', 'create_payment', 'pay_bills', 'manage_transfers',
@@ -44,7 +47,8 @@ class TenantRoleService
                 'open_pos_shift', 'close_pos_shift',
                 'view_beach', 'create_beach', 'update_beach',
                 'open_beach_shift', 'close_beach_shift',
-                'view_reports',
+                // Reports: the desk's own work only — no revenue, no money.
+                'view_reports_operations', 'view_reports_guests',
                 // Finance: sees the arka and records incoming payments only.
                 'view_finance', 'create_payment',
             ],
@@ -68,7 +72,8 @@ class TenantRoleService
                 'view_finance', 'view_bank_accounts', 'create_payment', 'pay_bills',
                 'manage_transfers', 'manage_invoices', 'manage_bills',
                 'manage_suppliers', 'manage_deposits',
-                'view_reports',
+                // Reports: the money sectors + the dashboard's money strip.
+                'view_reports_revenue', 'view_reports_finance', 'view_financials',
                 // Sees stock and writes off damaged/lost goods, but cannot
                 // create or edit the articles themselves.
                 'view_inventory', 'manage_stock_writeoffs',
@@ -89,9 +94,20 @@ class TenantRoleService
             'pos_shift' => ['open', 'close', 'close_any'],
             'beach' => ['view', 'create', 'update', 'delete'],
             'beach_shift' => ['open', 'close', 'close_any'],
+            // 'view_reports' is the LEGACY umbrella (kept so undrifted tenants
+            // keep working until roles:sync-definitions runs); the four sector
+            // permissions below are the real model since plan #724.
             'reports' => ['view'],
             'settings' => ['view', 'update'],
             'users' => ['view', 'create', 'update', 'delete'],
+        ];
+
+        // Report sectors mirror the reports page's own grouping, plus the
+        // dashboard's money strip. Visibility only — writes are untouched.
+        $reportSectors = [
+            'view_reports_operations', 'view_reports_guests',
+            'view_reports_revenue', 'view_reports_finance',
+            'view_financials',
         ];
 
         // Finance permissions (Marjus's decision: managed in the GLOBAL roles
@@ -107,6 +123,7 @@ class TenantRoleService
         return collect($resources)
             ->flatMap(fn (array $actions, string $resource) => collect($actions)
                 ->map(fn (string $action) => "{$action}_{$resource}"))
+            ->merge($reportSectors)
             ->merge($finance)
             ->values()
             ->all();
