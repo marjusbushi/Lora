@@ -100,6 +100,7 @@ class ChannexBookingImportTest extends TestCase
         $this->assertEquals(30.0, (float) $res->commission_amount);
         $this->assertSame('2026-06-20 09:30:00', $res->booked_at->format('Y-m-d H:i:s'));
         $this->assertSame($type->id, Room::find($res->room_id)->room_type_id);
+        $this->assertSame($type->id, $res->booked_room_type_id); // the product bought, stamped at creation
     }
 
     public function test_eur_booking_freezes_all_accounting_amounts(): void
@@ -243,6 +244,8 @@ class ChannexBookingImportTest extends TestCase
 
         $this->assertSame($roomB->id, $early->fresh()->room_id); // moved into B's gap
         $this->assertStringContainsString('Zhvendosur automatikisht', $early->fresh()->notes);
+        // The move never rewrites the product the guest booked.
+        $this->assertSame(Room::find($roomA->id)->room_type_id, $early->fresh()->booked_room_type_id);
         $this->assertSame($roomB->id, $late->fresh()->room_id); // untouched
 
         $log = ChannelSyncLog::where('action', 'booking.reshuffled')->sole();

@@ -250,6 +250,29 @@ function applyConflictSuggestion({ conflictId, reservationId, room }) {
     });
 }
 
+function applyConflictReshuffle({ conflictId, reservationId, plan }) {
+    if (props.demo) {
+        resolvedConflictIds.value = [...resolvedConflictIds.value, conflictId];
+        showConflictCenter.value = false;
+        toasts.value?.success(translate('admin.calendarConflicts.reshuffleApplied'));
+        return;
+    }
+
+    if (!confirm(translate('admin.calendarConflicts.confirmReshuffle', { n: plan.moves.length }))) return;
+
+    resolvingReservationId.value = reservationId;
+    // The server recomputes the plan fresh — only the intent is sent.
+    router.post(route('reservations.resolve-conflict', reservationId), { mode: 'reshuffle' }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            showConflictCenter.value = false;
+            toasts.value?.success(translate('admin.calendarConflicts.reshuffleApplied'));
+        },
+        onError: (errors) => toasts.value?.error(Object.values(errors)[0] || translate('admin.calendarConflicts.resolutionFailed')),
+        onFinish: () => { resolvingReservationId.value = null; },
+    });
+}
+
 function closeDetail() {
     showDetailModal.value = false;
 }
@@ -629,6 +652,7 @@ function doCheckOut(res) {
             @close="showConflictCenter = false"
             @open-reservation="openConflictReservation"
             @apply-suggestion="applyConflictSuggestion"
+            @apply-reshuffle="applyConflictReshuffle"
         />
 
         <!-- Reservation detail side drawer -->

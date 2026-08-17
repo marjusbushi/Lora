@@ -260,6 +260,23 @@ class RoomReshuffleServiceTest extends TestCase
         $this->assertPlanIsSound($plan, 1, 8);
     }
 
+    public function test_excluded_reservations_do_not_occupy_the_universe(): void
+    {
+        // The stay being re-homed must not block itself: excluded, the only
+        // room frees with zero moves; included, the type is simply oversold.
+        $roomA = $this->room('A1');
+        $stay = $this->stay($roomA, 2, 4);
+        $service = app(RoomReshuffleService::class);
+        $in = today()->addDays(1)->toDateString();
+        $out = today()->addDays(8)->toDateString();
+
+        $this->assertNull($service->planForIncoming($this->type->id, $in, $out));
+        $this->assertSame(
+            ['room_id' => $roomA->id, 'moves' => []],
+            $service->planForIncoming($this->type->id, $in, $out, [], [$stay->id]),
+        );
+    }
+
     public function test_best_free_room_prefers_the_tightest_gap(): void
     {
         // Between a completely empty room and one whose stay ends exactly when

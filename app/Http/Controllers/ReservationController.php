@@ -32,6 +32,7 @@ use App\Services\PricingCurrency;
 use App\Services\ReservationConflictService;
 use App\Services\ReservationMoney;
 use App\Services\RoomPricing;
+use App\Services\RoomReshuffleService;
 use App\Services\StayExtensionService;
 use App\Services\TenantBillingService;
 use App\Services\VatConfiguration;
@@ -1136,11 +1137,16 @@ class ReservationController extends Controller
         return back()->with('success', "Mysafiri u zhvendos te dhoma {$newRoom->room_number}.");
     }
 
-    public function resolveConflict(Request $request, Reservation $reservation, ReservationConflictService $conflictService): RedirectResponse
+    public function resolveConflict(Request $request, Reservation $reservation, ReservationConflictService $conflictService, RoomReshuffleService $reshuffler): RedirectResponse
     {
         $data = $request->validate([
-            'room_id' => ['required', TenantRule::exists('rooms')],
+            'room_id' => ['required_without:mode', TenantRule::exists('rooms')],
+            'mode' => ['sometimes', 'in:reshuffle'],
         ]);
+
+        if (($data['mode'] ?? null) === 'reshuffle') {
+            return $this->resolveConflictByReshuffle($reservation, $conflictService, $reshuffler);
+        }
 
         DB::transaction(function () use ($reservation, $data, $conflictService) {
             $lockedReservation = Reservation::query()->lockForUpdate()->findOrFail($reservation->id);
@@ -1180,6 +1186,72 @@ class ReservationController extends Controller
         });
 
         return back()->with('success', 'Konflikti u zgjidh dhe rezervimi u zhvendos.');
+    }
+
+    /**
+     * One-click chain resolution: recompute the same-type reshuffle plan fresh
+     * on the server (NEVER trust a client-supplied move list), apply the moves,
+     * and land the conflicted stay on the freed room — all under one
+     * transaction, so a mid-way surprise rolls everything back.
+     */
+    private function resolveConflictByReshuffle(Reservation $reservation, ReservationConflictService $conflictService, RoomReshuffleService $reshuffler): RedirectResponse
+    {
+        $freedRoomNumber = DB::transaction(function () use ($reservation, $conflictService, $reshuffler) {
+            $lockedReservation = Reservation::query()->lockForUpdate()->findOrFail($reservation->id);
+
+            if (! in_array($lockedReservation->status, ['pending', 'confirmed'], true)) {
+                throw ValidationException::withMessages([
+                    'mode' => 'Vetem rezervimet ne pritje ose te konfirmuara mund te zgjidhen nga qendra e konflikteve.',
+                ]);
+            }
+
+            if (! $conflictService->hasConflict($lockedReservation)) {
+                throw ValidationException::withMessages([
+                    'mode' => 'Konflikti nuk ekziston me. Rifresko kalendarin.',
+                ]);
+            }
+
+            // The product the guest booked — never re-home them into another type.
+            $baselineTypeId = $lockedReservation->booked_room_type_id
+                ?? Room::whereKey($lockedReservation->room_id)->value('room_type_id');
+            $plan = $baselineTypeId
+                ? $reshuffler->planForIncoming(
+                    $baselineTypeId,
+                    $lockedReservation->check_in_date->toDateString(),
+                    $lockedReservation->check_out_date->toDateString(),
+                    [],
+                    [$lockedReservation->id],
+                )
+                : null;
+            if (! $plan || $plan['moves'] === []) {
+                throw ValidationException::withMessages([
+                    'mode' => 'Nuk u gjet nje risistemim automatik i vlefshem. Zgjidh nje dhome manualisht.',
+                ]);
+            }
+
+            $reshuffler->apply(
+                $plan,
+                'Zhvendosur automatikisht nga dhoma {from} në dhomën {to} për të zgjidhur një konflikt rezervimesh.',
+            );
+
+            // The freed room must really be free now — a stale plan rolls back everything.
+            if (! Reservation::isRoomAvailable(
+                $plan['room_id'],
+                $lockedReservation->check_in_date->toDateString(),
+                $lockedReservation->check_out_date->toDateString(),
+                $lockedReservation->id
+            )) {
+                throw ValidationException::withMessages([
+                    'mode' => 'Risistemimi nuk eshte me i vlefshem. Rifresko kalendarin dhe provo perseri.',
+                ]);
+            }
+
+            $lockedReservation->update(['room_id' => $plan['room_id']]);
+
+            return Room::whereKey($plan['room_id'])->value('room_number');
+        });
+
+        return back()->with('success', "Konflikti u zgjidh me risistemim automatik — rezervimi kaloi te dhoma {$freedRoomNumber}.");
     }
 
     public function checkOut(Request $request, Reservation $reservation): RedirectResponse
