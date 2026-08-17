@@ -98,6 +98,7 @@ class WhatsAppController extends Controller
             match ((string) $request->input('type')) {
                 'status' => $importer->applyStatus((array) $request->input('payload', [])),
                 'message' => $importer->importMessage((array) $request->input('payload', [])),
+                'presence' => $importer->applyPresence((array) $request->input('payload', [])),
                 default => null,
             };
         } catch (\Throwable $e) {

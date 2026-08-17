@@ -7547,5 +7547,9 @@
   "website": {
     "whatsappCta": "Message us on WhatsApp",
     "whatsappPrefill": "Hello {hotel}! I have a question."
+  },
+  "messagesRt": {
+    "typing": "typing…",
+    "recording": "recording a voice note…"
   }
 }
