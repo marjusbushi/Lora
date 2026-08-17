@@ -4,10 +4,14 @@ import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { getIntlLocale } from '@/i18n';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
 
 // Paneli live i kamarierit të plazhit: porositë e çadrave të grupuara, zile
 // kur hyn porosi e re, dhe mbyllje 1-prekje "U dorëzua & u pagua" (cash).
 // Një faqe e vetme — listë vertikale në telefon, rrjetë kolonash në desktop.
+// Realtime (task #346): porosia QR nga çadra shfaqet vetiu te paneli i plazhit.
+useRealtimeReload('pos', '.pos.order.changed', ['groups', 'forgotten', 'stats']);
+
 const props = defineProps({
     configured: { type: Boolean, default: false },
     outletName: { type: String, default: null },
