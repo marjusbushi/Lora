@@ -26,14 +26,33 @@ class WhatsAppMessageImporter
         }
 
         return DB::transaction(function () use ($payload, $jid, $messageId, $body) {
+            $phoneDigits = preg_replace('/\D/', '', (string) ($payload['phone'] ?? ''));
+
             $thread = MessageThread::query()->where('whatsapp_jid', $jid)->first();
 
+            // Migrimi phone→lid i WhatsApp: biseda e vjetër me jid klasik të të
+            // njëjtit numër është i NJËJTI mysafir — mos e ndaj bisedën më dysh
+            // (gjetje Codex #441). Jid-i i thread-it përditësohet te i riu, që
+            // përgjigjet të shkojnë aty ku erdhi mesazhi i fundit.
+            if (! $thread && $phoneDigits !== '') {
+                $thread = MessageThread::query()
+                    ->where('whatsapp_jid', $phoneDigits.'@s.whatsapp.net')
+                    ->first();
+                $thread?->forceFill(['whatsapp_jid' => $jid])->save();
+            }
+
             if (! $thread) {
+                // Rezerva e emrit: numri real (payload.phone — për adresat @lid
+                // vjen nga senderPn, se pjesa para @ e jid-it NUK është numër),
+                // pastaj jid-i klasik, në fund etiketa neutrale.
+                $fallback = $phoneDigits !== ''
+                    ? '+'.$phoneDigits
+                    : (str_ends_with($jid, '@s.whatsapp.net') ? '+'.strstr($jid, '@', true) : 'WhatsApp');
+
                 $thread = MessageThread::create([
                     'whatsapp_jid' => $jid,
                     'channel' => 'whatsapp',
-                    // Emri i profilit (pushName) ose numri nga jid-i si rezervë.
-                    'guest_name' => trim((string) ($payload['name'] ?? '')) ?: '+'.strstr($jid, '@', true),
+                    'guest_name' => trim((string) ($payload['name'] ?? '')) ?: $fallback,
                     'status' => 'open',
                 ]);
             }
@@ -90,10 +109,36 @@ class WhatsAppMessageImporter
             WhatsAppConnection::STATUS_DISCONNECTED,
         ], true) ? $payload['status'] : WhatsAppConnection::STATUS_DISCONNECTED;
 
+        $phone = trim((string) ($payload['phone'] ?? ''));
+
         WhatsAppConnection::updateOrCreate([], [
             'status' => $status,
-            'phone_number' => trim((string) ($payload['phone'] ?? '')) ?: null,
+            'phone_number' => $phone ?: null,
             'last_event_at' => now(),
         ]);
+
+        // Një numër, jo dy konfigurime (kërkesë e Marjusit, task #342): lidhja
+        // QR mbush vetë numrin e butonit publik — VETËM kur fusha është bosh,
+        // kurrë mbi vlerën e vendosur nga pronari (ai mund ta fshijë/ndryshojë
+        // te Të dhënat e hotelit). Setting::set pastron cache-in e shared
+        // settings, kështu butoni në web shfaqet vetiu.
+        if ($status === WhatsAppConnection::STATUS_CONNECTED && $phone !== '') {
+            $digits = preg_replace('/\D/', '', $phone);
+
+            if ($digits !== '') {
+                // Kontrolli "bosh" + shkrimi janë ATOMIKE (lockForUpdate në
+                // transaksion): pa të, ruajtja e njëkohshme e pronarit mund të
+                // mbishkruhej nga webhook-u i lidhjes (gjetje Codex #443).
+                DB::transaction(function () use ($digits) {
+                    $row = \App\Models\Setting::query()
+                        ->where('group', 'hotel')->where('key', 'whatsapp_number')
+                        ->lockForUpdate()->first();
+
+                    if ($row === null || trim((string) $row->value) === '') {
+                        \App\Models\Setting::set('hotel.whatsapp_number', '+'.$digits);
+                    }
+                });
+            }
+        }
     }
 }
