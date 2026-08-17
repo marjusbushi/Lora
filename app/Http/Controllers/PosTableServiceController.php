@@ -251,7 +251,10 @@ class PosTableServiceController extends Controller
             'sent_at' => now(),
             'printed_at' => now(),
         ]);
-        $posOrderRound->order()->update(['service_status' => 'open']);
+        // Mbi MODELIN, jo mbi query-n e relacionit: update-i bulk anashkalon
+        // ngjarjet e Eloquent dhe ekranet e tjera s'e merrnin kurrë raundin e
+        // dërguar live (gjetje Codex #453).
+        $posOrderRound->order->update(['service_status' => 'open']);
 
         AuditLog::record('pos.round.sent', $posOrderRound->order, ['round_id' => $posOrderRound->id]);
         $request->session()->flash('pos_print_round_id', $posOrderRound->id);

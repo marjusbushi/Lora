@@ -17,7 +17,7 @@ import {
 } from 'lucide-vue-next';
 
 // Realtime (task #346): rounds/porositë e kolegëve rifreskojnë tavolinat vetiu.
-useRealtimeReload('pos', '.pos.order.changed', ['tables']);
+useRealtimeReload('pos', '.pos.order.changed', ['tables', 'stats']);
 
 const props = defineProps({
     tables: { type: Array, default: () => [] },

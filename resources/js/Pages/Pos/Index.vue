@@ -20,7 +20,7 @@ import { ArrowLeft, Banknote, BedDouble, Clock3, CreditCard, Expand, Maximize2, 
 
 // Realtime (task #346): porosia e re (staf, tavolina, QR nga çadrat) shfaqet
 // vetiu — vetëm lista e porosive, pa prekur porosinë/formën e hapur në kasë.
-useRealtimeReload('pos', '.pos.order.changed', ['orders']);
+useRealtimeReload('pos', '.pos.order.changed', ['orders', 'stats', 'outletCounts', 'currentShift', 'shiftHistory']);
 
 const props = defineProps({
     view: { type: String, default: 'sale' },
