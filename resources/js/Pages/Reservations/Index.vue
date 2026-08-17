@@ -22,7 +22,7 @@ import { useRealtimeReload } from '@/composables/useRealtimeReload';
 
 // Realtime (task #345): lista merr ndryshimet vetiu — vetëm props-et e të
 // dhënave, modalet/format e hapura mbeten të paprekura (gjendje lokale).
-useRealtimeReload('reservations', '.reservation.changed', ['reservations', 'stats']);
+useRealtimeReload('reservations', '.reservation.changed', ['reservations', 'guests', 'stats']);
 
 const props = defineProps({
     reservations: Object,

@@ -6,7 +6,7 @@ import { useRealtimeReload } from '@/composables/useRealtimeReload';
 
 // Realtime (task #345): rezervimi i ri/i ndryshuar nga çdo burim (web, OTA,
 // recepsion tjetër) shfaqet vetiu — vetëm të dhënat, pa prekur gjendjen e UI.
-useRealtimeReload('reservations', '.reservation.changed', ['reservations', 'rooms', 'conflicts']);
+useRealtimeReload('reservations', '.reservation.changed', ['reservations', 'rooms', 'guests', 'conflicts']);
 
 defineProps({
     rooms: Array,

@@ -46,6 +46,9 @@ export function useRealtimeReload(channelSuffix, eventName, onlyProps, { debounc
     onBeforeUnmount(() => {
         clearTimeout(timer);
         document.removeEventListener('visibilitychange', onVisibility);
-        if (tenantId) getEcho()?.leave(`private-${channelName}`);
+        // Emri LOGJIK — leave() i shton vetë variantet private-/presence-
+        // (gjetje Codex #452), kështu abonimi hiqet realisht dhe rikthimi në
+        // faqe s'grumbullon dëgjues dublikatë.
+        if (tenantId) getEcho()?.leave(channelName);
     });
 }
