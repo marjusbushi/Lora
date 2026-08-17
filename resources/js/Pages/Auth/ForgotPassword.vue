@@ -1,10 +1,11 @@
 <script setup>
 import GuestLayout from '@/Layouts/GuestLayout.vue';
-import InputError from '@/Components/InputError.vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
+import Button from '@/Components/UI/Button.vue';
+import Alert from '@/Components/UI/Alert.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import InputLabel from '@/Components/InputLabel.vue';
+import InputError from '@/Components/InputError.vue';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 
 defineProps({
     status: {
@@ -23,42 +24,56 @@ const submit = () => {
 
 <template>
     <GuestLayout>
-        <Head :title="$t('admin.generated.k_ecf46852bcd7')" />
+        <Head :title="$t('auth.forgot.title')" />
 
-        <div class="mb-4 text-sm text-gray-600">
-{{ $t('admin.generated.k_b851ceb12c43') }} </div>
-
-        <div
-            v-if="status"
-            class="mb-4 text-sm font-medium text-green-600"
-        >
-            {{ status }}
+        <div>
+            <h2 class="text-h3 text-primary-900 mb-1">{{ $t('auth.forgot.title') }}</h2>
+            <p class="text-body-sm text-neutral-500 mb-6">{{ $t('auth.forgot.intro') }}</p>
         </div>
 
-        <form @submit.prevent="submit">
-            <div>
-                <InputLabel for="email" :value="$t('admin.generated.k_a3a811d0bb6b')" />
+        <!--
+            Gjendja e suksesit e zëvendëson formën: pas dërgimit s'ka çfarë të bëhet
+            këtu, dhe një formë e mbetur e hapur fton dërgime të përsëritura.
+        -->
+        <template v-if="status">
+            <Alert variant="success" class="mb-4">
+                <p class="font-semibold">{{ $t('auth.forgot.sent') }}</p>
+                <p class="mt-1 text-body-sm">{{ $t('auth.forgot.sentHint') }}</p>
+            </Alert>
 
-                <TextInput
-                    id="email"
-                    type="email"
-                    class="mt-1 block w-full"
-                    v-model="form.email"
-                    required
-                    autofocus
-                    autocomplete="username"
-                />
+            <Link :href="route('login')" class="text-body-sm text-neutral-500 hover:text-accent-600 no-underline">
+                {{ $t('auth.forgot.backToLogin') }}
+            </Link>
+        </template>
 
-                <InputError class="mt-2" :message="form.errors.email" />
-            </div>
+        <template v-else>
+            <form class="space-y-5" @submit.prevent="submit">
+                <div class="space-y-1.5">
+                    <InputLabel for="email" :value="$t('auth.forgot.emailLabel')" />
+                    <TextInput
+                        id="email"
+                        v-model="form.email"
+                        type="email"
+                        class="mt-1 block w-full"
+                        :placeholder="$t('auth.forgot.emailPlaceholder')"
+                        required
+                        autofocus
+                        autocomplete="username"
+                    />
+                    <InputError class="mt-2" :message="form.errors.email" />
+                </div>
 
-            <div class="mt-4 flex items-center justify-end">
-                <PrimaryButton
-                    :class="{ 'opacity-25': form.processing }"
-                    :disabled="form.processing"
-                >
-{{ $t('admin.generated.k_4407d4642e9f') }} </PrimaryButton>
-            </div>
-        </form>
+                <Button type="submit" class="w-full justify-center" :disabled="form.processing">
+                    {{ form.processing ? $t('auth.forgot.submitting') : $t('auth.forgot.submit') }}
+                </Button>
+            </form>
+
+            <!-- Rruga e daljes që i mungonte faqes: llogaritë i hap administratori. -->
+            <p class="mt-6 text-body-sm text-neutral-500">{{ $t('auth.forgot.noEmailHelp') }}</p>
+
+            <Link :href="route('login')" class="mt-3 inline-block text-body-sm text-neutral-500 hover:text-accent-600 no-underline">
+                {{ $t('auth.forgot.backToLogin') }}
+            </Link>
+        </template>
     </GuestLayout>
 </template>

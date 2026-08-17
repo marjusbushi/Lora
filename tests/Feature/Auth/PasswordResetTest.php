@@ -30,6 +30,29 @@ class PasswordResetTest extends TestCase
         Notification::assertSentTo($user, ResetPassword::class);
     }
 
+    /**
+     * Numërim llogarish: më parë një email i panjohur kthente gabim validimi me
+     * "nuk gjejmë përdorues me këtë email", ndaj kushdo mund të mësonte se cilat
+     * adresa kanë llogari këtu. Të dyja rrugët duhet të duken NJËSOJ.
+     */
+    public function test_an_unknown_email_looks_exactly_like_a_known_one(): void
+    {
+        Notification::fake();
+
+        $user = User::factory()->create();
+
+        $known = $this->post('/forgot-password', ['email' => $user->email]);
+        $unknown = $this->post('/forgot-password', ['email' => 'nuk-ekziston-fare@example.com']);
+
+        // I njëjti rezultat, i njëjti mesazh, asnjë gabim që tregon mungesën.
+        $known->assertSessionHasNoErrors()->assertSessionHas('status', 'password-reset-link-sent');
+        $unknown->assertSessionHasNoErrors()->assertSessionHas('status', 'password-reset-link-sent');
+
+        // Dhe, natyrisht, njoftimi shkon VETËM te llogaria që ekziston.
+        Notification::assertSentTo($user, ResetPassword::class);
+        Notification::assertCount(1);
+    }
+
     public function test_reset_password_screen_can_be_rendered(): void
     {
         Notification::fake();

@@ -33,17 +33,24 @@ class PasswordResetLinkController extends Controller
             'email' => 'required|email',
         ]);
 
-        // We will send the password reset link to this user. Once we have attempted
-        // to send the link, we will examine the response then see the message we
-        // need to show to the user. Finally, we'll send out a proper response.
         $status = Password::sendResetLink(
             $request->only('email')
         );
 
-        if ($status == Password::RESET_LINK_SENT) {
-            return back()->with('status', __($status));
+        // PËRGJIGJE NEUTRALE. Sjellja e Breeze-it kthente "nuk gjejmë përdorues me
+        // këtë email" — pra faqja u tregonte të panjohurve se cilat adresa KANË
+        // llogari këtu (numërim llogarish). Tani një email i panjohur duket
+        // saktësisht si një i njohur: kush e ka llogarinë merr emailin, kush provon
+        // adresa të huaja nuk mëson asgjë.
+        // Sinjal, jo tekst: stringjet e dukshme jetojnë te resources/js/locales,
+        // ndaj faqja e përkthen vetë (lang/ i serverit s'ka fare skedarë auth).
+        if ($status === Password::RESET_LINK_SENT || $status === Password::INVALID_USER) {
+            return back()->with('status', 'password-reset-link-sent');
         }
 
+        // Kufizimi i shpeshtësisë mbetet i dukshëm: ai s'zbulon ekzistencën e
+        // llogarisë (vlen edhe për adresa të panjohura) dhe përdoruesi duhet ta dijë
+        // pse s'po ndodh asgjë.
         throw ValidationException::withMessages([
             'email' => [trans($status)],
         ]);
