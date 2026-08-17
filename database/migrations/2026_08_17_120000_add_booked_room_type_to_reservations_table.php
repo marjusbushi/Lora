@@ -20,14 +20,15 @@ return new class extends Migration
 
         // Backfill from the CURRENT room's type: correct for every row except
         // guests already moved cross-type before this column existed (those few
-        // rows are corrected in the data-cleanup pass, not here). Soft-deleted
-        // rooms still carry their type, so the join is unfiltered on purpose.
-        DB::statement(<<<'SQL'
-            UPDATE reservations r
-            JOIN rooms ro ON ro.id = r.room_id
-            SET r.booked_room_type_id = ro.room_type_id
-            WHERE r.booked_room_type_id IS NULL
-        SQL);
+        // rows are corrected in the data-cleanup pass, not here). Correlated
+        // subquery instead of UPDATE..JOIN so the same statement runs on MySQL
+        // (prod) AND the SQLite test database; soft-deleted rooms still carry
+        // their type, so the lookup is unfiltered on purpose.
+        DB::table('reservations')
+            ->whereNull('booked_room_type_id')
+            ->update([
+                'booked_room_type_id' => DB::raw('(select room_type_id from rooms where rooms.id = reservations.room_id)'),
+            ]);
     }
 
     public function down(): void
