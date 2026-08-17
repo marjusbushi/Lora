@@ -14,19 +14,61 @@
 // paralajmërim në UI.
 
 import { createServer } from 'node:http';
-import { mkdirSync, readdirSync, rmSync, existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, existsSync, readFileSync, writeFileSync, appendFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
 
 const PORT = Number(process.env.BRIDGE_PORT || 3100);
-const TOKEN = process.env.BRIDGE_TOKEN || '';
-const SESSIONS_DIR = process.env.SESSIONS_DIR || join(process.cwd(), 'sessions');
+
+// Token-i: nga env, ose nga .env i Laravel-it ngjitur (../.env nga cwd — ura
+// jeton në <app>/whatsapp-bridge). NJË burim i vetëm sekreti: pronari e fut
+// vetëm te Environment i Forge, komanda e daemon-it mbetet pa sekrete
+// ('node src/index.mjs') dhe sekreti s'duket në UI të Forge a në ps.
+// Në layout-in zero-downtime të Forge, cwd zgjidhet përmes symlink-ut 'current'
+// te release-i FIZIK — që fshihet nga retention pas disa deploy-esh. Çdo rrugë
+// e qëndrueshme (env, sessions) duhet realpath-uar NJË herë në nisje drejt
+// vendndodhjes së përbashkët, ndryshe daemon-i mbetet me rrugë të vdekura dhe
+// outbox-i humb ngjarje (gjetje Codex PR #436).
+function stablePath(path) {
+    try {
+        return realpathSync(path);
+    } catch {
+        return path;
+    }
+}
+
+function resolveToken() {
+    if (process.env.BRIDGE_TOKEN) return process.env.BRIDGE_TOKEN;
+
+    const envPath = stablePath(process.env.LARAVEL_ENV_PATH || join(process.cwd(), '..', '.env'));
+    try {
+        const line = readFileSync(envPath, 'utf8')
+            .split('\n')
+            .find((l) => l.startsWith('WHATSAPP_BRIDGE_TOKEN='));
+
+        return line
+            ? line.slice('WHATSAPP_BRIDGE_TOKEN='.length).trim().replace(/^["']|["']$/g, '')
+            : '';
+    } catch {
+        return '';
+    }
+}
+
+const TOKEN = resolveToken();
+
+// Sesionet + outbox-i duhet të mbijetojnë deploy-et: kur ura jeton brenda
+// aplikacionit Laravel, parazgjedhja shkon nën storage/ të tij.
+const SESSIONS_DIR = process.env.SESSIONS_DIR
+    || (existsSync(join(process.cwd(), '..', 'storage'))
+        ? join(stablePath(join(process.cwd(), '..', 'storage')), 'whatsapp-sessions')
+        : join(process.cwd(), 'sessions'));
+
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 if (!TOKEN) {
-    logger.error('BRIDGE_TOKEN mungon — ura nuk niset pa token (fail-closed).');
+    logger.error('Token mungon (as BRIDGE_TOKEN në env, as WHATSAPP_BRIDGE_TOKEN në ../.env) — ura nuk niset (fail-closed).');
     process.exit(1);
 }
 

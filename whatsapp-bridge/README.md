@@ -32,17 +32,13 @@ cd whatsapp-bridge && npm ci --omit=dev
 - **Command:** `node src/index.mjs`
 - **Directory:** `/home/forge/<app>/whatsapp-bridge`
 - **User:** `forge`
-- **Environment:**
 
-```
-BRIDGE_TOKEN=<i njëjti token>
-BRIDGE_PORT=3100
-SESSIONS_DIR=/home/forge/<app>/storage/whatsapp-sessions
-LARAVEL_URL nuk nevojitet — ura merr event_url per-tenant nga Laravel në "start".
-```
-
-`SESSIONS_DIR` mbahet NËN storage/ (jashtë release-ve) që sesionet + outbox-i
-të mbijetojnë deploy-et. Ura dëgjon vetëm në 127.0.0.1 — asnjë port publik.
+Kaq — **pa asnjë sekret në komandë**: ura e lexon token-in vetë nga
+`WHATSAPP_BRIDGE_TOKEN` i `.env`-it të Laravel-it ngjitur (../.env), dhe
+sesionet + outbox-i shkojnë vetiu nën `storage/whatsapp-sessions` (mbijetojnë
+deploy-et). Override-e në env të daemon-it po deshe: `BRIDGE_TOKEN`,
+`BRIDGE_PORT` (3100), `SESSIONS_DIR`, `LARAVEL_ENV_PATH`. Ura dëgjon vetëm
+në 127.0.0.1 — asnjë port publik.
 
 ## 5. Verifikimi
 
