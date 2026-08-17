@@ -104,5 +104,19 @@ class RealtimeMessagesTest extends TestCase
 
         $thread = MessageThread::query()->sole();
         Event::assertDispatched(MessageReceived::class, fn ($e) => $e->tenantId === $this->tenant->id && $e->threadId === $thread->id);
+
+        // Retry i webhook-ut (dublikatë) mbetet 200 por NUK emeton event të dytë
+        // — inbox-et s'rifreskohen kot (gjetje Codex #446).
+        $this->postJson('/channex/webhook', ['event' => 'message', 'payload' => [
+            'id' => 'MSG-RT-1',
+            'message' => 'Live nga Booking?',
+            'sender' => 'guest',
+            'property_id' => 'PROP-1',
+            'booking_id' => 'BK-1',
+            'message_thread_id' => 'TH-RT-1',
+            'have_attachment' => false,
+        ]], ['X-Channex-Webhook-Secret' => 'topsecret'])->assertOk();
+
+        Event::assertDispatchedTimes(MessageReceived::class, 1);
     }
 }

@@ -121,12 +121,14 @@ class ChannexMessageImporter
                 $thread->save();
             }
 
-            return ['status' => 'ok', 'thread_id' => $thread->id];
+            return ['status' => 'ok', 'thread_id' => $thread->id, 'imported' => ! $duplicate];
         });
 
-        // Realtime (task #343): pas commit-it, njofto inbox-in e hapur. Dështimi
-        // i transmetimit (Reverb offline) s'guxon ta prishë kurrë importin.
-        if (($result['status'] ?? null) === 'ok') {
+        // Realtime (task #343): pas commit-it, njofto inbox-in e hapur — VETËM
+        // kur u fut realisht mesazh (retry-t e webhook-ut mbeten 200/ok por pa
+        // emetim, që inbox-et të mos rifreskohen kot — gjetje Codex #446).
+        // Dështimi i transmetimit (Reverb offline) s'e prish kurrë importin.
+        if (($result['status'] ?? null) === 'ok' && ($result['imported'] ?? false)) {
             try {
                 event(new \App\Events\MessageReceived(
                     app(\App\Tenancy\TenantContext::class)->tenant()->id,

@@ -57,7 +57,15 @@ const rtChannelName = `tenant.${rtTenantId}.messages`;
 let rtFallbackTimer = null;
 
 function refreshInbox() {
+    // Tab në sfond: MOS rifresko — reload-i i bisedës së zgjedhur e shënon
+    // mesazhin si të lexuar dhe operatori humbte zilen/badge (gjetje Codex
+    // #446). Kur tab-i rikthehet i dukshëm, kapemi me një refresh të vetëm.
+    if (document.hidden) return;
     router.reload({ only: ['threads', 'selected'], preserveScroll: true });
+}
+
+function onVisibilityChange() {
+    if (!document.hidden) refreshInbox();
 }
 
 onMounted(() => {
@@ -67,10 +75,12 @@ onMounted(() => {
     rtFallbackTimer = setInterval(() => {
         if (!echoConnected()) refreshInbox();
     }, 20000);
+    document.addEventListener('visibilitychange', onVisibilityChange);
 });
 
 onBeforeUnmount(() => {
     clearInterval(rtFallbackTimer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
     if (rtTenantId) getEcho()?.leave(`private-${rtChannelName}`);
 });
 
