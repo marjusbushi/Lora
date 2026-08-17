@@ -109,10 +109,26 @@ class WhatsAppMessageImporter
             WhatsAppConnection::STATUS_DISCONNECTED,
         ], true) ? $payload['status'] : WhatsAppConnection::STATUS_DISCONNECTED;
 
+        $phone = trim((string) ($payload['phone'] ?? ''));
+
         WhatsAppConnection::updateOrCreate([], [
             'status' => $status,
-            'phone_number' => trim((string) ($payload['phone'] ?? '')) ?: null,
+            'phone_number' => $phone ?: null,
             'last_event_at' => now(),
         ]);
+
+        // Një numër, jo dy konfigurime (kërkesë e Marjusit, task #342): lidhja
+        // QR mbush vetë numrin e butonit publik — VETËM kur fusha është bosh,
+        // kurrë mbi vlerën e vendosur nga pronari (ai mund ta fshijë/ndryshojë
+        // te Të dhënat e hotelit). Setting::set pastron cache-in e shared
+        // settings, kështu butoni në web shfaqet vetiu.
+        if ($status === WhatsAppConnection::STATUS_CONNECTED && $phone !== '') {
+            $digits = preg_replace('/\D/', '', $phone);
+            $current = trim((string) \App\Models\Setting::get('hotel.whatsapp_number'));
+
+            if ($digits !== '' && $current === '') {
+                \App\Models\Setting::set('hotel.whatsapp_number', '+'.$digits);
+            }
+        }
     }
 }
