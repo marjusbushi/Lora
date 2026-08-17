@@ -36,21 +36,64 @@ class RoomReshuffleService
      */
     public function planForIncoming(int $roomTypeId, ?string $checkIn, ?string $checkOut, array $excludeRoomIds = []): ?array
     {
-        // A span that already started is never planned: its past nights collide
-        // with stays this planner deliberately does not load (check-out before
-        // today), so any plan for it would be built on incomplete occupancy.
-        if (! $checkIn || ! $checkOut || $checkIn >= $checkOut || $checkIn < today()->toDateString()) {
+        if (! $this->plannableSpan($checkIn, $checkOut)) {
             return null;
         }
 
+        [$roomIds, $pinned, $movable] = $this->loadTypeState($roomTypeId, $excludeRoomIds);
+        if ($roomIds === []) {
+            return null;
+        }
+
+        return $this->freeRoomWithMinimalEvictions($roomIds, $pinned, $movable, $checkIn, $checkOut)
+            ?? $this->globalReassignment($roomIds, $pinned, $movable, $checkIn, $checkOut);
+    }
+
+    /**
+     * The FREE room (no moves involved) where [checkIn, checkOut) fits with the
+     * least slack around it — placement that packs new stays against existing
+     * ones so long free runs survive for long bookings. Null when no room is
+     * free for the span or the span is unplannable (missing dates / started in
+     * the past); the caller then falls back to its own placement.
+     */
+    public function bestFreeRoom(int $roomTypeId, ?string $checkIn, ?string $checkOut, array $excludeRoomIds = []): ?int
+    {
+        if (! $this->plannableSpan($checkIn, $checkOut)) {
+            return null;
+        }
+
+        [$roomIds, $pinned, $movable] = $this->loadTypeState($roomTypeId, $excludeRoomIds);
+        $occupied = $pinned;
+        foreach ($movable as $m) {
+            $occupied[$m['room_id']][] = $m;
+        }
+
+        return $this->bestFitRoom(['in' => $checkIn, 'out' => $checkOut], $roomIds, $occupied);
+    }
+
+    /**
+     * A span that already started is never planned: its past nights collide
+     * with stays this planner deliberately does not load (check-out before
+     * today), so any plan for it would be built on incomplete occupancy.
+     */
+    private function plannableSpan(?string $checkIn, ?string $checkOut): bool
+    {
+        return $checkIn && $checkOut && $checkIn < $checkOut && $checkIn >= today()->toDateString();
+    }
+
+    /**
+     * Serviceable rooms of the type (minus exclusions) and their upcoming stays,
+     * split into pinned (never moved) and movable.
+     *
+     * @return array{0: array<int, int>, 1: array<int, array<int, array{in: string, out: string}>>, 2: array<int, array{in: string, out: string, id: int, room_id: int}>}
+     */
+    private function loadTypeState(int $roomTypeId, array $excludeRoomIds): array
+    {
         $rooms = Room::where('room_type_id', $roomTypeId)
             ->where('status', '!=', 'maintenance')
             ->whereNotIn('id', $excludeRoomIds ?: [0])
             ->orderByRaw('LENGTH(room_number), room_number')
             ->get(['id', 'room_number']);
-        if ($rooms->isEmpty()) {
-            return null;
-        }
 
         $today = today()->toDateString();
         // Stays already over cannot collide with anything upcoming.
@@ -79,8 +122,7 @@ class RoomReshuffleService
             }
         }
 
-        return $this->freeRoomWithMinimalEvictions($rooms->pluck('id')->all(), $pinned, $movable, $checkIn, $checkOut)
-            ?? $this->globalReassignment($rooms->pluck('id')->all(), $pinned, $movable, $checkIn, $checkOut);
+        return [$rooms->pluck('id')->all(), $pinned, $movable];
     }
 
     /**
