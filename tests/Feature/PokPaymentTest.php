@@ -340,4 +340,28 @@ class PokPaymentTest extends TestCase
         $this->assertSame('IT', $g->nationality);   // anti-tamper intact
         $this->assertSame('3551111', $g->phone);
     }
+
+    public function test_settle_broadcasts_realtime_and_idempotent_retry_does_not(): void
+    {
+        // Task #349 (gjetje e pronarit live): konfirmimi i pagesës vinte vetëm me
+        // reload — UPDATE-i atomik i settle() anashkalon observer-in, ndaj emeton vetë.
+        $this->configurePok();
+        $this->fakePok($this->paidStatus());
+        $reservation = $this->pendingReservation($this->room());
+
+        \Illuminate\Support\Facades\Event::fake([\App\Events\ReservationChanged::class]);
+
+        $this->post(route('website.pay.webhook'), ['id' => 'ord_1'])->assertOk();
+        \Illuminate\Support\Facades\Event::assertDispatched(
+            \App\Events\ReservationChanged::class,
+            fn ($e) => $e->reservationId === $reservation->id && $e->tenantId === (int) $reservation->tenant_id,
+        );
+
+        $base = \Illuminate\Support\Facades\Event::dispatched(\App\Events\ReservationChanged::class)->count();
+
+        // Retry i webhook-ut: flip-i prek 0 rreshta (tashmë confirmed) → asnjë emetim të ri.
+        $this->post(route('website.pay.webhook'), ['id' => 'ord_1'])->assertOk();
+        $this->assertSame($base, \Illuminate\Support\Facades\Event::dispatched(\App\Events\ReservationChanged::class)->count());
+        $this->assertSame('confirmed', $reservation->fresh()->status);
+    }
 }

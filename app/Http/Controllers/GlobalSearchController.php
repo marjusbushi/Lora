@@ -58,7 +58,7 @@ class GlobalSearchController extends Controller
             $groups->push($this->group('housekeeping', $this->housekeeping($user, $term, $like)));
         }
 
-        if ($this->allowed($user, 'view_maintenance')) {
+        if ($this->allowed($user, 'view_maintenance') && $billing->enabled(TenantBillingService::MAINTENANCE, $tenant)) {
             $groups->push($this->group('maintenance', $this->maintenance($term, $like)));
         }
 

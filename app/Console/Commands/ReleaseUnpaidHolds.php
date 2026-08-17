@@ -63,10 +63,25 @@ class ReleaseUnpaidHolds extends Command
 
             // settle() returned false with no error → POK confirms the order is NOT completed →
             // genuinely unpaid/expired → safe to release. Atomic guard wins any last-second race.
-            $released += Reservation::whereKey($reservation->id)
+            $affected = Reservation::whereKey($reservation->id)
                 ->where('status', 'pending')
                 ->whereNull('paid_at')
                 ->update(['status' => 'cancelled']);
+            $released += $affected;
+
+            // Realtime (task #345, gjetje Codex #452): UPDATE-i atomik anashkalon
+            // observer-in me qëllim (garda e race-it), ndaj kalendarët e hapur
+            // njoftohen këtu me dorë — ndryshe dhoma dukej e zënë deri në refresh.
+            if ($affected > 0) {
+                try {
+                    event(new \App\Events\ReservationChanged(
+                        (int) $reservation->tenant_id,
+                        (int) $reservation->id,
+                    ));
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
         }
 
         $this->info("Released {$released} unpaid hold(s)".($settled ? ", settled {$settled} late payment(s)." : '.'));

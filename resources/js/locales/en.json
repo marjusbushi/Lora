@@ -5,7 +5,8 @@
     "book": "Book",
     "about": "About",
     "contact": "Contact",
-    "reserve": "Book Now"
+    "reserve": "Book Now",
+    "sunbeds": "Sunbeds"
   },
   "sidebar": {
     "open": "Open",
@@ -376,7 +377,8 @@
       "inventory": "Inventory",
       "inventoryOverview": "Overview",
       "inventoryItems": "Items",
-      "inventoryWarehouses": "Warehouses"
+      "inventoryWarehouses": "Warehouses",
+      "beach": "Beach"
     },
     "account": {
       "profile": "Profile",
@@ -4384,7 +4386,10 @@
     "active": "Active",
     "all": "All",
     "inactive": "Inactive",
-    "types": { "cash": "Cash", "bank": "Bank" },
+    "types": {
+      "cash": "Cash",
+      "bank": "Bank"
+    },
     "noAccounts": "No accounts found.",
     "balance": "Balance",
     "inToday": "In today",
@@ -4398,8 +4403,19 @@
     "folio": "Folio",
     "expense": "Expense",
     "manual": "Manual",
-    "sourceLabels": { "folio": "Folio", "pos": "POS", "expense": "Expense", "transfer": "Transfer", "manual": "Manual" },
-    "methods": { "Kartë": "Card", "Cash": "Cash", "Bankë": "Bank", "Transferim": "Transfer" },
+    "sourceLabels": {
+      "folio": "Folio",
+      "pos": "POS",
+      "expense": "Expense",
+      "transfer": "Transfer",
+      "manual": "Manual"
+    },
+    "methods": {
+      "Kartë": "Card",
+      "Cash": "Cash",
+      "Bankë": "Bank",
+      "Transferim": "Transfer"
+    },
     "export": "Export",
     "date": "Date",
     "movement": "Movement",
@@ -4420,9 +4436,41 @@
     "cashAccountDescription": "Physical cash and cash collections",
     "bankAccountDescription": "Bank account and transfers",
     "disableAccount": "Deactivate account",
-    "enableAccount": "Activate account"
+    "enableAccount": "Activate account",
+    "beachBadge": "Beach"
   },
   "superAdmin": {
+    "catalog": {
+      "pageTitle": "Price catalog",
+      "title": "Price catalog",
+      "subtitle": "Official module prices — a change here shows up immediately on marketing, the subscription dialog, and new activations.",
+      "listTitle": "Modules and prices",
+      "snapshotNote": "Existing customers keep their frozen contract price — the catalog only affects new activations.",
+      "price": "Price",
+      "firstUnit": "First outlet",
+      "extraUnit": "Each extra outlet",
+      "tierLimit": "Up to (units)",
+      "excessPrice": "Above the limit",
+      "percent": "Percentage",
+      "basePrefix": "Base:",
+      "changedBy": "Changed by {name} · {date}",
+      "reset": "Reset to base",
+      "resetTitle": "Returns this module to the platform base price",
+      "inCalculator": "In calculator",
+      "inCalculatorTitle": "When on, this module starts enabled in the public pricing calculator",
+      "coreAlways": "Always on in the calculator",
+      "applyNote": "Saving applies the changes immediately, no deploy.",
+      "save": "Save prices",
+      "saving": "Saving…"
+    },
+    "moduleList": {
+      "priceFlat": "{price} / mo",
+      "pricePerUnit": "{price} / {unit}",
+      "pricePos": "{first} first outlet · then {extra}/outlet",
+      "priceTiered": "{price}/{unit} up to {limit} · then {excess}",
+      "pricePercentage": "{percent}% / {unit}",
+      "nowPaying": "now: {price} / mo"
+    },
     "tenantShow": {
       "actionCreated": "The hotel was created",
       "actionUpdated": "The hotel details were updated",
@@ -4526,7 +4574,10 @@
       "testConnection": "Test the connection",
       "auditNote": "Changes are recorded in the audit log.",
       "saving": "Saving…",
-      "saveChanges": "Save changes"
+      "saveChanges": "Save changes",
+      "contractLength": "Contract length",
+      "contractOption": "{years} yr — {percent}% off",
+      "contractOverride": "This tenant has an individually negotiated discount: {percent}% (overrides the ladder)"
     },
     "billing": {
       "unitMonth": "month",
@@ -4938,7 +4989,6 @@
       "slug": "Identifier (slug)",
       "slugHelp": "Used in internal addresses; letters, numbers and hyphens only.",
       "primaryDomain": "Primary domain",
-      "optional": "optional",
       "localization": "Localization",
       "localizationHelp": "Sets the default time and currency across the PMS.",
       "timezone": "Timezone",
@@ -4968,6 +5018,7 @@
       "paymentAttempts": "Payment Attempts",
       "providerEvents": "Provider Events",
       "currencies": "Currencies",
+      "catalog": "Price catalog",
       "open": "Open",
       "close": "Close",
       "openMenu": "Open menu",
@@ -5377,7 +5428,9 @@
     "outstanding": "Outstanding",
     "highDemand": "High demand",
     "amountsShownIn": "All amounts shown in {currency}",
-    "categoryTree": { "toggle": "Toggle sub-categories of" },
+    "categoryTree": {
+      "toggle": "Toggle sub-categories of"
+    },
     "moreRows": "+{n} more rows not shown",
     "todayOps": "Today's operations",
     "opsArrivals": "Arrivals today",
@@ -5500,8 +5553,19 @@
       "priority": "Priority",
       "responseTime": "Response time",
       "date": "Date",
-      "priorities": { "critical": "Critical", "high": "High", "medium": "Medium", "low": "Low" },
-      "sla": { "met": "Within SLA", "breached": "SLA breached", "overdue": "Overdue", "open": "Open", "not_set": "No SLA" }
+      "priorities": {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "sla": {
+        "met": "Within SLA",
+        "breached": "SLA breached",
+        "overdue": "Overdue",
+        "open": "Open",
+        "not_set": "No SLA"
+      }
     },
     "recurringMaintenance": {
       "title": "Recurring Maintenance Issues",
@@ -5551,8 +5615,23 @@
       "task": "Cleaning task",
       "unassignedRoom": "Room not assigned",
       "unassignedStaff": "Unassigned",
-      "tabs": { "all": "All rooms", "arrivals": "Arrivals", "attention": "Attention" },
-      "states": { "ready": "Ready for arrival", "available": "Available", "checked_in": "Checked in", "cleaning": "Cleaning", "cleaning_for_arrival": "Cleaning for arrival", "turnover": "Checkout + arrival", "departure_pending": "Departure pending", "maintenance": "Maintenance", "occupied": "Occupied / blocked", "unassigned": "Room not assigned" }
+      "tabs": {
+        "all": "All rooms",
+        "arrivals": "Arrivals",
+        "attention": "Attention"
+      },
+      "states": {
+        "ready": "Ready for arrival",
+        "available": "Available",
+        "checked_in": "Checked in",
+        "cleaning": "Cleaning",
+        "cleaning_for_arrival": "Cleaning for arrival",
+        "turnover": "Checkout + arrival",
+        "departure_pending": "Departure pending",
+        "maintenance": "Maintenance",
+        "occupied": "Occupied / blocked",
+        "unassigned": "Room not assigned"
+      }
     },
     "operationsExecutive": {
       "title": "Operations Executive Dashboard",
@@ -5609,15 +5688,32 @@
       "title": "Guest Movements",
       "short": "Arrivals, departures and in-house guests in one workspace.",
       "category": "Operations",
-      "tabs": { "arrivals": "Arrivals", "departures": "Departures", "in_house": "In-house live" },
-      "kpis": { "arrivals": "Arrivals", "departures": "Departures", "in_house": "In-house stays", "guests": "Guests", "nights": "Nights", "balance": "Outstanding", "openPos": "Open POS orders" },
+      "tabs": {
+        "arrivals": "Arrivals",
+        "departures": "Departures",
+        "in_house": "In-house live"
+      },
+      "kpis": {
+        "arrivals": "Arrivals",
+        "departures": "Departures",
+        "in_house": "In-house stays",
+        "guests": "Guests",
+        "nights": "Nights",
+        "balance": "Outstanding",
+        "openPos": "Open POS orders"
+      },
       "guest": "Guest",
       "room": "Room",
       "period": "Stay",
       "status": "Status",
       "pax": "Pax",
       "balance": "Balance",
-      "statuses": { "pending": "Pending", "confirmed": "Confirmed", "checked_in": "Checked in", "checked_out": "Checked out" }
+      "statuses": {
+        "pending": "Pending",
+        "confirmed": "Confirmed",
+        "checked_in": "Checked in",
+        "checked_out": "Checked out"
+      }
     },
     "guestLtv": {
       "title": "Repeat Guests & Lifetime Value",
@@ -5644,7 +5740,11 @@
       "avgStay": "Average stay",
       "lastVisit": "Last visit",
       "upcomingStay": "upcoming",
-      "segments": { "one_time": "One-time", "returning": "Returning", "loyal": "Loyal" }
+      "segments": {
+        "one_time": "One-time",
+        "returning": "Returning",
+        "loyal": "Loyal"
+      }
     },
     "guestSegments": {
       "title": "Guest Segments",
@@ -5666,8 +5766,21 @@
       "lastVisit": "Last visit",
       "action": "Recommended action",
       "days": "days",
-      "segments": { "all": "All", "vip": "VIP", "loyal": "Loyal", "returning": "Returning", "new": "New", "dormant": "Dormant" },
-      "actions": { "retain": "Priority retention", "reward": "Loyalty reward", "convert": "Convert to loyal", "second_stay": "Drive second stay", "win_back": "Win-back campaign" }
+      "segments": {
+        "all": "All",
+        "vip": "VIP",
+        "loyal": "Loyal",
+        "returning": "Returning",
+        "new": "New",
+        "dormant": "Dormant"
+      },
+      "actions": {
+        "retain": "Priority retention",
+        "reward": "Loyalty reward",
+        "convert": "Convert to loyal",
+        "second_stay": "Drive second stay",
+        "win_back": "Win-back campaign"
+      }
     },
     "housekeepingProductivity": {
       "title": "Housekeeping Productivity & Turnaround",
@@ -5692,8 +5805,18 @@
       "queue": "Queue",
       "cleaning": "Cleaning",
       "date": "Date",
-      "types": { "checkout_clean": "Checkout clean", "stayover_clean": "Stayover clean", "deep_clean": "Deep clean", "inspection": "Inspection" },
-      "statuses": { "pending": "Pending", "in_progress": "In progress", "completed": "Completed", "inspected": "Inspected" }
+      "types": {
+        "checkout_clean": "Checkout clean",
+        "stayover_clean": "Stayover clean",
+        "deep_clean": "Deep clean",
+        "inspection": "Inspection"
+      },
+      "statuses": {
+        "pending": "Pending",
+        "in_progress": "In progress",
+        "completed": "Completed",
+        "inspected": "Inspected"
+      }
     },
     "departmentRevenue": {
       "title": "Revenue by Department",
@@ -5805,7 +5928,12 @@
       "hourly": "Hourly demand",
       "items": "items",
       "cost": "Est. cost",
-      "margin": "Margin"
+      "margin": "Margin",
+      "outletFilterLabel": "Outlet",
+      "outletFilterAll": "All outlets",
+      "byOutlet": "Turnover by outlet",
+      "byOutletHint": "Completed-order totals per sales outlet in the selected period; refunds are deducted from the outlet where the sale was made.",
+      "noOutlet": "No outlet"
     },
     "purchasesByCategory": {
       "title": "Purchases by category",
@@ -5969,7 +6097,11 @@
       "title": "Outstanding balances & Aging",
       "short": "Debt, overdue balances and collection priorities.",
       "category": "Finance & cash",
-      "status": { "confirmed": "Confirmed", "checked_in": "Inside", "checked_out": "Away" },
+      "status": {
+        "confirmed": "Confirmed",
+        "checked_in": "Inside",
+        "checked_out": "Away"
+      },
       "total": "Total to collect",
       "overdue": "Overdue value",
       "collectionRate": "Collection rate",
@@ -6149,7 +6281,11 @@
     "toastUpdated": "Reservation updated.",
     "toastRoomMoved": "Room changed.",
     "toastDeparturePlanUpdated": "The departure plan was updated.",
-    "toastStayExtended": "Stay extended; the inventory update was sent to Channex."
+    "toastStayExtended": "Stay extended; the inventory update was sent to Channex.",
+    "actionConfirm": "Confirm",
+    "toastConfirm": "Confirmed: {name}",
+    "toastConfirmShort": "Reservation confirmed.",
+    "toastConfirmFailed": "Confirmation failed."
   },
   "reservationsReconciliation": {
     "pageTitle": "OTA–PMS reconciliation",
@@ -6221,7 +6357,8 @@
     "extendStay": "Extend stay",
     "manageDeparture": "Manage departure",
     "earlyDeparture": "Early departure",
-    "openPage": "Open full page"
+    "openPage": "Open full page",
+    "confirm": "Confirm"
   },
   "reservationModals": {
     "earlyDeparture": {
@@ -6470,7 +6607,14 @@
     "cancellationNotRecorded": "The cancellation was not recorded.",
     "refundRecorded": "The refund and stock return were recorded.",
     "refundNotRecorded": "The refund was not recorded.",
-    "statusRefunded": "Refunded"
+    "statusRefunded": "Refunded",
+    "roomShort": "Room",
+    "splitShort": "Split",
+    "customerGave": "Customer gave",
+    "changeDue": "Change",
+    "collect": "Collect",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Exit full screen"
   },
   "posTables": {
     "statusFree": "Free",
@@ -6597,7 +6741,117 @@
     "passwordPlaceholder": "Minimum 8 characters",
     "pinLabel": "Unique POS PIN",
     "cancel": "Cancel",
-    "createWaiter": "Create waiter"
+    "createWaiter": "Create waiter",
+    "outletsTitle": "Sales outlets",
+    "outletsHint": "Restaurant, Bar, Beach Bar — every order is stamped with the outlet it was created in, and reports filter by it.",
+    "addOutlet": "Add outlet",
+    "addFirstOutlet": "Add the first outlet",
+    "outletsEmpty": "No outlets configured — the POS works as a single outlet, exactly as it has until today. Add e.g. \"Restaurant\", \"Bar\", \"Beach Bar\" so orders, stock and reports split per outlet.",
+    "outletName": "Outlet name",
+    "outletNamePlaceholder": "e.g. Beach Bar",
+    "outletWarehouse": "Outlet warehouse",
+    "outletWarehouseAuto": "Automatic (as today)",
+    "outletWarehouseHint": "With a warehouse set, every order of this outlet deducts stock from it; without one, the category rule applies as today.",
+    "outletWarehouseLine": "Warehouse: {name}",
+    "outletWarehouseAutoLine": "Warehouse: automatic",
+    "outletActive": "Active",
+    "outletInactive": "Inactive",
+    "outletActiveLabel": "Outlet is active (visible in the POS)",
+    "outletEdit": "Edit",
+    "outletDelete": "Delete",
+    "outletEditTitle": "Outlet",
+    "outletSaved": "Outlet saved.",
+    "outletDeleted": "Outlet deleted.",
+    "outletDeleteConfirm": "Delete outlet \"{name}\"?",
+    "outletSave": "Save",
+    "outletCreate": "Create outlet",
+    "outletDeactivate": "Deactivate",
+    "outletDeactivateConfirm": "Deactivate outlet \"{name}\"? It disappears from the POS; history and reports remain.",
+    "outletDeactivated": "Outlet deactivated.",
+    "outletSubscription": "{count} of {limit} subscribed outlets",
+    "outletLimitReached": "Limit reached — contact Lora PMS for an additional outlet"
+  },
+  "pricingTabs": {
+    "ariaLabel": "Pricing navigation",
+    "calendar": "Calendar",
+    "seasons": "Seasons",
+    "lockedPrice": "€{price}/mo",
+    "lockedTitle": "Smart Pricing — €{price}/mo · contact Lora to activate",
+    "lockedTitleNoPrice": "Smart Pricing — contact Lora to activate"
+  },
+  "messagesAi": {
+    "suggestionTitle": "Lora AI suggestion",
+    "useSuggestion": "Use in the reply box",
+    "dismiss": "Dismiss",
+    "learnTitle": "Lora didn't know this one",
+    "learnBody": "Save your answer to Questions & Answers so Lora can reply on her own next time.",
+    "learnSave": "Save to FAQ",
+    "learnDismiss": "Dismiss"
+  },
+  "faqTab": {
+    "title": "Questions & Answers for Lora AI",
+    "subtitle": "These are the ONLY knowledge Lora answers guests from in Messages.",
+    "emptyTitle": "Without an FAQ, Lora only suggests —",
+    "emptyBody": "she never replies to a guest on her own until you add at least one question and answer.",
+    "question": "Question",
+    "questionPlaceholder": "Do you have parking?",
+    "answer": "Answer",
+    "answerPlaceholder": "Yes, free private parking in the courtyard.",
+    "add": "Add",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "active": "Active",
+    "inactive": "Inactive",
+    "created": "Question added — Lora will use it from now on.",
+    "updated": "Question updated.",
+    "deleted": "Question deleted.",
+    "confirmDelete": "Delete this question? Lora will no longer use it.",
+    "noneYet": "No questions yet.",
+    "suggestions": {
+      "title": "Questions Lora couldn't answer",
+      "subtitle": "From real conversations — the staff reply is pre-filled. Edit if you like, then save or dismiss.",
+      "save": "Save to FAQ",
+      "dismiss": "Dismiss",
+      "saved": "Added to the FAQ — Lora has learned this answer.",
+      "dismissed": "Suggestion dismissed."
+    }
+  },
+  "smartCal": {
+    "dows": {
+      "0": "Mo",
+      "1": "Tu",
+      "2": "We",
+      "3": "Th",
+      "4": "Fr",
+      "5": "Sa",
+      "6": "Su"
+    },
+    "dowsShort": {
+      "0": "Mon",
+      "1": "Tue",
+      "2": "Wed",
+      "3": "Thu",
+      "4": "Fri",
+      "5": "Sat",
+      "6": "Sun"
+    },
+    "monthOccupancy": "Month occupancy",
+    "avgPrice": "Average price",
+    "marketAvg": "Market average",
+    "suggestionsCount": "{count} suggestions",
+    "today": "TODAY",
+    "now": "Now",
+    "clampedTitle": "Held at the {bound} bound",
+    "acceptTitle": "Accept {price}",
+    "legendSuggestion": "= the suggestion (big number) · Now = live price",
+    "legendOccBar": "Bottom bar = occupancy:",
+    "legendOccCalm": "calm",
+    "legendOccFilling": "filling up",
+    "legendOccHot": "hot",
+    "strategyChanged": "Strategy updated — suggestions refreshed.",
+    "strategySaveFailed": "Strategy was not saved."
   },
   "pricingIndex": {
     "monthsShort": {
@@ -6751,10 +7005,13 @@
         "integrations": "Integrations",
         "ai": "Lora AI configuration",
         "channelManager": "Channel Manager",
+        "faqs": "Questions & Answers (AI)",
         "users": "Users & roles",
         "notifications": "Notifications",
         "security": "Security",
-        "history": "Audit"
+        "history": "Audit",
+        "beach": "Beach",
+        "whatsapp": "WhatsApp"
       },
       "groups": {
         "hotel": "Hotel",
@@ -6770,7 +7027,9 @@
     },
     "hotel": {
       "pricingCurrencyLabel": "Pricing currency",
-      "pricingCurrencyHint": "Smart Pricing, web, OTA and reservations."
+      "pricingCurrencyHint": "Smart Pricing, web, OTA and reservations.",
+      "whatsappNumberLabel": "WhatsApp number (public site button)",
+      "whatsappNumberHint": "Empty = the button is hidden on the website. Use the hotel's dedicated number — visitors message you directly on WhatsApp."
     },
     "roomTypes": {
       "uploadInterrupted": "The server interrupted the upload — try again or upload fewer photos at once.",
@@ -6828,7 +7087,9 @@
       "deleteCategoryConfirm": "Delete the category \"{name}\"?",
       "deleteItemConfirm": "Delete \"{name}\"?",
       "unavailable": "unavailable",
-      "available": "available"
+      "available": "available",
+      "visibleIn": "Visible in outlets",
+      "visibleInHint": "All checked = the category shows everywhere (including outlets added later). Uncheck to restrict."
     },
     "notifications": {
       "title": "Notifications",
@@ -6848,6 +7109,26 @@
       "checkOutLabel": "Standard check-out time",
       "futureNote": "Cancellation, prepayment and no-show policies will be added here once the policy engine is enabled.",
       "save": "Save policies"
+    },
+    "whatsapp": {
+      "title": "Hotel WhatsApp",
+      "subtitle": "Link the hotel's number with a QR scan — messages arrive in Messages like any other conversation.",
+      "warningTitle": "Warning:",
+      "warningBody": "this link uses the unofficial WhatsApp Web route. Meta may block the number — use a dedicated hotel number, never a personal one. The session can drop occasionally and needs re-scanning.",
+      "statusConnected": "Connected",
+      "statusPairing": "Pairing",
+      "statusDisconnected": "Disconnected",
+      "connectedAs": "Connected as",
+      "connectedHint": "New messages appear in Messages with the green WhatsApp badge.",
+      "disconnect": "Disconnect",
+      "confirmDisconnect": "Disconnect WhatsApp? Messages will stop arriving in Lora until you link it again.",
+      "connect": "Link with QR",
+      "disconnectedHint": "Click and scan the code with the phone holding the hotel's number: WhatsApp → Linked devices → Link a device.",
+      "qrAlt": "WhatsApp QR code",
+      "qrLoading": "Generating the QR code…",
+      "qrHint": "Open WhatsApp on the hotel phone → Linked devices → Link a device, and scan the code. The code refreshes automatically.",
+      "cancelPairing": "Cancel",
+      "bridgeOffline": "The WhatsApp bridge isn't active on this server yet — contact Lora to enable it."
     }
   },
   "shared": {
@@ -6874,7 +7155,8 @@
       "posSales": "Sales",
       "posOrders": "Orders",
       "posReceipts": "Sales & receipts",
-      "posShifts": "Shifts"
+      "posShifts": "Shifts",
+      "posBeach": "Beach"
     },
     "housekeepingClean": {
       "inspection": "Inspection"
@@ -6974,6 +7256,8 @@
     "protectedActionsSubtitle": "ChatGPT prepares the preview; the user must confirm it before execution.",
     "actionGuestReply": "Send a reply to the guest",
     "actionGuestReplyDesc": "Always with a preview, confirmation, idempotency and audit.",
+    "actionGuestAutoReply": "Automatic replies to guests",
+    "actionGuestAutoReplyDesc": "When the answer is clearly covered by your FAQ, Lora sends it to the guest herself (labeled Lora AI). Without an FAQ, she only suggests.",
     "actionApplyPrices": "Apply price proposals",
     "actionApplyPricesDesc": "Recalculated by the engine and blocked if the data has changed.",
     "actionAltRecommendation": "An alternative recommendation from ChatGPT",
@@ -6987,6 +7271,303 @@
     "step2": "Add a new connector and paste the URL.",
     "step3": "Sign in with your Lora account and approve only the hotel shown.",
     "recentAiActivity": "Recent AI activity",
-    "noAiActions": "No AI-executed actions yet."
+    "noAiActions": "No AI-executed actions yet.",
+    "actionWhatsAppAutoReply": "Auto-reply on WhatsApp",
+    "actionWhatsAppAutoReplyDesc": "OFF by default, deliberately: WhatsApp uses the unofficial route and a high-volume bot increases the risk of Meta blocking the number. Enable it only after testing with the dedicated number. Without this switch, Lora only prepares drafts for staff."
+  },
+  "posBeach": {
+    "title": "Beach",
+    "statToday": "Today",
+    "statDrawer": "Drawer",
+    "statOpen": "Open",
+    "sectionFresh": "New",
+    "sectionPending": "Waiting",
+    "sectionForgotten": "Attention — forgotten",
+    "unit": "Sunbed {number}",
+    "counter": "Counter",
+    "ordersCount": "{count} open orders",
+    "newChip": "NEW",
+    "justNow": "just now",
+    "minutesAgo": "{count} min ago",
+    "hoursAgo": "{count} h ago",
+    "daysOpen": "{count} days open",
+    "deliverPay": "✓ Delivered & paid — {amount}",
+    "confirmPay": "Confirm payment — {amount}",
+    "paying": "Recording…",
+    "noShiftTitle": "You have no open shift",
+    "noShiftBody": "Payments land in your shift drawer — open a shift before settling orders.",
+    "openShiftLink": "Open a shift at POS → Shifts",
+    "forgottenNote": "This order has been open far too long — settle or cancel it.",
+    "emptyTitle": "No open orders",
+    "emptyBody": "When a guest scans the sunbed QR and orders, it appears here on its own — with a chime.",
+    "notConfiguredTitle": "Beach ordering is not enabled yet",
+    "notConfiguredBody": "Set \"Beach ordering POS outlet\" under Settings → Beach so the sunbed QR opens the ordering menu and orders land here.",
+    "notConfiguredCta": "Go to Settings",
+    "notConfiguredAsk": "Ask your administrator to enable it.",
+    "autoRefresh": "Refreshes itself every 20 seconds · the chime rings on new orders",
+    "soundOn": "Chime: on",
+    "soundOff": "Chime: off",
+    "previewTitle": "Order #{id}",
+    "previewTime": "Time",
+    "previewPlace": "Place",
+    "previewAge": "Age",
+    "itemsTitle": "Items",
+    "totalLabel": "Total",
+    "discountLabel": "Discount",
+    "createdBy": "Recorded by",
+    "guestOrder": "Order from the sunbed QR",
+    "cancelTitle": "Cancel order",
+    "cancelReasonPlaceholder": "Cancellation reason (min 3 characters)",
+    "cancelSubmit": "Cancel order",
+    "cancelKeep": "Keep order",
+    "close": "Close"
+  },
+  "posOutlets": {
+    "label": "Sales outlet",
+    "switchConfirm": "The cart has unsaved items — switching outlet clears it. Continue?"
+  },
+  "beach": {
+    "nav": {
+      "calendar": "Sunbed calendar",
+      "setup": "Map & Prices"
+    },
+    "setup": {
+      "title": "Beach · Map & Prices",
+      "subtitle": "Zones, numbered sunbeds and daily prices. Booking window and season live in",
+      "settingsLink": "Settings → Beach",
+      "addZone": "Add zone",
+      "editZone": "Edit zone",
+      "edit": "Edit",
+      "delete": "Delete",
+      "printQr": "Print QR codes",
+      "noZonesTitle": "No beach zones yet",
+      "noZonesHint": "Create the first zone (e.g. Front Row) and generate numbered sunbeds.",
+      "pricePerDayBadge": "{price} / day",
+      "active": "Active",
+      "inactive": "Inactive",
+      "unitsCount": "{count} sunbeds",
+      "generateUnits": "Generate sunbeds",
+      "noUnits": "This zone has no sunbeds yet — generate them in one click.",
+      "deleteZoneConfirm": "Delete zone \"{name}\" together with its sunbeds?",
+      "deleteUnitConfirm": "Delete sunbed {number}?",
+      "seasonsTitle": "Price seasons",
+      "seasonsHint": "Same as room pricing: the base price always applies, seasons override it for their dates. Empty cell = the zone uses its base price.",
+      "addSeason": "Add season",
+      "editSeason": "Edit season",
+      "seasonName": "Season name",
+      "seasonNamePlaceholder": "e.g. August",
+      "seasonFrom": "From date",
+      "seasonUntil": "Until (inclusive)",
+      "seasonPricesHint": "Set the per-zone prices in the matrix after saving the season.",
+      "deleteSeasonConfirm": "Delete season \"{name}\"? Zones fall back to their base price for those dates.",
+      "noSeasons": "No seasons yet — each zone's base price applies all summer. Add a season (e.g. \"August\") to charge more on peak dates.",
+      "zoneCol": "Zone",
+      "basePriceCol": "Base price",
+      "basePriceColSub": "when no season",
+      "matrixFoot": "Multi-day bookings are priced day by day — an interval spanning two seasons pays each day's exact price.",
+      "unsavedChanges": "{count} unsaved changes",
+      "saveRates": "Save prices",
+      "zoneName": "Zone name",
+      "zoneNamePlaceholder": "e.g. Front Row",
+      "pricePerDay": "Price / day",
+      "sortOrder": "Sort order",
+      "activeLabel": "Status",
+      "activeHint": "Zone is active",
+      "unitActiveHint": "Sunbed is in service",
+      "cancel": "Cancel",
+      "save": "Save",
+      "create": "Create",
+      "generateTitle": "Generate sunbeds — {zone}",
+      "count": "How many sunbeds?",
+      "startNumber": "Starting number (optional)",
+      "startNumberPlaceholder": "auto",
+      "startNumberHint": "Empty = continues from the highest existing number on the beach.",
+      "generate": "Generate",
+      "editUnit": "Click to edit",
+      "editUnitTitle": "Sunbed {number}",
+      "unitNumber": "Sunbed number",
+      "print": {
+        "title": "Sunbed QR codes — attach one to each sunbed",
+        "qrAlt": "QR for sunbed {number}",
+        "scanToBook": "Scan to book"
+      }
+    },
+    "settings": {
+      "title": "Beach",
+      "subtitle": "Online booking window and beach season.",
+      "windowLabel": "How many days ahead can guests book online?",
+      "windowHint": "E.g. 10 = guests book from today up to 10 days ahead. Reception has no limit.",
+      "seasonStart": "Season start",
+      "seasonEnd": "Season end",
+      "seasonHint": "Empty = the beach is open all year.",
+      "save": "Save settings",
+      "saved": "Beach settings saved.",
+      "paymentModeLabel": "Payment method for online bookings",
+      "paymentModeHint": "Cash = pay at the beach only · Online = the guest goes straight to card payment · Guest's choice = they decide.",
+      "paymentCash": "At the beach only (cash/card there)",
+      "paymentOnline": "Online by card only",
+      "paymentBoth": "Guest's choice — they decide",
+      "moneyTitle": "Beach money — where it goes",
+      "moneyHint": "Same as the POS: new payments follow the choice immediately, history is untouched. The new account is auto-created on the first payment.",
+      "accountShared": "Together with the hotel",
+      "accountSharedText": "Beach cash and cards go to the general Arka/Banka.",
+      "accountSplitCash": "Separate beach cash drawer",
+      "accountSplitCashText": "Beach cash goes to \"Arka Plazh\"; cards to the general bank.",
+      "accountSplitBank": "Separate beach bank",
+      "accountSplitBankText": "Beach cards/online go to \"Banka Plazh\"; cash to the general drawer.",
+      "accountSplitAll": "Both separate",
+      "accountSplitAllText": "Cash to \"Arka Plazh\", cards/online to \"Banka Plazh\".",
+      "accountModeSaved": "Beach account mode saved.",
+      "accountModeNotSaved": "The mode was not saved — try again.",
+      "posOutletLabel": "POS outlet for beach orders",
+      "posOutletNone": "— (QR opens the reservation only)",
+      "posOutletHint": "With an outlet set, the sunbed QR opens its menu and orders land in the POS located at \"Sunbed N\". Without it, the QR only opens sunbed booking."
+    },
+    "calendar": {
+      "title": "Sunbed calendar",
+      "today": "Today",
+      "sunbed": "Sunbed",
+      "pickSunbed": "Pick a sunbed…",
+      "zonePrice": "{price}/day",
+      "newReservation": "New reservation",
+      "editReservation": "Sunbed reservation",
+      "guestName": "Guest name",
+      "guestPhone": "Phone",
+      "guestEmail": "Email (optional)",
+      "startDate": "From date",
+      "endDate": "Until (inclusive)",
+      "status": "Status",
+      "statusPending": "Pending",
+      "statusConfirmed": "Confirmed",
+      "sourceWebsite": "From the website",
+      "sourceReception": "From reception",
+      "cancelReservation": "Cancel reservation",
+      "cancelConfirm": "Cancel {name}'s reservation? The sunbed frees up immediately.",
+      "totalHint": "{days} days × zone price = {total}",
+      "outOfSeason": "Out of season",
+      "noUnitsTitle": "No sunbeds to show yet",
+      "noUnitsHint": "Create zones and generate sunbeds in Map & Prices.",
+      "prevAria": "Previous",
+      "nextAria": "Next",
+      "daysShort": "{count}d",
+      "unpaidToday": "{count} unpaid today",
+      "legendPaid": "paid",
+      "notPaidYet": "Not paid yet",
+      "markPaidCash": "Paid in cash",
+      "markPaidCard": "Paid by card",
+      "unmarkPaid": "Remove mark",
+      "unmarkConfirm": "Remove the payment mark? (only for mistakes)",
+      "paidLine": "Paid ({method}) — {date}",
+      "methodCash": "cash",
+      "methodCard": "card at the beach",
+      "methodOnline": "online"
+    },
+    "public": {
+      "headTitle": "Book a sunbed",
+      "title": "Book a sunbed",
+      "subtitle": "Pick your dates and sunbed — online booking is open up to {days} days ahead.",
+      "stepsLabel": "Booking steps",
+      "stepDates": "Dates",
+      "stepSunbed": "Sunbed",
+      "stepDetails": "Details",
+      "fromDate": "From date",
+      "toDate": "Until (inclusive)",
+      "daysCount": "{days} beach days",
+      "checking": "Checking…",
+      "seeFree": "See free sunbeds",
+      "pricePerDay": "{price} / day",
+      "pickHint": "Pick a free sunbed from the map.",
+      "legendFree": "Free",
+      "legendBusy": "Taken",
+      "legendSelected": "Selected",
+      "selectionSummary": "Sunbed {number} · {zone} · {days} days = {total}",
+      "continue": "Continue",
+      "name": "Full name",
+      "phone": "Phone",
+      "email": "Email (optional)",
+      "finalSummary": "Sunbed {number} · {zone} · {start} → {end}",
+      "totalLine": "{days} days = {total}",
+      "payOnSite": "Pay at the beach — no online payment.",
+      "booking": "Booking…",
+      "bookNow": "Book now",
+      "confirmationHeadTitle": "Booking confirmed",
+      "confirmedTitle": "Booking confirmed!",
+      "confirmedHint": "Thank you, {name} — see you at the beach.",
+      "confirmedDates": "{start} → {end} · {days} days",
+      "qrAlt": "Confirmation QR",
+      "showAtBeach": "Show this QR to the beach staff.",
+      "backHome": "Back to the homepage",
+      "sea": "The sea",
+      "downloadQr": "Download QR as an image",
+      "keepLink": "This page link also keeps your booking — reopen it anytime.",
+      "paidBadge": "Paid online — {date}",
+      "payOnline": "Pay online by card",
+      "payOnlineRequired": "Payment is made online by card right after booking.",
+      "payChoice": "Pay at the beach or online by card — your choice.",
+      "completeOnline": "Complete the online payment to finalize your booking."
+    },
+    "pay": {
+      "headTitle": "Sunbed payment",
+      "title": "Pay for your sunbed online",
+      "subtitle": "Secure card payment via POK — your booking stays valid even without paying online.",
+      "summary": "Sunbed {number} · {zone}",
+      "totalLabel": "Total",
+      "start": "Continue to payment",
+      "retry": "Try again",
+      "loadingForm": "Loading the card form…",
+      "formAria": "Card form",
+      "confirming": "Confirming your payment…",
+      "confirmFailed": "Confirmation failed — try again.",
+      "formFailed": "The payment form did not load.",
+      "sdkLoadFailed": "The payment system did not load.",
+      "verifying": "We are verifying your payment — give it a few seconds.",
+      "refresh": "Refresh",
+      "optionalNote": "If you prefer not to pay online, just go back — pay at the beach.",
+      "testCardIntro": "Test environment — use card",
+      "backToConfirmation": "Back to your booking"
+    },
+    "shift": {
+      "openSince": "Beach shift open since {time}",
+      "expectedNow": "Expected in drawer: {amount}",
+      "closeShift": "Close shift",
+      "noShift": "You have no open beach shift.",
+      "noShiftHint": "Open the beach shift before recording payments.",
+      "openShift": "Open shift",
+      "openingFloat": "Opening float",
+      "openingFloatHint": "The cash the drawer starts with — e.g. coins for change.",
+      "countedCash": "Cash counted in drawer",
+      "overShort": "Difference: {amount}",
+      "closingNote": "Closing note (optional)",
+      "closeConfirm": "Close shift"
+    },
+    "order": {
+      "unitBadge": "Sunbed {number}",
+      "title": "Order at the bar",
+      "subtitle": "Your order comes straight to your sunbed — prepared by {outlet}.",
+      "reserveLink": "Want to reserve a sunbed for other days? →",
+      "addOne": "Add {name}",
+      "removeOne": "Remove {name}",
+      "emptyMenu": "The menu isn't ready yet — ask the staff at the bar.",
+      "totalLabel": "Total",
+      "submit": "Order ({count})",
+      "sending": "Sending…",
+      "payOnDelivery": "Pay on delivery — the staff brings the order to your sunbed.",
+      "confirmedTitle": "Order received!",
+      "confirmedBody": "It's being prepared and coming to Sunbed {number}.",
+      "statusOpen": "Being prepared",
+      "statusCompleted": "Delivered and paid",
+      "statusCancelled": "Cancelled",
+      "refresh": "Refresh status"
+    }
+  },
+  "website": {
+    "whatsappCta": "Message us on WhatsApp",
+    "whatsappPrefill": "Hello {hotel}! I have a question."
+  },
+  "messagesRt": {
+    "typing": "typing…",
+    "recording": "recording a voice note…",
+    "failed": "Not sent",
+    "retry": "Retry"
   }
 }

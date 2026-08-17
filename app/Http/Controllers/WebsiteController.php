@@ -487,6 +487,13 @@ class WebsiteController extends Controller
                 } catch (\Throwable $e) {
                     report($e);
                 }
+            } elseif ($beach = \App\Models\BeachReservation::where('pok_order_id', $orderId)->first()) {
+                // I njëjti webhook mbulon edhe pagesat e çadrave të plazhit.
+                try {
+                    app(\App\Services\BeachPokPayments::class)->settle($beach);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
             }
         }
 

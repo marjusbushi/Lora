@@ -510,6 +510,9 @@ class TenantController extends Controller
         $rules = [
             'status' => ['required', Rule::in(['trialing', 'active', 'past_due', 'suspended', 'canceled'])],
             'billing_cycle' => ['required', Rule::in(['monthly', 'annual'])],
+            // 'sometimes': sirtari i listës së tenant-ëve s'e dërgon fushën — atëherë
+            // ruhet vlera ekzistuese e abonimit (fallback në TenantBillingService::update).
+            'contract_years' => ['sometimes', 'required', Rule::in(array_keys(config('lora_modules.contract_discounts', [1 => 10])))],
             'current_period_ends_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'modules' => ['required', 'array:'.implode(',', $moduleCodes)],
@@ -521,6 +524,15 @@ class TenantController extends Controller
         }
 
         $data = $request->validate($rules);
+
+        // Mesazhet punojnë vetëm përmes kanaleve OTA — s'ka kuptim pa Channel Manager.
+        if (($data['modules']['messages']['enabled'] ?? false)
+            && ! ($data['modules']['channel_manager']['enabled'] ?? false)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'modules.messages.enabled' => 'Mesazhet kërkojnë Channel Manager aktiv — inbox-i punon përmes kanaleve OTA.',
+            ]);
+        }
+
         $before = $billing->summary($tenant);
         $billing->update($tenant, $data);
         $tenant->unsetRelation('subscription')->unsetRelation('moduleEntitlements');

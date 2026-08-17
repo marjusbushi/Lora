@@ -339,12 +339,13 @@ class GuestDirectoryTest extends TestCase
 
         $this->actingAs($admin)->get(route('guests.index'))->assertOk();
 
-        // 36 = previous 35 + the single pricing.currency read the shared
-        // settings payload performs on a settings-cache miss.
-        // 37 = + the one-off pending split-proposals COUNT the global desk
+        // 37 = previous 36 + the single hotel.whatsapp_number read the shared
+        // settings payload performs on a settings-cache miss (public WhatsApp
+        // button, task #338).
+        // 38 = + the one-off pending split-proposals COUNT the global desk
         // banner performs on a cache miss (plan #723); rememberForever makes
         // it zero on every warm request.
-        $this->assertLessThanOrEqual(37, count(DB::getQueryLog()));
+        $this->assertLessThanOrEqual(38, count(DB::getQueryLog()));
     }
 
     private function user(string $role): User

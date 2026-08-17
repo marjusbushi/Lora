@@ -2,6 +2,11 @@
 import { Head, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ReservationCalendar from '@/Components/Reservations/ReservationCalendar.vue';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
+
+// Realtime (task #345): rezervimi i ri/i ndryshuar nga çdo burim (web, OTA,
+// recepsion tjetër) shfaqet vetiu — vetëm të dhënat, pa prekur gjendjen e UI.
+useRealtimeReload('reservations', '.reservation.changed', ['reservations', 'rooms', 'guests', 'conflicts']);
 
 defineProps({
     rooms: Array,

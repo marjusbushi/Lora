@@ -41,6 +41,49 @@ const isActive = computed(() => props.tenant.status === 'active');
 const billingIsHealthy = computed(() => ['active', 'trialing'].includes(props.tenant.billing?.status));
 const activeMembers = computed(() => props.members.filter((member) => member.is_active));
 const enabledModules = computed(() => Object.values(props.tenant.billing?.modules || {}).filter((module) => module.enabled));
+
+const euros = (cents) => {
+    const value = (Number(cents) || 0) / 100;
+    return `€${Number.isInteger(value) ? value : value.toFixed(2)}`;
+};
+
+// Catalog price line per billing model (fields shipped by TenantBillingService::summary).
+const modulePriceLabel = (module) => {
+    switch (module.billing_model) {
+        case 'per_user':
+            return translate('superAdmin.moduleList.pricePerUnit', { price: euros(module.unit_price_cents), unit: module.unit_label });
+        case 'per_pos':
+            return translate('superAdmin.moduleList.pricePos', { first: euros(module.first_unit_price_cents), extra: euros(module.unit_price_cents) });
+        case 'tiered_per_room':
+            return translate('superAdmin.moduleList.priceTiered', { price: euros(module.unit_price_cents), unit: module.unit_label, limit: module.tier_limit || 0, excess: euros(module.excess_unit_price_cents) });
+        case 'percentage':
+            return translate('superAdmin.moduleList.pricePercentage', { percent: (module.percentage_bps || 0) / 100, unit: module.unit_label });
+        default:
+            return translate('superAdmin.moduleList.priceFlat', { price: euros(module.unit_price_cents) });
+    }
+};
+
+// Live monthly cost while editing — follows the form's toggle + quantity, not the saved snapshot.
+const moduleLiveMonthly = (module) => {
+    const form = billingForm.modules[module.code];
+    if (!form?.enabled) return null;
+    const qty = Math.max(1, Number(form.quantity) || 1);
+    switch (module.billing_model) {
+        case 'per_user':
+            return (module.unit_price_cents || 0) * qty;
+        case 'per_pos':
+            return (module.first_unit_price_cents || 0) + (qty - 1) * (module.unit_price_cents || 0);
+        case 'tiered_per_room': {
+            const limit = module.tier_limit ?? Infinity;
+            return Math.min(qty, limit) * (module.unit_price_cents || 0)
+                + Math.max(qty - limit, 0) * (module.excess_unit_price_cents || 0);
+        }
+        case 'percentage':
+            return null;
+        default:
+            return module.unit_price_cents || 0;
+    }
+};
 const channexConfigured = computed(() => Boolean(
     props.tenant.integrations?.channex?.enabled
     && props.tenant.integrations?.channex?.has_api_key
@@ -83,6 +126,7 @@ const memberForm = useForm({
 const billingForm = useForm({
     status: 'active',
     billing_cycle: 'monthly',
+    contract_years: 1,
     current_period_ends_at: '',
     notes: '',
     modules: {},
@@ -210,6 +254,7 @@ function openBilling() {
     const billing = props.tenant.billing;
     billingForm.status = billing.status;
     billingForm.billing_cycle = billing.billing_cycle;
+    billingForm.contract_years = billing.contract_years || 1;
     billingForm.current_period_ends_at = billing.current_period_ends_at || '';
     billingForm.notes = billing.notes || '';
     billingForm.modules = Object.fromEntries(
@@ -536,8 +581,8 @@ function toggleStatus() {
                         </form>
 
                         <form v-else-if="activeDrawer === 'billing'" id="billing-form" class="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]" @submit.prevent="saveBilling">
-                            <aside class="h-fit rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p class="text-[9px] font-bold uppercase tracking-[.12em] text-neutral-500">{{ $t('superAdmin.tenantShow.currentTotal') }}</p><p class="mt-1 text-2xl font-bold">{{ money(tenant.mrr_cents) }} <small class="text-[10px] font-medium text-neutral-500">{{ $t('superAdmin.tenantShow.perMonthSuffix') }}</small></p><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.auto.copy059') }}<select v-model="billingForm.status" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option value="trialing">{{ $t('superAdmin.auto.copy049') }}</option><option value="active">{{ $t('superAdmin.auto.copy005') }}</option><option value="past_due">{{ $t('superAdmin.tenantShow.statusPastDue') }}</option><option value="suspended">{{ $t('superAdmin.auto.copy044') }}</option><option value="canceled">{{ $t('superAdmin.auto.copy009') }}</option></select></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.dynamic.billingCycleLabel') }}<select v-model="billingForm.billing_cycle" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option value="monthly">{{ $t('superAdmin.dynamic.monthly') }}</option><option value="annual">{{ $t('superAdmin.dynamic.annual') }}</option></select></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.dynamic.renewalDate') }}<input v-model="billingForm.current_period_ends_at" type="date" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.tenantShow.notes') }}<textarea v-model="billingForm.notes" rows="3" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label></aside>
-                            <section><h3 class="text-sm font-bold text-neutral-900">{{ $t('superAdmin.tenantShow.subscriptionModules') }}</h3><p class="mt-1 text-[10px] text-neutral-500">{{ $t('superAdmin.tenantShow.subscriptionModulesSubtitle') }}</p><div class="mt-3 grid gap-2 sm:grid-cols-2"><label v-for="module in tenant.billing.modules" :key="module.code" class="rounded-xl border p-3" :class="billingForm.modules[module.code]?.enabled ? 'border-emerald-200 bg-emerald-50/70' : 'border-neutral-200 bg-white'"><div class="flex items-start gap-2"><input v-model="billingForm.modules[module.code].enabled" type="checkbox" class="mt-0.5 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600" :disabled="module.locked" /><div><strong class="text-[11px] text-neutral-900">{{ module.name }}</strong><p class="mt-0.5 text-[9px] leading-4 text-neutral-500">{{ module.description }}</p></div></div><div v-if="['tiered_per_room', 'per_user', 'per_pos'].includes(module.billing_model)" class="mt-3 flex items-center justify-between border-t border-emerald-100 pt-2"><span class="text-[9px] text-neutral-500">{{ module.unit_label }}</span><input v-model.number="billingForm.modules[module.code].quantity" type="number" min="1" max="10000" class="w-20 rounded-lg border-neutral-300 py-1 text-right text-xs" /></div></label></div><p v-if="Object.keys(billingForm.errors).length" class="mt-3 text-xs text-red-600">{{ Object.values(billingForm.errors)[0] }}</p></section>
+                            <aside class="h-fit rounded-xl border border-neutral-200 bg-neutral-50 p-4"><p class="text-[9px] font-bold uppercase tracking-[.12em] text-neutral-500">{{ $t('superAdmin.tenantShow.currentTotal') }}</p><p class="mt-1 text-2xl font-bold">{{ money(tenant.mrr_cents) }} <small class="text-[10px] font-medium text-neutral-500">{{ $t('superAdmin.tenantShow.perMonthSuffix') }}</small></p><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.auto.copy059') }}<select v-model="billingForm.status" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option value="trialing">{{ $t('superAdmin.auto.copy049') }}</option><option value="active">{{ $t('superAdmin.auto.copy005') }}</option><option value="past_due">{{ $t('superAdmin.tenantShow.statusPastDue') }}</option><option value="suspended">{{ $t('superAdmin.auto.copy044') }}</option><option value="canceled">{{ $t('superAdmin.auto.copy009') }}</option></select></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.dynamic.billingCycleLabel') }}<select v-model="billingForm.billing_cycle" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option value="monthly">{{ $t('superAdmin.dynamic.monthly') }}</option><option value="annual">{{ $t('superAdmin.dynamic.annual') }}</option></select></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.tenantShow.contractLength') }}<select v-model.number="billingForm.contract_years" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm"><option v-for="option in tenant.billing.contract_options" :key="option.years" :value="option.years">{{ $t('superAdmin.tenantShow.contractOption', { years: option.years, percent: option.discount_percent }) }}</option></select><p v-if="tenant.billing.discount_override_percent !== null && tenant.billing.discount_override_percent !== undefined" class="mt-1 text-[10px] text-amber-600">{{ $t('superAdmin.tenantShow.contractOverride', { percent: tenant.billing.discount_override_percent }) }}</p></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.dynamic.renewalDate') }}<input v-model="billingForm.current_period_ends_at" type="date" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label><label class="mt-4 block text-[11px] font-semibold text-neutral-600">{{ $t('superAdmin.tenantShow.notes') }}<textarea v-model="billingForm.notes" rows="3" class="mt-1.5 w-full rounded-xl border-neutral-300 text-sm" /></label></aside>
+                            <section><h3 class="text-sm font-bold text-neutral-900">{{ $t('superAdmin.tenantShow.subscriptionModules') }}</h3><p class="mt-1 text-[10px] text-neutral-500">{{ $t('superAdmin.tenantShow.subscriptionModulesSubtitle') }}</p><div class="mt-3 divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200"><label v-for="module in tenant.billing.modules" :key="module.code" class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:flex-nowrap" :class="billingForm.modules[module.code]?.enabled ? 'bg-emerald-50/50' : 'bg-white'"><input v-model="billingForm.modules[module.code].enabled" type="checkbox" class="shrink-0 rounded border-neutral-300 text-emerald-700 focus:ring-emerald-600" :disabled="module.locked" /><span class="min-w-0 flex-1"><strong class="block text-[11px] text-neutral-900">{{ module.name }}</strong><span class="mt-0.5 block text-[9px] leading-4 text-neutral-500">{{ module.description }}</span></span><span v-if="['tiered_per_room', 'per_user', 'per_pos'].includes(module.billing_model)" class="flex shrink-0 items-center gap-1.5"><input v-model.number="billingForm.modules[module.code].quantity" type="number" min="1" max="10000" class="w-16 rounded-lg border-neutral-300 py-1 text-right text-xs" /><span class="text-[9px] text-neutral-500">{{ module.unit_label }}</span></span><span class="w-44 shrink-0 text-right"><strong class="block text-[11px] tabular-nums text-neutral-900">{{ modulePriceLabel(module) }}</strong><span v-if="moduleLiveMonthly(module) !== null" class="text-[9px] font-semibold text-emerald-700">{{ $t('superAdmin.moduleList.nowPaying', { price: euros(moduleLiveMonthly(module)) }) }}</span></span></label></div><p v-if="Object.keys(billingForm.errors).length" class="mt-3 text-xs text-red-600">{{ Object.values(billingForm.errors)[0] }}</p></section>
                         </form>
 
                         <div v-else-if="activeDrawer === 'config'">

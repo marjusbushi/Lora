@@ -12,6 +12,7 @@ import { useI18n } from 'vue-i18n';
 import AboutTab from './Tabs/AboutTab.vue';
 import AiTab from './Tabs/AiTab.vue';
 import AmenitiesTab from './Tabs/AmenitiesTab.vue';
+import BeachTab from './Tabs/BeachTab.vue';
 import BookingPoliciesTab from './Tabs/BookingPoliciesTab.vue';
 import CurrenciesTab from './Tabs/CurrenciesTab.vue';
 import FinancialTab from './Tabs/FinancialTab.vue';
@@ -24,6 +25,8 @@ import MenuTab from './Tabs/MenuTab.vue';
 import NotificationsTab from './Tabs/NotificationsTab.vue';
 import PricingProgramsTab from './Tabs/PricingProgramsTab.vue';
 import PosTab from './Tabs/PosTab.vue';
+import FaqTab from './Tabs/FaqTab.vue';
+import WhatsAppTab from './Tabs/WhatsAppTab.vue';
 import RoomTypesTab from './Tabs/RoomTypesTab.vue';
 import SecurityTab from './Tabs/SecurityTab.vue';
 import WebsiteTab from './Tabs/WebsiteTab.vue';
@@ -43,7 +46,13 @@ const props = defineProps({
     integrations: { type: Array, default: () => [] },
     posStaff: { type: Array, default: () => [] },
     posAccountMode: { type: String, default: 'shared' },
+    beachAccountMode: { type: String, default: 'shared' },
+    posOutlets: { type: Array, default: () => [] },
+    posOutletLimit: { type: Number, default: 1 },
     inventoryCategoryTree: { type: Array, default: () => [] },
+    faqs: { type: Array, default: () => [] },
+    faqSuggestions: { type: Array, default: () => [] },
+    whatsapp: { type: Object, default: () => ({}) },
 });
 
 const toasts = ref(null);
@@ -165,9 +174,10 @@ function selectMobileTab(tabId) {
                     <RoomTypesTab v-else-if="activeTab === 'room-types'" :room-types="roomTypes" :amenities="amenities" :toasts="toasts" />
                     <AmenitiesTab v-else-if="activeTab === 'amenities'" :amenities="amenities" :toasts="toasts" />
                     <FloorsTab v-else-if="activeTab === 'floors'" :floors="floors" :toasts="toasts" />
-                    <PosTab v-else-if="activeTab === 'pos'" :settings="settings.pos || {}" :staff="posStaff" :account-mode="posAccountMode" :toasts="toasts" />
-                    <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :tree="inventoryCategoryTree" :inventory-enabled="modules.finance === true" :toasts="toasts" />
+                    <PosTab v-else-if="activeTab === 'pos'" :settings="settings.pos || {}" :staff="posStaff" :account-mode="posAccountMode" :outlets="posOutlets" :outlet-limit="posOutletLimit" :warehouses="inventoryWarehouses" :toasts="toasts" />
+                    <MenuTab v-else-if="activeTab === 'menu'" :categories="menuCategories" :inventory-items="inventoryItems" :warehouses="inventoryWarehouses" :tree="inventoryCategoryTree" :inventory-enabled="modules.finance === true" :pos-outlets="posOutlets" :toasts="toasts" />
                     <HousekeepingTab v-else-if="activeTab === 'housekeeping'" :settings="settings.housekeeping || {}" :checklist-defaults="checklistDefaults" :toasts="toasts" />
+                    <BeachTab v-else-if="activeTab === 'beach'" :settings="settings.beach || {}" :account-mode="beachAccountMode" :pos-outlets="posOutlets" :toasts="toasts" />
                     <FinancialTab v-else-if="activeTab === 'financial'" :settings="settings.financial || {}" :toasts="toasts" />
                     <CurrenciesTab v-else-if="activeTab === 'currencies'" :settings="settings.currencies || {}" :toasts="toasts" />
                     <PricingProgramsTab v-else-if="activeTab === 'pricing-programs'" :settings="settings.pricing_programs || {}" :financial="settings.financial || {}" :toasts="toasts" />
@@ -175,6 +185,8 @@ function selectMobileTab(tabId) {
                     <IntegrationsTab v-else-if="activeTab === 'integrations'" :integrations="generalIntegrations" :toasts="toasts" @select-tab="selectTab" />
                     <AiTab v-else-if="activeTab === 'ai'" :settings="settings.ai || {}" :toasts="toasts" />
                     <IntegrationsTab v-else-if="activeTab === 'channel-manager'" :integrations="channelManagerIntegrations" :toasts="toasts" @select-tab="selectTab" />
+                    <FaqTab v-else-if="activeTab === 'faqs'" :faqs="faqs" :suggestions="faqSuggestions" :toasts="toasts" />
+                    <WhatsAppTab v-else-if="activeTab === 'whatsapp'" :whatsapp="whatsapp" :toasts="toasts" />
                     <UsersPage v-else-if="activeTab === 'users'" v-bind="userManagement" embedded />
                     <NotificationsTab v-else-if="activeTab === 'notifications'" :settings="settings.notifications || {}" :hotel-email="settings.hotel?.email || ''" :toasts="toasts" />
                     <SecurityTab v-else-if="activeTab === 'security'" />

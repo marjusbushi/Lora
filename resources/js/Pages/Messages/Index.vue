@@ -1,7 +1,8 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
-import { ref, computed, watch } from 'vue';
-import { Head, Link, useForm, router } from '@inertiajs/vue3';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
+import { getEcho, echoConnected } from '@/echo';
 import { useCurrency } from '@/composables/useCurrency';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -14,7 +15,106 @@ const props = defineProps({
 });
 
 const replyForm = useForm({ body: '' });
+
+// Drafti i Lora AI: 'Përdore' e parapërgatit kutinë (stafi editon e dërgon);
+// hedhja poshtë është lokale — dërgimi i stafit e pastron edhe në server.
+const aiDraftDismissed = ref(false);
+watch(() => props.selected?.id, () => { aiDraftDismissed.value = false; });
+function useAiSuggestion() {
+    replyForm.body = props.selected?.ai_suggestion || '';
+}
+
+// Cikli i mësimit: kur Lora s'e dinte pyetjen dhe stafi u përgjigj, serveri
+// dërgon çiftin si sugjerim FAQ — kutia shfaqet vetëm për userat me
+// view_settings (payload-i vjen null për të tjerët, rrugët janë të mbrojtura).
+const canManageFaqs = computed(() =>
+    (usePage().props.auth?.user?.permissions || []).includes('view_settings'));
+const faqSuggestProcessing = ref(false);
+function saveFaqSuggestion() {
+    const s = props.selected?.faq_suggestion;
+    if (!s) return;
+    faqSuggestProcessing.value = true;
+    router.post(route('settings.faqs.suggestions.accept', s.id), {
+        question: s.question,
+        answer: s.suggested_answer,
+    }, {
+        preserveScroll: true,
+        onFinish: () => (faqSuggestProcessing.value = false),
+    });
+}
+function dismissFaqSuggestion() {
+    const s = props.selected?.faq_suggestion;
+    if (!s) return;
+    router.post(route('settings.faqs.suggestions.dismiss', s.id), {}, { preserveScroll: true });
+}
 const filter = ref('all'); // all | unread | booking.com | airbnb
+
+// Realtime (task #343): mesazhi i ri shfaqet pa refresh — reload i pjesshëm
+// që NUK prek bisedën e hapur, scroll-in a tekstin që po shkruan operatori.
+// Kur lidhja live mungon a bie, faqja kalon vetiu në kontroll çdo 20s.
+const rtTenantId = usePage().props.tenant?.id;
+const rtChannelName = `tenant.${rtTenantId}.messages`;
+let rtFallbackTimer = null;
+
+function refreshInbox() {
+    // Tab në sfond: MOS rifresko — reload-i i bisedës së zgjedhur e shënon
+    // mesazhin si të lexuar dhe operatori humbte zilen/badge (gjetje Codex
+    // #446). Kur tab-i rikthehet i dukshëm, kapemi me një refresh të vetëm.
+    if (document.hidden) return;
+    router.reload({ only: ['threads', 'selected'], preserveScroll: true });
+}
+
+function onVisibilityChange() {
+    if (!document.hidden) refreshInbox();
+}
+
+// "Po shkruan…" (task #344) — vetëm WhatsApp (OTA-t s'e japin fare sinjalin,
+// ndaj s'kanë kurrë flicker). Ngjarje kalimtare pa DB, e mbajtur PËR BISEDË
+// (dy mysafirë që shkruajnë njëkohësisht s'e prishin njëri-tjetrin — gjetje
+// Codex #449): zhduket vetiu 4s pas ngjarjes së fundit; 'paused' dhe mesazhi
+// i mbërritur i asaj bisede e fshijnë menjëherë.
+const typingByThread = ref({}); // threadId → 'composing' | 'recording'
+const typingTimers = new Map(); // threadId → timeout (jo-reaktive)
+
+function clearTypingFor(threadId) {
+    clearTimeout(typingTimers.get(threadId));
+    typingTimers.delete(threadId);
+    if (threadId in typingByThread.value) {
+        const next = { ...typingByThread.value };
+        delete next[threadId];
+        typingByThread.value = next;
+    }
+}
+
+function onGuestTyping(e) {
+    if (e.state === 'paused') return clearTypingFor(e.thread_id);
+    typingByThread.value = { ...typingByThread.value, [e.thread_id]: e.state };
+    clearTimeout(typingTimers.get(e.thread_id));
+    typingTimers.set(e.thread_id, setTimeout(() => clearTypingFor(e.thread_id), 4000));
+}
+
+onMounted(() => {
+    if (rtTenantId) {
+        getEcho()?.private(rtChannelName)
+            .listen('.message.received', (e) => {
+                clearTypingFor(e.thread_id);
+                refreshInbox();
+            })
+            .listen('.guest.typing', onGuestTyping);
+    }
+    rtFallbackTimer = setInterval(() => {
+        if (!echoConnected()) refreshInbox();
+    }, 20000);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+});
+
+onBeforeUnmount(() => {
+    clearInterval(rtFallbackTimer);
+    typingTimers.forEach((t) => clearTimeout(t));
+    typingTimers.clear();
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    if (rtTenantId) getEcho()?.leave(`private-${rtChannelName}`);
+});
 
 // Sound alert on/off (read by AppLayout's poll via localStorage).
 const soundMuted = ref(typeof window !== 'undefined' && localStorage.getItem('msgSoundMuted') === '1');
@@ -32,9 +132,14 @@ function togglePanel() {
 
 // The page is a fixed frame; only the chat scrolls — so jump to the latest
 // message whenever a thread opens or a new message lands.
+const pendingReplies = ref([]); // { localId, threadId, body, sent_at, state: 'sending'|'failed' } — task #347
+let replySeq = 0;
+
 const chatBox = ref(null);
 watch(
-    () => [props.selected?.id, props.selected?.messages?.length],
+    // Edhe rreshtat optimistë (task #347) e zbresin scroll-in — mesazhi i sapo
+    // shtypur duhet parë në çast, jo pas kthimit të serverit.
+    () => [props.selected?.id, props.selected?.messages?.length, pendingReplies.value.length],
     () => {
         if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
     },
@@ -47,6 +152,7 @@ const CHANNELS = {
     airbnb: { label: translate('admin.generated.k_a52540094dea'), badge: 'bg-[#fdeded] text-[#e0565b]', grad: 'linear-gradient(145deg,#ec7a7e,#e0565b)' },
     expedia: { label: translate('admin.generated.k_9ccffb2c9d20'), badge: 'bg-[#f9f1da] text-[#a9790a]', grad: 'linear-gradient(145deg,#caa031,#a9790a)' },
     agoda: { label: translate('admin.generated.k_d10d71d623eb'), badge: 'bg-neutral-100 text-neutral-600', grad: 'linear-gradient(145deg,#7c8b85,#556059)' },
+    whatsapp: { label: 'WhatsApp', badge: 'bg-[#e7f8ef] text-[#128c4b]', grad: 'linear-gradient(145deg,#3ddc7a,#128c4b)' },
 };
 function chan(c) {
     return CHANNELS[c] || { label: c || 'OTA', badge: 'bg-neutral-100 text-neutral-600', grad: 'linear-gradient(145deg,#7c8b85,#556059)' };
@@ -145,7 +251,15 @@ function money(v) {
 const messageRows = computed(() => {
     const rows = [];
     let last = null;
-    for (const m of props.selected?.messages || []) {
+    // Rreshtat optimistë (task #347) hyjnë pas mesazheve reale të bisedës së
+    // hapur — ndarësi i ditës del nga i njëjti tur, pa logjikë të dyfishtë.
+    const pending = pendingReplies.value
+        .filter((p) => p.threadId === props.selected?.id)
+        .map((p) => ({
+            id: 'p' + p.localId, sender: 'host', body: p.body, sent_at: p.sent_at,
+            pending: p.state === 'sending', failed: p.state === 'failed', local: p,
+        }));
+    for (const m of [...(props.selected?.messages || []), ...pending]) {
         const day = m.sent_at ? new Date(m.sent_at).toDateString() : '';
         if (day !== last) { rows.push({ sep: dayLabel(m.sent_at), key: 's' + m.id }); last = day; }
         rows.push({ ...m, key: 'm' + m.id });
@@ -160,13 +274,86 @@ function openThread(id) {
 function backToList() {
     mobileChatOpen.value = false;
 }
-function sendReply() {
-    if (!props.selected || !replyForm.body.trim()) return;
-    replyForm.post(route('messages.reply', props.selected.id), {
+// Dërgim OPTIMIST (task #347, raport i Marjusit): mesazhi futet në bisedë NË
+// ÇAST dhe kutia zbrazet — rrugëtimi server → urë → WhatsApp (~0.5s) vazhdon
+// në sfond. Kur POST-i mbaron pa gabim, rreshti lokal hiqet (props-et e freskëta
+// e sjellin realin — zëvendësim pa dublim); dështimi (flash.error nga ura/
+// Channex ose gabim validimi) e shënon të dështuar dhe teksti RIKTHEHET me
+// "Riprovo" — kurrë humbje e heshtur e asaj që shkroi operatori.
+// Dërgimet SERIALIZOHEN (gjetje Codex #450): dy router.post paralele — i dyti
+// ANULON të parin në Inertia, dhe anulimi s'thërret as onSuccess as onError.
+// Radha mban një vizitë në fluturim; anulimet e mbetura (ndërrim bisede) i
+// zgjidh pajtuesi më poshtë, jo callback-et.
+const sendQueue = [];
+let sendBusy = false;
+
+function markFailed(localId) {
+    const row = pendingReplies.value.find((r) => r.localId === localId);
+    if (row && row.state === 'sending') row.state = 'failed';
+}
+
+function drainSendQueue() {
+    if (sendBusy || !sendQueue.length) return;
+    sendBusy = true;
+    const { localId, threadId, body } = sendQueue.shift();
+
+    router.post(route('messages.reply', threadId), { body }, {
         preserveScroll: true,
-        onSuccess: () => replyForm.reset('body'),
+        onSuccess: () => {
+            // Ura/Channex offline kthehet si redirect me flash.error (jo si
+            // gabim validimi) — mos e trajto kurrë si të dërguar.
+            if (usePage().props.flash?.error) return markFailed(localId);
+            pendingReplies.value = pendingReplies.value.filter((r) => r.localId !== localId);
+        },
+        onError: () => markFailed(localId),
+        // Anulim (u nis vizitë tjetër): fati i panjohur — NUK shënohet dështim
+        // këtu; pajtuesi e heq kur props-et sjellin binjakun real, ose kujdestari
+        // 20s e shënon të dështuar që operatori të ketë gjithmonë "Riprovo".
+        onCancel: () => { sendBusy = false; drainSendQueue(); },
+        onFinish: () => { sendBusy = false; drainSendQueue(); },
     });
 }
+
+function dispatchReply(body) {
+    const threadId = props.selected.id;
+    const localId = ++replySeq;
+    pendingReplies.value = [...pendingReplies.value, {
+        localId, threadId, body, sent_at: new Date().toISOString(), state: 'sending',
+    }];
+    setTimeout(() => markFailed(localId), 20000); // kujdestari kundër "sending" pafund
+    sendQueue.push({ localId, threadId, body });
+    drainSendQueue();
+}
+
+function sendReply() {
+    if (!props.selected || !replyForm.body.trim()) return;
+    const body = replyForm.body;
+    replyForm.reset('body');
+    dispatchReply(body);
+}
+
+// "Riprovo" RIDËRGON direkt — s'e prek kurrë kutinë, se operatori mund të ketë
+// nisur tashmë një draft të ri aty (gjetje Codex #450).
+function retryReply(local) {
+    pendingReplies.value = pendingReplies.value.filter((r) => r.localId !== local.localId);
+    dispatchReply(local.body);
+}
+
+// PAJTUESI: sapo props-et e freskëta sjellin një mesazh real hosti me të njëjtin
+// tekst, rreshti optimist bie — edhe kur vizita u ANULUA pasi serveri e kishte
+// kryer (rasti "kopja e vjetruar ngjitur me realen", gjetje Codex #450). Çdo
+// rresht real "konsumohet" vetëm një herë, që dy "Ok" të njëpasnjëshme të mos
+// fshihen me një binjak të vetëm.
+watch(() => props.selected?.messages, (msgs) => {
+    if (!msgs?.length || !pendingReplies.value.length) return;
+    const claimed = new Set();
+    pendingReplies.value = pendingReplies.value.filter((p) => {
+        if (p.threadId !== props.selected?.id) return true;
+        const twin = msgs.find((m) => m.sender === 'host' && m.body === p.body && !claimed.has(m.id));
+        if (twin) claimed.add(twin.id);
+        return !twin;
+    });
+});
 function statusLabel(s) {
     return { confirmed: translate('admin.generated.k_fbcc078dd3d9'), checked_in: translate('admin.generated.k_f6f991a4a716'), checked_out: 'Larguar', pending: translate('admin.generated.k_11b738a1d1e0'), cancelled: 'Anuluar' }[s] || s;
 }
@@ -262,6 +449,7 @@ function statusLabel(s) {
                                 <p class="truncate text-[13px] font-bold tracking-tight text-neutral-900">{{ selected.guest_name || $t('admin.generated.k_769ec202ccd2') }}</p>
                                 <p class="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-400">
                                     <span class="rounded px-1.5 py-0.5 text-[9.5px] font-bold" :class="chan(selected.channel).badge">{{ chan(selected.channel).label }}</span>
+                                    <span v-if="typingByThread[selected.id]" class="animate-pulse font-semibold text-emerald-600">{{ typingByThread[selected.id] === 'recording' ? $t('messagesRt.recording') : $t('messagesRt.typing') }}</span>
                                     <span v-if="selected.reservation">· {{ selected.reservation.ref }}</span>
                                     <span v-if="selected.status === 'closed'" class="rounded bg-neutral-200 px-1.5 py-0.5 text-[9.5px] font-bold text-neutral-600">{{ $t('admin.generated.k_3e102da76e23') }}</span>
                                 </p>
@@ -291,11 +479,19 @@ function statusLabel(s) {
                                 </div>
                                 <div v-else class="flex" :class="row.sender === 'host' ? 'justify-end' : 'justify-start'">
                                     <div class="max-w-[78%] rounded-2xl px-3 py-2 text-[13px] leading-relaxed"
-                                        :class="row.sender === 'host' ? 'rounded-br-md bg-[#15855c] text-white shadow-[0_4px_12px_-4px_rgba(21,133,92,0.5)]' : 'rounded-bl-md border border-neutral-200 bg-white text-neutral-800'">
+                                        :class="[row.sender === 'host' ? 'rounded-br-md bg-[#15855c] text-white shadow-[0_4px_12px_-4px_rgba(21,133,92,0.5)]' : 'rounded-bl-md border border-neutral-200 bg-white text-neutral-800', row.pending ? 'opacity-70' : '', row.failed ? '!bg-rose-600' : '']">
                                         <p class="whitespace-pre-wrap break-words">{{ row.body }}</p>
                                         <p class="mt-1 flex items-center gap-1 text-[9.5px]" :class="row.sender === 'host' ? 'justify-end text-emerald-100' : 'text-neutral-400'">
-                                            {{ clock(row.sent_at) }}
-                                            <svg v-if="row.sender === 'host'" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.2a.75.75 0 01.1 1.05l-8 10.5a.75.75 0 01-1.13.07l-4.5-4.5a.75.75 0 011.06-1.06l3.9 3.9 7.48-9.82a.75.75 0 011.05-.14z" clip-rule="evenodd" /></svg>
+                                            <span v-if="row.sent_by_ai" class="font-bold">✨ Lora AI ·</span>
+                                            <template v-if="row.failed">
+                                                <span class="font-bold text-white">{{ $t('messagesRt.failed') }}</span>
+                                                <button type="button" @click="retryReply(row.local)" class="rounded bg-white/20 px-1.5 py-0.5 font-bold text-white transition hover:bg-white/30">{{ $t('messagesRt.retry') }}</button>
+                                            </template>
+                                            <template v-else>
+                                                {{ clock(row.sent_at) }}
+                                                <svg v-if="row.pending" class="h-3 w-3 animate-spin" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="7" class="opacity-25" /><path d="M10 3a7 7 0 017 7" stroke-linecap="round" /></svg>
+                                                <svg v-else-if="row.sender === 'host'" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.7 5.2a.75.75 0 01.1 1.05l-8 10.5a.75.75 0 01-1.13.07l-4.5-4.5a.75.75 0 011.06-1.06l3.9 3.9 7.48-9.82a.75.75 0 011.05-.14z" clip-rule="evenodd" /></svg>
+                                            </template>
                                         </p>
                                     </div>
                                 </div>
@@ -308,6 +504,40 @@ function statusLabel(s) {
                                 class="rounded-lg bg-[#15855c] px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-[#0c5a3e]">{{ $t('admin.generated.k_08ec770c051b') }}</button>
                         </div>
                         <template v-else-if="selected.can_reply">
+                            <!-- Cikli i mësimit: stafi u përgjigj vetë — ruaje çiftin te FAQ -->
+                            <div v-if="selected?.faq_suggestion && canManageFaqs" class="border-t border-[#dcd2f2] bg-[#f7f4fd] px-3 py-2.5">
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-[#6d4fc1]">✨ {{ $t('messagesAi.learnTitle') }}</p>
+                                <p class="mt-1 text-[12.5px] leading-relaxed text-neutral-700">
+                                    <b>{{ selected.faq_suggestion.question }}</b>
+                                    <span class="mx-1 text-neutral-400">→</span>{{ selected.faq_suggestion.suggested_answer }}
+                                </p>
+                                <p class="mt-0.5 text-[11px] text-neutral-500">{{ $t('messagesAi.learnBody') }}</p>
+                                <div class="mt-2 flex gap-2">
+                                    <button type="button" :disabled="faqSuggestProcessing"
+                                        class="rounded-lg bg-[#6d4fc1] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#59409e] disabled:opacity-50"
+                                        @click="saveFaqSuggestion">
+                                        {{ $t('messagesAi.learnSave') }}
+                                    </button>
+                                    <button type="button" class="rounded-lg border border-neutral-200 px-3 py-1.5 text-[11px] font-semibold text-neutral-600 hover:bg-neutral-50" @click="dismissFaqSuggestion">
+                                        {{ $t('messagesAi.learnDismiss') }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Drafti i Lora AI — kur s'ishte e sigurt të dërgonte vetë -->
+                            <div v-if="selected?.ai_suggestion && !aiDraftDismissed" class="border-t border-[#dcd2f2] bg-[#f7f4fd] px-3 py-2.5">
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-[#6d4fc1]">✨ {{ $t('messagesAi.suggestionTitle') }}</p>
+                                <p class="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-neutral-700">{{ selected.ai_suggestion }}</p>
+                                <div class="mt-2 flex gap-2">
+                                    <button type="button" class="rounded-lg bg-[#6d4fc1] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#59409e]" @click="useAiSuggestion">
+                                        {{ $t('messagesAi.useSuggestion') }}
+                                    </button>
+                                    <button type="button" class="rounded-lg border border-neutral-200 px-3 py-1.5 text-[11px] font-semibold text-neutral-600 hover:bg-neutral-50" @click="aiDraftDismissed = true">
+                                        {{ $t('messagesAi.dismiss') }}
+                                    </button>
+                                </div>
+                            </div>
+
                             <form class="relative flex items-end gap-2 border-t border-neutral-200 bg-white p-2.5" @submit.prevent="sendReply">
                                 <!-- Quick-reply picker (WhatsApp-style, above the composer) -->
                                 <div v-if="quickOpen" class="fixed inset-0 z-10" @click="quickOpen = false" />

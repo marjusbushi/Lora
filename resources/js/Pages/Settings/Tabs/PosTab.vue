@@ -1,6 +1,6 @@
 <script setup>
 import { router, useForm } from '@inertiajs/vue3';
-import { Plus, UserRoundCheck } from 'lucide-vue-next';
+import { Plus, Store, UserRoundCheck } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import { translate } from '@/i18n';
 import FormGroup from '@/Components/UI/FormGroup.vue';
@@ -14,8 +14,83 @@ const props = defineProps({
     settings: { type: Object, default: () => ({}) },
     staff: { type: Array, default: () => [] },
     accountMode: { type: String, default: 'shared' },
+    outlets: { type: Array, default: () => [] },
+    outletLimit: { type: Number, default: 1 },
+    warehouses: { type: Array, default: () => [] },
     toasts: Object,
 });
+
+// Limiti i abonimit (pasqyrim i guard-it server-side te storePosOutlet).
+const outletLimitReached = computed(() => props.outlets.length >= props.outletLimit);
+
+// --- Sales outlets (Restorant / Bar / Beach Bar) ---
+const showOutletModal = ref(false);
+const editingOutlet = ref(null);
+const outletForm = useForm({ name: '', warehouse_id: null, is_active: true });
+
+function openCreateOutlet() {
+    editingOutlet.value = null;
+    outletForm.reset();
+    outletForm.clearErrors();
+    showOutletModal.value = true;
+}
+
+function openEditOutlet(outlet) {
+    editingOutlet.value = outlet;
+    Object.assign(outletForm, {
+        name: outlet.name,
+        warehouse_id: outlet.warehouse_id || null,
+        is_active: Boolean(outlet.is_active),
+    });
+    outletForm.clearErrors();
+    showOutletModal.value = true;
+}
+
+function submitOutlet() {
+    const options = {
+        preserveScroll: true,
+        onSuccess: () => { showOutletModal.value = false; props.toasts?.success(translate('settingsPos.outletSaved')); },
+    };
+    if (editingOutlet.value) outletForm.put(route('settings.pos.outlets.update', editingOutlet.value.id), options);
+    else outletForm.post(route('settings.pos.outlets.store'), options);
+}
+
+// A refused delete comes back as a flash error (the outlet had orders and was
+// deactivated instead) — surface the server's explanation, not a false "deleted".
+function deleteOutlet(outlet) {
+    if (!confirm(translate('settingsPos.outletDeleteConfirm', { name: outlet.name }))) return;
+    router.delete(route('settings.pos.outlets.destroy', outlet.id), {
+        preserveScroll: true,
+        onSuccess: (page) => {
+            const flashError = page?.props?.flash?.error;
+            if (flashError) props.toasts?.error(flashError);
+            else props.toasts?.success(page?.props?.flash?.success || translate('settingsPos.outletDeleted'));
+        },
+    });
+}
+
+// An outlet with recorded orders can never be deleted (history must stay
+// correct) — the honest action is deactivation, offered as such. The server
+// still refuses while open tickets exist.
+function deactivateOutlet(outlet) {
+    if (!confirm(translate('settingsPos.outletDeactivateConfirm', { name: outlet.name }))) return;
+    router.put(route('settings.pos.outlets.update', outlet.id), {
+        name: outlet.name,
+        warehouse_id: outlet.warehouse_id,
+        is_active: false,
+    }, {
+        preserveScroll: true,
+        onSuccess: (page) => {
+            const flashError = page?.props?.flash?.error;
+            if (flashError) props.toasts?.error(flashError);
+            else props.toasts?.success(translate('settingsPos.outletDeactivated'));
+        },
+    });
+}
+
+function outletWarehouseName(outlet) {
+    return props.warehouses.find((warehouse) => warehouse.id === outlet.warehouse_id)?.name || null;
+}
 
 // Where POS money lands — saved immediately, independent of the main form.
 const accountMode = ref(props.accountMode);
@@ -112,6 +187,57 @@ function digitsOnly(event) {
             </section>
 
             <section class="border-t border-neutral-100 pt-5">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h4 class="text-label text-primary-900">{{ $t('settingsPos.outletsTitle') }}</h4>
+                        <p class="mt-1 text-small text-neutral-500">{{ $t('settingsPos.outletsHint') }}</p>
+                        <p class="mt-1 text-small font-medium" :class="outletLimitReached ? 'text-amber-700' : 'text-neutral-500'">
+                            {{ $t('settingsPos.outletSubscription', { count: outlets.length, limit: outletLimit }) }}
+                            <template v-if="outletLimitReached"> · {{ $t('settingsPos.outletLimitReached') }}</template>
+                        </p>
+                    </div>
+                    <Button v-if="outlets.length" type="button" size="sm" variant="outline" :disabled="outletLimitReached" @click="openCreateOutlet">
+                        <Plus class="h-4 w-4" /> {{ $t('settingsPos.addOutlet') }}
+                    </Button>
+                </div>
+
+                <div v-if="outlets.length" class="mt-3 divide-y divide-neutral-100 rounded-xl border border-neutral-200">
+                    <div v-for="outlet in outlets" :key="outlet.id" class="flex flex-wrap items-center justify-between gap-3 p-4">
+                        <div class="flex items-center gap-3">
+                            <span class="grid h-9 w-9 place-items-center rounded-lg bg-accent-50 text-accent-700">
+                                <Store class="h-4.5 w-4.5" />
+                            </span>
+                            <div>
+                                <strong class="block text-body-sm text-primary-900">{{ outlet.name }}</strong>
+                                <span class="text-tiny text-neutral-500">
+                                    {{ outletWarehouseName(outlet)
+                                        ? $t('settingsPos.outletWarehouseLine', { name: outletWarehouseName(outlet) })
+                                        : $t('settingsPos.outletWarehouseAutoLine') }}
+                                </span>
+                            </div>
+                            <span
+                                class="rounded-full px-2.5 py-0.5 text-tiny font-semibold"
+                                :class="outlet.is_active ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500'"
+                            >
+                                {{ outlet.is_active ? $t('settingsPos.outletActive') : $t('settingsPos.outletInactive') }}
+                            </span>
+                        </div>
+                        <div class="flex gap-1.5">
+                            <Button type="button" size="sm" variant="ghost" @click="openEditOutlet(outlet)">{{ $t('settingsPos.outletEdit') }}</Button>
+                            <Button v-if="!outlet.orders_count" type="button" size="sm" variant="ghost" class="text-error-600" @click="deleteOutlet(outlet)">{{ $t('settingsPos.outletDelete') }}</Button>
+                            <Button v-else-if="outlet.is_active" type="button" size="sm" variant="ghost" class="text-warning-700" @click="deactivateOutlet(outlet)">{{ $t('settingsPos.outletDeactivate') }}</Button>
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="mt-3 rounded-xl border border-dashed border-neutral-200 bg-neutral-50 px-4 py-6 text-center">
+                    <p class="text-body-sm text-neutral-500">{{ $t('settingsPos.outletsEmpty') }}</p>
+                    <Button type="button" size="sm" variant="primary" class="mt-3" @click="openCreateOutlet">
+                        <Plus class="h-4 w-4" /> {{ $t('settingsPos.addFirstOutlet') }}
+                    </Button>
+                </div>
+            </section>
+
+            <section class="border-t border-neutral-100 pt-5">
                 <h4 class="text-label text-primary-900">{{ $t('settingsPos.moneyTitle') }}</h4>
                 <p class="mt-1 text-small text-neutral-500">{{ $t('settingsPos.moneyHint') }}</p>
                 <div class="mt-3 grid gap-3 md:grid-cols-3">
@@ -184,6 +310,26 @@ function digitsOnly(event) {
             </div>
         </form>
     </Card>
+
+    <Modal :show="showOutletModal" :title="editingOutlet ? `${$t('settingsPos.outletEditTitle')} · ${editingOutlet.name}` : $t('settingsPos.addOutlet')" max-width="sm" @close="showOutletModal = false">
+        <form class="space-y-4" @submit.prevent="submitOutlet">
+            <FormGroup :label="$t('settingsPos.outletName')" html-for="outlet-name" :error="outletForm.errors.name" required>
+                <TextInput id="outlet-name" v-model="outletForm.name" :placeholder="$t('settingsPos.outletNamePlaceholder')" :error="outletForm.errors.name" autofocus />
+            </FormGroup>
+            <FormGroup :label="$t('settingsPos.outletWarehouse')" html-for="outlet-warehouse" :error="outletForm.errors.warehouse_id">
+                <select id="outlet-warehouse" v-model="outletForm.warehouse_id" class="w-full rounded-lg border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500">
+                    <option :value="null">{{ $t('settingsPos.outletWarehouseAuto') }}</option>
+                    <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
+                </select>
+                <p class="mt-1 text-tiny text-neutral-400">{{ $t('settingsPos.outletWarehouseHint') }}</p>
+            </FormGroup>
+            <Checkbox v-if="editingOutlet" v-model="outletForm.is_active" :label="$t('settingsPos.outletActiveLabel')" />
+        </form>
+        <template #footer>
+            <Button type="button" variant="outline" @click="showOutletModal = false">{{ $t('settingsPos.cancel') }}</Button>
+            <Button type="button" variant="primary" :loading="outletForm.processing" @click="submitOutlet">{{ editingOutlet ? $t('settingsPos.outletSave') : $t('settingsPos.outletCreate') }}</Button>
+        </template>
+    </Modal>
 
     <Modal :show="showCreateModal" :title="$t('settingsPos.addWaiter')" max-width="md" @close="closeCreateModal">
         <form class="space-y-4" @submit.prevent="createSalesperson">

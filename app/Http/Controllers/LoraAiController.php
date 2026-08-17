@@ -59,6 +59,10 @@ class LoraAiController extends Controller
                 'reservations_enabled' => $this->boolSetting('reservations_enabled', true),
                 'messages_enabled' => $this->boolSetting('messages_enabled', true),
                 'guest_reply_enabled' => $this->boolSetting('guest_reply_enabled', true),
+                'guest_auto_reply_enabled' => $this->boolSetting('guest_auto_reply_enabled', true),
+                // WhatsApp: default FIKUR — rruga QR-lite mban risk bllokimi nga
+                // Meta, roboti aty ndizet vetëm me dorën e pronarit (task #337).
+                'whatsapp_auto_reply_enabled' => $this->boolSetting('whatsapp_auto_reply_enabled', false),
                 'pricing_enabled' => $this->boolSetting('pricing_enabled', true),
                 'ai_price_recommendations_enabled' => $this->boolSetting('ai_price_recommendations_enabled', true),
                 'price_apply_enabled' => $this->boolSetting('price_apply_enabled', false),
@@ -91,6 +95,8 @@ class LoraAiController extends Controller
             'reservations_enabled' => ['required', 'boolean'],
             'messages_enabled' => ['required', 'boolean'],
             'guest_reply_enabled' => ['required', 'boolean'],
+            'guest_auto_reply_enabled' => ['sometimes', 'boolean'],
+            'whatsapp_auto_reply_enabled' => ['sometimes', 'boolean'],
             'pricing_enabled' => ['required', 'boolean'],
             'ai_price_recommendations_enabled' => ['sometimes', 'boolean'],
             'price_apply_enabled' => ['required', 'boolean'],

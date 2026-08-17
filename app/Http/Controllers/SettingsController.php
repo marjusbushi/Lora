@@ -13,6 +13,7 @@ use App\Models\InventoryItem;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\PosOrderItem;
+use App\Models\PosOutlet;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomType;
@@ -121,13 +122,33 @@ class SettingsController extends Controller
 
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
+            // FAQ e Lora AI Chat (skeda 'Pyetje & Përgjigje', moduli messages).
+            'faqs' => \App\Models\HotelFaq::query()->ordered()->get(['id', 'question', 'answer', 'is_active', 'sort_order']),
+            // Cikli i mësimit: pyetjet që Lora s'i dinte, në pritje të pronarit.
+            'faqSuggestions' => \App\Models\HotelFaqSuggestion::query()->pending()
+                ->latest('id')->limit(20)->get(['id', 'question', 'suggested_answer']),
+            // WhatsApp QR-lite: gjendja e fundit e raportuar + a ekziston ura.
+            'whatsapp' => [
+                'connection' => \App\Models\WhatsAppConnection::query()->first(['id', 'status', 'phone_number', 'last_event_at']),
+                'bridge_configured' => app(\App\Services\WhatsAppBridgeClient::class)->configured(),
+            ],
             'checklistDefaults' => CleaningTask::DEFAULT_CHECKLISTS,
             'roomTypes' => RoomType::withCount('rooms')->with('images')->orderBy('name')->get(),
             'menuCategories' => MenuCategory::with([
                 'items' => fn ($q) => $q->with('inventoryComponents')->orderBy('name'),
+                'outlets:pos_outlets.id',
             ])
                 ->orderBy('sort_order')
-                ->get(),
+                ->get()
+                ->each(function (MenuCategory $category) {
+                    $category->setAttribute('outlet_ids', $category->outlets->pluck('id')->values());
+                    $category->unsetRelation('outlets');
+                }),
+            'posOutlets' => PosOutlet::ordered()->withCount('orders')
+                ->get(['id', 'name', 'warehouse_id', 'is_active', 'sort_order']),
+            // Sa pika mbulon abonimi (quantity e entitlement-it 'pos') — UI e pasqyron;
+            // kufiri real zbatohet server-side te storePosOutlet.
+            'posOutletLimit' => $this->posOutletLimit(),
             'inventoryCategoryTree' => InventoryCategory::flatTree(),
             'inventoryItems' => InventoryItem::where('is_active', true)->where('type', '!=', 'service')
                 ->orderBy('name')->get(['id', 'name', 'sku', 'unit']),
@@ -140,6 +161,7 @@ class SettingsController extends Controller
             'integrations' => $integrationCatalog->forSettings($settings),
             'posStaff' => $posSalespeople->staff(),
             'posAccountMode' => FinanceLedger::posAccountMode(),
+            'beachAccountMode' => FinanceLedger::beachAccountMode(),
         ]);
     }
 
@@ -232,6 +254,8 @@ class SettingsController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'address' => ['nullable', 'string', 'max:500'],
             'phone' => ['nullable', 'string', 'max:30'],
+            // Butoni WhatsApp në webin publik (bosh = butoni s'shfaqet).
+            'whatsapp_number' => ['nullable', 'string', 'max:30', 'regex:/^[+\d][\d\s\-()]*$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'timezone' => ['required', 'string', 'max:50'],
             'currency' => ['required', 'string', Rule::in(config('lora.tenant_currencies'))],
@@ -275,6 +299,11 @@ class SettingsController extends Controller
             ] as $key) {
                 Setting::set("hotel.{$key}", $request->input($key));
             }
+
+            // Numri WhatsApp normalizohet në ruajtje: '00…' → '+…' (wa.me e
+            // refuzon prefiksin 00 — task #340); fronti ka edhe rrjetën e vet.
+            $whatsapp = trim((string) $request->input('whatsapp_number'));
+            Setting::set('hotel.whatsapp_number', $whatsapp === '' ? null : preg_replace('/^00/', '+', $whatsapp));
 
             Setting::set('hotel.currency', $currency);
             Setting::set('pricing.currency', $pricingCurrency);
@@ -658,6 +687,30 @@ class SettingsController extends Controller
         return back()->with('success', 'Konfigurimet e housekeeping u ruajten.');
     }
 
+    // --- Plazhi (Beach) ---
+    public function updateBeach(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'booking_window_days' => ['required', 'integer', 'min:1', 'max:365'],
+            // Sezoni është opsional: pa data = plazhi i hapur gjithë vitin.
+            'season_start' => ['nullable', 'date'],
+            'season_end' => ['nullable', 'date', 'required_with:season_start', 'after_or_equal:season_start'],
+            // cash = vetëm në plazh; online = vetëm me kartë online; both = klienti zgjedh.
+            'payment_mode' => ['required', 'in:cash,online,both'],
+            // Pika POS ku rrugëtohen porositë nga QR i çadrës (V2) — bosh = QR
+            // çon vetëm te rezervimi, si në V1.
+            'pos_outlet_id' => ['nullable', 'integer', TenantRule::exists('pos_outlets')->where('is_active', true)],
+        ]);
+
+        Setting::set('beach.booking_window_days', (int) $data['booking_window_days'], 'number');
+        Setting::set('beach.season_start', (string) ($data['season_start'] ?? ''), 'text');
+        Setting::set('beach.season_end', (string) ($data['season_end'] ?? ''), 'text');
+        Setting::set('beach.payment_mode', (string) $data['payment_mode'], 'text');
+        Setting::set('beach.pos_outlet_id', (int) ($data['pos_outlet_id'] ?? 0), 'number');
+
+        return back()->with('success', 'Cilësimet e plazhit u ruajtën.');
+    }
+
     // --- AI (Gemini key for the Pricing Assistant) ---
     public function updateAi(Request $request): RedirectResponse
     {
@@ -885,6 +938,114 @@ class SettingsController extends Controller
         return back()->with('success', 'Pajisja u fshi nga lista.');
     }
 
+    // --- POS Outlets (pikat e shitjes: Restorant / Bar / Beach Bar) ---
+
+    /** Sa pika shitjeje mbulon abonimi — quantity e entitlement-it 'pos' (min 1). */
+    private function posOutletLimit(): int
+    {
+        $tenant = app(\App\Tenancy\TenantContext::class)->tenant();
+
+        return max(1, (int) ($tenant?->moduleEntitlements()
+            ->where('module_code', 'pos')
+            ->value('quantity') ?? 1));
+    }
+
+    public function storePosOutlet(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:80', TenantRule::unique('pos_outlets', 'name')],
+            'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
+        ]);
+
+        // Limiti i abonimit: hoteli hap vetëm aq pika sa ka paguar. Kufiri zbatohet
+        // KËTU (server-side) — butoni i fikur në UI është vetëm pasqyrim. Kyçja mbi
+        // rreshtin e tenant-it e bën numërim+krijim atomik: dy kërkesa të njëkohshme
+        // me një vend të lirë s'e kalojnë dot të dyja tavanin.
+        DB::transaction(function () use ($data) {
+            // KUJDES: where('id', …) — whereKey te query-builder-i bazë bëhet WHERE `key`
+            // (kolonë inekzistente → 500 në MySQL; sqlite e fsheh si string-literal).
+            DB::table('tenants')
+                ->where('id', app(\App\Tenancy\TenantContext::class)->tenant()->id)
+                ->lockForUpdate()
+                ->first();
+
+            $limit = $this->posOutletLimit();
+            if (PosOutlet::count() >= $limit) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'name' => "Abonimi juaj mbulon {$limit} pika shitjeje — për një pikë të re kontaktoni Lora PMS.",
+                ]);
+            }
+
+            PosOutlet::create([
+                'name' => $data['name'],
+                'warehouse_id' => $data['warehouse_id'] ?? null,
+                'sort_order' => ((int) PosOutlet::max('sort_order')) + 1,
+            ]);
+        });
+
+        return back()->with('success', "Pika \"{$data['name']}\" u shtua.");
+    }
+
+    public function updatePosOutlet(Request $request, PosOutlet $posOutlet): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:80', TenantRule::unique('pos_outlets', 'name')->ignore($posOutlet->id)],
+            'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        // Deactivating with open tickets would strand them: the outlet's tables
+        // leave every POS view, so those accounts could never be billed.
+        $deactivating = $posOutlet->is_active && ($data['is_active'] ?? true) == false;
+        if ($deactivating && $posOutlet->orders()->where('status', 'open')->exists()) {
+            return back()->with('error', "Pika \"{$posOutlet->name}\" ka porosi të hapura — mbylli ose anuloji ato para se ta çaktivizosh.");
+        }
+
+        $posOutlet->update([
+            'name' => $data['name'],
+            'warehouse_id' => $data['warehouse_id'] ?? null,
+            'is_active' => $data['is_active'] ?? $posOutlet->is_active,
+        ]);
+
+        return back()->with('success', 'Pika u përditësua.');
+    }
+
+    /** Historical orders keep their outlet stamp — a used outlet deactivates instead of deleting. */
+    public function destroyPosOutlet(PosOutlet $posOutlet): RedirectResponse
+    {
+        if ($posOutlet->orders()->exists()) {
+            if ($posOutlet->is_active && $posOutlet->orders()->where('status', 'open')->exists()) {
+                return back()->with('error', "Pika \"{$posOutlet->name}\" ka porosi të hapura — mbylli ose anuloji ato para se ta çaktivizosh.");
+            }
+            $posOutlet->update(['is_active' => false]);
+
+            return back()->with('error', "Pika \"{$posOutlet->name}\" ka porosi të regjistruara — u çaktivizua në vend të fshirjes, që raportet historike të mbeten të sakta.");
+        }
+
+        // Tell the admin what the delete quietly un-scopes: cascade removes the
+        // visibility rows (restricted categories go everywhere) and the tables
+        // become shared. Tables are detached EXPLICITLY before the delete —
+        // the composite same-tenant FK is RESTRICT (a composite SET NULL would
+        // try to null tenant_id too), so relying on the single-column
+        // nullOnDelete alone would make this delete fail on MySQL.
+        $affectedCategories = $posOutlet->menuCategories()->count();
+        $affectedTables = $posOutlet->tables()->count();
+        DB::transaction(function () use ($posOutlet) {
+            $posOutlet->tables()->update(['outlet_id' => null]);
+            $posOutlet->delete();
+        });
+
+        $message = 'Pika u fshi.';
+        if ($affectedCategories > 0) {
+            $message .= " {$affectedCategories} kategori që ishin të kufizuara te kjo pikë tani shfaqen në të gjitha pikat.";
+        }
+        if ($affectedTables > 0) {
+            $message .= " {$affectedTables} tavolina u bënë të përbashkëta (pa pikë).";
+        }
+
+        return back()->with('success', $message);
+    }
+
     // --- Menu Categories CRUD ---
     /**
      * Groups linked to the inventory tree keep their POS-only settings here
@@ -897,11 +1058,25 @@ class SettingsController extends Controller
             'name' => [$menuCategory->inventory_category_id ? 'nullable' : 'required', 'string', 'max:255', TenantRule::unique('menu_categories', 'name')->ignore($menuCategory->id)],
             'outlet' => ['nullable', 'in:bar,restaurant'],
             'warehouse_id' => ['nullable', TenantRule::exists('warehouses')->where('is_active', true)],
+            'outlet_ids' => ['nullable', 'array'],
+            'outlet_ids.*' => ['integer', TenantRule::exists('pos_outlets')],
         ]);
 
         if ($menuCategory->inventory_category_id) {
             unset($data['name']);
         }
+
+        // Visibility contract: no pivot rows = visible in EVERY outlet, so a
+        // full selection (or none) normalizes to an empty pivot — new outlets
+        // then see the category automatically.
+        if ($request->has('outlet_ids')) {
+            $ids = collect($data['outlet_ids'] ?? [])->unique()->values();
+            $menuCategory->outlets()->sync(
+                $ids->isEmpty() || $ids->count() >= PosOutlet::count() ? [] : $ids->all()
+            );
+        }
+        unset($data['outlet_ids']);
+
         $menuCategory->update($data);
 
         return back()->with('success', 'Kategoria u perditesua.');

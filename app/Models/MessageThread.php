@@ -7,8 +7,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class MessageThread extends TenantModel
 {
     protected $fillable = [
-        'channex_thread_id', 'channel', 'channex_booking_id', 'reservation_id',
+        'channex_thread_id', 'whatsapp_jid', 'channel', 'channex_booking_id', 'reservation_id',
         'guest_name', 'status', 'last_message_preview', 'last_message_at', 'unread_count',
+        'ai_suggestion', 'ai_suggested_at', 'ai_unanswered_question',
     ];
 
     protected function casts(): array
@@ -16,6 +17,7 @@ class MessageThread extends TenantModel
         return [
             'last_message_at' => 'datetime',
             'unread_count' => 'integer',
+            'ai_suggested_at' => 'datetime',
         ];
     }
 

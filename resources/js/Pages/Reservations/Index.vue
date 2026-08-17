@@ -18,6 +18,11 @@ import StayExtensionModal from '@/Components/Reservations/StayExtensionModal.vue
 import ReservationDetailsDrawer from './Components/ReservationDetailsDrawer.vue';
 import { channelOptions } from '@/channels';
 import { getIntlLocale, translate } from '@/i18n';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
+
+// Realtime (task #345): lista merr ndryshimet vetiu — vetëm props-et e të
+// dhënave, modalet/format e hapura mbeten të paprekura (gjendje lokale).
+useRealtimeReload('reservations', '.reservation.changed', ['reservations', 'guests', 'stats']);
 
 const props = defineProps({
     reservations: Object,
@@ -196,6 +201,13 @@ function canDepartEarly(reservation) {
 
     return earliestDeparture.toISOString().slice(0, 10) < contractualCheckOut;
 }
+function doConfirm(reservation) {
+    router.post(route('reservations.confirm', reservation.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => { closeDetails(false); toasts.value?.success(translate('reservationsIndex.toastConfirm', { name: reservation.guest?.name || '' })); },
+        onError: (errors) => toasts.value?.error(errors.confirm || translate('reservationsIndex.toastConfirmFailed')),
+    });
+}
 function doCheckIn(reservation) {
     router.post(route('reservations.check-in', reservation.id), {}, {
         preserveScroll: true,
@@ -355,7 +367,8 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                             <td class="px-5 py-3.5 text-right"><p class="font-semibold text-primary-900">{{ money(res.gross_amount, res.currency) }}</p><p class="text-small" :class="res.outstanding_amount > 0 ? 'text-warning-700' : 'text-success-700'">{{ res.outstanding_amount > 0 ? $t('reservationsIndex.outstandingRemaining', { amount: money(res.outstanding_amount, res.currency) }) : $t('reservationsIndex.paid') }}</p></td>
                             <td class="px-5 py-3.5 text-right" @click.stop>
                                 <div class="flex items-center justify-end gap-1.5">
-                                    <Button v-if="canUpdate && res.status === 'confirmed'" size="sm" variant="primary" @click="doCheckIn(res)">{{ $t('reservationsIndex.actionCheckIn') }}</Button>
+                                    <Button v-if="canUpdate && res.status === 'pending'" size="sm" variant="primary" @click="doConfirm(res)">{{ $t('reservationsIndex.actionConfirm') }}</Button>
+                                    <Button v-else-if="canUpdate && res.status === 'confirmed'" size="sm" variant="primary" @click="doCheckIn(res)">{{ $t('reservationsIndex.actionCheckIn') }}</Button>
                                     <Button v-else size="sm" variant="outline" @click="openDetails(res)"><Eye class="mr-1.5 h-4 w-4" />{{ $t('reservationsIndex.details') }}</Button>
                                     <ActionMenu>
                                         <Link :href="res.links.show" :class="menuItemClass"><Eye class="h-4 w-4 text-neutral-400" />{{ $t('reservationsIndex.openPage') }}</Link>
@@ -378,7 +391,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
             </div>
         </Card>
 
-        <ReservationDetailsDrawer :reservation="details" :can-update="canUpdate" :hotel-today="hotelToday" @close="closeDetails" @edit="openEdit" @check-in="doCheckIn" @check-out="doCheckOut" @early-departure="openEarlyDeparture" @stay-extension="openStayExtension" />
+        <ReservationDetailsDrawer :reservation="details" :can-update="canUpdate" :hotel-today="hotelToday" @close="closeDetails" @edit="openEdit" @confirm="doConfirm" @check-in="doCheckIn" @check-out="doCheckOut" @early-departure="openEarlyDeparture" @stay-extension="openStayExtension" />
         <ReservationCreateModal :show="showCreateModal" :rooms="rooms" :guests="guests" :channel-fees="channelFees" @close="closeCreateModal" @created="toasts?.success($t('reservationsIndex.toastCreated'))" />
         <ReservationEditModal :show="showEditModal" :reservation="selectedRes" :rooms="rooms" :guests="guests" :channel-fees="channelFees" @close="showEditModal = false" @updated="toasts?.success($t('reservationsIndex.toastUpdated'))" />
         <MoveRoomModal :show="showMoveModal" :reservation="moveRes" :rooms="rooms" @close="showMoveModal = false" @moved="toasts?.success($t('reservationsIndex.toastRoomMoved'))" />

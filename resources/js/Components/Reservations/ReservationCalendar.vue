@@ -63,9 +63,9 @@ const conflictingReservationIds = computed(() => new Set(activeConflicts.value.f
 const perms = usePage().props.auth.user?.permissions || [];
 const currencyCode = usePage().props.tenant?.currency || 'EUR';
 
-// Guest chat lives behind the Channel Manager module — without it there is
+// Guest chat lives behind the Messages module — without it there is
 // no Messages page to deep-link into, so the bar icon stays hidden.
-const canOpenGuestChat = (usePage().props.modules || {}).channel_manager === true;
+const canOpenGuestChat = (usePage().props.modules || {}).messages === true;
 
 function openGuestChat(reservation) {
     router.visit(route('messages.index', { thread: reservation.message_thread_id }));
@@ -496,6 +496,18 @@ function doCancel(res) {
     });
 }
 
+function doConfirm(res) {
+    if (props.demo) {
+        toasts.value?.success(translate('admin.calendarPreview.mockData'));
+        return;
+    }
+    router.post(route('reservations.confirm', res.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => { showDetailModal.value = false; toasts.value?.success(translate('reservationsIndex.toastConfirmShort')); },
+        onError: (errors) => toasts.value?.error(errors.confirm || translate('reservationsIndex.toastConfirmFailed')),
+    });
+}
+
 function doCheckIn(res) {
     if (props.demo) {
         toasts.value?.success(translate('admin.calendarPreview.mockData'));
@@ -820,6 +832,7 @@ function doCheckOut(res) {
                         </section>
 
                         <section v-if="canUpdate && ['pending', 'confirmed', 'checked_in'].includes(selectedReservation.status)" class="space-y-2 border-t border-neutral-200 pt-5">
+                            <Button v-if="selectedReservation.status === 'pending'" class="w-full justify-center" @click="doConfirm(selectedReservation)"><CalendarDays class="h-4 w-4" />{{ $t('reservationsIndex.actionConfirm') }}</Button>
                             <Button v-if="selectedReservation.status === 'confirmed'" class="w-full justify-center" @click="doCheckIn(selectedReservation)"><CalendarDays class="h-4 w-4" />{{ $t('admin.generated.k_cdcd4da54b15') }}</Button>
                             <Button v-if="selectedReservation.status === 'checked_in'" variant="secondary" class="w-full justify-center" @click="doCheckOut(selectedReservation)"><CalendarDays class="h-4 w-4" />{{ $t('admin.generated.k_21e6813ac89c') }}</Button>
                             <Button v-if="['pending','confirmed'].includes(selectedReservation.status)" variant="ghost" class="w-full justify-center text-error-600" @click="doCancel(selectedReservation)">{{ $t('admin.generated.k_1574ef95826c') }}</Button>

@@ -1,8 +1,11 @@
 <?php
 
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\BeachReservationController;
+use App\Http\Controllers\BeachSetupController;
 use App\Http\Controllers\ChannexController;
 use App\Http\Controllers\ChannexWebhookController;
+use App\Http\Controllers\WhatsAppController;
 use App\Http\Controllers\CleaningTaskController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceController;
@@ -12,6 +15,7 @@ use App\Http\Controllers\GuestMergeController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LoraAiController;
 use App\Http\Controllers\MaintenanceController;
+use App\Http\Controllers\HotelFaqController;
 use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OtaReconciliationController;
@@ -32,6 +36,7 @@ use App\Http\Controllers\SmartPricingController;
 use App\Http\Controllers\SuperAdmin\BillingInvoiceController as SuperAdminBillingInvoiceController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentAttemptController as SuperAdminBillingPaymentAttemptController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentController as SuperAdminBillingPaymentController;
+use App\Http\Controllers\SuperAdmin\CatalogController as SuperAdminCatalogController;
 use App\Http\Controllers\SuperAdmin\CurrencyController as SuperAdminCurrencyController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Http\Controllers\SuperAdmin\FatureAlOnboardingController as SuperAdminFatureAlOnboardingController;
@@ -42,6 +47,7 @@ use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantControll
 use App\Http\Controllers\TenantHandoffController;
 use App\Http\Controllers\TenantUserInvitationController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WebsiteBeachController;
 use App\Http\Controllers\WebsiteController;
 use App\Http\Middleware\AuthenticateSignedTenantInvitation;
 use App\Models\Setting;
@@ -55,7 +61,20 @@ use Inertia\Inertia;
 // subdomain goes to the back-office, and hotel domains keep their booking site.
 Route::get('/', function (Request $request) {
     if (in_array(strtolower($request->getHost()), config('lora.marketing_hosts', []), true)) {
-        return Inertia::render('Marketing/Home');
+        // Çmimet publike = pasqyrë e drejtpërdrejtë e katalogut real (config +
+        // override nga paneli Lora) — kurrë çmime të ngulitura (vendim 2026-08-16).
+        return Inertia::render('Marketing/Home', [
+            'catalog' => collect(\App\Services\ModuleCatalog::modules())->map(fn ($module) => [
+                'billing_model' => $module['billing_model'] ?? 'flat',
+                'unit_price_cents' => $module['unit_price_cents'] ?? null,
+                'first_unit_price_cents' => $module['first_unit_price_cents'] ?? null,
+                'tier_limit' => $module['tier_limit'] ?? null,
+                'excess_unit_price_cents' => $module['excess_unit_price_cents'] ?? null,
+                'percentage_bps' => $module['percentage_bps'] ?? null,
+                'calculator_default' => (bool) ($module['calculator_default'] ?? false),
+            ])->all(),
+            'contractDiscounts' => config('lora_modules.contract_discounts', []),
+        ]);
     }
 
     if (in_array(strtolower($request->getHost()), config('lora.dedicated_control_panel_hosts', []), true)) {
@@ -79,7 +98,24 @@ Route::get('/book/confirmation/{token}', [WebsiteController::class, 'bookingConf
 Route::get('/book/pay/{token}', [WebsiteController::class, 'bookingPayment'])->middleware('module:booking_engine')->name('website.pay.show');
 Route::post('/book/pay/{token}', [WebsiteController::class, 'confirmPayment'])->middleware(['module:booking_engine', 'throttle:20,1'])->name('website.pay.confirm');
 // POK server-to-server webhook (CSRF-excluded in bootstrap/app.php; verifies via getOrder, never trusts the body).
-Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware(['module:booking_engine', 'throttle:120,1'])->name('website.pay.webhook');
+// Rruga është e përbashkët për dhomat DHE çadrat — mjafton njëri modul (tenant vetëm-beach s'duhet të marrë 403).
+Route::post('/pok/webhook', [WebsiteController::class, 'paymentWebhook'])->middleware(['module:booking_engine,beach', 'throttle:120,1'])->name('website.pay.webhook');
+
+// Plazhi — Book Sunbeds publik (host-resolved si çdo website.*; moduli 'beach' per-tenant)
+Route::get('/book-sunbeds', [WebsiteBeachController::class, 'index'])->middleware('module:beach')->name('website.beach');
+Route::get('/book-sunbeds/availability', [WebsiteBeachController::class, 'availability'])->middleware(['module:beach', 'throttle:60,1'])->name('website.beach.availability');
+Route::post('/book-sunbeds', [WebsiteBeachController::class, 'submit'])->middleware(['module:beach', 'throttle:10,1'])->name('website.beach.submit');
+Route::get('/book-sunbeds/confirmation/{token}', [WebsiteBeachController::class, 'confirmation'])->middleware('module:beach')->name('website.beach.confirmation');
+// QR i përjetshëm i çadrës (i printuar një herë): V1 → rezervimi; V2 → porosia te bari.
+// Kova throttle me PREFIKS për secilën rrugë QR: throttle-i inline pa prefiks
+// ndan një numërues të vetëm per domain|ip me gjithë faqen publike — Wi-Fi i
+// përbashkët i plazhit do t'ia bllokonte porosinë mysafirit real.
+Route::get('/s/{qrToken}', [WebsiteBeachController::class, 'qr'])->middleware(['module:beach', 'throttle:60,1,beach-qr'])->name('website.beach.qr');
+Route::post('/s/{qrToken}/order', [WebsiteBeachController::class, 'order'])->middleware(['module:beach', 'throttle:12,1,beach-order'])->name('website.beach.order.submit');
+Route::get('/beach-order/{guestToken}', [WebsiteBeachController::class, 'orderStatus'])->middleware(['module:beach', 'throttle:60,1,beach-status'])->name('website.beach.order.status');
+// Pagesa POK e çadrës (opsionale — rezervimi vlen edhe "paguaj në plazh").
+Route::get('/book-sunbeds/pay/{token}', [WebsiteBeachController::class, 'payment'])->middleware(['module:beach', 'throttle:30,1'])->name('website.beach.pay');
+Route::post('/book-sunbeds/pay/{token}', [WebsiteBeachController::class, 'paymentConfirm'])->middleware(['module:beach', 'throttle:20,1'])->name('website.beach.pay.confirm');
 
 Route::get('/about', [WebsiteController::class, 'about'])->name('website.about');
 Route::get('/contact', [WebsiteController::class, 'contact'])->name('website.contact');
@@ -88,6 +124,10 @@ Route::post('/contact', [WebsiteController::class, 'submitContact'])->middleware
 // Inbound Channex booking webhook (server-to-server; CSRF-excluded in bootstrap/app.php).
 // Auth is a shared secret header validated in the controller — Channex has no HMAC.
 Route::post('/channex/webhook', [ChannexWebhookController::class, 'handle'])->middleware(['module:channel_manager', 'throttle:channex-webhook'])->name('channex.webhook');
+
+// Ngjarjet e urës WhatsApp (Node/Baileys, i njëjti server) — si channex/webhook:
+// tenant-i zgjidhet nga hosti i hotelit, token-i verifikohet në kontrollues.
+Route::post('/whatsapp/bridge/event', [WhatsAppController::class, 'event'])->middleware(['module:messages', 'throttle:60,1'])->name('whatsapp.bridge.event');
 
 // Short-lived, one-time Control Panel -> hotel-domain authentication callback.
 Route::get('/tenant-handoff', TenantHandoffController::class)
@@ -141,6 +181,8 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
     ->group(function () {
         Route::get('/', [SuperAdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/activity', [SuperAdminDashboardController::class, 'activity'])->name('activity');
+        Route::get('/catalog', [SuperAdminCatalogController::class, 'index'])->name('catalog.index');
+        Route::put('/catalog', [SuperAdminCatalogController::class, 'update'])->name('catalog.update');
         Route::get('/onboarding', [SuperAdminOnboardingController::class, 'index'])->name('onboarding.index');
         Route::get('/onboarding/{tenant}', [SuperAdminOnboardingController::class, 'show'])->name('onboarding.show');
         Route::get('/onboarding/{tenant}/fiscalization', [SuperAdminFatureAlOnboardingController::class, 'show'])->name('onboarding.fiscalization.show');
@@ -225,7 +267,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
 
     Route::redirect('/maintenance-design', '/pms/maintenance')->name('maintenance.design');
 
-    Route::middleware('permission:view_maintenance')->group(function () {
+    Route::middleware(['permission:view_maintenance', 'module:maintenance'])->group(function () {
         Route::get('/maintenance', [MaintenanceController::class, 'index'])->name('maintenance.index');
         Route::get('/maintenance/attachments/{attachment}', [MaintenanceController::class, 'previewAttachment'])->name('maintenance.attachments.show');
         Route::post('/maintenance', [MaintenanceController::class, 'store'])->middleware('permission:create_maintenance')->name('maintenance.store');
@@ -276,12 +318,22 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/reservations', [ReservationController::class, 'index'])->name('reservations.index');
 
         // Guest messaging (Channex Messages) — front desk replies to OTA guests.
-        Route::get('/messages', [MessagesController::class, 'index'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.index');
-        Route::get('/messages/unread', [MessagesController::class, 'unread'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.unread');
-        Route::post('/messages/{thread}/reply', [MessagesController::class, 'reply'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.reply');
-        Route::post('/messages/quick-replies', [MessagesController::class, 'saveQuickReplies'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.quick-replies');
-        Route::post('/messages/{thread}/close', [MessagesController::class, 'close'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.close');
-        Route::post('/messages/{thread}/reopen', [MessagesController::class, 'reopen'])->middleware(['permission:view_reservations', 'module:channel_manager'])->name('messages.reopen');
+        Route::get('/messages', [MessagesController::class, 'index'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.index');
+        Route::get('/messages/unread', [MessagesController::class, 'unread'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.unread');
+        Route::post('/messages/{thread}/reply', [MessagesController::class, 'reply'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.reply');
+        Route::post('/messages/quick-replies', [MessagesController::class, 'saveQuickReplies'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.quick-replies');
+        Route::post('/messages/{thread}/close', [MessagesController::class, 'close'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.close');
+        Route::post('/messages/{thread}/reopen', [MessagesController::class, 'reopen'])->middleware(['permission:view_reservations', 'module:messages'])->name('messages.reopen');
+
+        // FAQ e hotelit — njohuritë e Lora AI Chat (moduli messages).
+        Route::middleware(['permission:view_settings', 'module:messages'])->group(function () {
+            Route::post('/settings/faqs', [HotelFaqController::class, 'store'])->name('settings.faqs.store');
+            Route::put('/settings/faqs/{faq}', [HotelFaqController::class, 'update'])->name('settings.faqs.update');
+            Route::delete('/settings/faqs/{faq}', [HotelFaqController::class, 'destroy'])->name('settings.faqs.destroy');
+            // Cikli i mësimit: prano/hidh sugjerimet "Lora s'e dinte" (task #334).
+            Route::post('/settings/faqs/suggestions/{suggestion}/accept', [HotelFaqController::class, 'acceptSuggestion'])->name('settings.faqs.suggestions.accept');
+            Route::post('/settings/faqs/suggestions/{suggestion}/dismiss', [HotelFaqController::class, 'dismissSuggestion'])->name('settings.faqs.suggestions.dismiss');
+        });
         Route::get('/reservations/calendar', [ReservationController::class, 'calendar'])->name('reservations.calendar');
         Route::get('/reservations/calendar-design', fn () => Inertia::render('Reservations/CalendarDesign'))->name('reservations.calendar-design');
         Route::get('/reservations/reconciliation', [OtaReconciliationController::class, 'index'])
@@ -297,6 +349,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/reservations/store-multi', [ReservationController::class, 'storeMulti'])->middleware('permission:create_reservations')->name('reservations.store-multi');
         Route::put('/reservations/{reservation}', [ReservationController::class, 'update'])->middleware('permission:update_reservations')->name('reservations.update');
         Route::delete('/reservations/{reservation}', [ReservationController::class, 'destroy'])->middleware('permission:delete_reservations')->name('reservations.destroy');
+        Route::post('/reservations/{reservation}/confirm', [ReservationController::class, 'confirm'])->middleware('permission:update_reservations')->name('reservations.confirm');
         Route::post('/reservations/{reservation}/check-in', [ReservationController::class, 'checkIn'])->middleware('permission:update_reservations')->name('reservations.check-in');
         Route::post('/reservations/{reservation}/check-out', [ReservationController::class, 'checkOut'])->middleware('permission:update_reservations')->name('reservations.check-out');
         Route::post('/reservations/{reservation}/early-departure', [ReservationController::class, 'earlyDeparture'])->middleware('permission:update_reservations')->name('reservations.early-departure');
@@ -355,6 +408,12 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         // Cash-drawer shifts (hapje/mbyllje turni)
         Route::post('/pos/shift/open', [PosShiftController::class, 'open'])->middleware('permission:open_pos_shift')->name('pos.shift.open');
         Route::post('/pos/shift/{posShift}/close', [PosShiftController::class, 'close'])->middleware('permission:close_pos_shift')->name('pos.shift.close');
+
+        // Paneli i plazhit — porositë e çadrave live (kërkon edhe modulin beach)
+        Route::middleware('module:beach')->group(function () {
+            Route::get('/pos/beach', [PosController::class, 'beachPanel'])->name('pos.beach');
+            Route::post('/pos/beach/{posOrder}/deliver', [PosController::class, 'beachDeliver'])->middleware('permission:update_pos_orders')->name('pos.beach.deliver');
+        });
     });
 
     // Reports
@@ -389,8 +448,8 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::get('/reports/purchases-by-category', [ReportsController::class, 'purchasesByCategory'])->middleware('module:finance')->name('reports.purchasesByCategory');
         Route::get('/reports/room-status', [ReportsController::class, 'roomStatus'])->name('reports.roomStatus');
         Route::get('/reports/housekeeping', [ReportsController::class, 'housekeepingReport'])->middleware('module:housekeeping')->name('reports.housekeepingReport');
-        Route::get('/reports/maintenance-sla', [ReportsController::class, 'maintenanceSla'])->name('reports.maintenanceSla');
-        Route::get('/reports/recurring-maintenance', [ReportsController::class, 'recurringMaintenance'])->name('reports.recurringMaintenance');
+        Route::get('/reports/maintenance-sla', [ReportsController::class, 'maintenanceSla'])->middleware('module:maintenance')->name('reports.maintenanceSla');
+        Route::get('/reports/recurring-maintenance', [ReportsController::class, 'recurringMaintenance'])->middleware('module:maintenance')->name('reports.recurringMaintenance');
         Route::get('/reports/room-readiness', [ReportsController::class, 'roomReadiness'])->name('reports.roomReadiness');
         Route::get('/reports/operations-executive', [ReportsController::class, 'operationsExecutive'])->name('reports.operationsExecutive');
         Route::get('/reports/guest-movements', [ReportsController::class, 'guestMovements'])->name('reports.guestMovements');
@@ -408,6 +467,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/accounts', [FinanceController::class, 'storeAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.store');
         Route::put('/accounts/{account}/toggle', [FinanceController::class, 'toggleAccount'])->middleware('permission:manage_finance_settings')->name('finance.accounts.toggle');
         Route::put('/accounts/pos-mode', [FinanceController::class, 'updatePosAccountMode'])->middleware('permission:manage_finance_settings')->name('finance.accounts.pos-mode');
+        Route::put('/accounts/beach-mode', [FinanceController::class, 'updateBeachAccountMode'])->middleware(['permission:manage_finance_settings', 'module:beach'])->name('finance.accounts.beach-mode');
         Route::get('/payments', [FinanceController::class, 'payments'])->name('finance.payments');
         Route::get('/payments/export', [FinanceController::class, 'exportPayments'])->name('finance.payments.export');
         Route::post('/payments', [FinanceController::class, 'storePayment'])->middleware('permission:create_payment')->name('finance.payments.store');
@@ -448,6 +508,30 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/categories', [InventoryController::class, 'storeCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.store');
         Route::put('/categories/{category}', [InventoryController::class, 'updateCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.update');
         Route::delete('/categories/{category}', [InventoryController::class, 'destroyCategory'])->middleware('permission:manage_inventory')->name('inventory.categories.destroy');
+    });
+
+    // Plazhi (Beach) — kalendari i çadrave + setup i zonave/çadrave
+    Route::middleware(['module:beach', 'permission:view_beach'])->group(function () {
+        Route::get('/beach/calendar', [BeachReservationController::class, 'calendar'])->name('beach.calendar');
+        Route::get('/beach/reservations/quote', [BeachReservationController::class, 'quote'])->name('beach.reservations.quote');
+        Route::post('/beach/reservations', [BeachReservationController::class, 'store'])->middleware('permission:create_beach')->name('beach.reservations.store');
+        Route::put('/beach/reservations/{beachReservation}', [BeachReservationController::class, 'update'])->middleware('permission:update_beach')->name('beach.reservations.update');
+        Route::post('/beach/reservations/{beachReservation}/cancel', [BeachReservationController::class, 'cancel'])->middleware('permission:update_beach')->name('beach.reservations.cancel');
+        Route::post('/beach/reservations/{beachReservation}/mark-paid', [BeachReservationController::class, 'markPaid'])->middleware('permission:update_beach')->name('beach.reservations.mark-paid');
+        Route::post('/beach/reservations/{beachReservation}/unmark-paid', [BeachReservationController::class, 'unmarkPaid'])->middleware('permission:update_beach')->name('beach.reservations.unmark-paid');
+        Route::post('/beach/shifts/open', [\App\Http\Controllers\BeachShiftController::class, 'open'])->middleware('permission:open_beach_shift')->name('beach.shifts.open');
+        Route::post('/beach/shifts/{beachShift}/close', [\App\Http\Controllers\BeachShiftController::class, 'close'])->middleware('permission:close_beach_shift')->name('beach.shifts.close');
+        Route::get('/beach/setup', [BeachSetupController::class, 'index'])->name('beach.setup');
+        Route::post('/beach/zones', [BeachSetupController::class, 'storeZone'])->middleware('permission:create_beach')->name('beach.zones.store');
+        Route::put('/beach/zones/{zone}', [BeachSetupController::class, 'updateZone'])->middleware('permission:update_beach')->name('beach.zones.update');
+        Route::delete('/beach/zones/{zone}', [BeachSetupController::class, 'destroyZone'])->middleware('permission:delete_beach')->name('beach.zones.destroy');
+        Route::post('/beach/seasons/rates', [BeachSetupController::class, 'saveSeasonRates'])->middleware('permission:update_beach')->name('beach.seasons.rates.save');
+        Route::post('/beach/seasons', [BeachSetupController::class, 'storeSeason'])->middleware('permission:create_beach')->name('beach.seasons.store');
+        Route::put('/beach/seasons/{season}', [BeachSetupController::class, 'updateSeason'])->middleware('permission:update_beach')->name('beach.seasons.update');
+        Route::delete('/beach/seasons/{season}', [BeachSetupController::class, 'destroySeason'])->middleware('permission:delete_beach')->name('beach.seasons.destroy');
+        Route::post('/beach/zones/{zone}/units', [BeachSetupController::class, 'generateUnits'])->middleware('permission:create_beach')->name('beach.units.generate');
+        Route::put('/beach/units/{unit}', [BeachSetupController::class, 'updateUnit'])->middleware('permission:update_beach')->name('beach.units.update');
+        Route::delete('/beach/units/{unit}', [BeachSetupController::class, 'destroyUnit'])->middleware('permission:delete_beach')->name('beach.units.destroy');
     });
 
     // Admin-only: User Management + Settings
@@ -510,11 +594,22 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/settings/financial', [SettingsController::class, 'updateFinancial'])->name('settings.financial');
         Route::put('/settings/pos', [SettingsController::class, 'updatePos'])->middleware('module:pos')->name('settings.pos');
         Route::post('/settings/pos/salespeople', [SettingsController::class, 'storePosSalesperson'])->middleware('module:pos')->name('settings.pos.salespeople.store');
+        Route::post('/settings/pos/outlets', [SettingsController::class, 'storePosOutlet'])->middleware('module:pos')->name('settings.pos.outlets.store');
+        Route::put('/settings/pos/outlets/{posOutlet}', [SettingsController::class, 'updatePosOutlet'])->middleware('module:pos')->name('settings.pos.outlets.update');
+        Route::delete('/settings/pos/outlets/{posOutlet}', [SettingsController::class, 'destroyPosOutlet'])->middleware('module:pos')->name('settings.pos.outlets.destroy');
         Route::put('/settings/market-rates', [SettingsController::class, 'updateMarketRates'])->name('settings.market-rates');
         Route::put('/settings/currencies', [SettingsController::class, 'updateCurrencies'])->middleware('module:finance')->name('settings.currencies');
         Route::put('/settings/pricing-programs', [SettingsController::class, 'updatePricingPrograms'])->name('settings.pricing-programs');
         Route::put('/settings/housekeeping', [SettingsController::class, 'updateHousekeeping'])->middleware('module:housekeeping')->name('settings.housekeeping');
         Route::put('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai');
+
+        // WhatsApp QR-lite (moduli messages): lidhja/statusi/shkëputja e numrit.
+        Route::middleware('module:messages')->group(function () {
+            Route::get('/settings/whatsapp/status', [WhatsAppController::class, 'status'])->name('settings.whatsapp.status');
+            Route::post('/settings/whatsapp/connect', [WhatsAppController::class, 'connect'])->name('settings.whatsapp.connect');
+            Route::post('/settings/whatsapp/disconnect', [WhatsAppController::class, 'disconnect'])->name('settings.whatsapp.disconnect');
+        });
+        Route::put('/settings/beach', [SettingsController::class, 'updateBeach'])->middleware('module:beach')->name('settings.beach');
         Route::post('/settings/integrations/{provider}/test', [SettingsController::class, 'testIntegration'])
             ->whereIn('provider', ['fature_al'])->middleware('throttle:10,1')->name('settings.integrations.test');
 
