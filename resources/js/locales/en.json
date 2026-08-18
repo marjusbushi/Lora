@@ -740,6 +740,11 @@
       "showOtherTypes": "Show other types",
       "otherTypesWarning": "Careful: these rooms change the product the guest booked (a different room type)."
     },
+    "housekeeping": {
+      "checkInToday": "Check-in TODAY",
+      "checkInTomorrow": "Check-in tomorrow",
+      "checkInOverdue": "Check-in OVERDUE"
+    },
     "impersonation": {
       "action": "Impersonate user",
       "confirmTitle": "Impersonate user",

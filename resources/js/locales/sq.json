@@ -740,6 +740,11 @@
       "showOtherTypes": "Shfaq tipe të tjera",
       "otherTypesWarning": "Kujdes: këto dhoma ndryshojnë produktin që mysafiri ka rezervuar (tip tjetër dhome)."
     },
+    "housekeeping": {
+      "checkInToday": "Check-in SOT",
+      "checkInTomorrow": "Check-in nesër",
+      "checkInOverdue": "Check-in i VONUAR"
+    },
     "impersonation": {
       "action": "Simulo përdoruesin",
       "confirmTitle": "Simulo përdoruesin",
