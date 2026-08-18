@@ -121,8 +121,12 @@ class GenerateAiGuestReply implements ShouldQueue
         // Muhabet mirësjelljeje (task #369): AI e klasifikon vetë, po roja është
         // deterministe — small talk NUK lejohet të mbartë ASNJË shifër (numra =
         // fakte të kontrabanduara → draft). Përshëndetja s'ka nevojë për numra.
-        $smallTalk = ($result['args']['kind'] ?? 'informative') === 'small_talk'
-            && ! preg_match('/\d/', $reply);
+        $kind = $result['args']['kind'] ?? 'informative';
+        $smallTalk = $kind === 'small_talk' && ! preg_match('/\d/', $reply);
+        // Pyetje sqaruese (task #376): përgjigje që VETËM pyet mysafirin për të
+        // dhëna (datat, personat) — s'shpik asgjë, prandaj s'ka pse të varet nga
+        // FAQ-ja. E njëjta rojë zero-shifra; vota e dytë mbi PËRGJIGJEN më poshtë.
+        $clarifying = $kind === 'clarifying' && ! preg_match('/\d/', $reply);
         if ($reply === '') {
             return;
         }
@@ -155,7 +159,9 @@ class GenerateAiGuestReply implements ShouldQueue
         // (gjetje Codex, PR #470 — klasifikuesi sheh vetëm mesazhin e mysafirit).
         $trusted = ($result['toolsUsed'] ?? []) !== []
             ? $toolGrounded
-            : ($faqs->isNotEmpty() || ($smallTalk && $this->confirmSmallTalk($gemini, (string) $latest->body)));
+            : ($faqs->isNotEmpty()
+                || ($smallTalk && $this->confirmSmallTalk($gemini, (string) $latest->body))
+                || ($clarifying && $this->confirmClarifying($gemini, $reply)));
 
         if ($confident && $autoEnabled && $trusted) {
             $this->sendAutoReply($channex, $whatsapp, $thread, $reply, $rateKey);
@@ -169,7 +175,7 @@ class GenerateAiGuestReply implements ShouldQueue
             // Cikli i mësimit (task #334): "s'e dinte" = jo e sigurt, OSE pyetje
             // faktesh pa FAQ e pa ankorim te motori. Muhabeti dhe përgjigjet e
             // sigurta s'kanë ç'mësohet — mos ndot sugjerimet e FAQ-së me "Si je?".
-            ...(! $confident || (! $toolGrounded && ! $smallTalk && $faqs->isEmpty())
+            ...(! $confident || (! $toolGrounded && ! $smallTalk && ! $clarifying && $faqs->isEmpty())
                 ? ['ai_unanswered_question' => mb_substr($latest->body, 0, 500)]
                 : []),
         ])->save();
@@ -227,7 +233,8 @@ RREGULLA TË PATHYESHME:
    asnjëra s'është e lirë, thuaja qartë dhe ftoje të provojë data të tjera.
 2. Nëse mysafiri pyet për çmim a disponibilitet PA dhënë datat e plota (ose pa
    thënë sa persona janë) → MOS e thirr mjetin: pyete njëherë për datat dhe
-   numrin e personave (confident=true — kjo është pyetje sqaruese, jo premtim).
+   numrin e personave (confident=true, kind='clarifying' — pyetje sqaruese pa
+   asnjë fakt e pa asnjë numër, jo premtim).
 3. REZERVIMI I MYSAFIRIT: kur mysafiri pyet për rezervimin e tij — "kur e kam
    check-in-in?", "sa kam për të paguar?", "çfarë dhome kam?" — thirr mjetin
    get_thread_reservation. Ai kthen VETËM rezervimin e lidhur me këtë bisedë.
@@ -291,8 +298,8 @@ PROMPT;
                         ],
                         'kind' => [
                             'type' => 'string',
-                            'enum' => ['small_talk', 'informative'],
-                            'description' => 'small_talk = mirësjellje e pastër pa asnjë fakt e pa asnjë numër; informative = çdo përgjigje me të dhëna.',
+                            'enum' => ['small_talk', 'informative', 'clarifying'],
+                            'description' => 'small_talk = mirësjellje e pastër pa asnjë fakt e pa asnjë numër; clarifying = VETËM pyetje sqaruese drejt mysafirit (datat, personat, preferencat) pa asnjë fakt e pa asnjë numër; informative = çdo përgjigje me të dhëna.',
                         ],
                     ],
                     'required' => ['confident', 'reply', 'kind'],
@@ -426,6 +433,39 @@ PROMPT;
             );
 
             return (bool) ($verdict['small_talk'] ?? false);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return false;
+        }
+    }
+
+    /**
+     * Votë e dytë për pyetjet sqaruese (task #376): klasifikuesi vlerëson vetë
+     * PËRGJIGJEN — kalon vetëm një tekst që VETËM pyet mysafirin për të dhëna,
+     * pa asnjë fakt hoteli, çmim, orar a premtim. Dështim → false → draft.
+     */
+    private function confirmClarifying(GeminiClient $gemini, string $reply): bool
+    {
+        try {
+            $verdict = $gemini->structured(
+                'Vlerëso tekstin e një përgjigjeje të recepsionit të hotelit drejt mysafirit. clarifying=true VETËM nëse teksti thjesht PYET mysafirin për të dhëna (datat e qëndrimit, numrin e personave, preferencat) dhe NUK përmban ASNJË fakt për hotelin, asnjë çmim, orar, pajisje, shërbim apo premtim.',
+                $reply,
+                [
+                    'name' => 'classify_reply',
+                    'description' => 'Vlerësimi i përgjigjes së recepsionit.',
+                    'input_schema' => [
+                        'type' => 'object',
+                        'properties' => ['clarifying' => ['type' => 'boolean']],
+                        'required' => ['clarifying'],
+                    ],
+                ],
+                'classify_reply',
+                128,
+                15,
+            );
+
+            return (bool) ($verdict['clarifying'] ?? false);
         } catch (\Throwable $e) {
             report($e);
 
