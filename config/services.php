@@ -107,6 +107,13 @@ return [
         'onboarding_token' => env('FATURE_AL_ONBOARDING_TOKEN'),
         'app_name' => env('FATURE_AL_APP_NAME', 'LoraPMS'),
         'build_version' => env('FATURE_AL_BUILD_VERSION', env('APP_VERSION', 'dev')),
+        // Application identity (solution-provider layer, 2026-08): the SAME
+        // pair for every hotel — it names Lora, not the client. Sent as
+        // X-Client-Id / X-Client-Secret on every request, but ONLY when both
+        // are set: fature.al rejects unknown ids immediately, so empty or
+        // placeholder values must never be sent.
+        'client_id' => env('FATURE_AL_CLIENT_ID'),
+        'client_secret' => env('FATURE_AL_CLIENT_SECRET'),
     ],
 
     // Laravel Forge — provisions hotel custom domains on the platform's own

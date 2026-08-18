@@ -230,6 +230,49 @@ class FatureAlIntegrationTest extends TestCase
         ]);
     }
 
+    public function test_client_identity_headers_are_sent_only_when_both_credentials_are_set(): void
+    {
+        // The solution-provider layer (fature.al, 2026-08): both headers or
+        // neither. Empty or half-configured pairs must never reach the wire —
+        // an unknown id is rejected 401 on the spot, while absent headers
+        // remain valid until fature.al's enforcement date.
+        $tenant = Tenant::factory()->create();
+        app(TenantContext::class)->run($tenant, fn () => TenantIntegration::query()->create([
+            'provider' => 'fature_al',
+            'enabled' => true,
+            'credentials' => ['api_token' => 'synthetic-sandbox-token'],
+            'configuration' => ['environment' => 'sandbox'],
+        ]));
+
+        $accountResponse = Http::response([
+            'status' => true,
+            'data' => [
+                'company' => 'Sandbox Hotel', 'nipt' => 'L00000000A',
+                'branch' => ['name' => 'Main'], 'vatConfigs' => ['issuerInVat' => 'true'],
+            ],
+        ]);
+
+        // Fully configured pair → both headers on the request.
+        config(['services.fature_al.client_id' => 'ft_id_test123', 'services.fature_al.client_secret' => 'ft_sk_test456']);
+        Http::preventStrayRequests();
+        Http::fake(['https://demo.fature.al/api/v1/account' => $accountResponse]);
+        $this->actingAs($this->superAdmin)
+            ->post(route('super-admin.tenants.integrations.test', [$tenant->id, 'fature_al']))
+            ->assertRedirect();
+        Http::assertSent(fn (Request $request) => $request->hasHeader('X-Client-Id', 'ft_id_test123')
+            && $request->hasHeader('X-Client-Secret', 'ft_sk_test456'));
+
+        // Half-configured (secret missing) → NEITHER header is sent.
+        config(['services.fature_al.client_id' => 'ft_id_test123', 'services.fature_al.client_secret' => null]);
+        Http::fake(['https://demo.fature.al/api/v1/account' => $accountResponse]);
+        $this->actingAs($this->superAdmin)
+            ->post(route('super-admin.tenants.integrations.test', [$tenant->id, 'fature_al']))
+            ->assertRedirect();
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://demo.fature.al/api/v1/account'
+            && ! $request->hasHeader('X-Client-Id')
+            && ! $request->hasHeader('X-Client-Secret'));
+    }
+
     public function test_connection_check_is_read_only_and_records_success(): void
     {
         $tenant = Tenant::factory()->create();
@@ -270,12 +313,17 @@ class FatureAlIntegrationTest extends TestCase
             ->firstOrFail();
         $this->assertSame('success', $integration->configuration['last_test_status']);
         $this->assertNotEmpty($integration->configuration['last_tested_at']);
+        // Key order is engine-dependent: MySQL's JSON type reorders object
+        // keys (length, then bytes) while SQLite preserves insertion order —
+        // sort before comparing so the assertion holds on both.
+        $account = $integration->configuration['account'];
+        ksort($account);
         $this->assertSame([
-            'company' => 'Sandbox Hotel',
-            'nipt' => 'L00000000A',
             'branch' => 'Main',
+            'company' => 'Sandbox Hotel',
             'issuer_in_vat' => true,
-        ], $integration->configuration['account']);
+            'nipt' => 'L00000000A',
+        ], $account);
     }
 
     public function test_hotel_integration_center_exposes_status_but_not_token(): void
