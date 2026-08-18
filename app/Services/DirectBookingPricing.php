@@ -30,7 +30,19 @@ class DirectBookingPricing
      */
     public function quote(RoomType $roomType, string|Carbon $checkIn, string|Carbon $checkOut): array
     {
-        $canonical = RoomPricing::quote($roomType, $checkIn, $checkOut);
+        return $this->applyTo(RoomPricing::quote($roomType, $checkIn, $checkOut));
+    }
+
+    /**
+     * Apply the direct-booking benefit to an already-computed canonical quote
+     * (RoomPricing::quote/quoteMany row). Single home for the discount math, so
+     * the website and Lora's guest chat can never round differently.
+     *
+     * @param  array{nights:int,total:float}  $canonical
+     * @return array{nights:int,original_total:float,discount_pct:float,discount_amount:float,total:float,original_per_night:float,price_per_night:float}
+     */
+    public function applyTo(array $canonical): array
+    {
         $original = round((float) $canonical['total'], 2);
         $pct = $this->discountPercent();
         $discount = round($original * $pct / 100, 2);
