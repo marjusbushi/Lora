@@ -46,7 +46,13 @@ class GenerateAiGuestReply implements ShouldQueue
     // Gemini deri 75s + "koha e shkrimit" deri 10s → 120s lë marzh të qetë.
     public int $timeout = 120;
 
-    private const MAX_AI_REPLIES_PER_THREAD_PER_HOUR = 5;
+    /**
+     * 15/orë (task #375): 5-shi i epokës FAQ i mjaftonte robotit, po një bisedë
+     * REALE rezervimi (përshëndetje → datat → personat → çmimi → pyetje pasuese)
+     * i digjte të 5-tat për minuta — dhe roja ndal PARA Gemini-t, pa as draft.
+     * Cikli anti-echo mbrohet nga dedup-i i id-ve + roja "stafi foli".
+     */
+    private const MAX_AI_REPLIES_PER_THREAD_PER_HOUR = 15;
 
     /**
      * Identiteti default (task #369) — burim i VETËM edhe për UI-në e /pms/lora-ai:
