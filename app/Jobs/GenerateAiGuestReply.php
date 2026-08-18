@@ -473,6 +473,11 @@ PROMPT;
             'ai_unanswered_question' => null,
         ])->save();
 
+        // Inbox-i i hapur i stafit e sheh përgjigjen e Lora-s LIVE (task #371) —
+        // i njëjti event minimal si mesazhet hyrëse; faqja bën partial reload vetë.
+        // Pa të, stafit i duhej refresh që të shihte ç'dërgoi AI-ja.
+        event(new \App\Events\MessageReceived($thread->tenant_id, $thread->id));
+
         Cache::add($rateKey, 0, now()->addHour());
         Cache::increment($rateKey);
 

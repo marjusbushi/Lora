@@ -458,6 +458,39 @@ class AiGuestReplyTest extends TestCase
         $this->assertNull($thread->ai_unanswered_question);
     }
 
+    /** Task #371: përgjigja e dërguar e Lora-s transmetohet live (MessageReceived) — stafi s'ka nevojë për refresh. */
+    public function test_auto_reply_broadcasts_message_received_for_live_inbox(): void
+    {
+        \Illuminate\Support\Facades\Event::fake([\App\Events\MessageReceived::class]);
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->fakeGemini(true);
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        \Illuminate\Support\Facades\Event::assertDispatched(
+            \App\Events\MessageReceived::class,
+            fn ($event) => $event->tenantId === $thread->tenant_id && $event->threadId === $thread->id,
+        );
+    }
+
+    /** Task #371: draft-i (pa dërgim) s'transmeton asgjë — s'ka mesazh të ri për t'u shfaqur. */
+    public function test_draft_path_does_not_broadcast(): void
+    {
+        \Illuminate\Support\Facades\Event::fake([\App\Events\MessageReceived::class]);
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->fakeGemini(false, 'Recepsioni do t\'ju përgjigjet shumë shpejt.');
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        \Illuminate\Support\Facades\Event::assertNotDispatched(\App\Events\MessageReceived::class);
+    }
+
     /** Task #370: identiteti/karakteri ruhen si string nga UI dhe emri i ri mbërrin në promptin e job-it. */
     public function test_identity_settings_persist_and_reach_the_prompt(): void
     {
