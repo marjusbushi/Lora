@@ -417,6 +417,8 @@ class AiGuestReplyTest extends TestCase
 
                 return ['args' => ['confident' => true, 'reply' => 'Përshëndetje! Jam Lora — si mund t\'ju ndihmoj?', 'kind' => 'small_talk'], 'toolsUsed' => []];
             });
+            // Vota e dytë e pavarur (gjetje Codex #470) konfirmon muhabetin.
+            $mock->shouldReceive('structured')->once()->andReturn(['small_talk' => true]);
         });
         $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
 
@@ -427,6 +429,27 @@ class AiGuestReplyTest extends TestCase
         $this->assertNull($thread->ai_unanswered_question);
         $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
         $this->assertStringContainsString('Lora', $capturedSystem);
+    }
+
+    /** Gjetja Codex #470: pyetje faktesh e keq-klasifikuar si muhabet (pa shifra) → vota e dytë e rrëzon → draft. */
+    public function test_misclassified_fact_question_fails_second_vote_and_stays_draft(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            // Përgjigjësi gabon: fakt i shpikur pa shifra, i etiketuar si muhabet.
+            $mock->shouldReceive('converse')
+                ->andReturn(['args' => ['confident' => true, 'reply' => 'Po, parkimi është falas!', 'kind' => 'small_talk'], 'toolsUsed' => []]);
+            // Klasifikuesi i pavarur (sheh vetëm mesazhin e mysafirit) e kap.
+            $mock->shouldReceive('structured')->once()->andReturn(['small_talk' => false]);
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
     }
 
     /** Task #369: small_talk me SHIFRA = kontrabandë faktesh → draft, kurrë dërgim. */
@@ -524,6 +547,7 @@ class AiGuestReplyTest extends TestCase
 
                 return ['args' => ['confident' => true, 'reply' => 'Përshëndetje! Jam Maja.', 'kind' => 'small_talk'], 'toolsUsed' => []];
             });
+            $mock->shouldReceive('structured')->once()->andReturn(['small_talk' => true]);
         });
         $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
 

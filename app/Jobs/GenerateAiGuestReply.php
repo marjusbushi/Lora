@@ -142,7 +142,12 @@ class GenerateAiGuestReply implements ShouldQueue
         // i pastër mirësjelljeje pa asnjë shifër (task #369) — përshëndetjet
         // marrin përgjigje vetë edhe me 0 FAQ. Pyetje FAKTESH pa FAQ e pa mjet
         // mbeten draft si më parë.
-        if ($confident && $autoEnabled && ($faqs->isNotEmpty() || $toolGrounded || $smallTalk)) {
+        // Kur muhabeti është burimi i VETËM i besimit (0 FAQ, pa mjet), kërkohet
+        // VOTË E DYTË e pavarur (gjetje Codex, PR #470): klasifikuesi sheh vetëm
+        // mesazhin e mysafirit — një pyetje faktesh e keq-klasifikuar si muhabet
+        // nga përgjigjësi duhet të gabohet DY herë radhazi që të dalë te mysafiri.
+        if ($confident && $autoEnabled
+            && ($faqs->isNotEmpty() || $toolGrounded || ($smallTalk && $this->confirmSmallTalk($gemini, (string) $latest->body)))) {
             $this->sendAutoReply($channex, $whatsapp, $thread, $reply, $rateKey);
 
             return;
@@ -385,6 +390,40 @@ PROMPT;
     }
 
     /**
+     * Votë e dytë e pavarur për muhabetin (gjetje Codex, PR #470): klasifikues
+     * i veçantë që sheh VETËM mesazhin e mysafirit — pa të dhëna hoteli, pa
+     * bisedë, pa FAQ. Vetëm kur edhe ky thotë "muhabet i pastër" lejohet
+     * auto-dërgimi pa FAQ. Çdo dështim a paqartësi → false → draft (fail-closed).
+     */
+    private function confirmSmallTalk(GeminiClient $gemini, string $guestMessage): bool
+    {
+        try {
+            $verdict = $gemini->structured(
+                'Klasifiko mesazhin e një mysafiri drejt hotelit. small_talk=true VETËM për përshëndetje, falënderim, mirësjellje, ose pyetje për emrin a gjendjen e asistentes. ÇDO kërkesë për fakte — çmime, orare, parkim, pajisje, shërbime, rezervime, ndihmë konkrete — është small_talk=false.',
+                $guestMessage,
+                [
+                    'name' => 'classify',
+                    'description' => 'Vlerësimi i mesazhit të mysafirit.',
+                    'input_schema' => [
+                        'type' => 'object',
+                        'properties' => ['small_talk' => ['type' => 'boolean']],
+                        'required' => ['small_talk'],
+                    ],
+                ],
+                'classify',
+                128,
+                15,
+            );
+
+            return (bool) ($verdict['small_talk'] ?? false);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return false;
+        }
+    }
+
+    /**
      * Ritmi njerëzor (task #368): sa më e gjatë përgjigja, aq më shumë "kohë
      * shkrimi" — sikur recepsionisti po e shkruan vërtet. Kufij 2-10s që
      * mysafiri të mos bezdiset. ~40 shkronja/sekondë mbi bazën 2s.
@@ -473,16 +512,21 @@ PROMPT;
             'ai_unanswered_question' => null,
         ])->save();
 
-        // Inbox-i i hapur i stafit e sheh përgjigjen e Lora-s LIVE (task #371) —
-        // i njëjti event minimal si mesazhet hyrëse; faqja bën partial reload vetë.
-        // Pa të, stafit i duhej refresh që të shihte ç'dërgoi AI-ja.
-        event(new \App\Events\MessageReceived($thread->tenant_id, $thread->id));
-
         Cache::add($rateKey, 0, now()->addHour());
         Cache::increment($rateKey);
 
         AuditLog::record('message.ai_reply', $thread, [
             'preview' => mb_substr($reply, 0, 160),
         ], 'ai');
+
+        // Inbox-i i hapur i stafit e sheh përgjigjen e Lora-s LIVE (task #371) —
+        // PAS kontabilitetit dhe i izoluar (gjetje Codex, PR #470): një Reverb
+        // offline s'duhet t'i anashkalojë limitit/auditimit as ta rrëzojë job-in
+        // (mesazhi u dërgua vërtet — retry do të dilte bosh e i panumëruar).
+        try {
+            event(new \App\Events\MessageReceived($thread->tenant_id, $thread->id));
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }
