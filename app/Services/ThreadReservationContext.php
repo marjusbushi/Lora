@@ -27,9 +27,10 @@ class ThreadReservationContext
             return ['error' => "Kjo bisedë s'ka rezervim të lidhur — mos jep asnjë të dhënë personale; drejtoje mysafirin te recepsioni."];
         }
 
-        // Bilanci si te ekrani i rezervimit: totali minus pagesat e pavoiduara.
-        $paid = (float) $reservation->payments->where('is_voided', false)->sum('amount');
-        $total = (float) $reservation->total_amount;
+        // Bilanci KANONIK (gjetje Codex, PR #465): ReservationMoney::totals —
+        // folio (minibar etj.), zbritjet, rimbursimet si negative dhe pagesat në
+        // monedhë tjetër të konvertuara — i njëjti numër që sheh stafi te folio.
+        $totals = ReservationMoney::totals($reservation);
 
         return [
             'guest_first_name' => $reservation->guest?->first_name,
@@ -41,10 +42,12 @@ class ThreadReservationContext
             'adults' => $reservation->adults,
             'children' => $reservation->children,
             'status' => $reservation->status,
-            'currency' => PricingCurrency::code(),
-            'total' => $total,
-            'paid' => $paid,
-            'balance' => round($total - $paid, 2),
+            // Monedha e NGRIRË e rezervimit, jo ajo aktuale e hotelit (gjetje
+            // Codex, PR #465) — një prenotim USD s'etiketohet kurrë si EUR.
+            'currency' => ReservationMoney::currency($reservation),
+            'total' => $totals['gross'],
+            'paid' => $totals['paid'],
+            'balance' => $totals['outstanding'],
         ];
     }
 
@@ -83,20 +86,32 @@ class ThreadReservationContext
             return null;
         }
 
-        $guestIds = Guest::query()
+        $matched = Guest::query()
             ->whereNotNull('phone')->where('phone', '!=', '')
-            ->get(['id', 'phone'])
+            ->get(['id', 'phone', 'first_name', 'last_name'])
             ->filter(function (Guest $guest) use ($jidDigits): bool {
                 $digits = ltrim(preg_replace('/\D/', '', (string) $guest->phone), '0');
 
                 return strlen($digits) >= 8
                     && (str_ends_with($jidDigits, $digits) || str_ends_with($digits, $jidDigits));
-            })
-            ->pluck('id');
+            });
 
-        if ($guestIds->isEmpty()) {
+        if ($matched->isEmpty()) {
             return null;
         }
+
+        // Numri duhet të identifikojë NJË person të vetëm (gjetje Codex, PR #465):
+        // telefonat s'janë unikë në skemë — numër i përbashkët/i ricikluar mes
+        // personash të ndryshëm = paqartësi → refuzim (fail-closed). Profilet
+        // DUBLIKATE të të njëjtit person (emër i njëjtë) lejohen — janë një njeri.
+        $distinctNames = $matched
+            ->map(fn (Guest $guest) => mb_strtolower(trim("{$guest->first_name} {$guest->last_name}")))
+            ->unique();
+        if ($distinctNames->count() > 1) {
+            return null;
+        }
+
+        $guestIds = $matched->pluck('id');
 
         $base = Reservation::with($with)
             ->whereIn('guest_id', $guestIds)

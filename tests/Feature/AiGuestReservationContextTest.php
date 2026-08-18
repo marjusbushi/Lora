@@ -227,4 +227,116 @@ class AiGuestReservationContextTest extends TestCase
         $this->assertSame(100.0, $context['paid']);
         $this->assertSame(200.0, $context['balance']);
     }
+
+    /** Gjetja Codex #2 (PR #465): bilanci është ai KANONIK i folio-s — minibari hyn, si te ekrani i stafit. */
+    public function test_balance_includes_folio_charges(): void
+    {
+        $reservation = $this->makeReservation();
+        \App\Models\FolioItem::create([
+            'reservation_id' => $reservation->id, 'type' => 'minibar', 'description' => 'Minibar',
+            'amount' => 50, 'charge_date' => now()->toDateString(),
+        ]);
+        Payment::create(['reservation_id' => $reservation->id, 'amount' => 100, 'method' => 'cash']);
+        [$thread] = $this->makeThread(['reservation_id' => $reservation->id]);
+
+        $context = app(ThreadReservationContext::class)->forThread($thread);
+
+        $this->assertSame(350.0, $context['total']);
+        $this->assertSame(250.0, $context['balance']);
+    }
+
+    /** Gjetja Codex #4 (PR #465): monedha e NGRIRË e rezervimit, jo ajo aktuale e hotelit. */
+    public function test_reservation_snapshot_currency_is_reported(): void
+    {
+        $reservation = $this->makeReservation();
+        $reservation->forceFill(['currency' => 'USD', 'exchange_rate' => 1.1])->save();
+        [$thread] = $this->makeThread(['reservation_id' => $reservation->id]);
+
+        $context = app(ThreadReservationContext::class)->forThread($thread);
+
+        $this->assertSame('USD', $context['currency']);
+    }
+
+    /** Gjetja Codex #1 (PR #465): i njëjti numër te DY persona të ndryshëm → paqartësi → refuzim (fail-closed). */
+    public function test_shared_phone_between_two_people_is_ambiguous_and_refused(): void
+    {
+        $this->makeReservation(['phone' => '+355 69 123 4567']);
+        Guest::create(['first_name' => 'Person', 'last_name' => 'Tjetër', 'email' => 'p2@example.com', 'phone' => '069 123 4567']);
+        $thread = MessageThread::create([
+            'whatsapp_jid' => '355691234567@s.whatsapp.net',
+            'channel' => 'whatsapp',
+            'guest_name' => '355691234567',
+            'status' => 'open',
+        ]);
+
+        $context = app(ThreadReservationContext::class)->forThread($thread);
+
+        $this->assertArrayHasKey('error', $context);
+    }
+
+    /** Profilet dublikate të të NJËJTIT person (emër i njëjtë) s'janë paqartësi — zgjidhet normalisht. */
+    public function test_duplicate_profiles_of_same_person_still_resolve(): void
+    {
+        $this->makeReservation(['phone' => '+355 69 123 4567']);
+        Guest::create(['first_name' => 'Ardit', 'last_name' => 'Hoxha', 'email' => 'ardit2@example.com', 'phone' => '069 123 4567']);
+        $thread = MessageThread::create([
+            'whatsapp_jid' => '355691234567@s.whatsapp.net',
+            'channel' => 'whatsapp',
+            'guest_name' => '355691234567',
+            'status' => 'open',
+        ]);
+
+        $context = app(ThreadReservationContext::class)->forThread($thread);
+
+        $this->assertSame('Ardit', $context['guest_first_name']);
+    }
+
+    /** Gjetja Codex #3 (PR #465): bilanc i vogël 20 → AI thotë 10 → JO grounded → draft (s'ka më përjashtim ≤31). */
+    public function test_hallucinated_small_balance_stays_draft(): void
+    {
+        $reservation = $this->makeReservation();
+        Payment::create(['reservation_id' => $reservation->id, 'amount' => 280, 'method' => 'cash']);
+        [$thread, $message] = $this->makeThread(['reservation_id' => $reservation->id]);
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $context = $executors['get_thread_reservation']([]);
+                \PHPUnit\Framework\Assert::assertSame(20.0, $context['balance']);
+
+                // AI "korrigjon" bilancin e vogël — numri 10 s'ekziston në motor.
+                return ['args' => ['confident' => true, 'reply' => 'Ju kanë mbetur vetëm 10 EUR për të paguar.'], 'toolsUsed' => ['get_thread_reservation']];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Proza me data mbetet e ankoruar: ditët/muajt e datave të mjetit lejohen si shifra në tekst. */
+    public function test_prose_dates_from_tool_results_stay_grounded(): void
+    {
+        $reservation = $this->makeReservation([], [
+            'check_in_date' => '2027-08-20', 'check_out_date' => '2027-08-23',
+        ]);
+        Payment::create(['reservation_id' => $reservation->id, 'amount' => 100, 'method' => 'cash']);
+        [$thread, $message] = $this->makeThread(['reservation_id' => $reservation->id]);
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $executors['get_thread_reservation']([]);
+
+                return ['args' => ['confident' => true, 'reply' => 'Qëndrimi juaj: nga 20 deri më 23 gusht, 3 net. Bilanci: 200 EUR.'], 'toolsUsed' => ['get_thread_reservation']];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
 }

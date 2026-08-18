@@ -295,11 +295,14 @@ PROMPT;
     }
 
     /**
-     * Verifikim determinist (gjetje Codex, PR #462): çdo shifër "monetare" në
-     * përgjigjen e AI-së (> 31 — mbi çdo ditë muaji/numër netësh/personash)
-     * duhet të ekzistojë saktësisht në rezultatet e motorit. Një numër i huaj
-     * = jo e ankoruar → draft për stafin. Datat (YYYY-MM-DD) dhe orât (HH:MM)
-     * përjashtohen para skanimit. Dështon GJITHMONË në drejtim të sigurt.
+     * Verifikim determinist (gjetje Codex, PR #462 + #465): ÇDO shifër në
+     * përgjigjen e AI-së duhet të ekzistojë saktësisht në rezultatet e motorit
+     * — pa përjashtim për vlerat e vogla (një bilanc 20 i "korrigjuar" në 10
+     * nga AI kapet njësoj si një çmim 300 → 350). Që prozat me data të mos
+     * refuzohen kot ("nga 20 deri më 23 gusht"), komponentët e çdo date
+     * YYYY-MM-DD të rezultateve (viti, muaji, dita) hyjnë në setin e lejuar.
+     * Datat e plota dhe orât (HH:MM) pastrohen para skanimit. Një numër i huaj
+     * = jo e ankoruar → draft për stafin. Dështon GJITHMONË në drejtim të sigurt.
      *
      * @param  array<int,array<string,mixed>>  $quotes
      */
@@ -310,6 +313,11 @@ PROMPT;
             if (is_int($value) || is_float($value) || (is_string($value) && is_numeric($value))) {
                 $allowed[] = (float) $value;
             }
+            if (is_string($value) && preg_match_all('/\b(\d{4})-(\d{2})-(\d{2})\b/', $value, $dates, PREG_SET_ORDER)) {
+                foreach ($dates as $date) {
+                    array_push($allowed, (float) $date[1], (float) $date[2], (float) $date[3]);
+                }
+            }
         });
 
         $scrubbed = preg_replace(['/\b\d{4}-\d{2}-\d{2}\b/', '/\b\d{1,2}:\d{2}\b/'], ' ', $reply);
@@ -317,9 +325,6 @@ PROMPT;
 
         foreach ($matches[0] as $candidate) {
             $value = (float) str_replace(',', '.', $candidate);
-            if ($value <= 31) {
-                continue;
-            }
             $known = false;
             foreach ($allowed as $engineValue) {
                 if (abs($engineValue - $value) < 0.01) {
