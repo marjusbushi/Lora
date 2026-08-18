@@ -679,6 +679,24 @@ class AiGuestReplyTest extends TestCase
         $this->assertSame(28, GenerateAiGuestReply::humanDelaySeconds(str_repeat('a', 400)));
     }
 
+    /** Gjetja Codex #482: dy ekzekutime të të njëjtit mesazh (ri-lëshim i radhës) → VETËM NJË dërgim (kyçja atomike). */
+    public function test_duplicate_job_execution_sends_only_once(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->fakeGemini(true);
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once()->andReturn(['id' => 'chx-1']));
+
+        // Ekzekutimi i parë dërgon; i dyti (i njëjti messageId, si pas retry_after)
+        // ndalet nga kyçja — sendThreadMessage pritet SAKTËSISHT një herë.
+        $this->runJob($thread, $message);
+        $thread->messages()->where('sent_by_ai', true)->delete(); // simulo që supersededBy s'e ndal (mesazhi AI i fshirë)
+        $this->runJob($thread, $message);
+
+        $this->assertSame(0, $thread->messages()->where('sent_by_ai', true)->count());
+    }
+
     /** Task #378 (gara e ritmit): përgjigja racuese e VETË Lora-s pas mesazhit tonë NUK e hesht job-in. */
     public function test_lora_own_racing_reply_does_not_silence_the_next_answer(): void
     {
