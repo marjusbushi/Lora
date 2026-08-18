@@ -24,7 +24,11 @@ Route::middleware('guest')->group(function () {
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
 
+    // Throttle UNIFORM, i pavarur nga ekzistenca e llogarisë: kufiri i brokerit
+    // (60s) kontrollohet vetëm PASI gjendet përdoruesi, ndaj vetëm ky rrezik-
+    // kufizim mbi rrugë e ndalon dot dikë që provon adresa me shumicë.
     Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
+        ->middleware('throttle:6,1')
         ->name('password.email');
 
     Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])

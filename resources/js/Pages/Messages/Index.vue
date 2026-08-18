@@ -113,7 +113,8 @@ onBeforeUnmount(() => {
     typingTimers.forEach((t) => clearTimeout(t));
     typingTimers.clear();
     document.removeEventListener('visibilitychange', onVisibilityChange);
-    if (rtTenantId) getEcho()?.leave(`private-${rtChannelName}`);
+    // Emri LOGJIK — leave() i shton vetë variantet (si te useRealtimeReload).
+    if (rtTenantId) getEcho()?.leave(rtChannelName);
 });
 
 // Sound alert on/off (read by AppLayout's poll via localStorage).
