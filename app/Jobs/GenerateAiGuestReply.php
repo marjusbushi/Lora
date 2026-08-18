@@ -157,13 +157,26 @@ class GenerateAiGuestReply implements ShouldQueue
         // bilanc të ndryshuar nga AI (vrima: hotel me FAQ → verifikimi anashkalohej).
         // Pa mjete: FAQ aktive OSE muhabet i pastër me VOTË TË DYTË të pavarur
         // (gjetje Codex, PR #470 — klasifikuesi sheh vetëm mesazhin e mysafirit).
-        $trusted = ($result['toolsUsed'] ?? []) !== []
-            ? $toolGrounded
-            : ($faqs->isNotEmpty()
-                || ($smallTalk && $this->confirmSmallTalk($gemini, (string) $latest->body))
-                || ($clarifying && $this->confirmClarifying($gemini, $reply)));
+        // Votat e dyta ekzekutohen DAZI — vetëm kur mund të çojnë në dërgim
+        // (confident + auto ON + pa burim tjetër besimi); verdikti i clarifying
+        // RUHET veçmas nga etiketa e papërpunuar (gjetje Codex, PR #478): një
+        // "clarifying" i rrëzuar nga vota mban fakt të fshehur — pyetja e
+        // mysafirit DUHET të hyjë te materiali i FAQ-së, jo të përjashtohet.
+        $clarifyingConfirmed = false;
+        $trusted = false;
+        if ($confident && $autoEnabled) {
+            if (($result['toolsUsed'] ?? []) !== []) {
+                $trusted = $toolGrounded;
+            } elseif ($faqs->isNotEmpty()) {
+                $trusted = true;
+            } elseif ($smallTalk) {
+                $trusted = $this->confirmSmallTalk($gemini, (string) $latest->body);
+            } elseif ($clarifying) {
+                $trusted = $clarifyingConfirmed = $this->confirmClarifying($gemini, $reply);
+            }
+        }
 
-        if ($confident && $autoEnabled && $trusted) {
+        if ($trusted) {
             $this->sendAutoReply($channex, $whatsapp, $thread, $reply, $rateKey);
 
             return;
@@ -175,7 +188,7 @@ class GenerateAiGuestReply implements ShouldQueue
             // Cikli i mësimit (task #334): "s'e dinte" = jo e sigurt, OSE pyetje
             // faktesh pa FAQ e pa ankorim te motori. Muhabeti dhe përgjigjet e
             // sigurta s'kanë ç'mësohet — mos ndot sugjerimet e FAQ-së me "Si je?".
-            ...(! $confident || (! $toolGrounded && ! $smallTalk && ! $clarifying && $faqs->isEmpty())
+            ...(! $confident || (! $toolGrounded && ! $smallTalk && ! $clarifyingConfirmed && $faqs->isEmpty())
                 ? ['ai_unanswered_question' => mb_substr($latest->body, 0, 500)]
                 : []),
         ])->save();

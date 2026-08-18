@@ -542,15 +542,20 @@ class AiGuestReplyTest extends TestCase
 
         $this->runJob($thread, $message);
 
-        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $thread->refresh();
+        $this->assertNotNull($thread->ai_suggestion);
+        // Gjetja Codex #478: vota e rrëzuar = fakt i fshehur → pyetja e mysafirit
+        // HYN te materiali i FAQ-së (verdikti vendos, jo etiketa e papërpunuar).
+        $this->assertNotNull($thread->ai_unanswered_question);
     }
 
-    /** Task #376: clarifying në draft (auto OFF) NUK krijon material FAQ-je. */
-    public function test_clarifying_draft_does_not_create_faq_suggestion_material(): void
+    /** Task #376 + Codex #478: auto OFF → vota s'ekzekutohet fare (kursim) dhe pyetja ruhet si material FAQ-je. */
+    public function test_clarifying_draft_with_auto_off_skips_vote_and_keeps_faq_material(): void
     {
         Setting::set('ai_mcp.guest_auto_reply_enabled', false, 'boolean');
         [$thread, $message] = $this->makeThreadWithGuestMessage();
 
+        // Mock-u PA 'structured' — po u thirr vota me auto OFF, testi dështon vetë.
         $this->fakeGemini(true, 'Për cilat data dhe sa persona?', [], 'clarifying');
         $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
 
@@ -558,7 +563,7 @@ class AiGuestReplyTest extends TestCase
 
         $thread->refresh();
         $this->assertNotNull($thread->ai_suggestion);
-        $this->assertNull($thread->ai_unanswered_question);
+        $this->assertNotNull($thread->ai_unanswered_question);
     }
 
     /** Task #369: small_talk me SHIFRA = kontrabandë faktesh → draft, kurrë dërgim. */
