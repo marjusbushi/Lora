@@ -1,7 +1,7 @@
 <script setup>
 import { getIntlLocale, translate } from '@/i18n';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { router, useForm } from '@inertiajs/vue3';
+import { router, useForm, usePage } from '@inertiajs/vue3';
 import {
     ChevronLeft,
     ChevronRight,
@@ -14,6 +14,7 @@ import {
     UserRoundCheck,
     UserRoundX,
     UsersRound,
+    VenetianMask,
 } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
@@ -38,10 +39,13 @@ const props = defineProps({
 });
 
 const toasts = ref(null);
+const page = usePage();
 const activeTab = ref('users');
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const showDeleteModal = ref(false);
+const showImpersonateModal = ref(false);
+const impersonateBusy = ref(false);
 const selectedUser = ref(null);
 const searchQuery = ref(props.filters.search || '');
 const roleFilter = ref(props.filters.role || '');
@@ -226,6 +230,34 @@ function restoreUser(id) {
     });
 }
 
+// ===== Impersonation ("see it with their eyes") =====
+// The button hides for self, for admin/super-admin rows and for inactive
+// memberships — but hiding is UX, not access control: the backend refuses
+// all of these on its own (404/422).
+function canImpersonate(user) {
+    return user.membership_active
+        && user.id !== page.props.auth?.user?.id
+        && !user.is_super_admin
+        && !(user.roles || []).some((role) => role.name === 'admin');
+}
+
+function openImpersonate(user) {
+    selectedUser.value = user;
+    showImpersonateModal.value = true;
+}
+
+function submitImpersonate() {
+    if (impersonateBusy.value) return;
+    impersonateBusy.value = true;
+    router.post(route('users.impersonate', selectedUser.value.id), {}, {
+        onError: (errors) => {
+            showImpersonateModal.value = false;
+            toasts.value?.error(errors.impersonate || translate('admin.impersonation.failed'));
+        },
+        onFinish: () => { impersonateBusy.value = false; },
+    });
+}
+
 // ===== Roles & per-module CRUD permissions =====
 const ALL_ACTIONS = ['view', 'create', 'update', 'delete', 'open', 'close', 'close_any'];
 const actionLabel = { view: translate('admin.generated.k_43c4e8990712'), create: translate('admin.generated.k_fdf8bf6c2537'), update: translate('admin.generated.k_210e45b02c6e'), delete: translate('admin.generated.k_0c2d2addd5ad'), open: 'Hap', close: translate('admin.generated.k_3db530a81f37'), close_any: translate('admin.generated.k_582aae36fb3b') };
@@ -406,6 +438,10 @@ function submitRole() {
                                             <button type="button" :class="menuItemClass" role="menuitem" @click="openEdit(user)">
                                                 <Pencil class="h-4 w-4 text-neutral-500" :stroke-width="1.8" />
 {{ $t('admin.generated.k_d6008fe622cf') }} </button>
+                                            <button v-if="canImpersonate(user)" type="button" :class="menuItemClass" role="menuitem" @click="openImpersonate(user)">
+                                                <VenetianMask class="h-4 w-4 text-neutral-500" :stroke-width="1.8" />
+                                                {{ $t('admin.impersonation.action') }}
+                                            </button>
                                             <button type="button" :class="[menuItemClass, 'text-error-700 hover:bg-error-50']" role="menuitem" @click="openDelete(user)">
                                                 <UserRoundX class="h-4 w-4" :stroke-width="1.8" />
 {{ $t('admin.generated.k_4d199f6b9036') }} </button>
@@ -563,6 +599,16 @@ function submitRole() {
             <template #footer>
                 <Button variant="outline" @click="showDeleteModal = false">{{ $t('admin.generated.k_f82fdcdd7d40') }}</Button>
                 <Button variant="danger" @click="submitDelete">{{ $t('admin.generated.k_4d199f6b9036') }}</Button>
+            </template>
+        </Modal>
+
+        <Modal :show="showImpersonateModal" :title="$t('admin.impersonation.confirmTitle')" max-width="sm" @close="showImpersonateModal = false">
+            <p class="text-body-sm text-neutral-600">
+                {{ $t('admin.impersonation.confirmBody') }} <strong>{{ selectedUser?.name }}</strong>{{ $t('admin.impersonation.confirmBodyTail') }}
+            </p>
+            <template #footer>
+                <Button variant="outline" @click="showImpersonateModal = false">{{ $t('admin.generated.k_f82fdcdd7d40') }}</Button>
+                <Button variant="primary" :loading="impersonateBusy" @click="submitImpersonate">{{ $t('admin.impersonation.confirmCta') }}</Button>
             </template>
         </Modal>
 
