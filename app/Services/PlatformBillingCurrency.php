@@ -91,6 +91,22 @@ class PlatformBillingCurrency
     }
 
     /**
+     * Cent të monedhës së faturimit → cent BAZË (euro), me kursin e NGRIRË të
+     * vetë dokumentit.
+     *
+     * Pa këtë, çdo total i platformës do të mblidhte mollë me dardha: një rresht
+     * prej €29 i ruajtur si 291 000 cent lekë do të shtonte €2 910 te KPI-të.
+     */
+    public function toBaseCents(int $cents, ?float $rate): int
+    {
+        if ($rate === null || $rate <= 0 || $rate === 1.0) {
+            return $cents;
+        }
+
+        return (int) round($cents / $rate);
+    }
+
+    /**
      * Rrumbullakon një shumë TASHMË të konvertuar (p.sh. zbritjen, që del si
      * përqindje e nëntotalit) në të njëjtin hap si rreshtat.
      */

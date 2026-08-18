@@ -121,7 +121,166 @@ class PlatformBillingService
             throw ValidationException::withMessages(['invoice' => 'Vetëm një faturë Draft mund të publikohet.']);
         }
 
-        $invoice->update(['status' => 'open', 'issued_at' => now()]);
+        DB::transaction(function () use ($invoice) {
+            $this->refreshFxSnapshot($invoice);
+            $invoice->update(['status' => 'open', 'issued_at' => now()]);
+        });
+    }
+
+    /**
+     * Kursi ngrihet në çastin e LËSHIMIT, jo kur u shkrua drafti.
+     *
+     * Një draft mund të rrijë me ditë; po ta mbante kursin e ditës kur u shkrua,
+     * dokumenti do të mbante datë lëshimi të sotme me kurs të djeshëm. Rreshtat
+     * rindërtohen nga vlera ORIGJINALE në euro (metadata.base_amount_cents) —
+     * kurrë nga shuma e konvertuar, që do ta përsëriste gabimin e rrumbullakimit.
+     */
+    private function refreshFxSnapshot(BillingInvoice $invoice): void
+    {
+        if ($invoice->currency === PlatformBillingCurrency::BASE) {
+            return;
+        }
+
+        $invoice->loadMissing('lines', 'subscription');
+        $rate = $this->billingCurrency->rateFor($invoice->subscription, $invoice->currency);
+
+        if ((float) $invoice->fx_rate === $rate) {
+            return;
+        }
+
+        // Llogaritet e GJITHA para se të shkruhet: një faturë e vjetër pa gjurmën
+        // e vlerës bazë nuk guxon të mbetet gjysmë e rishkruar.
+        $amounts = [];
+        $subtotal = 0;
+
+        foreach ($invoice->lines as $line) {
+            $base = $line->metadata['base_amount_cents'] ?? null;
+
+            if (! is_numeric($base)) {
+                return;
+            }
+
+            $amount = $this->billingCurrency->convertCents((int) $base, $rate);
+            $amounts[$line->id] = $amount;
+            $subtotal += $amount;
+        }
+
+        if ($amounts === []) {
+            return;
+        }
+
+        $annual = ($invoice->metadata['billing_cycle'] ?? 'monthly') === 'annual';
+        $discountPercent = (int) ($invoice->metadata['annual_discount_percent'] ?? 0);
+        $discount = $annual
+            ? $this->billingCurrency->roundToStep((int) round($subtotal * ($discountPercent / 100)))
+            : 0;
+
+        foreach ($invoice->lines as $line) {
+            $line->update([
+                'unit_amount_cents' => $amounts[$line->id],
+                'amount_cents' => $amounts[$line->id],
+            ]);
+        }
+
+        $invoice->update([
+            'fx_rate' => $rate,
+            'subtotal_cents' => $subtotal,
+            'discount_cents' => $discount,
+            'total_cents' => $subtotal - $discount,
+        ]);
+    }
+
+    /**
+     * KPI-t e faturave, GJITHMONË në cent EURO.
+     *
+     * Faturat në lek ruajnë cent lekë; po t'i mblidhje drejtpërdrejt me ato në
+     * euro, kartat e të ardhurave do të shfaqnin shuma qesharake. Normalizimi
+     * bëhet me kursin e NGRIRË të secilit dokument.
+     *
+     * @return array{paid_cents:int, open_cents:int, overdue_cents:int, currency:string}
+     */
+    public function invoiceStatsInBase(): array
+    {
+        $paid = 0;
+        $open = 0;
+        $overdue = 0;
+        $monthStart = now()->startOfMonth();
+        $monthEnd = now()->endOfMonth();
+
+        BillingInvoice::query()
+            ->whereIn('status', ['paid', 'open', 'overdue'])
+            ->select(['id', 'status', 'currency', 'fx_rate', 'total_cents', 'amount_paid_cents', 'paid_at'])
+            ->chunkById(500, function ($invoices) use (&$paid, &$open, &$overdue, $monthStart, $monthEnd) {
+                foreach ($invoices as $invoice) {
+                    $rate = $invoice->fx_rate !== null ? (float) $invoice->fx_rate : null;
+
+                    if ($invoice->status === 'paid') {
+                        if ($invoice->paid_at?->betweenIncluded($monthStart, $monthEnd)) {
+                            $paid += $this->billingCurrency->toBaseCents($invoice->total_cents, $rate);
+                        }
+
+                        continue;
+                    }
+
+                    $balance = max(0, $invoice->total_cents - $invoice->amount_paid_cents);
+                    $normalized = $this->billingCurrency->toBaseCents($balance, $rate);
+
+                    if ($invoice->status === 'overdue') {
+                        $overdue += $normalized;
+                    } else {
+                        $open += $normalized;
+                    }
+                }
+            });
+
+        return [
+            'paid_cents' => $paid,
+            'open_cents' => $open,
+            'overdue_cents' => $overdue,
+            'currency' => PlatformBillingCurrency::BASE,
+        ];
+    }
+
+    /**
+     * KPI-t e pagesave të muajit, GJITHMONË në cent EURO. Pagesa e trashëgon
+     * monedhën nga fatura, ndaj normalizohet me kursin e ngrirë të asaj fature.
+     *
+     * @return array{month_cents:int, manual_cents:int, online_cents:int, currency:string}
+     */
+    public function paymentStatsInBase(): array
+    {
+        $month = 0;
+        $manual = 0;
+        $online = 0;
+
+        BillingPayment::query()
+            ->where('status', 'completed')
+            ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
+            ->with('invoice:id,fx_rate')
+            ->select(['id', 'provider', 'amount_cents', 'billing_invoice_id'])
+            ->chunkById(500, function ($payments) use (&$month, &$manual, &$online) {
+                foreach ($payments as $payment) {
+                    $rate = $payment->invoice?->fx_rate !== null
+                        ? (float) $payment->invoice->fx_rate
+                        : null;
+                    $base = $this->billingCurrency->toBaseCents($payment->amount_cents, $rate);
+
+                    $month += $base;
+
+                    if ($payment->provider === 'manual') {
+                        $manual += $base;
+                    } else {
+                        $online += $base;
+                    }
+                }
+            });
+
+        return [
+            'month_cents' => $month,
+            'manual_cents' => $manual,
+            'online_cents' => $online,
+            'currency' => PlatformBillingCurrency::BASE,
+        ];
     }
 
     public function void(BillingInvoice $invoice): void

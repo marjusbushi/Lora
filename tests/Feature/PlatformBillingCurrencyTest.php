@@ -7,6 +7,7 @@ use App\Models\PlatformSetting;
 use App\Models\Setting;
 use App\Models\Tenant;
 use App\Models\TenantSubscription;
+use App\Models\User;
 use App\Services\PlatformBillingCurrency;
 use App\Services\PlatformBillingService;
 use App\Services\TenantBillingService;
@@ -253,6 +254,104 @@ class PlatformBillingCurrencyTest extends TestCase
             'billing_currency' => 'XAU',
             'modules' => [],
         ]);
+    }
+
+    public function test_platform_kpis_never_add_lek_cents_onto_euro_cents(): void
+    {
+        // Gjetje e rishikimit (P1): një faturë prej €29 e ruajtur si 291 000 cent
+        // lekë do të shtonte €2 910 te kartat e të ardhurave po të mblidhej bruto.
+        $euroTenant = $this->makeTenant('EUR');
+        app(TenantBillingService::class)->provision($euroTenant, true);
+        $this->pinCoreOnly($euroTenant);
+        $euroInvoice = $this->invoice($euroTenant);
+        $euroInvoice->update(['status' => 'open']);
+
+        $lekTenant = $this->makeTenant('EUR');
+        app(TenantBillingService::class)->provision($lekTenant, true);
+        $this->pinCoreOnly($lekTenant);
+        $lekTenant->subscription()->update(['billing_currency' => 'ALL']);
+        PlatformSetting::set('currencies.rates', ['ALL' => 100.4], 'json');
+        $lekInvoice = $this->invoice($lekTenant);
+        $lekInvoice->update(['status' => 'open']);
+
+        $this->assertSame(2900, $euroInvoice->total_cents);
+        $this->assertSame(291000, $lekInvoice->total_cents);
+
+        $stats = app(PlatformBillingService::class)->invoiceStatsInBase();
+
+        // 2900 (euro) + 291000/100.4 ≈ 2900 → rreth €58, jo €2 939.
+        $this->assertSame('EUR', $stats['currency']);
+        $this->assertEqualsWithDelta(5800, $stats['open_cents'], 20,
+            'KPI-ja duhet të jetë ~€58, jo shuma bruto e centëve të përzier.');
+        $this->assertLessThan(10000, $stats['open_cents']);
+    }
+
+    public function test_payment_kpis_are_normalised_through_the_invoice_rate(): void
+    {
+        $tenant = $this->makeTenant('EUR');
+        app(TenantBillingService::class)->provision($tenant, true);
+        $this->pinCoreOnly($tenant);
+        $tenant->subscription()->update(['billing_currency' => 'ALL']);
+        PlatformSetting::set('currencies.rates', ['ALL' => 100.4], 'json');
+
+        $invoice = $this->invoice($tenant);
+        $invoice->update(['status' => 'open']);
+        $admin = User::factory()->create(['is_super_admin' => true]);
+
+        // 2 910 lek = i gjithë bilanci (291 000 cent).
+        app(PlatformBillingService::class)->registerManualPayment($invoice, [
+            'amount' => 2910,
+            'method' => 'bank',
+            'paid_at' => now(),
+        ], $admin);
+
+        $stats = app(PlatformBillingService::class)->paymentStatsInBase();
+
+        $this->assertSame('EUR', $stats['currency']);
+        $this->assertEqualsWithDelta(2900, $stats['month_cents'], 20, 'Pagesa prej 2 910 lek është ~€29, jo €2 910.');
+        $this->assertSame($stats['month_cents'], $stats['manual_cents']);
+    }
+
+    public function test_publishing_a_stale_draft_refreezes_the_rate_at_issuance(): void
+    {
+        // Gjetje e rishikimit (P2): drafti mund të rrijë me ditë; dokumenti nuk
+        // guxon të mbajë datë lëshimi të sotme me kursin e ditës kur u shkrua.
+        $tenant = $this->makeTenant('EUR');
+        app(TenantBillingService::class)->provision($tenant, true);
+        $this->pinCoreOnly($tenant);
+        $tenant->subscription()->update(['billing_currency' => 'ALL']);
+        PlatformSetting::set('currencies.rates', ['ALL' => 100.4], 'json');
+
+        $draft = $this->invoice($tenant);
+        $this->assertSame('draft', $draft->status);
+        $this->assertSame(291000, $draft->total_cents);
+
+        PlatformSetting::set('currencies.rates', ['ALL' => 130.0], 'json');
+        app(PlatformBillingService::class)->publish($draft);
+
+        $published = BillingInvoice::query()->with('lines')->findOrFail($draft->id);
+        $this->assertSame('open', $published->status);
+        $this->assertNotNull($published->issued_at);
+        $this->assertSame(130.0, (float) $published->fx_rate);
+        // Rindërtuar nga vlera bazë 2900, JO nga 291 000 e konvertuar sërish.
+        $this->assertSame(377000, $published->total_cents);
+        $this->assertSame(377000, $published->lines->sole()->amount_cents);
+        $this->assertSame(2900, $published->lines->sole()->metadata['base_amount_cents']);
+    }
+
+    public function test_publishing_a_euro_draft_leaves_its_amounts_untouched(): void
+    {
+        $tenant = $this->makeTenant('ALL');
+        app(TenantBillingService::class)->provision($tenant, true);
+        $this->pinCoreOnly($tenant);
+
+        $draft = $this->invoice($tenant);
+        app(PlatformBillingService::class)->publish($draft);
+
+        $published = BillingInvoice::query()->with('lines')->findOrFail($draft->id);
+        $this->assertSame('open', $published->status);
+        $this->assertSame(1.0, (float) $published->fx_rate);
+        $this->assertSame(2900, $published->total_cents);
     }
 
     public function test_the_migration_leaves_every_existing_subscription_and_invoice_on_euro(): void

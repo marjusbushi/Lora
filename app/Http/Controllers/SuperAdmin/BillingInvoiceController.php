@@ -46,11 +46,9 @@ class BillingInvoiceController extends Controller
                 'currency' => $tenant->subscription?->billing_currency ?: PlatformBillingCurrency::BASE,
                 'has_subscription' => (bool) $tenant->subscription,
             ]),
-            'stats' => [
-                'paid_cents' => BillingInvoice::query()->where('status', 'paid')->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])->sum('total_cents'),
-                'open_cents' => (int) BillingInvoice::query()->where('status', 'open')->selectRaw('COALESCE(SUM(total_cents - amount_paid_cents), 0) as aggregate')->value('aggregate'),
-                'overdue_cents' => (int) BillingInvoice::query()->where('status', 'overdue')->selectRaw('COALESCE(SUM(total_cents - amount_paid_cents), 0) as aggregate')->value('aggregate'),
-            ],
+            // Normalizuar në EURO me kursin e ngrirë të secilës faturë — një
+            // faturë në lek s'guxon të mblidhet drejtpërdrejt me ato në euro.
+            'stats' => $billing->invoiceStatsInBase(),
         ]);
     }
 

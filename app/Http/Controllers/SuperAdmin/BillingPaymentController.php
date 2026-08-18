@@ -17,7 +17,7 @@ use Inertia\Response;
 
 class BillingPaymentController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, PlatformBillingService $billing): Response
     {
         $tenantId = $request->integer('tenant_id');
         $invoiceId = $request->integer('invoice_id');
@@ -59,11 +59,8 @@ class BillingPaymentController extends Controller
                     'currency' => $invoice->currency,
                     'balance_cents' => $invoice->balance_cents,
                 ]),
-            'stats' => [
-                'month_cents' => BillingPayment::query()->where('status', 'completed')->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])->sum('amount_cents'),
-                'manual_cents' => BillingPayment::query()->where('status', 'completed')->where('provider', 'manual')->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])->sum('amount_cents'),
-                'online_cents' => BillingPayment::query()->where('status', 'completed')->where('provider', '!=', 'manual')->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])->sum('amount_cents'),
-            ],
+            // Normalizuar në EURO me kursin e ngrirë të faturës përkatëse.
+            'stats' => $billing->paymentStatsInBase(),
         ]);
     }
 
