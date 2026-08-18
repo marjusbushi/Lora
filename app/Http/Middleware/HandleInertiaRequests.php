@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\ReservationSplitProposal;
 use App\Models\Setting;
+use App\Models\User;
 use App\Services\BaseCurrency;
 use App\Services\CurrencyRates;
 use App\Services\PricingCurrency;
@@ -121,6 +122,13 @@ class HandleInertiaRequests extends Middleware
                 'current_period_ends_at' => $billingAccess['current_period_ends_at'],
             ] : null,
             'modules' => $billingAccess['modules'] ?? [],
+            // Impersonation banner: present on EVERY page while an admin is
+            // browsing as someone else; costs one extra lookup only in that state.
+            'impersonating' => ($user && $request->session()->has('impersonator_id')) ? [
+                'target_name' => $user->name,
+                'admin_name' => User::withoutGlobalScope('tenant_membership')
+                    ->find($request->session()->get('impersonator_id'))?->name,
+            ] : null,
             // Global desk alert: split-stay proposals waiting for the guest
             // conversation. Cached per tenant so every page load costs one
             // cache read, not a COUNT — the model invalidates it on writes

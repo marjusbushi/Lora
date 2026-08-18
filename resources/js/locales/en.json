@@ -740,6 +740,17 @@
       "showOtherTypes": "Show other types",
       "otherTypesWarning": "Careful: these rooms change the product the guest booked (a different room type)."
     },
+    "impersonation": {
+      "action": "Impersonate user",
+      "confirmTitle": "Impersonate user",
+      "confirmBody": "You will see the system with the eyes and permissions of",
+      "confirmBodyTail": ". Both start and stop are written to the audit log.",
+      "confirmCta": "Yes, impersonate",
+      "banner": "{admin} is viewing as {target}",
+      "stop": "Exit impersonation",
+      "stopping": "Exiting…",
+      "failed": "The impersonation could not be started."
+    },
     "splitStay": {
       "title": "Split-stay proposal — talk to the guest",
       "explain": "The whole stay fits within the same room type, but only with a mid-stay room change. Talk to the guest: if they agree, the split applies in one click; if not, staff act through Booking.com and only the decision is recorded here.",
