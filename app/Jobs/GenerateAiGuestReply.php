@@ -43,8 +43,9 @@ class GenerateAiGuestReply implements ShouldQueue
     /** @var array<int,int> */
     public array $backoff = [30, 60];
 
-    // Gemini deri 75s + "koha e shkrimit" deri 10s → 120s lë marzh të qetë.
-    public int $timeout = 120;
+    // Gemini deri 75s + "koha e shkrimit" PA tavan (paragrafët e gjatë 30-60s+)
+    // → 300s marzh; radha s'mbahet peng se copat e pritjes dalin herët në abort.
+    public int $timeout = 300;
 
     /**
      * 15/orë (task #375): 5-shi i epokës FAQ i mjaftonte robotit, po një bisedë
@@ -89,11 +90,19 @@ class GenerateAiGuestReply implements ShouldQueue
             return;
         }
 
-        // Nëse pas mesazhit të mysafirit ka folur tashmë stafi (ose AI), s'ka
-        // vend për përgjigje të dytë — njeriu e ka marrë bisedën në dorë.
-        // reorder() heq renditjen ASC të ngulitur në relacion — pa të, latest() s'fiton.
-        $latest = $thread->messages()->reorder()->latest('sent_at')->latest('id')->first();
-        if (! $latest || $latest->id !== $this->messageId || $latest->sender !== Message::SENDER_GUEST) {
+        // Mesazhi që trajton ky job duhet të ekzistojë dhe të jetë i mysafirit.
+        $own = $thread->messages()->reorder()->find($this->messageId);
+        if (! $own || $own->sender !== Message::SENDER_GUEST) {
+            return;
+        }
+
+        // Roja race-aware (task #378): përgjigja e VONUAR e Lora-s për një mesazh
+        // të mëparshëm ulet në bisedë PAS mesazhit tonë — ajo s'është "stafi foli"
+        // dhe s'duhet ta heshtë përgjigjen e radhës (gara e parë live nga Marjusi:
+        // mysafiri shkruante ndërsa Lora "po shkruante" → mesazhi i tij mbetej pa
+        // përgjigje). Ndalim VETËM për mesazh më të ri MYSAFIRI (e trajton job-i
+        // i vet) ose përgjigje NJERIU nga stafi.
+        if ($this->supersededBy($thread)) {
             return;
         }
 
@@ -131,12 +140,11 @@ class GenerateAiGuestReply implements ShouldQueue
             return;
         }
 
-        // Thirrja e Gemini-t mund të zgjasë deri në 45s — nëse ndërkohë foli
-        // stafi (ose erdhi mesazh i ri), përgjigja jonë është e vjetruar: as
-        // dërgim, as draft (gjetje Codex, PR #433).
+        // Thirrja e Gemini-t mund të zgjasë — nëse ndërkohë foli STAFI njeri ose
+        // erdhi mesazh i ri mysafiri, përgjigja jonë është e vjetruar: as dërgim,
+        // as draft (gjetje Codex PR #433; race-aware nga task #378).
         $thread->refresh();
-        $latest = $thread->messages()->reorder()->latest('sent_at')->latest('id')->first();
-        if (! $latest || $latest->id !== $this->messageId || $thread->status === 'closed') {
+        if ($thread->status === 'closed' || $this->supersededBy($thread)) {
             return;
         }
 
@@ -170,7 +178,7 @@ class GenerateAiGuestReply implements ShouldQueue
             } elseif ($faqs->isNotEmpty()) {
                 $trusted = true;
             } elseif ($smallTalk) {
-                $trusted = $this->confirmSmallTalk($gemini, (string) $latest->body);
+                $trusted = $this->confirmSmallTalk($gemini, (string) $own->body);
             } elseif ($clarifying) {
                 $trusted = $clarifyingConfirmed = $this->confirmClarifying($gemini, $reply);
             }
@@ -189,7 +197,7 @@ class GenerateAiGuestReply implements ShouldQueue
             // faktesh pa FAQ e pa ankorim te motori. Muhabeti dhe përgjigjet e
             // sigurta s'kanë ç'mësohet — mos ndot sugjerimet e FAQ-së me "Si je?".
             ...(! $confident || (! $toolGrounded && ! $smallTalk && ! $clarifyingConfirmed && $faqs->isEmpty())
-                ? ['ai_unanswered_question' => mb_substr($latest->body, 0, 500)]
+                ? ['ai_unanswered_question' => mb_substr($own->body, 0, 500)]
                 : []),
         ])->save();
     }
@@ -235,6 +243,15 @@ pyet drejtpërdrejt nëse je njeri apo robot, përgjigju me sinqeritet e
 thjeshtësi që je asistentja dixhitale e recepsionit — pa u zgjatur. Çdo
 përgjigje që mbart fakte a të dhëna shëno kind='informative'. Karakteri
 ndryshon vetëm TONIN — kurrë rregullat e mëposhtme.
+
+RRJEDHA E BISEDËS (hap pas hapi — KURRË disa hapa të bashkuar në një mesazh):
+a) Mysafiri përshëndet a bën muhabet → kthe VETËM përshëndetje të shkurtër me
+   emrin tënd + një pyetje interesi ("Si mund t'ju ndihmoj?"). MOS përmend
+   dhoma, çmime a data — mysafiri s'ka kërkuar ende asgjë.
+b) Mysafiri shpreh kërkesën → pyet VETËM të dhënat që mungojnë (datat, personat).
+c) Me të dhënat e plota → jep përgjigjen ose ofertën nga mjetet.
+Përgjigja jote është gjithmonë NJË hap i kësaj rrjedhe, e shkurtër dhe
+proporcionale me mesazhin e mysafirit.
 
 RREGULLA TË PATHYESHME:
 1. DISPONIBILITET & ÇMIME: kur mysafiri jep datat e qëndrimit (check-in dhe
@@ -487,36 +504,56 @@ PROMPT;
     }
 
     /**
-     * Ritmi njerëzor (task #368): sa më e gjatë përgjigja, aq më shumë "kohë
-     * shkrimi" — sikur recepsionisti po e shkruan vërtet. Kufij 2-10s që
-     * mysafiri të mos bezdiset. ~40 shkronja/sekondë mbi bazën 2s.
+     * Ritmi njerëzor (task #378, urdhëresë e Marjusit): 2s "lexim" + 1s për çdo
+     * 15 shkronja shkrimi — PA TAVAN. Një paragraf ~200 shkronja merr ~15s,
+     * i gjati 30-40s — si njeri që e shkruan vërtet.
      */
     public static function humanDelaySeconds(string $reply): int
     {
-        return (int) min(10, max(2, 2 + intdiv(mb_strlen($reply), 40)));
+        return 2 + intdiv(mb_strlen($reply), 15);
+    }
+
+    /**
+     * Roja race-aware (task #378): pas mesazhit të këtij job-i ka vetëm përgjigje
+     * AI (gara e ritmit) → vazhdo; ka mesazh më të ri mysafiri OSE përgjigje
+     * njeriu nga stafi → hesht.
+     */
+    private function supersededBy(MessageThread $thread): bool
+    {
+        return $thread->messages()->reorder()
+            ->where('id', '>', $this->messageId)
+            ->where(function ($query) {
+                $query->where('sender', Message::SENDER_GUEST)
+                    ->orWhere(fn ($q) => $q->where('sender', Message::SENDER_HOST)->where('sent_by_ai', false));
+            })
+            ->exists();
     }
 
     private function sendAutoReply(ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, MessageThread $thread, string $reply, string $rateKey): void
     {
-        // Si njeri (task #368): në WhatsApp mysafiri sheh "po shkruan..." gjatë
-        // vonesës (best-effort — urë e vjetër pa endpoint-in / offline = vetëm
-        // vonesa, dërgimi s'preket). WhatsApp e fshin vetë treguesin me mesazhin.
-        if ($thread->channel === 'whatsapp' && $thread->whatsapp_jid) {
-            try {
-                $whatsapp->typing($thread->tenant_id, $thread->whatsapp_jid);
-            } catch (\Throwable) {
-                // Zbukurim, jo kusht — vazhdo pa tregues.
+        // Si njeri (task #378): pritja copëtohet në copa 8-sekondëshe — para çdo
+        // cope ri-dërgohet "po shkruan..." (treguesi i WhatsApp skadon ~10s; pa
+        // keep-alive zhduket në mes të paragrafëve të gjatë) dhe pas çdo cope
+        // ri-verifikohet freskia (mysafir i ri / staf njeri gjatë "shkrimit" →
+        // hesht). Typing best-effort: urë offline = vetëm vonesa, dërgimi s'preket.
+        $remaining = self::humanDelaySeconds($reply);
+        while ($remaining > 0) {
+            if ($thread->channel === 'whatsapp' && $thread->whatsapp_jid) {
+                try {
+                    $whatsapp->typing($thread->tenant_id, $thread->whatsapp_jid);
+                } catch (\Throwable) {
+                    // Zbukurim, jo kusht — vazhdo pa tregues.
+                }
             }
-        }
 
-        Sleep::for(self::humanDelaySeconds($reply))->seconds();
+            $chunk = min(8, $remaining);
+            Sleep::for($chunk)->seconds();
+            $remaining -= $chunk;
 
-        // Gjatë "shkrimit" mund të ketë folur stafi ose të ketë ardhur mesazh
-        // i ri — ri-verifiko freskinë para dërgimit, njësoj si pas Gemini-t.
-        $thread->refresh();
-        $latest = $thread->messages()->reorder()->latest('sent_at')->latest('id')->first();
-        if (! $latest || $latest->id !== $this->messageId || $thread->status === 'closed') {
-            return;
+            $thread->refresh();
+            if ($thread->status === 'closed' || $this->supersededBy($thread)) {
+                return;
+            }
         }
 
         $channexMessageId = null;

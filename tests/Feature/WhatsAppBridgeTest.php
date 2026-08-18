@@ -453,6 +453,35 @@ class WhatsAppBridgeTest extends TestCase
         $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
     }
 
+    /** Task #378: vonesa 15s copëtohet [8,7] me "po shkruan..." para çdo cope (keep-alive i treguesit). */
+    public function test_long_delay_chunks_sleep_and_keeps_typing_alive(): void
+    {
+        \App\Models\Setting::set('ai_mcp.whatsapp_auto_reply_enabled', true, 'boolean');
+        \App\Models\HotelFaq::create(['question' => 'Parkim?', 'answer' => 'Po.']);
+        $thread = $this->makeWhatsAppThread();
+        $message = $thread->messages()->create([
+            'sender' => \App\Models\Message::SENDER_GUEST,
+            'body' => 'A keni parkim?',
+            'sent_at' => now(),
+        ]);
+
+        // 195 shkronja → 2 + 13 = 15s → copa [8, 7] → typing 2 herë.
+        $reply = str_repeat('a', 195);
+        $this->fakeGemini(true, $reply);
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('typing')->twice()->andReturn([]);
+            $mock->shouldReceive('send')->once()->andReturn(['id' => 'WA-LONG-1']);
+        });
+
+        $this->runAiJob($thread, $message->id);
+
+        \Illuminate\Support\Sleep::assertSequence([
+            \Illuminate\Support\Sleep::for(8)->seconds(),
+            \Illuminate\Support\Sleep::for(7)->seconds(),
+        ]);
+        $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true, 'whatsapp_message_id' => 'WA-LONG-1']);
+    }
+
     /** Task #368: typing që dështon (urë e vjetër pa endpoint) s'e ndal dërgimin. */
     public function test_typing_failure_does_not_block_the_auto_reply(): void
     {
