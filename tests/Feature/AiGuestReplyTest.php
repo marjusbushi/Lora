@@ -458,6 +458,48 @@ class AiGuestReplyTest extends TestCase
         $this->assertNull($thread->ai_unanswered_question);
     }
 
+    /** Task #370: identiteti/karakteri ruhen si string nga UI dhe emri i ri mbërrin në promptin e job-it. */
+    public function test_identity_settings_persist_and_reach_the_prompt(): void
+    {
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $admin = \App\Models\User::factory()->create(['current_tenant_id' => $this->tenant->id]);
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)->put(route('lora-ai.update'), [
+            'reservations_enabled' => true,
+            'messages_enabled' => true,
+            'guest_reply_enabled' => true,
+            'pricing_enabled' => true,
+            'price_apply_enabled' => false,
+            'assistant_name' => 'Maja',
+            'assistant_character' => 'Serioze, e shkurtër dhe pa emoji.',
+        ])->assertRedirect();
+
+        $this->assertSame('Maja', Setting::get('ai_mcp.assistant_name'));
+        $this->assertSame('Serioze, e shkurtër dhe pa emoji.', Setting::get('ai_mcp.assistant_character'));
+
+        // Kërkesa HTTP e pastron TenantContext në terminim — rikthe kontekstin
+        // që job-i (TenantAwareJob) të mos dalë te roja e parë me tenant null.
+        app(TenantContext::class)->set($this->tenant);
+
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $capturedSystem = '';
+        $this->mock(GeminiClient::class, function ($mock) use (&$capturedSystem) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system) use (&$capturedSystem) {
+                $capturedSystem = $system;
+
+                return ['args' => ['confident' => true, 'reply' => 'Përshëndetje! Jam Maja.', 'kind' => 'small_talk'], 'toolsUsed' => []];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        $this->assertStringContainsString('Maja', $capturedSystem);
+        $this->assertStringContainsString('Serioze, e shkurtër dhe pa emoji.', $capturedSystem);
+    }
+
     /** Task #368: "koha e shkrimit" rritet me gjatësinë — kufij 2s dhe 10s. */
     public function test_human_delay_scales_with_reply_length(): void
     {
