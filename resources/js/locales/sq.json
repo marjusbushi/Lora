@@ -754,6 +754,17 @@
       "showOtherTypes": "Shfaq tipe të tjera",
       "otherTypesWarning": "Kujdes: këto dhoma ndryshojnë produktin që mysafiri ka rezervuar (tip tjetër dhome)."
     },
+    "impersonation": {
+      "action": "Simulo përdoruesin",
+      "confirmTitle": "Simulo përdoruesin",
+      "confirmBody": "Do ta shikosh sistemin me sytë dhe lejet e",
+      "confirmBodyTail": ". Nisja dhe mbyllja regjistrohen në auditim.",
+      "confirmCta": "Po, simulo",
+      "banner": "{admin} po shikon si {target}",
+      "stop": "Dil nga simulimi",
+      "stopping": "Duke dalë…",
+      "failed": "Simulimi nuk u nis dot."
+    },
     "splitStay": {
       "title": "Propozim ndarjeje qëndrimi — fol me mysafirin",
       "explain": "Ka vend për gjithë qëndrimin brenda të njëjtit tip, por vetëm me ndërrim dhome gjatë qëndrimit. Bisedo me mysafirin: nëse pranon, ndarja zbatohet me një klik; nëse jo, veprimet kryhen nga stafi përmes Booking.com dhe këtu regjistrohet vetëm vendimi.",

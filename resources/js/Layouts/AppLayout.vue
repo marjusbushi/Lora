@@ -12,9 +12,9 @@ import Dropdown from '@/Components/Dropdown.vue';
 import LanguageSwitcher from '@/Components/LanguageSwitcher.vue';
 import NotificationBell from '@/Components/NotificationBell.vue';
 import GlobalSearch from '@/Components/GlobalSearch.vue';
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
-import { AlertTriangle, ChevronDown, LogOut, Settings, UserRound } from 'lucide-vue-next';
+import { AlertTriangle, ChevronDown, LogOut, Settings, UserRound, VenetianMask } from 'lucide-vue-next';
 
 defineProps({
     immersive: { type: Boolean, default: false },
@@ -38,6 +38,18 @@ const userPermissions = computed(() => page.props.auth.user?.permissions || []);
 // Split-stay proposals awaiting the guest conversation — global by design:
 // the desk must see this on EVERY page, not only the calendar.
 const splitProposalsPending = computed(() => Number(page.props.splitProposalsPending || 0));
+// Impersonation: an admin is browsing as someone else — the red banner must
+// be impossible to miss on any page, and the exit must be one click even for
+// roles that hold zero permissions (the stop route needs no permission).
+const impersonating = computed(() => page.props.impersonating || null);
+const stoppingImpersonation = ref(false);
+function stopImpersonation() {
+    if (stoppingImpersonation.value) return;
+    stoppingImpersonation.value = true;
+    router.post(route('impersonation.stop'), {}, {
+        onFinish: () => { stoppingImpersonation.value = false; },
+    });
+}
 const activeModules = computed(() => page.props.modules || {});
 const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
 const canAccessSettings = computed(() => isAdmin.value);
@@ -347,6 +359,28 @@ const globalSearchLinks = computed(() => navItems.value.flatMap((item) => {
                     </Dropdown>
                 </div>
             </header>
+
+            <!-- Impersonation banner: RED (error tokens) so it can never be
+                 confused with the amber split-stay alert below it; visible on
+                 every PMS page for as long as the impersonation lasts. -->
+            <div
+                v-if="impersonating"
+                class="flex flex-wrap items-center justify-between gap-2 border-b border-error-700 bg-error-600 px-4 py-2.5 sm:px-6"
+                role="alert"
+            >
+                <span class="flex min-w-0 items-center gap-2 text-body-sm font-semibold text-white">
+                    <VenetianMask class="h-4 w-4 shrink-0" />
+                    {{ $t('admin.impersonation.banner', { admin: impersonating.admin_name, target: impersonating.target_name }) }}
+                </span>
+                <button
+                    type="button"
+                    :disabled="stoppingImpersonation"
+                    class="shrink-0 rounded-lg border border-white/40 bg-white px-3 py-1.5 text-tiny font-bold text-error-700 transition hover:bg-error-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    @click="stopImpersonation"
+                >
+                    {{ stoppingImpersonation ? $t('admin.impersonation.stopping') : $t('admin.impersonation.stop') }}
+                </button>
+            </div>
 
             <!-- Global desk alert: split-stay proposals waiting for the guest
                  conversation — visible on every PMS page by design. -->
