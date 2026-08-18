@@ -60,6 +60,10 @@ class LoraAiController extends Controller
                 'messages_enabled' => $this->boolSetting('messages_enabled', true),
                 'guest_reply_enabled' => $this->boolSetting('guest_reply_enabled', true),
                 'guest_auto_reply_enabled' => $this->boolSetting('guest_auto_reply_enabled', true),
+                // Identiteti & karakteri (task #370): vlera EFEKTIVE, kurrë bosh —
+                // hoteli e para-gjen të mbushur me default-in tonë dhe e ndryshon vetë.
+                'assistant_name' => trim((string) Setting::get('ai_mcp.assistant_name')) ?: \App\Jobs\GenerateAiGuestReply::DEFAULT_ASSISTANT_NAME,
+                'assistant_character' => trim((string) Setting::get('ai_mcp.assistant_character')) ?: \App\Jobs\GenerateAiGuestReply::DEFAULT_ASSISTANT_CHARACTER,
                 // WhatsApp: default FIKUR — rruga QR-lite mban risk bllokimi nga
                 // Meta, roboti aty ndizet vetëm me dorën e pronarit (task #337).
                 'whatsapp_auto_reply_enabled' => $this->boolSetting('whatsapp_auto_reply_enabled', false),
@@ -97,6 +101,8 @@ class LoraAiController extends Controller
             'guest_reply_enabled' => ['required', 'boolean'],
             'guest_auto_reply_enabled' => ['sometimes', 'boolean'],
             'whatsapp_auto_reply_enabled' => ['sometimes', 'boolean'],
+            'assistant_name' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'assistant_character' => ['sometimes', 'nullable', 'string', 'max:600'],
             'pricing_enabled' => ['required', 'boolean'],
             'ai_price_recommendations_enabled' => ['sometimes', 'boolean'],
             'price_apply_enabled' => ['required', 'boolean'],
@@ -107,8 +113,13 @@ class LoraAiController extends Controller
             'inventory_enabled' => ['sometimes', 'boolean'],
         ]);
 
+        // Identiteti/karakteri janë TEKST — jo çelësa on/off (task #370). Bosh →
+        // ruhet '' dhe job-i bie vetë te default-i i para-shkruar.
+        $stringKeys = ['assistant_name', 'assistant_character'];
         foreach ($data as $key => $value) {
-            Setting::set('ai_mcp.'.$key, $value, 'boolean');
+            in_array($key, $stringKeys, true)
+                ? Setting::set('ai_mcp.'.$key, trim((string) $value), 'string')
+                : Setting::set('ai_mcp.'.$key, $value, 'boolean');
         }
 
         return back()->with('success', 'Lejet e Lora AI u ruajtën.');

@@ -59,12 +59,15 @@ class AiGuestReplyTest extends TestCase
     }
 
     /** @param  array<int,string>  $toolsUsed  simulon cilat mjete "përdori" Gemini në këtë përgjigje */
-    private function fakeGemini(bool $confident, string $reply = 'Breakfast is 7-10.', array $toolsUsed = []): void
+    private function fakeGemini(bool $confident, string $reply = 'Breakfast is 7-10.', array $toolsUsed = [], ?string $kind = null): void
     {
-        $this->mock(GeminiClient::class, function ($mock) use ($confident, $reply, $toolsUsed) {
+        $this->mock(GeminiClient::class, function ($mock) use ($confident, $reply, $toolsUsed, $kind) {
             $mock->shouldReceive('configured')->andReturn(true);
             $mock->shouldReceive('converse')
-                ->andReturn(['args' => ['confident' => $confident, 'reply' => $reply], 'toolsUsed' => $toolsUsed]);
+                ->andReturn([
+                    'args' => ['confident' => $confident, 'reply' => $reply] + ($kind ? ['kind' => $kind] : []),
+                    'toolsUsed' => $toolsUsed,
+                ]);
         });
     }
 
@@ -399,6 +402,159 @@ class AiGuestReplyTest extends TestCase
         $thread->refresh();
         $this->assertNull($thread->ai_suggestion);
         $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Task #369: muhabeti i mirësjelljes dërgohet VETË edhe me 0 FAQ — dhe prompt-i mbart identitetin 'Lora'. */
+    public function test_small_talk_auto_sends_with_zero_faq_and_prompt_carries_identity(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $capturedSystem = '';
+        $this->mock(GeminiClient::class, function ($mock) use (&$capturedSystem) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system) use (&$capturedSystem) {
+                $capturedSystem = $system;
+
+                return ['args' => ['confident' => true, 'reply' => 'Përshëndetje! Jam Lora — si mund t\'ju ndihmoj?', 'kind' => 'small_talk'], 'toolsUsed' => []];
+            });
+            // Vota e dytë e pavarur (gjetje Codex #470) konfirmon muhabetin.
+            $mock->shouldReceive('structured')->once()->andReturn(['small_talk' => true]);
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        $thread->refresh();
+        $this->assertNull($thread->ai_suggestion);
+        $this->assertNull($thread->ai_unanswered_question);
+        $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+        $this->assertStringContainsString('Lora', $capturedSystem);
+    }
+
+    /** Gjetja Codex #470: pyetje faktesh e keq-klasifikuar si muhabet (pa shifra) → vota e dytë e rrëzon → draft. */
+    public function test_misclassified_fact_question_fails_second_vote_and_stays_draft(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            // Përgjigjësi gabon: fakt i shpikur pa shifra, i etiketuar si muhabet.
+            $mock->shouldReceive('converse')
+                ->andReturn(['args' => ['confident' => true, 'reply' => 'Po, parkimi është falas!', 'kind' => 'small_talk'], 'toolsUsed' => []]);
+            // Klasifikuesi i pavarur (sheh vetëm mesazhin e mysafirit) e kap.
+            $mock->shouldReceive('structured')->once()->andReturn(['small_talk' => false]);
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Task #369: small_talk me SHIFRA = kontrabandë faktesh → draft, kurrë dërgim. */
+    public function test_small_talk_with_digits_stays_draft(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->fakeGemini(true, 'Jam Lora! Na merrni në 069 123 4567.', [], 'small_talk');
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+    }
+
+    /** Task #369: small_talk me auto OFF → draft, po PA 'pyetje pa përgjigje' (s'ndot sugjerimet e FAQ-së). */
+    public function test_small_talk_draft_does_not_create_faq_suggestion_material(): void
+    {
+        Setting::set('ai_mcp.guest_auto_reply_enabled', false, 'boolean');
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->fakeGemini(true, 'Përshëndetje! Si mund t\'ju ndihmoj?', [], 'small_talk');
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $thread->refresh();
+        $this->assertNotNull($thread->ai_suggestion);
+        $this->assertNull($thread->ai_unanswered_question);
+    }
+
+    /** Task #371: përgjigja e dërguar e Lora-s transmetohet live (MessageReceived) — stafi s'ka nevojë për refresh. */
+    public function test_auto_reply_broadcasts_message_received_for_live_inbox(): void
+    {
+        \Illuminate\Support\Facades\Event::fake([\App\Events\MessageReceived::class]);
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->fakeGemini(true);
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        \Illuminate\Support\Facades\Event::assertDispatched(
+            \App\Events\MessageReceived::class,
+            fn ($event) => $event->tenantId === $thread->tenant_id && $event->threadId === $thread->id,
+        );
+    }
+
+    /** Task #371: draft-i (pa dërgim) s'transmeton asgjë — s'ka mesazh të ri për t'u shfaqur. */
+    public function test_draft_path_does_not_broadcast(): void
+    {
+        \Illuminate\Support\Facades\Event::fake([\App\Events\MessageReceived::class]);
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->fakeGemini(false, 'Recepsioni do t\'ju përgjigjet shumë shpejt.');
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        \Illuminate\Support\Facades\Event::assertNotDispatched(\App\Events\MessageReceived::class);
+    }
+
+    /** Task #370: identiteti/karakteri ruhen si string nga UI dhe emri i ri mbërrin në promptin e job-it. */
+    public function test_identity_settings_persist_and_reach_the_prompt(): void
+    {
+        $this->seed(\Database\Seeders\RolePermissionSeeder::class);
+        $admin = \App\Models\User::factory()->create(['current_tenant_id' => $this->tenant->id]);
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)->put(route('lora-ai.update'), [
+            'reservations_enabled' => true,
+            'messages_enabled' => true,
+            'guest_reply_enabled' => true,
+            'pricing_enabled' => true,
+            'price_apply_enabled' => false,
+            'assistant_name' => 'Maja',
+            'assistant_character' => 'Serioze, e shkurtër dhe pa emoji.',
+        ])->assertRedirect();
+
+        $this->assertSame('Maja', Setting::get('ai_mcp.assistant_name'));
+        $this->assertSame('Serioze, e shkurtër dhe pa emoji.', Setting::get('ai_mcp.assistant_character'));
+
+        // Kërkesa HTTP e pastron TenantContext në terminim — rikthe kontekstin
+        // që job-i (TenantAwareJob) të mos dalë te roja e parë me tenant null.
+        app(TenantContext::class)->set($this->tenant);
+
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $capturedSystem = '';
+        $this->mock(GeminiClient::class, function ($mock) use (&$capturedSystem) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system) use (&$capturedSystem) {
+                $capturedSystem = $system;
+
+                return ['args' => ['confident' => true, 'reply' => 'Përshëndetje! Jam Maja.', 'kind' => 'small_talk'], 'toolsUsed' => []];
+            });
+            $mock->shouldReceive('structured')->once()->andReturn(['small_talk' => true]);
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        $this->assertStringContainsString('Maja', $capturedSystem);
+        $this->assertStringContainsString('Serioze, e shkurtër dhe pa emoji.', $capturedSystem);
     }
 
     /** Task #368: "koha e shkrimit" rritet me gjatësinë — kufij 2s dhe 10s. */
