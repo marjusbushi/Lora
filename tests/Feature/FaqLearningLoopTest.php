@@ -15,6 +15,7 @@ use App\Services\GeminiClient;
 use App\Tenancy\TenantContext;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 /**
@@ -32,6 +33,9 @@ class FaqLearningLoopTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Ritmi njerëzor (task #368) mos i bëjë testet të flenë realisht.
+        Sleep::fake();
 
         $this->tenant = Tenant::query()->sole();
         app(TenantContext::class)->set($this->tenant);

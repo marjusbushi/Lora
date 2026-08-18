@@ -17,6 +17,7 @@ use App\Tenancy\TenantContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Sleep;
 
 /**
  * Lora AI Chat (propozimi MHQ #22 + task #363 "Lora recepsioniste"): pas çdo
@@ -32,11 +33,18 @@ class GenerateAiGuestReply implements ShouldQueue
 {
     use Queueable, TenantAwareJob;
 
-    public int $tries = 2;
+    /**
+     * 3 prova me 30s/60s ndërmjet — 429-at e Gemini (bursts) dhe ngecjet
+     * kalimtare të rrjetit kapërcehen vetë; rojet (staleness, rate-limit,
+     * thread closed) ri-ekzekutohen në çdo riprovë, pa dërgim të dyfishtë.
+     */
+    public int $tries = 3;
 
-    public int $backoff = 30;
+    /** @var array<int,int> */
+    public array $backoff = [30, 60];
 
-    public int $timeout = 90;
+    // Gemini deri 75s + "koha e shkrimit" deri 10s → 120s lë marzh të qetë.
+    public int $timeout = 120;
 
     private const MAX_AI_REPLIES_PER_THREAD_PER_HOUR = 5;
 
@@ -284,14 +292,14 @@ PROMPT;
             },
         ];
 
-        try {
-            return $gemini->converse($system, "BISEDA:\n{$conversation}", $tools, $executors, 'guest_reply', 1024, 45)
-                + ['quotes' => $quotes];
-        } catch (\Throwable $e) {
-            report($e);
-
-            return null;
-        }
+        // PA catch (task #367): një dështim i Gemini-t (429, timeout, deadline)
+        // duhet ta RRËZOJË job-in — vetëm kështu radha e riprovon (tries/backoff).
+        // Catch-i i vjetër e kthente në "sukses" të heshtur: as përgjigje, as
+        // draft, as riprovë — pikërisht dështimet "herë pas here" të staging-ut.
+        // Deadline 75s: përgjigja me çmime mban 2-3 thirrje HTTP radhazi; 45s
+        // mbushej nga një raund i ngadaltë "thinking" (job timeout 90s — ka marzh).
+        return $gemini->converse($system, "BISEDA:\n{$conversation}", $tools, $executors, 'guest_reply', 1024, 75)
+            + ['quotes' => $quotes];
     }
 
     /**
@@ -340,8 +348,39 @@ PROMPT;
         return true;
     }
 
+    /**
+     * Ritmi njerëzor (task #368): sa më e gjatë përgjigja, aq më shumë "kohë
+     * shkrimi" — sikur recepsionisti po e shkruan vërtet. Kufij 2-10s që
+     * mysafiri të mos bezdiset. ~40 shkronja/sekondë mbi bazën 2s.
+     */
+    public static function humanDelaySeconds(string $reply): int
+    {
+        return (int) min(10, max(2, 2 + intdiv(mb_strlen($reply), 40)));
+    }
+
     private function sendAutoReply(ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, MessageThread $thread, string $reply, string $rateKey): void
     {
+        // Si njeri (task #368): në WhatsApp mysafiri sheh "po shkruan..." gjatë
+        // vonesës (best-effort — urë e vjetër pa endpoint-in / offline = vetëm
+        // vonesa, dërgimi s'preket). WhatsApp e fshin vetë treguesin me mesazhin.
+        if ($thread->channel === 'whatsapp' && $thread->whatsapp_jid) {
+            try {
+                $whatsapp->typing($thread->tenant_id, $thread->whatsapp_jid);
+            } catch (\Throwable) {
+                // Zbukurim, jo kusht — vazhdo pa tregues.
+            }
+        }
+
+        Sleep::for(self::humanDelaySeconds($reply))->seconds();
+
+        // Gjatë "shkrimit" mund të ketë folur stafi ose të ketë ardhur mesazh
+        // i ri — ri-verifiko freskinë para dërgimit, njësoj si pas Gemini-t.
+        $thread->refresh();
+        $latest = $thread->messages()->reorder()->latest('sent_at')->latest('id')->first();
+        if (! $latest || $latest->id !== $this->messageId || $thread->status === 'closed') {
+            return;
+        }
+
         $channexMessageId = null;
         $whatsappMessageId = null;
 

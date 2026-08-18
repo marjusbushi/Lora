@@ -380,7 +380,7 @@ const server = createServer(async (req, res) => {
     }
 
     const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
-    const match = url.pathname.match(/^\/sessions\/(\d+)(?:\/(start|logout|send))?$/);
+    const match = url.pathname.match(/^\/sessions\/(\d+)(?:\/(start|logout|send|typing))?$/);
     if (!match) return json(res, 404, { error: 'not found' });
 
     const tenantId = Number(match[1]);
@@ -435,6 +435,23 @@ const server = createServer(async (req, res) => {
                 }
                 const sent = await session.sock.sendMessage(jid, { text });
                 return json(res, 200, { id: sent?.key?.id || null });
+            }
+            case 'typing': {
+                // "Po shkruan..." DALËS (task #368): Lora AI e tregon veten si
+                // njeri para se të dërgojë — mysafiri sheh treguesin e shkrimit.
+                // WhatsApp e fshin vetë treguesin pas ~10s ose me mbërritjen e
+                // mesazhit, prandaj s'ka nevojë për 'paused' të detyruar.
+                const session = sessions.get(tenantId);
+                if (session?.status !== 'connected') {
+                    return json(res, 409, { error: 'not connected' });
+                }
+                const jid = String(body.jid || '');
+                const state = String(body.state || 'composing');
+                if (!(jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) || !['composing', 'paused'].includes(state)) {
+                    return json(res, 422, { error: 'invalid jid or state' });
+                }
+                await session.sock.sendPresenceUpdate(state, jid);
+                return json(res, 200, { state });
             }
             default:
                 return json(res, 405, { error: 'method' });
