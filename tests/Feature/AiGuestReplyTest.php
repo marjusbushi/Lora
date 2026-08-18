@@ -671,12 +671,55 @@ class AiGuestReplyTest extends TestCase
         $this->assertStringContainsString('Serioze, e shkurtër dhe pa emoji.', $capturedSystem);
     }
 
-    /** Task #368: "koha e shkrimit" rritet me gjatësinë — kufij 2s dhe 10s. */
+    /** Task #378 (urdhëresë e Marjusit): 2s + 1s/15 shkronja, PA tavan. */
     public function test_human_delay_scales_with_reply_length(): void
     {
         $this->assertSame(2, GenerateAiGuestReply::humanDelaySeconds(''));
-        $this->assertSame(5, GenerateAiGuestReply::humanDelaySeconds(str_repeat('a', 120)));
-        $this->assertSame(10, GenerateAiGuestReply::humanDelaySeconds(str_repeat('a', 400)));
+        $this->assertSame(10, GenerateAiGuestReply::humanDelaySeconds(str_repeat('a', 120)));
+        $this->assertSame(28, GenerateAiGuestReply::humanDelaySeconds(str_repeat('a', 400)));
+    }
+
+    /** Task #378 (gara e ritmit): përgjigja racuese e VETË Lora-s pas mesazhit tonë NUK e hesht job-in. */
+    public function test_lora_own_racing_reply_does_not_silence_the_next_answer(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        // Përgjigja e vonuar e Lora-s për një mesazh të MËPARSHËM ulet pas tonit.
+        $thread->messages()->create([
+            'sender' => Message::SENDER_HOST,
+            'sent_by_ai' => true,
+            'body' => 'Përshëndetje! Si mund t\'ju ndihmoj?',
+            'sent_at' => now()->addSecond(),
+        ]);
+
+        $this->fakeGemini(true);
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true, 'body' => 'Breakfast is 7-10.']);
+    }
+
+    /** Task #378: mesazh MË I RI mysafiri pas tonit → ky job hesht (e trajton job-i i vet), pa draft. */
+    public function test_newer_guest_message_supersedes_this_job(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $thread->messages()->create([
+            'sender' => Message::SENDER_GUEST,
+            'body' => 'Edhe një pyetje tjetër...',
+            'sent_at' => now()->addSecond(),
+        ]);
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->never();
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNull($thread->refresh()->ai_suggestion);
     }
 
     public function test_staff_reply_clears_the_ai_draft(): void
