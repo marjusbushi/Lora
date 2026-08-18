@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import { translate } from '@/i18n';
@@ -7,10 +8,14 @@ import { ArrowLeft, Building2, CreditCard, FileText, ReceiptText } from 'lucide-
 const props = defineProps({ invoice: Object });
 
 function money(cents) {
+    // Leku s'ka qindarka — pas rrumbullakimit në 10 njësi, ".00" do të ishte zhurmë.
+    const fractionDigits = props.invoice.currency === 'ALL' ? 0 : 2;
+
     return new Intl.NumberFormat('sq-AL', {
         style: 'currency',
         currency: props.invoice.currency,
-        minimumFractionDigits: 2,
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits,
     }).format((cents || 0) / 100);
 }
 
@@ -30,11 +35,31 @@ function quantity(value) {
     return new Intl.NumberFormat('sq-AL', { maximumFractionDigits: 2 }).format(Number(value || 0));
 }
 
+// Cikli i NGRIRË mbi faturë, jo ai aktual i abonimit: një faturë mujore e
+// korrikut nuk guxon të shfaqë "vit" vetëm sepse abonimi u kalua në vjetor më
+// vonë. Dokumenti i lëshuar nuk ndryshon kurrë.
 function unitLabel() {
-    return props.invoice.subscription?.billing_cycle === 'annual'
+    const cycle = props.invoice.billing_cycle ?? props.invoice.subscription?.billing_cycle;
+
+    return cycle === 'annual'
         ? translate('superAdmin.billing.unitYear')
         : translate('superAdmin.billing.unitMonth');
 }
+
+// Kursi i ngrirë — shfaqet vetëm kur ka pasur vërtet konvertim, që klienti ta
+// dijë nga erdhi shuma.
+const fxLine = computed(() => {
+    const rate = Number(props.invoice.fx_rate ?? 1);
+    const base = props.invoice.fx_base || 'EUR';
+
+    if (!rate || rate === 1 || props.invoice.currency === base) {
+        return null;
+    }
+
+    const formatted = new Intl.NumberFormat('sq-AL', { maximumFractionDigits: 4 }).format(rate);
+
+    return `1 ${base} = ${formatted} ${props.invoice.currency}`;
+});
 
 function statusClass(status) {
     return {
@@ -159,6 +184,7 @@ function voidInvoice() {
                         <p class="mt-2 max-w-2xl whitespace-pre-wrap text-[11px] leading-5 text-neutral-500">{{ invoice.notes || $t('superAdmin.billing.noInvoiceNotes') }}</p>
                     </div>
                     <dl class="divide-y divide-neutral-100 px-5 py-2 text-xs">
+                        <div v-if="fxLine" class="flex justify-between gap-4 py-2.5"><dt class="text-neutral-500">{{ $t('superAdmin.billing.exchangeRate') }}</dt><dd class="font-semibold tabular-nums text-neutral-700">{{ fxLine }}</dd></div>
                         <div class="flex justify-between gap-4 py-2.5"><dt class="text-neutral-500">{{ $t('superAdmin.billing.subtotal') }}</dt><dd class="font-semibold">{{ money(invoice.subtotal_cents) }}</dd></div>
                         <div v-if="invoice.discount_cents" class="flex justify-between gap-4 py-2.5"><dt class="text-neutral-500">{{ $t('superAdmin.billing.discount') }}</dt><dd class="font-semibold text-emerald-700">−{{ money(invoice.discount_cents) }}</dd></div>
                         <div class="flex justify-between gap-4 py-2.5"><dt class="text-neutral-500">{{ $t('superAdmin.billing.vatTax') }}</dt><dd class="font-semibold">{{ money(invoice.tax_cents) }}</dd></div>

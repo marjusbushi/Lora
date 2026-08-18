@@ -15,6 +15,7 @@ use App\Services\BaseCurrency;
 use App\Services\DomainProvisioner;
 use App\Services\FatureAlClient;
 use App\Services\ForgeClient;
+use App\Services\PlatformBillingCurrency;
 use App\Services\TenantBillingService;
 use App\Services\TenantHandoff;
 use App\Services\TenantOnboardingService;
@@ -513,6 +514,10 @@ class TenantController extends Controller
             // 'sometimes': sirtari i listës së tenant-ëve s'e dërgon fushën — atëherë
             // ruhet vlera ekzistuese e abonimit (fallback në TenantBillingService::update).
             'contract_years' => ['sometimes', 'required', Rule::in(array_keys(config('lora_modules.contract_discounts', [1 => 10])))],
+            // Monedha me të cilën hoteli PAGUAN Lora-n — s'ka lidhje me monedhën
+            // operative të hotelit. Po s'u dërgua, vlera ekzistuese mbetet.
+            'billing_currency' => ['sometimes', 'required', Rule::in((new PlatformBillingCurrency)->allowed())],
+            'fx_rate_override' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'current_period_ends_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'modules' => ['required', 'array:'.implode(',', $moduleCodes)],

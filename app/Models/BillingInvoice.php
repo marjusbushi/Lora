@@ -10,6 +10,7 @@ class BillingInvoice extends Model
 {
     protected $fillable = [
         'tenant_id', 'tenant_subscription_id', 'number', 'idempotency_key', 'status', 'currency',
+        'fx_rate', 'fx_base',
         'subtotal_cents', 'discount_cents', 'tax_cents', 'total_cents',
         'amount_paid_cents', 'period_starts_on', 'period_ends_on', 'issued_at',
         'due_on', 'paid_at', 'notes', 'metadata',
@@ -18,6 +19,7 @@ class BillingInvoice extends Model
     protected function casts(): array
     {
         return [
+            'fx_rate' => 'decimal:6',
             'subtotal_cents' => 'integer',
             'discount_cents' => 'integer',
             'tax_cents' => 'integer',
