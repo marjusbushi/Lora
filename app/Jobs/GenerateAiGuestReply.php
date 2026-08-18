@@ -17,6 +17,7 @@ use App\Tenancy\TenantContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Sleep;
 
 /**
  * Lora AI Chat (propozimi MHQ #22 + task #363 "Lora recepsioniste"): pas çdo
@@ -42,7 +43,8 @@ class GenerateAiGuestReply implements ShouldQueue
     /** @var array<int,int> */
     public array $backoff = [30, 60];
 
-    public int $timeout = 90;
+    // Gemini deri 75s + "koha e shkrimit" deri 10s → 120s lë marzh të qetë.
+    public int $timeout = 120;
 
     private const MAX_AI_REPLIES_PER_THREAD_PER_HOUR = 5;
 
@@ -346,8 +348,39 @@ PROMPT;
         return true;
     }
 
+    /**
+     * Ritmi njerëzor (task #368): sa më e gjatë përgjigja, aq më shumë "kohë
+     * shkrimi" — sikur recepsionisti po e shkruan vërtet. Kufij 2-10s që
+     * mysafiri të mos bezdiset. ~40 shkronja/sekondë mbi bazën 2s.
+     */
+    public static function humanDelaySeconds(string $reply): int
+    {
+        return (int) min(10, max(2, 2 + intdiv(mb_strlen($reply), 40)));
+    }
+
     private function sendAutoReply(ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, MessageThread $thread, string $reply, string $rateKey): void
     {
+        // Si njeri (task #368): në WhatsApp mysafiri sheh "po shkruan..." gjatë
+        // vonesës (best-effort — urë e vjetër pa endpoint-in / offline = vetëm
+        // vonesa, dërgimi s'preket). WhatsApp e fshin vetë treguesin me mesazhin.
+        if ($thread->channel === 'whatsapp' && $thread->whatsapp_jid) {
+            try {
+                $whatsapp->typing($thread->tenant_id, $thread->whatsapp_jid);
+            } catch (\Throwable) {
+                // Zbukurim, jo kusht — vazhdo pa tregues.
+            }
+        }
+
+        Sleep::for(self::humanDelaySeconds($reply))->seconds();
+
+        // Gjatë "shkrimit" mund të ketë folur stafi ose të ketë ardhur mesazh
+        // i ri — ri-verifiko freskinë para dërgimit, njësoj si pas Gemini-t.
+        $thread->refresh();
+        $latest = $thread->messages()->reorder()->latest('sent_at')->latest('id')->first();
+        if (! $latest || $latest->id !== $this->messageId || $thread->status === 'closed') {
+            return;
+        }
+
         $channexMessageId = null;
         $whatsappMessageId = null;
 

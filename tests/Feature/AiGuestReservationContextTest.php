@@ -17,6 +17,7 @@ use App\Services\GeminiClient;
 use App\Services\ThreadReservationContext;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 /**
@@ -32,6 +33,9 @@ class AiGuestReservationContextTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Ritmi njerëzor (task #368) mos i bëjë testet të flenë realisht.
+        Sleep::fake();
 
         $this->tenant = Tenant::query()->sole();
         app(TenantContext::class)->set($this->tenant);

@@ -12,6 +12,7 @@ use App\Services\ChannexClient;
 use App\Services\GeminiClient;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
@@ -24,6 +25,9 @@ class AiGuestReplyTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Ritmi njerëzor (task #368) mos i bëjë testet të flenë realisht.
+        Sleep::fake();
 
         // Tenant-i legacy nga migrimet — ka messages të trashëguar (falas) + CM.
         $this->tenant = Tenant::query()->sole();
@@ -395,6 +399,14 @@ class AiGuestReplyTest extends TestCase
         $thread->refresh();
         $this->assertNull($thread->ai_suggestion);
         $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Task #368: "koha e shkrimit" rritet me gjatësinë — kufij 2s dhe 10s. */
+    public function test_human_delay_scales_with_reply_length(): void
+    {
+        $this->assertSame(2, GenerateAiGuestReply::humanDelaySeconds(''));
+        $this->assertSame(5, GenerateAiGuestReply::humanDelaySeconds(str_repeat('a', 120)));
+        $this->assertSame(10, GenerateAiGuestReply::humanDelaySeconds(str_repeat('a', 400)));
     }
 
     public function test_staff_reply_clears_the_ai_draft(): void
