@@ -11,6 +11,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\GuestController;
+use App\Http\Controllers\ImpersonationController;
 use App\Http\Controllers\GuestMergeController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\LoraAiController;
@@ -554,6 +555,10 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::delete('/beach/units/{unit}', [BeachSetupController::class, 'destroyUnit'])->middleware('permission:delete_beach')->name('beach.units.destroy');
     });
 
+    // Leaving impersonation must work for ANY impersonated role (they are
+    // usually not admins) — the only gate is the session marker itself.
+    Route::post('/impersonation/stop', [ImpersonationController::class, 'stop'])->name('impersonation.stop');
+
     // Admin-only: User Management + Settings
     Route::middleware('role:admin')->group(function () {
         Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
@@ -563,6 +568,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
         Route::post('/users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
+        // See-it-with-their-eyes: binding scopes {user} to active members of
+        // THIS tenant; the controller refuses self, admins and nesting.
+        Route::post('/users/{user}/impersonate', [ImpersonationController::class, 'start'])->name('users.impersonate');
 
         // Roles & per-module CRUD permissions
         Route::post('/users/roles', [UserController::class, 'storeRole'])->name('users.roles.store');
