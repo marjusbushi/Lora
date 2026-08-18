@@ -203,10 +203,10 @@ const allNavItems = computed(() => [
             { label: t('admin.sidebar.financeDashboard'), href: '/pms/finance' },
             { label: t('admin.sidebar.cashAndBank'), href: '/pms/finance/accounts' },
             ...(can('manage_deposits') || can('manage_withdrawals') ? [{ label: t('financeMovements.pageTitle'), href: '/pms/finance/movements' }] : []),
-            { label: t('admin.sidebar.payments'), href: '/pms/finance/payments' },
-            { label: t('admin.sidebar.salesInvoices'), href: '/pms/finance/invoices' },
-            { label: t('admin.sidebar.bills'), href: '/pms/finance/bills' },
-            { label: t('admin.sidebar.suppliers'), href: '/pms/finance/suppliers' },
+            ...(can('create_payment') || can('view_financials') ? [{ label: t('admin.sidebar.payments'), href: '/pms/finance/payments' }] : []),
+            ...(can('manage_invoices') || can('view_financials') ? [{ label: t('admin.sidebar.salesInvoices'), href: '/pms/finance/invoices' }] : []),
+            ...(can('manage_bills') || can('view_financials') ? [{ label: t('admin.sidebar.bills'), href: '/pms/finance/bills' }] : []),
+            ...(can('manage_suppliers') || can('view_financials') ? [{ label: t('admin.sidebar.suppliers'), href: '/pms/finance/suppliers' }] : []),
         ],
     },
     {
@@ -229,13 +229,13 @@ const allNavItems = computed(() => [
         icon: icons.pricing,
         permission: 'view_settings',
     },
-    { label: t('admin.sidebar.reports'), href: '/pms/reports', icon: icons.reports, permission: 'view_reports' },
+    { label: t('admin.sidebar.reports'), href: '/pms/reports', icon: icons.reports, permission: ['view_reports', 'view_reports_operations', 'view_reports_guests', 'view_reports_revenue', 'view_reports_finance'] },
 ]);
 
 // Filter nav items based on user permissions
 const navItems = computed(() =>
     allNavItems.value.filter((item) =>
-        (!item.permission || can(item.permission))
+        (!item.permission || (Array.isArray(item.permission) ? item.permission.some(can) : can(item.permission)))
         && hasModule(item.module)
         && (!item.role || page.props.auth.user?.role === item.role)
         && (!item.nonAdminOnly || page.props.auth.user?.role !== 'admin')

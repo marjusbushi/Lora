@@ -39,7 +39,9 @@ class DashboardController extends Controller
             'view_rooms' => $user->can('view_rooms'),
             'view_housekeeping' => $user->can('view_housekeeping'),
             'view_pos' => $user->can('view_pos_orders'),
-            'view_financials' => $user->can('view_reports'),
+            // The REAL money gate (plan #724) — no longer aliased to the
+            // legacy view_reports umbrella.
+            'view_financials' => $user->can('view_financials'),
             // Pricing routes are admin-only, so expose the real route capability.
             'view_pricing' => $user->hasRole('admin'),
         ];
