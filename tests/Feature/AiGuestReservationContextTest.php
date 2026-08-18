@@ -201,6 +201,24 @@ class AiGuestReservationContextTest extends TestCase
         $this->assertSame(300.0, $context['total']);
     }
 
+    /** Gjetja Codex #471: '@lid' është ID e errët, JO telefon — kurrë përputhje, edhe kur shifrat rastësisht ngjajnë. */
+    public function test_lid_jid_never_resolves_by_phone_even_when_digits_match(): void
+    {
+        // Mysafir me telefon që përputhet me shifrat e LID-it — kurthi i llotarisë.
+        $this->makeReservation(['phone' => '+355 69 123 4567']);
+        $thread = MessageThread::create([
+            'whatsapp_jid' => '355691234567@lid',
+            'channel' => 'whatsapp',
+            'guest_name' => 'Lid Guest',
+            'status' => 'open',
+        ]);
+
+        $context = app(ThreadReservationContext::class)->forThread($thread);
+
+        $this->assertArrayHasKey('error', $context);
+        $this->assertCount(1, $context);
+    }
+
     /** WhatsApp: numër i panjohur → refuzim i pastër, zero të dhëna. */
     public function test_whatsapp_unknown_number_gets_error(): void
     {
