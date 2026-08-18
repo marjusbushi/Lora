@@ -43,9 +43,16 @@ class GenerateAiGuestReply implements ShouldQueue
     /** @var array<int,int> */
     public array $backoff = [30, 60];
 
-    // Gemini deri 75s + "koha e shkrimit" PA tavan (paragrafët e gjatë 30-60s+)
-    // → 300s marzh; radha s'mbahet peng se copat e pritjes dalin herët në abort.
-    public int $timeout = 300;
+    // NËN retry_after 180s të radhës (gjetje Codex, PR #482): mbi të, një worker
+    // i dytë e rimerr punën ndërsa i pari ende "shkruan" → përgjigje dyfish.
+    // Buxheti i pritjes (SEND_BUDGET) e mban totalin brenda; kyçja atomike më
+    // poshtë e vret dyfishimin edhe në rastin ekstrem.
+    public int $timeout = 170;
+
+    /** Sekondat maksimale nga nisja e job-it para se pritja të ndërpritet dhe të dërgohet. */
+    private const SEND_BUDGET_SECONDS = 150;
+
+    private float $startedAt = 0.0;
 
     /**
      * 15/orë (task #375): 5-shi i epokës FAQ i mjaftonte robotit, po një bisedë
@@ -72,6 +79,8 @@ class GenerateAiGuestReply implements ShouldQueue
 
     public function handle(GeminiClient $gemini, ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, TenantBillingService $billing, TenantContext $context): void
     {
+        $this->startedAt = microtime(true);
+
         $tenant = $context->tenant();
         if (! $tenant || ! $billing->enabled(TenantBillingService::MESSAGES, $tenant)) {
             return;
@@ -546,6 +555,13 @@ PROMPT;
                 }
             }
 
+            // Buxheti kohor (gjetje Codex, PR #482): mos e kalo dritaren e radhës —
+            // kur buxheti mbaron, ndërprit "shkrimin" dhe dërgo (më mirë pak më
+            // shpejt sesa dyfish nga një worker i dytë).
+            if ((microtime(true) - $this->startedAt) + 8 > self::SEND_BUDGET_SECONDS) {
+                break;
+            }
+
             $chunk = min(8, $remaining);
             Sleep::for($chunk)->seconds();
             $remaining -= $chunk;
@@ -554,6 +570,13 @@ PROMPT;
             if ($thread->status === 'closed' || $this->supersededBy($thread)) {
                 return;
             }
+        }
+
+        // Kyçje atomike per-mesazh (gjetje Codex, PR #482): edhe nëse radha e
+        // ri-lëshon job-in ndërsa i pari ende punon, vetëm NJË ekzekutim e
+        // dërgon përgjigjen — i dyti ndal këtu pa zhurmë.
+        if (! Cache::add(sprintf('ai-reply-sent:%d:%d', $thread->tenant_id, $this->messageId), 1, now()->addMinutes(30))) {
+            return;
         }
 
         $channexMessageId = null;
