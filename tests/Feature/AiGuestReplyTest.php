@@ -370,6 +370,33 @@ class AiGuestReplyTest extends TestCase
         $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true, 'body' => $ask]);
     }
 
+    /**
+     * Task #367: dështimi i Gemini-t duhet të RRËZOJË job-in (që radha ta
+     * riprovojë me tries/backoff) — jo të gëlltitet në heshtje pa as draft.
+     */
+    public function test_gemini_failure_bubbles_up_so_the_queue_retries(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andThrow(new \RuntimeException('Shumë kërkesa te Google (limiti u kalua).'));
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        try {
+            $this->runJob($thread, $message);
+            $this->fail('Përjashtimi duhej të dilte nga handle() — radha s\'riprovon dot një "sukses".');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('limiti u kalua', $e->getMessage());
+        }
+
+        $thread->refresh();
+        $this->assertNull($thread->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
     public function test_staff_reply_clears_the_ai_draft(): void
     {
         [$thread] = $this->makeThreadWithGuestMessage();

@@ -32,9 +32,15 @@ class GenerateAiGuestReply implements ShouldQueue
 {
     use Queueable, TenantAwareJob;
 
-    public int $tries = 2;
+    /**
+     * 3 prova me 30s/60s ndërmjet — 429-at e Gemini (bursts) dhe ngecjet
+     * kalimtare të rrjetit kapërcehen vetë; rojet (staleness, rate-limit,
+     * thread closed) ri-ekzekutohen në çdo riprovë, pa dërgim të dyfishtë.
+     */
+    public int $tries = 3;
 
-    public int $backoff = 30;
+    /** @var array<int,int> */
+    public array $backoff = [30, 60];
 
     public int $timeout = 90;
 
@@ -284,14 +290,14 @@ PROMPT;
             },
         ];
 
-        try {
-            return $gemini->converse($system, "BISEDA:\n{$conversation}", $tools, $executors, 'guest_reply', 1024, 45)
-                + ['quotes' => $quotes];
-        } catch (\Throwable $e) {
-            report($e);
-
-            return null;
-        }
+        // PA catch (task #367): një dështim i Gemini-t (429, timeout, deadline)
+        // duhet ta RRËZOJË job-in — vetëm kështu radha e riprovon (tries/backoff).
+        // Catch-i i vjetër e kthente në "sukses" të heshtur: as përgjigje, as
+        // draft, as riprovë — pikërisht dështimet "herë pas here" të staging-ut.
+        // Deadline 75s: përgjigja me çmime mban 2-3 thirrje HTTP radhazi; 45s
+        // mbushej nga një raund i ngadaltë "thinking" (job timeout 90s — ka marzh).
+        return $gemini->converse($system, "BISEDA:\n{$conversation}", $tools, $executors, 'guest_reply', 1024, 75)
+            + ['quotes' => $quotes];
     }
 
     /**
