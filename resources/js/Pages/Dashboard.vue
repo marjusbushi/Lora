@@ -78,7 +78,7 @@ const canCreateReservations = computed(() => hasPermission('create_reservations'
 const canUpdateReservations = computed(() => hasPermission('update_reservations'));
 const canViewHousekeeping = computed(() => hasPermission('view_housekeeping') && activeModules.value.housekeeping === true);
 const canViewPos = computed(() => hasPermission('view_pos', 'view_pos_orders') && activeModules.value.pos === true);
-const canViewFinancials = computed(() => hasPermission('view_financials', 'view_reports'));
+const canViewFinancials = computed(() => hasPermission('view_financials'));
 const canViewPricing = computed(() => hasPermission('view_pricing'));
 const canViewSmartPricing = computed(() => canViewPricing.value && activeModules.value.smart_pricing === true);
 
