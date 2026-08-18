@@ -19,6 +19,7 @@ class PlatformBillingService
     public function __construct(
         private TenantBillingService $tenantBilling,
         private TenantContext $tenantContext,
+        private PlatformBillingCurrency $billingCurrency,
     ) {}
 
     public function createInvoice(Tenant $tenant, array $data): BillingInvoice
@@ -32,10 +33,19 @@ class PlatformBillingService
                 ? Carbon::parse($data['period_ends_on'])
                 : ($annual ? $startsOn->copy()->addYear()->subDay() : $startsOn->copy()->addMonth()->subDay());
 
+            // Katalogu është në cent EURO. Nëse hoteli faturohet në monedhë
+            // tjetër, kursi merret NJË HERË këtu dhe ngrihet mbi faturë — një
+            // dokument i lëshuar nuk guxon të ndryshojë vlerë kur kursi lëviz.
+            $currency = $summary['billing_currency'];
+            $rate = $this->billingCurrency->rateFor($tenant->subscription, $currency);
+
             $linePayloads = collect($summary['modules'])
                 ->filter(fn (array $module) => $module['enabled'] && $module['monthly_cents'] > 0)
-                ->map(function (array $module) use ($annual) {
-                    $amount = $annual ? $module['monthly_cents'] * 12 : $module['monthly_cents'];
+                ->map(function (array $module) use ($annual, $rate) {
+                    $baseAmount = $annual ? $module['monthly_cents'] * 12 : $module['monthly_cents'];
+                    // Rrumbullakimi bëhet PËR RRESHT dhe nëntotali është shuma e
+                    // rreshtave — ndryshe fatura s'do të mblidhej me sytë e klientit.
+                    $amount = $this->billingCurrency->convertCents($baseAmount, $rate);
 
                     return [
                         'type' => 'module',
@@ -48,6 +58,10 @@ class PlatformBillingService
                             'billing_model' => $module['billing_model'],
                             'source_quantity' => $module['quantity'],
                             'monthly_cents' => $module['monthly_cents'],
+                            // Gjurma e vlerës origjinale, që një faturë në lek të
+                            // mund të rilexohet gjithmonë kundrejt katalogut.
+                            'base_amount_cents' => $baseAmount,
+                            'base_currency' => PlatformBillingCurrency::BASE,
                         ],
                     ];
                 })
@@ -64,12 +78,20 @@ class PlatformBillingService
                 ? (int) round($subtotal * ($summary['annual_discount_percent'] / 100))
                 : 0;
 
+            // Zbritja del si përqindje e nëntotalit të konvertuar, ndaj duhet
+            // rrumbullakosur në të njëjtin hap si rreshtat.
+            if ($discount > 0 && $rate !== 1.0) {
+                $discount = $this->billingCurrency->roundToStep($discount);
+            }
+
             $invoice = BillingInvoice::query()->create([
                 'tenant_id' => $tenant->id,
                 'tenant_subscription_id' => $tenant->subscription?->id,
                 'idempotency_key' => $data['idempotency_key'] ?? null,
                 'status' => ($data['issue_now'] ?? false) ? 'open' : 'draft',
-                'currency' => $summary['currency'],
+                'currency' => $currency,
+                'fx_rate' => $rate,
+                'fx_base' => PlatformBillingCurrency::BASE,
                 'subtotal_cents' => $subtotal,
                 'discount_cents' => $discount,
                 'tax_cents' => 0,

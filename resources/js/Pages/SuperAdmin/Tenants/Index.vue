@@ -199,6 +199,12 @@ function monthlyMrr(tenant) {
         : Number(tenant.billing.monthly_fixed_cents || 0);
 }
 
+// Monedha me të cilën hoteli PAGUAN Lora-n. Shumat mbeten euro (çmime katalogu);
+// kjo tregon vetëm se në ç'monedhë do të dalë fatura.
+function billedIn(tenant) {
+    return tenant.billing?.billing_currency || 'EUR';
+}
+
 function tenantHealth(tenant) {
     const status = hotelStatus(tenant);
     if (status.tone !== 'ok') return { ...status, detail: t('superAdmin.auto.copy066') };
@@ -501,8 +507,8 @@ function statusLabel(status) {
                                     </div>
                                 </td>
                                 <td class="px-4 py-2.5">
-                                    <p class="sa-table-primary tabular-nums">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(monthlyMrr(tenant), tenant.billing.currency) }) }}</p>
-                                    <p class="sa-table-meta">{{ tenant.billing.billing_cycle === 'annual' ? 'Faturim vjetor' : 'Faturim mujor' }}</p>
+                                    <p class="sa-table-primary tabular-nums">{{ t('superAdmin.dynamic.amountPerMonth', { amount: money(monthlyMrr(tenant)) }) }}</p>
+                                    <p class="sa-table-meta">{{ tenant.billing.billing_cycle === 'annual' ? 'Faturim vjetor' : 'Faturim mujor' }}<span v-if="billedIn(tenant) !== 'EUR'" class="ml-1 font-semibold text-amber-700">· {{ t('superAdmin.tenantShow.invoicedIn', { currency: billedIn(tenant) }) }}</span></p>
                                 </td>
                                 <td class="px-4 py-2.5">
                                     <p class="sa-table-primary"><Users class="mr-1 inline h-3.5 w-3.5 text-neutral-400" />{{ t('superAdmin.dynamic.usersCount', { count: tenant.users_count }) }}</p>
@@ -582,7 +588,7 @@ function statusLabel(status) {
                         <div class="grid grid-cols-3 gap-3">
                             <div class="rounded-xl bg-neutral-50 p-3">
                                 <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-400">MRR</p>
-                                <p class="mt-1 font-semibold text-neutral-900">{{ money(monthlyMrr(selectedTenant), selectedTenant.billing.currency) }}</p>
+                                <p class="mt-1 font-semibold text-neutral-900">{{ money(monthlyMrr(selectedTenant)) }}</p>
                             </div>
                             <div class="rounded-xl bg-neutral-50 p-3">
                                 <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-400">{{ $t('superAdmin.auto.copy051') }}</p>
@@ -780,7 +786,7 @@ function statusLabel(status) {
                                         <p class="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-400">{{ $t('superAdmin.auto.copy011') }}</p>
                                         <div class="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
                                             <p class="text-xs text-neutral-500">{{ $t('superAdmin.auto.copy026') }}</p>
-                                            <p class="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">{{ money(monthlyMrr(editingTenant), editingTenant.billing.currency) }}</p>
+                                            <p class="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">{{ money(monthlyMrr(editingTenant)) }}</p>
                                             <p class="mt-1 text-xs text-neutral-400">{{ t('superAdmin.dynamic.activeModulesCount', { count: enabledCount(editingTenant) }) }}</p>
                                         </div>
                                     </div>

@@ -4591,11 +4591,18 @@
       "saveChanges": "Ruaj ndryshimet",
       "contractLength": "Gjatësia e kontratës",
       "contractOption": "{years} vjet — {percent}% zbritje",
-      "contractOverride": "Ky tenant ka zbritje të negociuar veç: {percent}% (fiton mbi shkallën)"
+      "contractOverride": "Ky tenant ka zbritje të negociuar veç: {percent}% (fiton mbi shkallën)",
+      "billingCurrency": "Monedha e faturimit",
+      "billingCurrencyHint": "Me çfarë monedhe ta paguajë hoteli abonimin. S'ka lidhje me monedhën me të cilën ai shet dhomat.",
+      "catalogNote": "Çmimet më poshtë janë të katalogut, gjithmonë në euro.",
+      "invoicedIn": "Faturat lëshohen në {currency}, me kursin e çastit të lëshimit.",
+      "fxOverride": "Kurs fiks kontrate",
+      "fxOverrideHint": "Lëre bosh për kursin ditor të platformës. Shumat rrumbullakosen në 10 njësi."
     },
     "billing": {
       "unitMonth": "muaj",
       "unitYear": "vit",
+      "exchangeRate": "Kursi i këmbimit",
       "statusDraft": "Draft",
       "statusOpen": "Për pagesë",
       "statusPaid": "Paguar",
