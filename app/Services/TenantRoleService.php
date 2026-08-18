@@ -18,13 +18,15 @@ class TenantRoleService
     {
         return [
             'admin' => '*',
+            // Renato (2026-08-17): the manager deliberately has NO delete_* —
+            // deleting records stays owner-only.
             'manager' => [
-                'view_rooms', 'create_rooms', 'update_rooms', 'delete_rooms',
-                'view_reservations', 'create_reservations', 'update_reservations', 'delete_reservations',
-                'view_guests', 'create_guests', 'update_guests', 'delete_guests',
-                'view_housekeeping', 'create_housekeeping', 'update_housekeeping', 'delete_housekeeping',
-                'view_maintenance', 'create_maintenance', 'update_maintenance', 'delete_maintenance',
-                'view_pos_orders', 'create_pos_orders', 'update_pos_orders', 'delete_pos_orders',
+                'view_rooms', 'create_rooms', 'update_rooms',
+                'view_reservations', 'create_reservations', 'update_reservations',
+                'view_guests', 'create_guests', 'update_guests',
+                'view_housekeeping', 'create_housekeeping', 'update_housekeeping',
+                'view_maintenance', 'create_maintenance', 'update_maintenance',
+                'view_pos_orders', 'create_pos_orders', 'update_pos_orders',
                 'open_pos_shift', 'close_pos_shift', 'close_any_pos_shift',
                 'view_beach', 'create_beach', 'update_beach',
                 'open_beach_shift', 'close_beach_shift', 'close_any_beach_shift',
@@ -42,6 +44,9 @@ class TenantRoleService
                 'view_rooms', 'update_rooms',
                 'view_reservations', 'create_reservations', 'update_reservations', 'delete_reservations',
                 'view_guests', 'create_guests', 'update_guests',
+                // Renato (2026-08-17): the desk creates and closes cleaning
+                // tasks in practice — the definition follows the real workflow.
+                'view_housekeeping', 'create_housekeeping', 'update_housekeeping',
                 'view_maintenance', 'create_maintenance', 'update_maintenance',
                 'view_pos_orders', 'create_pos_orders', 'update_pos_orders',
                 'open_pos_shift', 'close_pos_shift',
