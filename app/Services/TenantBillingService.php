@@ -8,6 +8,7 @@ use App\Models\TenantSubscription;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class TenantBillingService
 {
@@ -79,7 +80,10 @@ class TenantBillingService
                 'status' => 'active',
                 'billing_cycle' => 'monthly',
                 'billing_anchor_day' => now()->day,
-                'currency' => $tenant->currency,
+                // Monedha e faturimit NUK trashëgohet nga monedha operative e
+                // hotelit — çmimet e katalogut janë euro. Ndryshohet vetëm me
+                // dorë nga super-admini.
+                'billing_currency' => PlatformBillingCurrency::BASE,
                 // Zbritja vjen nga shkalla e kontratës (contract_years);
                 // discount_override_percent mbetet vetëm për negociata të veçanta.
                 'contract_years' => 1,
@@ -120,7 +124,8 @@ class TenantBillingService
                 'status' => $data['status'],
                 'billing_cycle' => $data['billing_cycle'],
                 'contract_years' => (int) ($data['contract_years'] ?? $subscription->contract_years ?? 1),
-                'currency' => $tenant->currency,
+                'billing_currency' => $this->resolveBillingCurrency($data, $subscription),
+                'fx_rate_override' => $this->resolveRateOverride($data, $subscription),
                 'starts_at' => $subscription->starts_at ?? now(),
                 'current_period_ends_at' => $periodEndsAt,
                 'notes' => $data['notes'] ?? null,
@@ -221,10 +226,19 @@ class TenantBillingService
             ];
         }
 
+        // Monedha e FATURIMIT — kurrë $tenant->currency (ajo është monedha me të
+        // cilën hoteli shet dhomat). Të gjitha shumat më poshtë mbeten në cent
+        // EURO; konvertimi ndodh një herë, kur lëshohet fatura.
+        $billingCurrency = $subscription?->billing_currency ?: PlatformBillingCurrency::BASE;
+
         return [
             'status' => $subscription?->status ?? 'inactive',
             'billing_cycle' => $subscription?->billing_cycle ?? 'monthly',
-            'currency' => $subscription?->currency ?? $tenant->currency,
+            'billing_currency' => $billingCurrency,
+            'fx_rate_override' => $subscription?->fx_rate_override !== null
+                ? (float) $subscription->fx_rate_override
+                : null,
+            'billing_currency_options' => (new PlatformBillingCurrency)->allowed(),
             'current_period_ends_at' => $subscription?->current_period_ends_at?->toDateString(),
             'next_billing_at' => $subscription?->next_billing_at?->toIso8601String(),
             'last_billed_at' => $subscription?->last_billed_at?->toIso8601String(),
@@ -237,6 +251,55 @@ class TenantBillingService
             'annual_discount_percent' => $discount,
             'modules' => $modules,
         ];
+    }
+
+    /**
+     * Monedha e faturimit ndryshon VETËM kur super-admini e dërgon shprehimisht.
+     * Pa çelësin në payload, vlera ekzistuese mbetet e paprekur — kështu një
+     * ruajtje e zakonshme e abonimit s'e rrëshqet dot monedhën pa u vënë re.
+     */
+    private function resolveBillingCurrency(array $data, TenantSubscription $subscription): string
+    {
+        $current = $subscription->billing_currency ?: PlatformBillingCurrency::BASE;
+
+        if (! array_key_exists('billing_currency', $data)) {
+            return $current;
+        }
+
+        $requested = strtoupper((string) $data['billing_currency']);
+        $allowed = (new PlatformBillingCurrency)->allowed();
+
+        if (! in_array($requested, $allowed, true)) {
+            throw ValidationException::withMessages([
+                'billing_currency' => 'Monedhë faturimi e palejuar. E lejuar: '.implode(', ', $allowed).'.',
+            ]);
+        }
+
+        return $requested;
+    }
+
+    /** Kursi fiks i kontratës: bosh/null = kursi ditor i platformës. */
+    private function resolveRateOverride(array $data, TenantSubscription $subscription): ?float
+    {
+        if (! array_key_exists('fx_rate_override', $data)) {
+            return $subscription->fx_rate_override !== null
+                ? (float) $subscription->fx_rate_override
+                : null;
+        }
+
+        $raw = $data['fx_rate_override'];
+
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        if (! is_numeric($raw) || (float) $raw <= 0) {
+            throw ValidationException::withMessages([
+                'fx_rate_override' => 'Kursi fiks duhet të jetë numër më i madh se zero, ose bosh për kursin ditor.',
+            ]);
+        }
+
+        return (float) $raw;
     }
 
     private function monthlyPrice(array $module, int $quantity): int

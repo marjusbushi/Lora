@@ -11,6 +11,12 @@ return [
         5 => 30,
     ],
 
+    // Monedhat në të cilat mund të faturohet një hotel për abonimin e Lora-s.
+    // Çmimet më poshtë autorohen GJITHMONË në cent EURO; çdo monedhë tjetër
+    // del prej tyre me kursin e platformës, i ngrirë mbi faturë.
+    // KUJDES: kjo s'ka lidhje me monedhën me të cilën hoteli shet dhomat.
+    'billing_currencies' => ['EUR', 'ALL'],
+
     'modules' => [
         'core' => [
             'name' => 'Lora Core',

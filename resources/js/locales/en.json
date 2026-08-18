@@ -4602,11 +4602,18 @@
       "saveChanges": "Save changes",
       "contractLength": "Contract length",
       "contractOption": "{years} yr — {percent}% off",
-      "contractOverride": "This tenant has an individually negotiated discount: {percent}% (overrides the ladder)"
+      "contractOverride": "This tenant has an individually negotiated discount: {percent}% (overrides the ladder)",
+      "billingCurrency": "Billing currency",
+      "billingCurrencyHint": "The currency the hotel pays its subscription in. Unrelated to the currency it sells rooms in.",
+      "catalogNote": "The prices below are catalog prices, always in euro.",
+      "invoicedIn": "Invoices are issued in {currency}, at the rate frozen when they are issued.",
+      "fxOverride": "Fixed contract rate",
+      "fxOverrideHint": "Leave empty for the platform's daily rate. Amounts are rounded to 10 units."
     },
     "billing": {
       "unitMonth": "month",
       "unitYear": "year",
+      "exchangeRate": "Exchange rate",
       "statusDraft": "Draft",
       "statusOpen": "Open",
       "statusPaid": "Paid",

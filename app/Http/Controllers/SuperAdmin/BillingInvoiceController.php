@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\BillingInvoice;
 use App\Models\Tenant;
+use App\Services\PlatformBillingCurrency;
 use App\Services\PlatformBillingService;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
@@ -40,14 +41,14 @@ class BillingInvoiceController extends Controller
             'tenants' => Tenant::query()->with('subscription')->orderBy('name')->get(['id', 'name', 'currency'])->map(fn (Tenant $tenant) => [
                 'id' => $tenant->id,
                 'name' => $tenant->name,
-                'currency' => $tenant->currency,
+                // Monedha me të cilën hoteli PAGUAN Lora-n — jo ajo me të cilën
+                // shet dhomat ($tenant->currency), që s'ka lidhje me abonimin.
+                'currency' => $tenant->subscription?->billing_currency ?: PlatformBillingCurrency::BASE,
                 'has_subscription' => (bool) $tenant->subscription,
             ]),
-            'stats' => [
-                'paid_cents' => BillingInvoice::query()->where('status', 'paid')->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])->sum('total_cents'),
-                'open_cents' => (int) BillingInvoice::query()->where('status', 'open')->selectRaw('COALESCE(SUM(total_cents - amount_paid_cents), 0) as aggregate')->value('aggregate'),
-                'overdue_cents' => (int) BillingInvoice::query()->where('status', 'overdue')->selectRaw('COALESCE(SUM(total_cents - amount_paid_cents), 0) as aggregate')->value('aggregate'),
-            ],
+            // Normalizuar në EURO me kursin e ngrirë të secilës faturë — një
+            // faturë në lek s'guxon të mblidhet drejtpërdrejt me ato në euro.
+            'stats' => $billing->invoiceStatsInBase(),
         ]);
     }
 
@@ -154,6 +155,12 @@ class BillingInvoiceController extends Controller
             'subscription_id' => $invoice->tenant_subscription_id,
             'status' => $invoice->status,
             'currency' => $invoice->currency,
+            // Kursi i ngrirë në çastin e lëshimit; null/1 = pa konvertim.
+            'fx_rate' => $invoice->fx_rate !== null ? (float) $invoice->fx_rate : null,
+            'fx_base' => $invoice->fx_base,
+            // Cikli i NGRIRË mbi faturë — jo ai aktual i abonimit, që ndryshon
+            // më vonë dhe do t'i rishkruante njësinë një dokumenti të lëshuar.
+            'billing_cycle' => $invoice->metadata['billing_cycle'] ?? null,
             'subtotal_cents' => $invoice->subtotal_cents,
             'discount_cents' => $invoice->discount_cents,
             'tax_cents' => $invoice->tax_cents,

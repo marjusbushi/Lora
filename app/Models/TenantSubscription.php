@@ -14,7 +14,10 @@ class TenantSubscription extends Model
         'billing_cycle',
         'contract_years',
         'billing_anchor_day',
-        'currency',
+        // `currency` (kolona e vjetër) është e NGRIRË: mbante monedhën operative
+        // të hotelit dhe s'lexohet më. Faturimi lexon `billing_currency`.
+        'billing_currency',
+        'fx_rate_override',
         'annual_discount_percent',
         'discount_override_percent',
         'starts_at',
@@ -31,6 +34,7 @@ class TenantSubscription extends Model
         return [
             'starts_at' => 'datetime',
             'contract_years' => 'integer',
+            'fx_rate_override' => 'decimal:6',
             'annual_discount_percent' => 'integer',
             'discount_override_percent' => 'integer',
             'billing_anchor_day' => 'integer',
