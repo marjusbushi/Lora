@@ -341,6 +341,31 @@ class AiGuestReplyTest extends TestCase
         $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
     }
 
+    /** Gjetja Codex #471: FAQ e pranishme NUK e anashkalon verifikimin e numrave kur mjetet u përdorën. */
+    public function test_faq_presence_does_not_bypass_number_grounding_for_tool_answers(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        $type = \App\Models\RoomType::create(['name' => 'Dhomë Deluxe', 'base_price' => 100, 'max_occupancy' => 2]);
+        \App\Models\Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $executors['check_availability'](['check_in' => '2027-07-01', 'check_out' => '2027-07-04', 'adults' => 2]);
+
+                // Çmim i "korrigjuar" nga AI (350 ≠ 300) — FAQ-ja s'duhet ta shpëtojë.
+                return ['args' => ['confident' => true, 'reply' => 'Dhomë Deluxe: 350 EUR për 3 net.'], 'toolsUsed' => ['check_availability']];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
     /** Gjetja Codex #1 (PR #462): mjeti u thirr por ktheu ERROR (pa kuotë) → etiketa toolsUsed s'mjafton → draft. */
     public function test_failed_quote_is_not_grounded_even_when_tool_was_called(): void
     {
