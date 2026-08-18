@@ -754,6 +754,17 @@
       "showOtherTypes": "Shfaq tipe të tjera",
       "otherTypesWarning": "Kujdes: këto dhoma ndryshojnë produktin që mysafiri ka rezervuar (tip tjetër dhome)."
     },
+    "impersonation": {
+      "action": "Simulo përdoruesin",
+      "confirmTitle": "Simulo përdoruesin",
+      "confirmBody": "Do ta shikosh sistemin me sytë dhe lejet e",
+      "confirmBodyTail": ". Nisja dhe mbyllja regjistrohen në auditim.",
+      "confirmCta": "Po, simulo",
+      "banner": "{admin} po shikon si {target}",
+      "stop": "Dil nga simulimi",
+      "stopping": "Duke dalë…",
+      "failed": "Simulimi nuk u nis dot."
+    },
     "splitStay": {
       "title": "Propozim ndarjeje qëndrimi — fol me mysafirin",
       "explain": "Ka vend për gjithë qëndrimin brenda të njëjtit tip, por vetëm me ndërrim dhome gjatë qëndrimit. Bisedo me mysafirin: nëse pranon, ndarja zbatohet me një klik; nëse jo, veprimet kryhen nga stafi përmes Booking.com dhe këtu regjistrohet vetëm vendimi.",
@@ -6812,8 +6823,8 @@
   "faqTab": {
     "title": "Pyetje & Përgjigje për Lora AI",
     "subtitle": "Këto janë të VETMET njohuri nga të cilat Lora u përgjigjet mysafirëve në Mesazhet.",
-    "emptyTitle": "Pa FAQ, Lora vetëm sugjeron —",
-    "emptyBody": "nuk i përgjigjet vetë asnjë mysafiri derisa të shtosh të paktën një pyetje-përgjigje.",
+    "emptyTitle": "Pa FAQ, Lora dërgon vetë vetëm çmime e disponibilitet —",
+    "emptyBody": "ato i merr nga motori real i sistemit. Për çdo pyetje tjetër vetëm sugjeron draft, derisa të shtosh të paktën një pyetje-përgjigje.",
     "question": "Pyetja",
     "questionPlaceholder": "A keni parkim?",
     "answer": "Përgjigjja",
@@ -7278,7 +7289,7 @@
     "actionGuestReply": "Dërgo përgjigje te mysafiri",
     "actionGuestReplyDesc": "Gjithmonë me preview, konfirmim, idempotencë dhe audit.",
     "actionGuestAutoReply": "Përgjigje automatike te mysafirët",
-    "actionGuestAutoReplyDesc": "Kur përgjigja mbulohet qartë nga FAQ-ja jote, Lora ia dërgon vetë mysafirit (etiketuar Lora AI). Pa FAQ, vetëm sugjeron.",
+    "actionGuestAutoReplyDesc": "Lora ia dërgon vetë mysafirit (etiketuar Lora AI) kur përgjigja mbulohet nga FAQ-ja jote OSE kur çmimet e disponibiliteti vijnë nga motori real i sistemit. Biseda OTA merr çmimin e kanalit; WhatsApp-i çmimin direkt me zbritje.",
     "actionApplyPrices": "Apliko propozime çmimesh",
     "actionApplyPricesDesc": "Rillogaritet nga motori dhe bllokohet nëse të dhënat kanë ndryshuar.",
     "actionAltRecommendation": "Rekomandim alternativ nga ChatGPT",

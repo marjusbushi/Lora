@@ -54,11 +54,13 @@ class AiGuestReplyTest extends TestCase
         return [$thread, $message];
     }
 
-    private function fakeGemini(bool $confident, string $reply = 'Breakfast is 7-10.'): void
+    /** @param  array<int,string>  $toolsUsed  simulon cilat mjete "përdori" Gemini në këtë përgjigje */
+    private function fakeGemini(bool $confident, string $reply = 'Breakfast is 7-10.', array $toolsUsed = []): void
     {
-        $this->mock(GeminiClient::class, function ($mock) use ($confident, $reply) {
+        $this->mock(GeminiClient::class, function ($mock) use ($confident, $reply, $toolsUsed) {
             $mock->shouldReceive('configured')->andReturn(true);
-            $mock->shouldReceive('structured')->andReturn(['confident' => $confident, 'reply' => $reply]);
+            $mock->shouldReceive('converse')
+                ->andReturn(['args' => ['confident' => $confident, 'reply' => $reply], 'toolsUsed' => $toolsUsed]);
         });
     }
 
@@ -186,14 +188,14 @@ class AiGuestReplyTest extends TestCase
         // Gemini "vonon" — dhe ndërkohë stafi përgjigjet.
         $this->mock(GeminiClient::class, function ($mock) use ($thread) {
             $mock->shouldReceive('configured')->andReturn(true);
-            $mock->shouldReceive('structured')->andReturnUsing(function () use ($thread) {
+            $mock->shouldReceive('converse')->andReturnUsing(function () use ($thread) {
                 $thread->messages()->create([
                     'sender' => Message::SENDER_HOST,
                     'body' => 'Staff replied mid-flight',
                     'sent_at' => now()->addSecond(),
                 ]);
 
-                return ['confident' => true, 'reply' => 'Late AI answer'];
+                return ['args' => ['confident' => true, 'reply' => 'Late AI answer'], 'toolsUsed' => []];
             });
         });
         $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
@@ -219,6 +221,153 @@ class AiGuestReplyTest extends TestCase
             'sent_by_ai' => true,
             'channex_message_id' => 'chx-msg-123',
         ]);
+    }
+
+    /**
+     * Kriteri #1 i task #363: mysafiri jep datat → mjeti check_availability
+     * EKZEKUTOHET vërtet (executor-i real i job-it) → përgjigja e dërguar mbart
+     * çmimin e motorit real — dhe dërgohet edhe me 0 FAQ (tool-grounded).
+     */
+    public function test_availability_question_runs_engine_and_sends_real_prices(): void
+    {
+        $type = \App\Models\RoomType::create(['name' => 'Dhomë Deluxe', 'base_price' => 100, 'max_occupancy' => 2]);
+        \App\Models\Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        // Mock-u luan rolin e Gemini-t: thërret executor-in REAL që i jep job-i,
+        // dhe ndërton përgjigjen nga numrat që kthen motori — si modeli i vërtetë.
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $quote = $executors['check_availability'](['check_in' => '2027-07-01', 'check_out' => '2027-07-04', 'adults' => 2]);
+                $room = $quote['room_types'][0];
+
+                return [
+                    'args' => [
+                        'confident' => true,
+                        'reply' => "{$room['name']}: {$room['stay_total']} {$quote['currency']} për {$quote['nights']} net.",
+                    ],
+                    'toolsUsed' => ['check_availability'],
+                ];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')
+            ->once()->withArgs(fn ($threadId, $body) => str_contains($body, '300')));
+
+        $this->runJob($thread, $message);
+
+        $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+        // Tool-grounded + e sigurt → asnjë "pyetje pa përgjigje" për ciklin e FAQ-së.
+        $this->assertNull($thread->refresh()->ai_unanswered_question);
+    }
+
+    /** Kriteri #2 i task #363: OTA merr çmimin kanonik, WhatsApp finalen me zbritje direkte. */
+    public function test_ota_and_whatsapp_channels_price_differently(): void
+    {
+        Setting::set('pricing_programs.direct_discount_enabled', true, 'boolean');
+        Setting::set('pricing_programs.direct_discount_pct', 10);
+        $type = \App\Models\RoomType::create(['name' => 'Dhomë Standard', 'base_price' => 100, 'max_occupancy' => 2]);
+        \App\Models\Room::create(['room_type_id' => $type->id, 'room_number' => '201', 'floor' => 2, 'status' => 'available']);
+
+        $service = app(\App\Services\GuestStayQuote::class);
+        $ota = $service->forGuest('booking.com', '2027-07-01', '2027-07-03', 2);
+        $wa = $service->forGuest('whatsapp', '2027-07-01', '2027-07-03', 2);
+
+        // 2 net × 100 = 200 kanonik (= finali që sheh mysafiri në OTA pas Genius).
+        $this->assertSame(200.0, $ota['room_types'][0]['stay_total']);
+        $this->assertArrayNotHasKey('direct_discount_pct', $ota['room_types'][0]);
+        // WhatsApp: finali direkt me -10% = 180, me origjinalin të dukshëm.
+        $this->assertSame(180.0, $wa['room_types'][0]['stay_total']);
+        $this->assertSame(200.0, $wa['room_types'][0]['price_before_direct_discount']);
+        $this->assertSame(10.0, $wa['room_types'][0]['direct_discount_pct']);
+    }
+
+    /**
+     * Kriteri #3 i task #363: 0 FAQ + tool-grounded → dërgohet. "Grounded" pas
+     * gjetjes Codex (PR #462) = kuotë e SUKSESSHME + numrat përputhen me motorin
+     * — prandaj mock-u e thërret executor-in real, s'mjafton etiketa toolsUsed.
+     */
+    public function test_tool_grounded_reply_auto_sends_with_zero_faq(): void
+    {
+        $type = \App\Models\RoomType::create(['name' => 'Dhomë Deluxe', 'base_price' => 100, 'max_occupancy' => 2]);
+        \App\Models\Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $executors['check_availability'](['check_in' => '2027-07-01', 'check_out' => '2027-07-04', 'adults' => 2]);
+
+                return ['args' => ['confident' => true, 'reply' => 'Dhomë Deluxe: 300 EUR për 3 net.'], 'toolsUsed' => ['check_availability']];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        $thread->refresh();
+        $this->assertNull($thread->ai_suggestion);
+        $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Gjetja Codex #1 (PR #462): numër që s'ekziston në motor (350 ≠ 300) → JO grounded → draft, asnjë dërgim. */
+    public function test_reply_with_number_not_from_engine_stays_draft(): void
+    {
+        $type = \App\Models\RoomType::create(['name' => 'Dhomë Deluxe', 'base_price' => 100, 'max_occupancy' => 2]);
+        \App\Models\Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $executors['check_availability'](['check_in' => '2027-07-01', 'check_out' => '2027-07-04', 'adults' => 2]);
+
+                // AI "halucinon" një çmim tjetër nga ai i motorit (300).
+                return ['args' => ['confident' => true, 'reply' => 'Dhomë Deluxe: 350 EUR për 3 net.'], 'toolsUsed' => ['check_availability']];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Gjetja Codex #1 (PR #462): mjeti u thirr por ktheu ERROR (pa kuotë) → etiketa toolsUsed s'mjafton → draft. */
+    public function test_failed_quote_is_not_grounded_even_when_tool_was_called(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $result = $executors['check_availability'](['check_in' => '2027-07-04', 'check_out' => '2027-07-01']);
+                \PHPUnit\Framework\Assert::assertArrayHasKey('error', $result);
+
+                return ['args' => ['confident' => true, 'reply' => 'Kemi dhoma të lira!'], 'toolsUsed' => ['check_availability']];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+    }
+
+    /** Kriteri #4 i task #363: pa data të plota → pyetje sqaruese, pa mjet e pa çmime — dërgohet si bisedë normale. */
+    public function test_missing_dates_reply_asks_for_dates_without_prices(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $ask = 'Me kënaqësi! Për cilat data dhe sa persona?';
+        $this->fakeGemini(true, $ask, []);
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once()->with($thread->channex_thread_id, $ask));
+
+        $this->runJob($thread, $message);
+
+        $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true, 'body' => $ask]);
     }
 
     public function test_staff_reply_clears_the_ai_draft(): void

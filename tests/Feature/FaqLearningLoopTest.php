@@ -68,7 +68,8 @@ class FaqLearningLoopTest extends TestCase
     {
         $this->mock(GeminiClient::class, function ($mock) use ($confident, $reply) {
             $mock->shouldReceive('configured')->andReturn(true);
-            $mock->shouldReceive('structured')->andReturn(['confident' => $confident, 'reply' => $reply]);
+            $mock->shouldReceive('converse')
+                ->andReturn(['args' => ['confident' => $confident, 'reply' => $reply], 'toolsUsed' => []]);
         });
     }
 
