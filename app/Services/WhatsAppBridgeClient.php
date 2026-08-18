@@ -44,6 +44,16 @@ class WhatsAppBridgeClient
         return $this->request('post', "/sessions/{$tenantId}/send", ['jid' => $jid, 'text' => $text]);
     }
 
+    /**
+     * Treguesi "po shkruan..." te mysafiri (task #368) — best-effort: thirrësi
+     * duhet ta kapë dështimin dhe të vazhdojë (urë e vjetër pa endpoint-in,
+     * daemon offline — treguesi është zbukurim, jo kusht për dërgimin).
+     */
+    public function typing(int $tenantId, string $jid, string $state = 'composing'): array
+    {
+        return $this->request('post', "/sessions/{$tenantId}/typing", ['jid' => $jid, 'state' => $state]);
+    }
+
     private function request(string $method, string $path, array $payload = []): array
     {
         if (! $this->configured()) {

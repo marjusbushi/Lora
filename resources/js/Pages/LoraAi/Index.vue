@@ -263,6 +263,21 @@ const actions = {
                             <p>{{ $t('loraAi.protectedActionsSubtitle') }}</p>
                         </div>
                         <div data-ui="card-body" data-padding="true" class="grid gap-4 md:grid-cols-2">
+                            <div data-ui="inner-panel" class="border border-[#c9ecd9] md:col-span-2" :class="!form.messages_enabled && 'opacity-50'">
+                                <b class="text-sm text-neutral-900">{{ $t('loraAi.identityTitle') }}</b>
+                                <span class="mt-1 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.identitySubtitle') }}</span>
+                                <div class="mt-3 grid gap-3 md:grid-cols-3">
+                                    <label class="block">
+                                        <span class="text-xs font-semibold text-neutral-700">{{ $t('loraAi.identityName') }}</span>
+                                        <input v-model="form.assistant_name" type="text" maxlength="40" :disabled="!form.messages_enabled" class="mt-1 w-full rounded-lg border-neutral-300 text-sm focus:border-primary-500 focus:ring-primary-500" />
+                                    </label>
+                                    <label class="block md:col-span-2">
+                                        <span class="text-xs font-semibold text-neutral-700">{{ $t('loraAi.identityCharacter') }}</span>
+                                        <textarea v-model="form.assistant_character" rows="3" maxlength="600" :disabled="!form.messages_enabled" class="mt-1 w-full rounded-lg border-neutral-300 text-sm focus:border-primary-500 focus:ring-primary-500"></textarea>
+                                    </label>
+                                </div>
+                                <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.identityHint') }}</span>
+                            </div>
                             <label data-ui="inner-panel" class="border border-neutral-200" :class="!form.messages_enabled && 'opacity-50'">
                                 <span class="flex items-center justify-between gap-3"><b class="text-sm text-neutral-900">{{ $t('loraAi.actionGuestReply') }}</b><input v-model="form.guest_reply_enabled" type="checkbox" :disabled="!form.messages_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600" /></span>
                                 <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.actionGuestReplyDesc') }}</span>

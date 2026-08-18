@@ -10,6 +10,7 @@ use App\Services\WhatsAppBridgeClient;
 use App\Tenancy\TenantContext;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Sleep;
 use Tests\TestCase;
 
 /**
@@ -25,6 +26,9 @@ class WhatsAppBridgeTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Ritmi njerëzor (task #368) mos i bëjë testet të flenë realisht.
+        Sleep::fake();
 
         $this->tenant = Tenant::query()->sole();
         app(TenantContext::class)->set($this->tenant);
@@ -358,7 +362,8 @@ class WhatsAppBridgeTest extends TestCase
     {
         $this->mock(\App\Services\GeminiClient::class, function ($mock) use ($confident, $reply) {
             $mock->shouldReceive('configured')->andReturn(true);
-            $mock->shouldReceive('structured')->andReturn(['confident' => $confident, 'reply' => $reply]);
+            $mock->shouldReceive('converse')
+                ->andReturn(['args' => ['confident' => $confident, 'reply' => $reply], 'toolsUsed' => []]);
         });
     }
 
@@ -401,6 +406,9 @@ class WhatsAppBridgeTest extends TestCase
 
         $this->fakeGemini(true);
         $this->mock(WhatsAppBridgeClient::class, function ($mock) use ($thread) {
+            // Si njeri (task #368): treguesi "po shkruan..." para dërgimit.
+            $mock->shouldReceive('typing')->once()
+                ->with($this->tenant->id, $thread->whatsapp_jid)->andReturn([]);
             $mock->shouldReceive('send')->once()
                 ->with($this->tenant->id, $thread->whatsapp_jid, 'Përgjigje AI.')
                 ->andReturn(['id' => 'WA-AI-1']);
@@ -409,6 +417,8 @@ class WhatsAppBridgeTest extends TestCase
 
         $this->runAiJob($thread, $message->id);
 
+        // 'Përgjigje AI.' = 13 shkronja → 2s "kohë shkrimi" (task #368).
+        \Illuminate\Support\Sleep::assertSequence([\Illuminate\Support\Sleep::for(2)->seconds()]);
         $this->assertDatabaseHas('messages', [
             'message_thread_id' => $thread->id,
             'sender' => \App\Models\Message::SENDER_HOST,
@@ -430,12 +440,72 @@ class WhatsAppBridgeTest extends TestCase
         ]);
 
         $this->fakeGemini(true);
-        $this->mock(WhatsAppBridgeClient::class, fn ($mock) => $mock->shouldReceive('send')->once()->andThrow(new \RuntimeException('Ura offline')));
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            // Edhe typing dështon (ura offline) — dërgimi provohet njësoj dhe bie në draft.
+            $mock->shouldReceive('typing')->once()->andThrow(new \RuntimeException('Ura offline'));
+            $mock->shouldReceive('send')->once()->andThrow(new \RuntimeException('Ura offline'));
+        });
 
         $this->runAiJob($thread, $message->id);
 
         $thread->refresh();
         $this->assertSame('Përgjigje AI.', $thread->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Task #368: typing që dështon (urë e vjetër pa endpoint) s'e ndal dërgimin. */
+    public function test_typing_failure_does_not_block_the_auto_reply(): void
+    {
+        \App\Models\Setting::set('ai_mcp.whatsapp_auto_reply_enabled', true, 'boolean');
+        \App\Models\HotelFaq::create(['question' => 'Parkim?', 'answer' => 'Po.']);
+        $thread = $this->makeWhatsAppThread();
+        $message = $thread->messages()->create([
+            'sender' => \App\Models\Message::SENDER_GUEST,
+            'body' => 'A keni parkim?',
+            'sent_at' => now(),
+        ]);
+
+        $this->fakeGemini(true);
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('typing')->once()->andThrow(new \RuntimeException('404 endpoint i panjohur'));
+            $mock->shouldReceive('send')->once()->andReturn(['id' => 'WA-OK-9']);
+        });
+
+        $this->runAiJob($thread, $message->id);
+
+        $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true, 'whatsapp_message_id' => 'WA-OK-9']);
+    }
+
+    /** Task #368: stafi flet GJATË "kohës së shkrimit" → asnjë dërgim, asnjë draft. */
+    public function test_staff_reply_during_typing_delay_aborts_the_send(): void
+    {
+        \App\Models\Setting::set('ai_mcp.whatsapp_auto_reply_enabled', true, 'boolean');
+        \App\Models\HotelFaq::create(['question' => 'Parkim?', 'answer' => 'Po.']);
+        $thread = $this->makeWhatsAppThread();
+        $message = $thread->messages()->create([
+            'sender' => \App\Models\Message::SENDER_GUEST,
+            'body' => 'A keni parkim?',
+            'sent_at' => now(),
+        ]);
+
+        $this->fakeGemini(true);
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) use ($thread) {
+            // typing ndodh PARA fjetjes — pikërisht dritarja ku stafi mund të flasë.
+            $mock->shouldReceive('typing')->once()->andReturnUsing(function () use ($thread) {
+                $thread->messages()->create([
+                    'sender' => \App\Models\Message::SENDER_HOST,
+                    'body' => 'Staff replied while Lora was typing',
+                    'sent_at' => now()->addSecond(),
+                ]);
+
+                return [];
+            });
+            $mock->shouldReceive('send')->never();
+        });
+
+        $this->runAiJob($thread, $message->id);
+
+        $this->assertNull($thread->refresh()->ai_suggestion);
         $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
     }
 

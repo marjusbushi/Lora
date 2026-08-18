@@ -84,6 +84,124 @@ class GeminiClient
         );
     }
 
+    /**
+     * Multi-round function-calling conversation (Lora recepsioniste). The model may
+     * call any of the $executors tools — PHP runs them and feeds the result back as
+     * a functionResponse — for at most $maxToolRounds rounds; the FINAL answer must
+     * arrive via $finalToolName (declared in $tools alongside the executor tools).
+     * Every round forces mode=ANY over the declared names, so the model always
+     * returns a function call — never free text.
+     *
+     * @param  array<int,array{name:string,description?:string,input_schema?:array}>  $tools
+     * @param  array<string,callable(array):array>  $executors  tool name → server-side runner
+     * @return array{args:array<string,mixed>,toolsUsed:array<int,string>}
+     */
+    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3): array
+    {
+        $functions = collect($tools)->map(fn (array $tool) => [
+            'name' => $tool['name'],
+            'description' => $tool['description'] ?? '',
+            'parameters' => $tool['input_schema'] ?? ['type' => 'object'],
+        ])->values()->all();
+        $allNames = array_column($functions, 'name');
+
+        $contents = [['role' => 'user', 'parts' => [['text' => $userMessage]]]];
+        $toolsUsed = [];
+
+        // $timeoutSeconds është kufiri i GJITHË bisedës, jo i çdo kërkese — me
+        // 3 raunde mjetesh nga 45s secili, job-i (timeout 90s) vritej në mes
+        // dhe s'linte as draft (gjetje Codex, PR #462).
+        $deadline = microtime(true) + $timeoutSeconds;
+
+        for ($round = 0; $round <= $maxToolRounds; $round++) {
+            $remaining = (int) floor($deadline - microtime(true));
+            if ($remaining < 3) {
+                throw new RuntimeException('Koha e bisedës me modelin u mbush para përgjigjes finale.');
+            }
+
+            // Raundi i fundit lejon VETËM përgjigjen finale — cikli s'mbetet kurrë pa dalje.
+            $allowed = $round === $maxToolRounds ? [$finalToolName] : $allNames;
+            $call = $this->generate($system, $contents, $functions, $allowed, $maxTokens, $remaining);
+
+            if ($call['name'] === $finalToolName) {
+                return ['args' => $call['args'], 'toolsUsed' => $toolsUsed];
+            }
+
+            $runner = $executors[$call['name']] ?? null;
+            $result = $runner
+                ? $runner($call['args'])
+                : ['error' => 'Mjet i panjohur.'];
+
+            $toolsUsed[] = $call['name'];
+            $contents[] = ['role' => 'model', 'parts' => [['functionCall' => ['name' => $call['name'], 'args' => $call['args'] ?: new \stdClass]]]];
+            $contents[] = ['role' => 'user', 'parts' => [['functionResponse' => ['name' => $call['name'], 'response' => $result ?: new \stdClass]]]];
+        }
+
+        throw new RuntimeException("Modeli s'e mbylli përgjigjen brenda raundeve të lejuara.");
+    }
+
+    /**
+     * One generateContent round that MUST return a function call among $allowedNames.
+     *
+     * @return array{name:string,args:array<string,mixed>}
+     */
+    private function generate(string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, int $timeoutSeconds): array
+    {
+        // The key travels in the x-goog-api-key HEADER — never in the URL, so it
+        // can never leak via exception messages, access logs, or report() traces.
+        $url = $this->base().'/models/'.$this->model().':generateContent';
+
+        $res = Http::withHeaders([
+            'content-type' => 'application/json',
+            'x-goog-api-key' => (string) $this->key(),
+        ])->timeout($timeoutSeconds)->post($url, [
+            'system_instruction' => ['parts' => [['text' => $system]]],
+            'contents' => $contents,
+            'tools' => [['function_declarations' => $functions]],
+            'tool_config' => ['function_calling_config' => ['mode' => 'ANY', 'allowed_function_names' => $allowedNames]],
+            'generationConfig' => [
+                'maxOutputTokens' => $maxTokens,
+                'temperature' => 0.4,
+                // gemini-2.5-flash is a THINKING model: without a cap its internal reasoning
+                // tokens are billed against maxOutputTokens and can consume the whole budget,
+                // leaving no room for the forced function call (finishReason=MAX_TOKENS, empty
+                // parts). A small budget keeps light reasoning while guaranteeing output room.
+                'thinkingConfig' => ['thinkingBudget' => self::THINKING_BUDGET],
+            ],
+        ]);
+
+        if (!$res->successful()) {
+            $this->throwHttpError($res->status(), (string) $res->body());
+        }
+
+        foreach ($res->json('candidates.0.content.parts', []) as $part) {
+            $call = $part['functionCall'] ?? null;
+            if ($call && in_array($call['name'] ?? null, $allowedNames, true)) {
+                return ['name' => $call['name'], 'args' => $call['args'] ?? []];
+            }
+        }
+
+        // No function call came back. The usual cause is the thinking budget eating the
+        // output — surface that specifically so it is actionable, not a generic failure.
+        $finish = $res->json('candidates.0.finishReason');
+        throw new RuntimeException($finish === 'MAX_TOKENS'
+            ? 'Modeli u ndërpre para se ta mbaronte planin (buxheti i tokenave u mbush). Provo sërish ose zvogëlo periudhën.'
+            : "Modeli s'ktheu një plan të vlefshëm. Provo sërish.");
+    }
+
+    private function throwHttpError(int $status, string $body): never
+    {
+        // The key lives only in a request header, so reading the body here
+        // cannot leak it. Map to a clear Albanian message.
+        throw new RuntimeException(match (true) {
+            $status === 429 => 'Shumë kërkesa te Google (limiti u kalua). Prit pak minuta dhe provo sërish.',
+            $status === 400 && str_contains($body, 'API key not valid') => 'Çelësi Gemini nuk është i vlefshëm. Kontrollo çelësin te Settings → Asistenti AI.',
+            $status === 403 => 'Çelësi Gemini u refuzua (403). Kontrollo çelësin te Settings → Asistenti AI.',
+            $status === 404 => 'Modeli i AI nuk u gjet (404) — mund të jetë tërhequr. Njofto zhvilluesin.',
+            default => "Google ktheu një gabim ($status). Provo sërish.",
+        });
+    }
+
     /** @return array<string,mixed> */
     private function structuredWithParts(string $system, array $parts, array $tool, string $toolName, int $maxTokens, int $timeoutSeconds): array
     {
@@ -117,17 +235,7 @@ class GeminiClient
         ]);
 
         if (!$res->successful()) {
-            // The key lives only in a request header, so reading $res->body() below
-            // cannot leak it. Map to a clear Albanian message.
-            $status = $res->status();
-            $body = (string) $res->body();
-            throw new RuntimeException(match (true) {
-                $status === 429 => 'Shumë kërkesa te Google (limiti u kalua). Prit pak minuta dhe provo sërish.',
-                $status === 400 && str_contains($body, 'API key not valid') => 'Çelësi Gemini nuk është i vlefshëm. Kontrollo çelësin te Settings → Asistenti AI.',
-                $status === 403 => 'Çelësi Gemini u refuzua (403). Kontrollo çelësin te Settings → Asistenti AI.',
-                $status === 404 => 'Modeli i AI nuk u gjet (404) — mund të jetë tërhequr. Njofto zhvilluesin.',
-                default => "Google ktheu një gabim ($status). Provo sërish.",
-            });
+            $this->throwHttpError($res->status(), (string) $res->body());
         }
 
         foreach ($res->json('candidates.0.content.parts', []) as $part) {

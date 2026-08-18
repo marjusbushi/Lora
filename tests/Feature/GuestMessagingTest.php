@@ -25,6 +25,10 @@ class GuestMessagingTest extends TestCase
     {
         parent::setUp();
         Http::preventStrayRequests();
+        // Këto teste provojnë webhook-un/importerin, jo AI-në: Gemini FIKUR —
+        // ndryshe job-i (sync në teste) do të tentonte thirrje reale dhe, pas
+        // task #367 (dështimi ngjitet lart për retry), do të 500-onte webhook-un.
+        $this->mock(\App\Services\GeminiClient::class, fn ($mock) => $mock->shouldReceive('configured')->andReturn(false));
         config([
             'services.channex.api_key' => 'test-key',
             'services.channex.base_url' => 'https://staging.channex.io/api/v1',
