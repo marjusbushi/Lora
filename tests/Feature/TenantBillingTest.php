@@ -53,7 +53,10 @@ class TenantBillingTest extends TestCase
 
             $this->assertTrue($admin->hasPermissionTo('manage_finance_settings'));
             $this->assertTrue($manager->hasPermissionTo('manage_bills'));
-            $this->assertTrue($receptionist->hasPermissionTo('view_finance'));
+            // Renato (2026-08-18): the desk lost the whole Financa module;
+            // create_payment remains as the folio-checkout marker.
+            $this->assertFalse($receptionist->hasPermissionTo('view_finance'));
+            $this->assertTrue($receptionist->hasPermissionTo('create_payment'));
             $this->assertFalse($receptionist->hasPermissionTo('view_bank_accounts'));
         });
     }

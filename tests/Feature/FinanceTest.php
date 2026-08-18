@@ -182,45 +182,51 @@ class FinanceTest extends TestCase
 
     // -- permissions ------------------------------------------------------------
 
-    public function test_receptionist_can_record_incoming_but_not_outgoing_or_transfer(): void
+    public function test_receptionist_is_locked_out_of_the_finance_module_entirely(): void
     {
+        // Renato (2026-08-18, after impersonating the role live): the desk
+        // does not see the Financa module AT ALL — view_finance left the role.
+        // Checkout money still flows through the reservation folio
+        // (reservations.payment, gated by update_reservations) — proven in
+        // ReservationPaymentTest.
         $rec = $this->role('receptionist');
         $arka = $this->arka();
 
-        $this->actingAs($rec)->post(route('finance.payments.store'), [
-            'direction' => 'in', 'account_id' => $arka->id, 'amount' => 50,
-            'currency' => 'EUR', 'method' => 'cash', 'description' => 'arkëtim testi',
-        ])->assertRedirect()->assertSessionHasNoErrors();
-        $this->assertSame(50.0, $arka->balance());
+        $this->actingAs($rec)->get(route('finance.index'))->assertForbidden();
+        $this->actingAs($rec)->get(route('finance.accounts'))->assertForbidden();
+        $this->actingAs($rec)->get(route('finance.payments'))->assertForbidden();
 
         $this->actingAs($rec)->post(route('finance.payments.store'), [
-            'direction' => 'out', 'account_id' => $arka->id, 'amount' => 10,
-            'currency' => 'EUR', 'method' => 'cash', 'description' => 'dalje e ndaluar',
+            'direction' => 'in', 'account_id' => $arka->id, 'amount' => 50,
+            'currency' => 'EUR', 'method' => 'cash', 'description' => 'arkëtim i bllokuar',
         ])->assertForbidden();
+        $this->assertSame(0.0, $arka->balance());
 
         $this->actingAs($rec)->post(route('finance.transfers.store'), [
             'from_account_id' => $arka->id, 'to_account_id' => $arka->id + 1, 'amount' => 5,
         ])->assertForbidden();
     }
 
-    public function test_user_without_view_finance_gets_403_and_receptionist_never_sees_bank(): void
+    public function test_user_without_view_finance_gets_403_and_manager_never_sees_bank(): void
     {
         $this->withoutVite();
         $housekeeping = $this->role('housekeeping');
         $this->actingAs($housekeeping)->get(route('finance.index'))->assertForbidden();
 
-        $rec = User::factory()->create();
-        $rec->assignRole('receptionist');
+        // The bank wall: the manager holds view_finance but not
+        // view_bank_accounts — bank stays owner-only (Lejet v2).
+        $manager = User::factory()->create();
+        $manager->assignRole('manager');
         FinanceAccount::ensureDefaults();
         $bank = FinanceAccount::where('type', 'bank')->first();
 
         // page props must not contain the bank account
-        $this->actingAs($rec)->get(route('finance.index'))
+        $this->actingAs($manager)->get(route('finance.index'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page->where('accounts', fn ($accounts) => collect($accounts)->every(fn ($a) => $a['type'] === 'cash')));
 
         // and a hand-typed bank account_id on the ledger is refused
-        $this->actingAs($rec)->get(route('finance.accounts', ['account_id' => $bank->id]))->assertForbidden();
+        $this->actingAs($manager)->get(route('finance.accounts', ['account_id' => $bank->id]))->assertForbidden();
     }
 
     public function test_dashboard_math_matches_the_rows(): void

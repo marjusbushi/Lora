@@ -52,6 +52,28 @@ class ReservationPaymentTest extends TestCase
         ]);
     }
 
+    public function test_receptionist_records_checkout_money_through_the_folio(): void
+    {
+        // Renato (2026-08-18): the desk lost the Financa module entirely —
+        // this folio route (gated by update_reservations) is where checkout
+        // money flows for reception, and it must keep working.
+        $receptionist = User::factory()->create(['current_tenant_id' => $this->staff->current_tenant_id]);
+        $receptionist->assignRole('receptionist');
+
+        $this->actingAs($receptionist)
+            ->postJson(route('reservations.payment', $this->reservation), [
+                'amount' => 100,
+                'method' => 'cash',
+            ])
+            ->assertCreated();
+
+        $this->assertDatabaseHas('payments', [
+            'reservation_id' => $this->reservation->id,
+            'amount' => 100,
+            'created_by' => $receptionist->id,
+        ]);
+    }
+
     public function test_payment_returns_json_and_is_recorded(): void
     {
         $this->actingAs($this->staff)
