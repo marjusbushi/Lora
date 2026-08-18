@@ -559,6 +559,46 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
     // usually not admins) — the only gate is the session marker itself.
     Route::post('/impersonation/stop', [ImpersonationController::class, 'stop'])->name('impersonation.stop');
 
+    // Pricing (Çmimet) — no longer admin-only: the manager works the module
+    // with view_pricing/update_pricing (Renato 2026-08-18). role_or_permission
+    // keeps un-synced tenants' admins inside (the ROLE matches on its own),
+    // while every write additionally needs update_pricing — including the AI
+    // endpoints, so view-only custom roles cannot burn AI credit.
+    Route::middleware('role_or_permission:admin|view_pricing')->group(function () {
+        // Seasons + per-type rate matrix
+        Route::get('/pricing', [PricingController::class, 'index'])->name('pricing.index');
+        Route::middleware('role_or_permission:admin|update_pricing')->group(function () {
+            Route::post('/pricing/seasons', [PricingController::class, 'storeSeason'])->name('pricing.seasons.store');
+            Route::post('/pricing/seasons/copy/preview', [SeasonCopyController::class, 'preview'])->name('pricing.seasons.copy.preview');
+            Route::post('/pricing/seasons/copy', [SeasonCopyController::class, 'apply'])->name('pricing.seasons.copy.apply');
+            Route::put('/pricing/seasons/{season}', [PricingController::class, 'updateSeason'])->name('pricing.seasons.update');
+            Route::delete('/pricing/seasons/{season}', [PricingController::class, 'destroySeason'])->name('pricing.seasons.destroy');
+            Route::post('/pricing/rates', [PricingController::class, 'saveRates'])->name('pricing.rates.save');
+        });
+
+        Route::middleware('module:smart_pricing')->group(function () {
+            // Çmim Inteligjent — occupancy-based price suggestions (suggest-only; Apply writes a date override)
+            Route::get('/pricing/smart', [SmartPricingController::class, 'index'])->name('pricing.smart.index');
+            Route::middleware('role_or_permission:admin|update_pricing')->group(function () {
+                Route::post('/pricing/smart/apply', [SmartPricingController::class, 'apply'])->name('pricing.smart.apply');
+                Route::post('/pricing/smart/remove', [SmartPricingController::class, 'remove'])->name('pricing.smart.remove');
+                // AI Pricing Assistant — generate a reasoned plan (JSON) + apply one recommendation
+                Route::post('/pricing/smart/apply-range', [SmartPricingController::class, 'applyRange'])->name('pricing.smart.apply-range');
+                Route::post('/pricing/smart/explain', [SmartPricingController::class, 'explain'])->name('pricing.smart.explain');
+                Route::post('/pricing/smart/ask', [SmartPricingController::class, 'ask'])->name('pricing.smart.ask');
+                Route::post('/pricing/smart/events/suggest', [SmartPricingController::class, 'suggestEvents'])->name('pricing.smart.events.suggest');
+                Route::post('/pricing/smart/events', [SmartPricingController::class, 'approveEvent'])->name('pricing.smart.events.approve');
+                Route::put('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'updateEvent'])->name('pricing.smart.events.update');
+                Route::delete('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'destroyEvent'])->name('pricing.smart.events.destroy');
+                Route::post('/pricing/smart/report', [SmartPricingController::class, 'generateReport'])->name('pricing.smart.report');
+                Route::post('/pricing/smart/autopilot', [SmartPricingController::class, 'updateAutopilot'])->name('pricing.smart.autopilot');
+                Route::post('/pricing/smart/autopilot/revert/{log}', [SmartPricingController::class, 'revertAutopilot'])->name('pricing.smart.autopilot.revert');
+                Route::post('/pricing/smart/strategy', [SmartPricingController::class, 'updateStrategy'])->name('pricing.smart.strategy');
+                Route::put('/pricing/smart/bounds/{roomType}', [SmartPricingController::class, 'updateBounds'])->name('pricing.smart.bounds');
+            });
+        });
+    });
+
     // Admin-only: User Management + Settings
     Route::middleware('role:admin')->group(function () {
         Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
@@ -575,36 +615,6 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         // Roles & per-module CRUD permissions
         Route::post('/users/roles', [UserController::class, 'storeRole'])->name('users.roles.store');
         Route::put('/users/roles/{role}/permissions', [UserController::class, 'updateRolePermissions'])->name('users.roles.permissions');
-
-        // Settings
-        // Pricing (Cmimet) — seasons + per-type rate matrix
-        Route::get('/pricing', [PricingController::class, 'index'])->name('pricing.index');
-        Route::post('/pricing/seasons', [PricingController::class, 'storeSeason'])->name('pricing.seasons.store');
-        Route::post('/pricing/seasons/copy/preview', [SeasonCopyController::class, 'preview'])->name('pricing.seasons.copy.preview');
-        Route::post('/pricing/seasons/copy', [SeasonCopyController::class, 'apply'])->name('pricing.seasons.copy.apply');
-        Route::put('/pricing/seasons/{season}', [PricingController::class, 'updateSeason'])->name('pricing.seasons.update');
-        Route::delete('/pricing/seasons/{season}', [PricingController::class, 'destroySeason'])->name('pricing.seasons.destroy');
-        Route::post('/pricing/rates', [PricingController::class, 'saveRates'])->name('pricing.rates.save');
-
-        Route::middleware('module:smart_pricing')->group(function () {
-            // Çmim Inteligjent — occupancy-based price suggestions (suggest-only; Apply writes a date override)
-            Route::get('/pricing/smart', [SmartPricingController::class, 'index'])->name('pricing.smart.index');
-            Route::post('/pricing/smart/apply', [SmartPricingController::class, 'apply'])->name('pricing.smart.apply');
-            Route::post('/pricing/smart/remove', [SmartPricingController::class, 'remove'])->name('pricing.smart.remove');
-            // AI Pricing Assistant — generate a reasoned plan (JSON) + apply one recommendation
-            Route::post('/pricing/smart/apply-range', [SmartPricingController::class, 'applyRange'])->name('pricing.smart.apply-range');
-            Route::post('/pricing/smart/explain', [SmartPricingController::class, 'explain'])->name('pricing.smart.explain');
-            Route::post('/pricing/smart/ask', [SmartPricingController::class, 'ask'])->name('pricing.smart.ask');
-            Route::post('/pricing/smart/events/suggest', [SmartPricingController::class, 'suggestEvents'])->name('pricing.smart.events.suggest');
-            Route::post('/pricing/smart/events', [SmartPricingController::class, 'approveEvent'])->name('pricing.smart.events.approve');
-            Route::put('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'updateEvent'])->name('pricing.smart.events.update');
-            Route::delete('/pricing/smart/events/{pricingEvent}', [SmartPricingController::class, 'destroyEvent'])->name('pricing.smart.events.destroy');
-            Route::post('/pricing/smart/report', [SmartPricingController::class, 'generateReport'])->name('pricing.smart.report');
-            Route::post('/pricing/smart/autopilot', [SmartPricingController::class, 'updateAutopilot'])->name('pricing.smart.autopilot');
-            Route::post('/pricing/smart/autopilot/revert/{log}', [SmartPricingController::class, 'revertAutopilot'])->name('pricing.smart.autopilot.revert');
-            Route::post('/pricing/smart/strategy', [SmartPricingController::class, 'updateStrategy'])->name('pricing.smart.strategy');
-            Route::put('/pricing/smart/bounds/{roomType}', [SmartPricingController::class, 'updateBounds'])->name('pricing.smart.bounds');
-        });
 
         // Channel manager (Channex) — manual full re-sync
         Route::middleware('module:channel_manager')->group(function () {

@@ -127,6 +127,7 @@ class UserController extends Controller
             ['key' => 'pos_orders', 'label' => 'POS', 'actions' => ['view', 'create', 'update', 'delete']],
             ['key' => 'pos_shift', 'label' => 'Turnet POS', 'actions' => ['open', 'close', 'close_any']],
             ['key' => 'reports', 'label' => 'Raporte', 'actions' => ['view']],
+            ['key' => 'pricing', 'label' => 'Çmimet', 'actions' => ['view', 'update']],
             ['key' => 'settings', 'label' => 'Settings', 'actions' => ['view', 'update']],
             ['key' => 'users', 'label' => 'Perdoruesit', 'actions' => ['view', 'create', 'update', 'delete']],
         ];

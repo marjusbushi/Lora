@@ -69,13 +69,21 @@ class FinancialVisibilityTest extends TestCase
         $this->actingAs($manager)->get(route('finance.suppliers'))->assertOk();
     }
 
-    public function test_reception_keeps_the_arka_recording_flow(): void
+    public function test_reception_is_out_of_the_finance_module_but_the_manager_keeps_it(): void
     {
-        // The seeder's stated intent: "sees the arka and records incoming
-        // payments only" — narrowing must not break the desk's real work.
+        // Renato (2026-08-18, after impersonating the role live): the desk no
+        // longer sees the Financa module AT ALL — the 2026-08-17 "arka only"
+        // narrowing is superseded. Checkout money flows through the folio
+        // (reservations.payment, gated by update_reservations) — proven in
+        // ReservationPaymentTest.
         $receptionist = $this->userWithRole('receptionist');
 
-        $this->actingAs($receptionist)->get(route('finance.index'))->assertOk();
-        $this->actingAs($receptionist)->get(route('finance.payments'))->assertOk();
+        $this->actingAs($receptionist)->get(route('finance.index'))->assertForbidden();
+        $this->actingAs($receptionist)->get(route('finance.payments'))->assertForbidden();
+
+        // The pages themselves stay healthy for a role that kept the module.
+        $manager = $this->userWithRole('manager');
+        $this->actingAs($manager)->get(route('finance.index'))->assertOk();
+        $this->actingAs($manager)->get(route('finance.payments'))->assertOk();
     }
 }
