@@ -455,7 +455,15 @@ class FinanceBillsTest extends TestCase
             ->assertRedirect(route('finance.bills'))
             ->assertSessionHas('error');
 
-        $this->actingAs($receptionist)->get(route('finance.bills.show', $bill))
+        // Renato (2026-08-18): reception no longer holds view_finance, so even
+        // the read-only single-bill view is out of reach for the desk now.
+        $this->actingAs($receptionist)->get(route('finance.bills.show', $bill))->assertForbidden();
+
+        // The read-only branch itself stays covered through a bespoke user who
+        // can see finance but cannot manage bills (custom-role shape).
+        $viewer = User::factory()->create();
+        $viewer->givePermissionTo('view_finance');
+        $this->actingAs($viewer)->get(route('finance.bills.show', $bill))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Finance/BillCreate')

@@ -39,6 +39,9 @@ class TenantRoleService
                 'view_finance', 'create_payment', 'pay_bills', 'manage_transfers',
                 'manage_invoices', 'manage_bills', 'manage_suppliers',
                 'view_inventory', 'manage_inventory',
+                // Renato (2026-08-18): the manager works the pricing module,
+                // including the smart calendar.
+                'view_pricing', 'update_pricing',
             ],
             'receptionist' => [
                 'view_rooms', 'update_rooms',
@@ -54,8 +57,12 @@ class TenantRoleService
                 'open_beach_shift', 'close_beach_shift',
                 // Reports: the desk's own work only — no revenue, no money.
                 'view_reports_operations', 'view_reports_guests',
-                // Finance: sees the arka and records incoming payments only.
-                'view_finance', 'create_payment',
+                // Renato (2026-08-18, after impersonating the role live): the
+                // desk does NOT see the Financa module at all. Checkout money
+                // still flows — the folio posts to reservations.payment, which
+                // is gated by update_reservations, not by any finance permission.
+                // create_payment stays as the honest marker of that write.
+                'create_payment',
             ],
             'housekeeping' => [
                 'view_rooms', 'update_rooms',
@@ -103,6 +110,11 @@ class TenantRoleService
             // keep working until roles:sync-definitions runs); the four sector
             // permissions below are the real model since plan #724.
             'reports' => ['view'],
+            // Pricing left the admin-only umbrella (Renato 2026-08-18): view_
+            // pricing opens the module (incl. the smart calendar), update_
+            // pricing allows writes. view_pricing also feeds Dashboard.vue's
+            // pricing cards, which referenced it as a ghost until now.
+            'pricing' => ['view', 'update'],
             'settings' => ['view', 'update'],
             'users' => ['view', 'create', 'update', 'delete'],
         ];

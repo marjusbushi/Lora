@@ -239,7 +239,9 @@ const allNavItems = computed(() => [
         href: activeModules.value.smart_pricing === true ? '/pms/pricing/smart' : '/pms/pricing',
         match: '/pms/pricing',
         icon: icons.pricing,
-        permission: 'view_settings',
+        // view_settings keeps un-synced tenants' admins covered; view_pricing
+        // is the real gate (managers hold it since Lejet v2.1).
+        permission: ['view_settings', 'view_pricing'],
     },
     { label: t('admin.sidebar.reports'), href: '/pms/reports', icon: icons.reports, permission: ['view_reports', 'view_reports_operations', 'view_reports_guests', 'view_reports_revenue', 'view_reports_finance'] },
 ]);
