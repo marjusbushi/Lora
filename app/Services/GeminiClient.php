@@ -108,10 +108,20 @@ class GeminiClient
         $contents = [['role' => 'user', 'parts' => [['text' => $userMessage]]]];
         $toolsUsed = [];
 
+        // $timeoutSeconds është kufiri i GJITHË bisedës, jo i çdo kërkese — me
+        // 3 raunde mjetesh nga 45s secili, job-i (timeout 90s) vritej në mes
+        // dhe s'linte as draft (gjetje Codex, PR #462).
+        $deadline = microtime(true) + $timeoutSeconds;
+
         for ($round = 0; $round <= $maxToolRounds; $round++) {
+            $remaining = (int) floor($deadline - microtime(true));
+            if ($remaining < 3) {
+                throw new RuntimeException('Koha e bisedës me modelin u mbush para përgjigjes finale.');
+            }
+
             // Raundi i fundit lejon VETËM përgjigjen finale — cikli s'mbetet kurrë pa dalje.
             $allowed = $round === $maxToolRounds ? [$finalToolName] : $allNames;
-            $call = $this->generate($system, $contents, $functions, $allowed, $maxTokens, $timeoutSeconds);
+            $call = $this->generate($system, $contents, $functions, $allowed, $maxTokens, $remaining);
 
             if ($call['name'] === $finalToolName) {
                 return ['args' => $call['args'], 'toolsUsed' => $toolsUsed];

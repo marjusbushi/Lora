@@ -89,9 +89,12 @@ class GenerateAiGuestReply implements ShouldQueue
 
         $confident = (bool) ($result['args']['confident'] ?? false);
         $reply = trim((string) ($result['args']['reply'] ?? ''));
-        // Përgjigje e ankoruar te motori: check_availability u ekzekutua vërtet,
-        // pra numrat në përgjigje vijnë nga sistemi — jo nga imagjinata e AI-së.
-        $toolGrounded = in_array('check_availability', $result['toolsUsed'] ?? [], true);
+        // Përgjigje e ankoruar te motori (gjetje Codex, PR #462): NUK mjafton që
+        // mjeti të jetë thirrur — duhet (a) të paktën një kuotë e SUKSESSHME (pa
+        // error) dhe (b) çdo shifër monetare në tekst të ekzistojë në rezultatin
+        // e motorit. Ndryshe përgjigja mbetet draft — kurrë çmim i shpikur vetë.
+        $toolGrounded = ($result['quotes'] ?? []) !== []
+            && $this->replyNumbersMatchQuotes($reply, $result['quotes']);
         if ($reply === '') {
             return;
         }
@@ -134,7 +137,7 @@ class GenerateAiGuestReply implements ShouldQueue
         ])->save();
     }
 
-    /** @return array{args:array<string,mixed>,toolsUsed:array<int,string>}|null */
+    /** @return array{args:array<string,mixed>,toolsUsed:array<int,string>,quotes:array<int,array<string,mixed>>}|null */
     private function askGemini(GeminiClient $gemini, MessageThread $thread, $faqs): ?array
     {
         $hotel = collect(Setting::getGroup('hotel'))
@@ -165,8 +168,9 @@ RREGULLA TË PATHYESHME:
    check-out), thirr mjetin check_availability dhe përgjigju VETËM me numrat
    që kthen mjeti — totalin e qëndrimit dhe çmimin për natë, me monedhën e
    dhënë. KURRË mos llogarit, mos rrumbullakos, mos shto e mos hiq zbritje
-   vetë. Trego vetëm tipologjitë me rooms_available > 0; nëse asnjëra s'është
-   e lirë, thuaja qartë dhe ftoje të provojë data të tjera.
+   vetë. Shkruaji shifrat SAKTËSISHT siç i kthen mjeti (p.sh. 300 ose 300.5),
+   pa ndarës mijëshesh. Trego vetëm tipologjitë me rooms_available > 0; nëse
+   asnjëra s'është e lirë, thuaja qartë dhe ftoje të provojë data të tjera.
 2. Nëse mysafiri pyet për çmim a disponibilitet PA dhënë datat e plota (ose pa
    thënë sa persona janë) → MOS e thirr mjetin: pyete njëherë për datat dhe
    numrin e personave (confident=true — kjo është pyetje sqaruese, jo premtim).
@@ -223,15 +227,22 @@ PROMPT;
             ],
         ];
 
+        // Vetëm rezultatet e SUKSESSHME të mjetit hyjnë këtu — porta e ankërimit
+        // i beson vetëm atyre, jo faktit që mjeti "u thirr" (gjetje Codex, PR #462).
+        $quotes = [];
+
         $executors = [
-            'check_availability' => function (array $args) use ($thread): array {
+            'check_availability' => function (array $args) use ($thread, &$quotes): array {
                 try {
-                    return app(GuestStayQuote::class)->forGuest(
+                    $quote = app(GuestStayQuote::class)->forGuest(
                         (string) $thread->channel,
                         (string) ($args['check_in'] ?? ''),
                         (string) ($args['check_out'] ?? ''),
                         (int) ($args['adults'] ?? 2),
                     );
+                    $quotes[] = $quote;
+
+                    return $quote;
                 } catch (\InvalidArgumentException $e) {
                     // Data të pavlefshme — kthejini AI-së arsyen, që t'ia kërkojë
                     // mysafirit datat e sakta në vend që të dështojë në heshtje.
@@ -245,12 +256,54 @@ PROMPT;
         ];
 
         try {
-            return $gemini->converse($system, "BISEDA:\n{$conversation}", $tools, $executors, 'guest_reply', 1024, 45);
+            return $gemini->converse($system, "BISEDA:\n{$conversation}", $tools, $executors, 'guest_reply', 1024, 45)
+                + ['quotes' => $quotes];
         } catch (\Throwable $e) {
             report($e);
 
             return null;
         }
+    }
+
+    /**
+     * Verifikim determinist (gjetje Codex, PR #462): çdo shifër "monetare" në
+     * përgjigjen e AI-së (> 31 — mbi çdo ditë muaji/numër netësh/personash)
+     * duhet të ekzistojë saktësisht në rezultatet e motorit. Një numër i huaj
+     * = jo e ankoruar → draft për stafin. Datat (YYYY-MM-DD) dhe orât (HH:MM)
+     * përjashtohen para skanimit. Dështon GJITHMONË në drejtim të sigurt.
+     *
+     * @param  array<int,array<string,mixed>>  $quotes
+     */
+    private function replyNumbersMatchQuotes(string $reply, array $quotes): bool
+    {
+        $allowed = [];
+        array_walk_recursive($quotes, function ($value) use (&$allowed): void {
+            if (is_int($value) || is_float($value) || (is_string($value) && is_numeric($value))) {
+                $allowed[] = (float) $value;
+            }
+        });
+
+        $scrubbed = preg_replace(['/\b\d{4}-\d{2}-\d{2}\b/', '/\b\d{1,2}:\d{2}\b/'], ' ', $reply);
+        preg_match_all('/\d+(?:[.,]\d+)?/', $scrubbed, $matches);
+
+        foreach ($matches[0] as $candidate) {
+            $value = (float) str_replace(',', '.', $candidate);
+            if ($value <= 31) {
+                continue;
+            }
+            $known = false;
+            foreach ($allowed as $engineValue) {
+                if (abs($engineValue - $value) < 0.01) {
+                    $known = true;
+                    break;
+                }
+            }
+            if (! $known) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function sendAutoReply(ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, MessageThread $thread, string $reply, string $rateKey): void

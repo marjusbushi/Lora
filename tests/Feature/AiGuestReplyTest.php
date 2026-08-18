@@ -282,12 +282,25 @@ class AiGuestReplyTest extends TestCase
         $this->assertSame(10.0, $wa['room_types'][0]['direct_discount_pct']);
     }
 
-    /** Kriteri #3 i task #363: 0 FAQ + tool-grounded → dërgohet; (gjysma tjetër: test_empty_faq_never_auto_sends...) */
+    /**
+     * Kriteri #3 i task #363: 0 FAQ + tool-grounded → dërgohet. "Grounded" pas
+     * gjetjes Codex (PR #462) = kuotë e SUKSESSHME + numrat përputhen me motorin
+     * — prandaj mock-u e thërret executor-in real, s'mjafton etiketa toolsUsed.
+     */
     public function test_tool_grounded_reply_auto_sends_with_zero_faq(): void
     {
+        $type = \App\Models\RoomType::create(['name' => 'Dhomë Deluxe', 'base_price' => 100, 'max_occupancy' => 2]);
+        \App\Models\Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
         [$thread, $message] = $this->makeThreadWithGuestMessage();
 
-        $this->fakeGemini(true, 'Deluxe: 300 EUR për 3 net.', ['check_availability']);
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $executors['check_availability'](['check_in' => '2027-07-01', 'check_out' => '2027-07-04', 'adults' => 2]);
+
+                return ['args' => ['confident' => true, 'reply' => 'Dhomë Deluxe: 300 EUR për 3 net.'], 'toolsUsed' => ['check_availability']];
+            });
+        });
         $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
 
         $this->runJob($thread, $message);
@@ -295,6 +308,51 @@ class AiGuestReplyTest extends TestCase
         $thread->refresh();
         $this->assertNull($thread->ai_suggestion);
         $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Gjetja Codex #1 (PR #462): numër që s'ekziston në motor (350 ≠ 300) → JO grounded → draft, asnjë dërgim. */
+    public function test_reply_with_number_not_from_engine_stays_draft(): void
+    {
+        $type = \App\Models\RoomType::create(['name' => 'Dhomë Deluxe', 'base_price' => 100, 'max_occupancy' => 2]);
+        \App\Models\Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $executors['check_availability'](['check_in' => '2027-07-01', 'check_out' => '2027-07-04', 'adults' => 2]);
+
+                // AI "halucinon" një çmim tjetër nga ai i motorit (300).
+                return ['args' => ['confident' => true, 'reply' => 'Dhomë Deluxe: 350 EUR për 3 net.'], 'toolsUsed' => ['check_availability']];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Gjetja Codex #1 (PR #462): mjeti u thirr por ktheu ERROR (pa kuotë) → etiketa toolsUsed s'mjafton → draft. */
+    public function test_failed_quote_is_not_grounded_even_when_tool_was_called(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $result = $executors['check_availability'](['check_in' => '2027-07-04', 'check_out' => '2027-07-01']);
+                \PHPUnit\Framework\Assert::assertArrayHasKey('error', $result);
+
+                return ['args' => ['confident' => true, 'reply' => 'Kemi dhoma të lira!'], 'toolsUsed' => ['check_availability']];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
     }
 
     /** Kriteri #4 i task #363: pa data të plota → pyetje sqaruese, pa mjet e pa çmime — dërgohet si bisedë normale. */
@@ -310,28 +368,6 @@ class AiGuestReplyTest extends TestCase
         $this->runJob($thread, $message);
 
         $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true, 'body' => $ask]);
-    }
-
-    /** Datat e pavlefshme s'e rrëzojnë job-in: executor-i kthen error të kuptueshëm për AI-në. */
-    public function test_invalid_dates_return_tool_error_instead_of_crashing(): void
-    {
-        [$thread, $message] = $this->makeThreadWithGuestMessage();
-
-        $this->mock(GeminiClient::class, function ($mock) {
-            $mock->shouldReceive('configured')->andReturn(true);
-            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
-                $result = $executors['check_availability'](['check_in' => '2027-07-04', 'check_out' => '2027-07-01']);
-
-                \PHPUnit\Framework\Assert::assertArrayHasKey('error', $result);
-
-                return ['args' => ['confident' => true, 'reply' => 'Cilat data ju interesojnë saktësisht?'], 'toolsUsed' => []];
-            });
-        });
-        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
-
-        $this->runJob($thread, $message);
-
-        $this->assertNotNull($thread->refresh()->ai_suggestion);
     }
 
     public function test_staff_reply_clears_the_ai_draft(): void
