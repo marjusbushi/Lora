@@ -1,5 +1,5 @@
 <script setup>
-import { translate } from '@/i18n';
+import { getIntlLocale, translate } from '@/i18n';
 import { ref, computed } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -41,6 +41,51 @@ const typeBadge = {
     stayover_clean: { variant: 'info', label: translate('admin.generated.k_6a7209d6cf00') },
     deep_clean: { variant: 'dark', label: translate('admin.generated.k_6dafa95221f3') },
     inspection: { variant: 'neutral', label: translate('admin.generated.k_218c17888641') },
+};
+
+// Arrival urgency (Renato 2026-08-18): red = the guest lands TODAY (or is
+// overdue), yellow = tomorrow. Colour is never alone — a textual badge with
+// the date always accompanies it. Dates compare as local Y-m-d strings, the
+// staff's wall-clock day.
+function localDate(offsetDays = 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const todayStr = localDate(0);
+const tomorrowStr = localDate(1);
+function nextCheckInDate(task) {
+    return (task.next_check_in || '').slice(0, 10);
+}
+function urgency(task) {
+    const ci = nextCheckInDate(task);
+    if (!ci) return null;
+    if (ci <= todayStr) return 'today';
+    if (ci === tomorrowStr) return 'tomorrow';
+    return null;
+}
+function urgencyLabel(task) {
+    const ci = nextCheckInDate(task);
+    if (ci < todayStr) return translate('admin.housekeeping.checkInOverdue');
+    if (ci === todayStr) return translate('admin.housekeeping.checkInToday');
+    return translate('admin.housekeeping.checkInTomorrow');
+}
+function fmtDay(value) {
+    if (!value) return '';
+    const date = new Date(String(value).slice(0, 10) + 'T00:00:00');
+    return date.toLocaleDateString(getIntlLocale(), { day: '2-digit', month: 'short' });
+}
+const urgencyCardClass = {
+    today: 'border-error-300 bg-error-50',
+    tomorrow: 'border-warning-300 bg-warning-50',
+};
+const urgencyBadgeClass = {
+    today: 'bg-error-100 text-error-700',
+    tomorrow: 'bg-warning-100 text-warning-800',
+};
+const urgencyRowClass = {
+    today: 'bg-error-50/60 hover:bg-error-50',
+    tomorrow: 'bg-warning-50/60 hover:bg-warning-50',
 };
 
 // Kanban columns (calm — only a small dot is coloured)
@@ -202,12 +247,18 @@ const housekeeperOptions = props.housekeepers.map((h) => ({ value: h.id, label: 
                     <div
                         v-for="task in tasksByStatus[col.status]"
                         :key="task.id"
-                        class="rounded-lg border border-neutral-200 bg-white shadow-card p-3"
+                        class="rounded-lg border shadow-card p-3"
+                        :class="urgencyCardClass[urgency(task)] || 'border-neutral-200 bg-white'"
                     >
                         <div class="flex items-start justify-between gap-2">
                             <p class="text-h4 text-primary-900 leading-none">{{ $t('admin.generated.k_33533ce43e5f') }} {{ task.room?.room_number }}</p>
                             <span v-if="task.priority === 'urgent'" class="text-tiny font-medium text-error-600 shrink-0">{{ $t('admin.generated.k_8d9b6a0a288e') }}</span>
                         </div>
+                        <p v-if="urgency(task)" class="mt-1.5">
+                            <span class="inline-flex items-center rounded px-1.5 py-0.5 text-tiny font-bold" :class="urgencyBadgeClass[urgency(task)]">
+                                {{ urgencyLabel(task) }} · {{ fmtDay(task.next_check_in) }}
+                            </span>
+                        </p>
                         <p class="text-small text-neutral-500 mt-1.5">{{ task.room?.room_type?.name }} {{ $t('admin.generated.k_c0164cc28c7b') }} {{ task.room?.floor }}</p>
                         <div class="flex items-center gap-1.5 mt-1">
                             <Badge :variant="typeBadge[task.type]?.variant" size="sm">{{ typeBadge[task.type]?.label }}</Badge>
@@ -257,8 +308,13 @@ const housekeeperOptions = props.housekeepers.map((h) => ({ value: h.id, label: 
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-neutral-100">
-                            <tr v-for="task in tasks.data" :key="task.id" class="hover:bg-neutral-50">
-                                <td class="px-5 py-3 text-body-sm text-primary-900 font-medium">{{ task.room?.room_number }}</td>
+                            <tr v-for="task in tasks.data" :key="task.id" :class="urgencyRowClass[urgency(task)] || 'hover:bg-neutral-50'">
+                                <td class="px-5 py-3 text-body-sm text-primary-900 font-medium">
+                                    {{ task.room?.room_number }}
+                                    <span v-if="urgency(task)" class="ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-tiny font-bold" :class="urgencyBadgeClass[urgency(task)]">
+                                        {{ urgencyLabel(task) }} · {{ fmtDay(task.next_check_in) }}
+                                    </span>
+                                </td>
                                 <td class="px-5 py-3"><Badge :variant="typeBadge[task.type]?.variant" size="sm">{{ typeBadge[task.type]?.label }}</Badge></td>
                                 <td class="px-5 py-3 text-body-sm" :class="task.assigned_user ? 'text-neutral-600' : 'text-error-500'">{{ task.assigned_user?.name || $t('admin.generated.k_ab5d50806d6c') }}</td>
                                 <td class="px-5 py-3"><Badge :variant="statusBadge[task.status]?.variant" dot>{{ statusBadge[task.status]?.label }}</Badge></td>
