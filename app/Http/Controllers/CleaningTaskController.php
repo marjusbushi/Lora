@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CleaningTask;
+use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\User;
 use App\Services\MaintenanceIssueService;
@@ -31,9 +32,26 @@ class CleaningTaskController extends Controller
                 'assignedUser:id,name',
                 'inspectedBy:id,name',
             ])
+            // The room's soonest incoming arrival (Renato 2026-08-18): clean
+            // FIRST where a guest lands next. Correlated subquery — portable
+            // to CI's SQLite, unlike UPDATE..JOIN (the #447 lesson).
+            // Yesterday's still-confirmed arrival counts (that guest may walk
+            // in any minute — sorts first, shows "i VONUAR"), but older stale
+            // rows do NOT: with no-shows never marked (#7536 pending), an
+            // unbounded window would paint rooms red forever — alert fatigue.
+            ->addSelect(['next_check_in' => Reservation::query()
+                ->select(DB::raw('MIN(check_in_date)'))
+                ->whereColumn('reservations.room_id', 'cleaning_tasks.room_id')
+                ->whereIn('status', ['pending', 'confirmed'])
+                ->where('check_in_date', '>=', today()->subDay()->toDateString()),
+            ])
             // Daily-archived (inspected) tasks drop off the board — kept in the DB for records.
             ->whereNull('archived_at')
             ->orderByRaw("CASE status WHEN 'in_progress' THEN 0 WHEN 'pending' THEN 1 WHEN 'completed' THEN 2 WHEN 'inspected' THEN 3 ELSE 4 END")
+            // Rooms with no incoming arrival sort last (IS NULL ranks after
+            // dates in both MySQL and SQLite with this boolean-first trick).
+            ->orderByRaw('(next_check_in IS NULL)')
+            ->orderBy('next_check_in')
             ->orderByRaw("CASE priority WHEN 'urgent' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END");
 
         if ($request->filled('status')) {
