@@ -172,12 +172,28 @@ class AiGuestReplyTest extends TestCase
         $this->assertNull($thread->refresh()->ai_suggestion);
     }
 
-    public function test_rate_limit_stops_the_sixth_reply_in_an_hour(): void
+    /** Task #375: limiti u ngrit 5→15 — e 15-ta kalon, e 16-ta ndalon. */
+    public function test_fifteenth_reply_sends_but_sixteenth_is_rate_limited(): void
     {
         HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
         [$thread, $message] = $this->makeThreadWithGuestMessage();
 
-        Cache::put(sprintf('ai-guest-reply:%d:%d', $this->tenant->id, $thread->id), 5, now()->addHour());
+        Cache::put(sprintf('ai-guest-reply:%d:%d', $this->tenant->id, $thread->id), 14, now()->addHour());
+
+        $this->fakeGemini(true);
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    public function test_rate_limit_stops_the_sixteenth_reply_in_an_hour(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        Cache::put(sprintf('ai-guest-reply:%d:%d', $this->tenant->id, $thread->id), 15, now()->addHour());
 
         $this->fakeGemini(true);
         $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
