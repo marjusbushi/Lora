@@ -142,12 +142,16 @@ class GenerateAiGuestReply implements ShouldQueue
         // i pastër mirësjelljeje pa asnjë shifër (task #369) — përshëndetjet
         // marrin përgjigje vetë edhe me 0 FAQ. Pyetje FAKTESH pa FAQ e pa mjet
         // mbeten draft si më parë.
-        // Kur muhabeti është burimi i VETËM i besimit (0 FAQ, pa mjet), kërkohet
-        // VOTË E DYTË e pavarur (gjetje Codex, PR #470): klasifikuesi sheh vetëm
-        // mesazhin e mysafirit — një pyetje faktesh e keq-klasifikuar si muhabet
-        // nga përgjigjësi duhet të gabohet DY herë radhazi që të dalë te mysafiri.
-        if ($confident && $autoEnabled
-            && ($faqs->isNotEmpty() || $toolGrounded || ($smallTalk && $this->confirmSmallTalk($gemini, (string) $latest->body)))) {
+        // Burimi i besimit (gjetje Codex, PR #471): nëse MJETET u thirrën, ankërimi
+        // i numrave është i DETYRUAR — FAQ-ja s'e hap dot portën për një çmim a
+        // bilanc të ndryshuar nga AI (vrima: hotel me FAQ → verifikimi anashkalohej).
+        // Pa mjete: FAQ aktive OSE muhabet i pastër me VOTË TË DYTË të pavarur
+        // (gjetje Codex, PR #470 — klasifikuesi sheh vetëm mesazhin e mysafirit).
+        $trusted = ($result['toolsUsed'] ?? []) !== []
+            ? $toolGrounded
+            : ($faqs->isNotEmpty() || ($smallTalk && $this->confirmSmallTalk($gemini, (string) $latest->body)));
+
+        if ($confident && $autoEnabled && $trusted) {
             $this->sendAutoReply($channex, $whatsapp, $thread, $reply, $rateKey);
 
             return;

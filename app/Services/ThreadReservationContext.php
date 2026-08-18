@@ -66,7 +66,12 @@ class ThreadReservationContext
                 ->latest('id')->first();
         }
 
-        if ($thread->whatsapp_jid) {
+        // VETËM jid-et klasike mbartin numrin real të telefonit. Adresimi '@lid'
+        // është identifikues i ERRËT i WhatsApp — shifrat e tij S'JANË telefon
+        // (gjetje Codex, PR #471): përputhja do të ishte llotari me rrezik
+        // rrjedhjeje te personi i gabuar → refuzim i sigurt (recepsioni e lidh
+        // me dorë ose lidhja vjen kur të ruhet numri real i urës në thread).
+        if ($thread->whatsapp_jid && str_ends_with($thread->whatsapp_jid, '@s.whatsapp.net')) {
             return $this->byWhatsAppPhone($thread->whatsapp_jid, $with);
         }
 
