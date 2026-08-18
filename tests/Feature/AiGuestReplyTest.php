@@ -493,6 +493,74 @@ class AiGuestReplyTest extends TestCase
         $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
     }
 
+    /** Task #376: pyetja sqaruese ("cilat data?") dërgohet VETË edhe me 0 FAQ — me votë të dytë mbi përgjigjen. */
+    public function test_clarifying_question_auto_sends_with_zero_faq(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')
+                ->andReturn(['args' => ['confident' => true, 'reply' => 'Me kënaqësi! Për cilat data dhe sa persona?', 'kind' => 'clarifying'], 'toolsUsed' => []]);
+            // Vota e dytë vlerëson PËRGJIGJEN — konfirmon se është vetëm pyetje sqaruese.
+            $mock->shouldReceive('structured')->once()->andReturn(['clarifying' => true]);
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        $thread->refresh();
+        $this->assertNull($thread->ai_suggestion);
+        $this->assertDatabaseHas('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Task #376: clarifying me SHIFRA = fakte të kontrabanduara → draft (vota e dytë s'thirret fare). */
+    public function test_clarifying_with_digits_stays_draft(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->fakeGemini(true, 'Cilat data? Kemi çmime nga 80 EUR.', [], 'clarifying');
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+    }
+
+    /** Task #376: vota e dytë e rrëzon (fakt i fshehur pa shifra) → draft. */
+    public function test_clarifying_failing_second_vote_stays_draft(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')
+                ->andReturn(['args' => ['confident' => true, 'reply' => 'Cilat data? Kemi edhe pishinë të mbuluar!', 'kind' => 'clarifying'], 'toolsUsed' => []]);
+            $mock->shouldReceive('structured')->once()->andReturn(['clarifying' => false]);
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+    }
+
+    /** Task #376: clarifying në draft (auto OFF) NUK krijon material FAQ-je. */
+    public function test_clarifying_draft_does_not_create_faq_suggestion_material(): void
+    {
+        Setting::set('ai_mcp.guest_auto_reply_enabled', false, 'boolean');
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->fakeGemini(true, 'Për cilat data dhe sa persona?', [], 'clarifying');
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $thread->refresh();
+        $this->assertNotNull($thread->ai_suggestion);
+        $this->assertNull($thread->ai_unanswered_question);
+    }
+
     /** Task #369: small_talk me SHIFRA = kontrabandë faktesh → draft, kurrë dërgim. */
     public function test_small_talk_with_digits_stays_draft(): void
     {
