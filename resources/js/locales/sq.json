@@ -4,7 +4,7 @@
       "title": "Rivendos fjalëkalimin",
       "intro": "Shkruaj emailin e llogarisë dhe të dërgojmë një link për të vendosur një fjalëkalim të ri.",
       "emailLabel": "Email",
-      "emailPlaceholder": "emri@hoteli.com",
+      "emailPlaceholder": "emri{'@'}hoteli.com",
       "submit": "Dërgo linkun",
       "submitting": "Po dërgohet…",
       "sent": "Nëse ka llogari me këtë adresë, linku sapo u nis.",
@@ -5496,7 +5496,7 @@
       "next90": "90 ditët e ardhshme",
       "expectedArrivals": "Pritet të mbërrijnë",
       "materialization": "Materializimi",
-      "materializationDetail": "{pct}% materializim @ {days}d",
+      "materializationDetail": "{pct}% materializim {'@'} {days}d",
       "sampleDays": "{count} ditë mësimi"
     },
     "distribution": {
