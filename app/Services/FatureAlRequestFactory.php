@@ -17,6 +17,18 @@ class FatureAlRequestFactory
             ->timeout($timeout)
             ->connectTimeout(5);
 
+        // Solution-provider identity (fature.al, 2026-08): both headers or
+        // neither — an unknown/empty pair is rejected with 401 on the spot,
+        // while absent headers stay valid until fature.al's enforcement date.
+        $clientId = trim((string) config('services.fature_al.client_id', ''));
+        $clientSecret = trim((string) config('services.fature_al.client_secret', ''));
+        if ($clientId !== '' && $clientSecret !== '') {
+            $request = $request->withHeaders([
+                'X-Client-Id' => $clientId,
+                'X-Client-Secret' => $clientSecret,
+            ]);
+        }
+
         return filled($token) ? $request->withToken($token) : $request;
     }
 }
