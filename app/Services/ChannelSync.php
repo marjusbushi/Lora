@@ -237,23 +237,27 @@ class ChannelSync
     protected function pushRatesForMapping(ChannelMapping $mapping, RoomType $roomType, CarbonInterface $from, CarbonInterface $to): bool
     {
         $prices = $this->priceByDate($roomType, $from, $to);
-        $programs = OtaPricingPrograms::settings();
 
         $plans = [
-            [$mapping->channex_rate_plan_id, 1.0],
-            [$mapping->channex_booking_rate_plan_id, (float) $programs['booking']['discount_factor']],
-            [$mapping->channex_expedia_rate_plan_id, (float) $programs['expedia']['discount_factor']],
-            [$mapping->channex_airbnb_rate_plan_id, (float) $programs['airbnb']['discount_factor']],
+            [$mapping->channex_rate_plan_id, null],
+            [$mapping->channex_booking_rate_plan_id, 'booking'],
+            [$mapping->channex_expedia_rate_plan_id, 'expedia'],
+            [$mapping->channex_airbnb_rate_plan_id, 'airbnb'],
         ];
 
         $ok = true;
-        foreach ($plans as [$planId, $factor]) {
+        foreach ($plans as [$planId, $channelKey]) {
             if (! $planId) {
                 continue;
             }
-            $adjusted = abs($factor - 1.0) < 1e-9
+            // The divisor is per DATE since offers are time-boxed: program
+            // factors are static, but an active offer deepens the divisor for
+            // exactly its window (factorFor returns the composed value).
+            $adjusted = $channelKey === null
                 ? $prices
-                : array_map(fn (float $p) => round($p / $factor, 2), $prices);
+                : collect($prices)
+                    ->map(fn (float $p, string $date) => round($p / OtaPricingPrograms::factorFor($channelKey, $date), 2))
+                    ->all();
 
             $ok = $this->channex->pushRateRanges(
                 $planId,
