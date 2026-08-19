@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\PushRoomTypeAri;
+use App\Models\PricingOffer;
 use App\Models\RoomType;
 use App\Models\Season;
 use App\Models\SeasonRate;
@@ -42,6 +43,17 @@ class PricingController extends Controller
         return Inertia::render('Pricing/Index', [
             'roomTypes' => $roomTypes,
             'seasons' => $seasons,
+            // OTA offers — the extranet campaign's compensation records.
+            'offers' => PricingOffer::orderByDesc('starts_on')->get()
+                ->map(fn (PricingOffer $offer) => [
+                    'id' => $offer->id,
+                    'name' => $offer->name,
+                    'channel' => $offer->channel,
+                    'discount_pct' => (float) $offer->discount_pct,
+                    'starts_on' => $offer->starts_on->toDateString(),
+                    'ends_on' => $offer->ends_on->toDateString(),
+                    'active' => $offer->active,
+                ]),
             'otaWindow' => $sellWindow->summary(),
             'seasonCopy' => [
                 'source_years' => $sourceYears,
@@ -53,6 +65,46 @@ class PricingController extends Controller
             'smartModule' => [
                 'priceCents' => (int) (ModuleCatalog::module('smart_pricing')['unit_price_cents'] ?? 0),
             ],
+        ]);
+    }
+
+    /**
+     * OTA offers: the discount campaign is ACTIVATED in the OTA's extranet by
+     * the hotel; these records only make the push compensate the price for the
+     * channel and window (PricingOffer's saved event triggers the resync).
+     */
+    public function storeOffer(Request $request): RedirectResponse
+    {
+        PricingOffer::create($this->validateOffer($request));
+
+        return back()->with('success', 'Oferta u shtua — çmimet e kanalit po ripërshtaten.');
+    }
+
+    public function updateOffer(Request $request, PricingOffer $pricingOffer): RedirectResponse
+    {
+        $pricingOffer->update($this->validateOffer($request));
+
+        return back()->with('success', 'Oferta u përditësua — çmimet e kanalit po ripërshtaten.');
+    }
+
+    public function destroyOffer(PricingOffer $pricingOffer): RedirectResponse
+    {
+        $pricingOffer->delete();
+
+        return back()->with('success', 'Oferta u fshi — çmimet e kanalit po rikthehen.');
+    }
+
+    /** @return array<string, mixed> */
+    private function validateOffer(Request $request): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'channel' => ['required', 'in:'.implode(',', PricingOffer::CHANNELS)],
+            // 70% cap pairs with the 0.3 factor floor in OtaPricingPrograms.
+            'discount_pct' => ['required', 'numeric', 'min:0.01', 'max:70'],
+            'starts_on' => ['required', 'date'],
+            'ends_on' => ['required', 'date', 'after_or_equal:starts_on'],
+            'active' => ['sometimes', 'boolean'],
         ]);
     }
 

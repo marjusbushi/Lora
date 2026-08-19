@@ -54,7 +54,7 @@ class SmartPricing
                     'rounding' => $day['rounding'],
                     'has_override' => $day['has_override'],
                     'days_until' => $day['days_until'],
-                    'ota_prices' => OtaPricingPrograms::quote((float) $day['suggested_price']),
+                    'ota_prices' => OtaPricingPrograms::quote((float) $day['suggested_price'], $day['date'] ?? null),
                 ];
             }
         }

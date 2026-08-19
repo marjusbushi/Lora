@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\PricingOffer;
 use App\Models\Setting;
+use App\Tenancy\TenantContext;
 
 /**
  * Keeps the hotel's desired guest-facing price canonical while calculating
@@ -11,10 +13,24 @@ use App\Models\Setting;
  * These values are intentionally presentation/configuration data. Channex's
  * per-channel modifier is the safe place to apply the markup; changing the
  * canonical PMS rate would also inflate the hotel website and every OTA.
+ *
+ * Time-boxed OTA offers (Renato 2026-08-19) compose here too: the campaign
+ * lives in the OTA's extranet, Lora compensates the pushed price for the
+ * offer's channel and dates — factorFor(channel, date) = program factor ×
+ * (1 − deepest active offer). Overlapping same-channel offers never stack.
  */
 class OtaPricingPrograms
 {
     private const CHANNELS = ['booking.com', 'expedia', 'airbnb'];
+
+    /**
+     * The combined divisor never drops below this once an offer joins in —
+     * a typo like 90% would otherwise multiply the pushed price tenfold.
+     */
+    private const OFFER_FACTOR_FLOOR = 0.3;
+
+    /** @var array<int, \Illuminate\Support\Collection<int, PricingOffer>> */
+    private static array $offerCache = [];
 
     public static function settings(): array
     {
@@ -43,13 +59,17 @@ class OtaPricingPrograms
         ];
     }
 
-    public static function quote(float $targetPrice): array
+    public static function quote(float $targetPrice, ?string $date = null): array
     {
         $targetPrice = round(max(0, $targetPrice), 2);
 
-        return collect(self::settings())->map(function (array $channel) use ($targetPrice) {
-            $published = $channel['discount_factor'] > 0
-                ? round($targetPrice / $channel['discount_factor'], 2)
+        return collect(self::settings())->map(function (array $channel, string $key) use ($targetPrice, $date) {
+            $factor = $date !== null
+                ? self::factorFor($key, $date)
+                : (float) $channel['discount_factor'];
+            $offerPct = $date !== null ? self::offerPct($key, $date) : 0.0;
+            $published = $factor > 0
+                ? round($targetPrice / $factor, 2)
                 : $targetPrice;
             $net = round($targetPrice * (1 - $channel['commission_pct'] / 100), 2);
 
@@ -57,6 +77,7 @@ class OtaPricingPrograms
                 'target_price' => $targetPrice,
                 'published_price' => $published,
                 'estimated_net' => $net,
+                'offer_pct' => round($offerPct, 2),
             ]);
         })->all();
     }
@@ -64,9 +85,52 @@ class OtaPricingPrograms
     /** Add OTA economics to one Smart Pricing calendar/suggestion row. */
     public static function decorate(array $row): array
     {
-        $row['ota_prices'] = self::quote((float) $row['suggested_price']);
+        $row['ota_prices'] = self::quote((float) $row['suggested_price'], $row['date'] ?? null);
 
         return $row;
+    }
+
+    /**
+     * The full divisor for one channel on one date: static program factor ×
+     * the deepest active offer, floored so a fat-fingered discount can never
+     * explode the pushed price.
+     */
+    public static function factorFor(string $channelKey, string $date): float
+    {
+        $base = (float) (self::settings()[$channelKey]['discount_factor'] ?? 1.0);
+        $pct = self::offerPct($channelKey, $date);
+        if ($pct <= 0) {
+            return $base;
+        }
+
+        // Rounded like channelSummary's discount_factor, so equality holds.
+        return max(self::OFFER_FACTOR_FLOOR, round($base * (1 - $pct / 100), 6));
+    }
+
+    /** Deepest active offer discount (percent) for a channel on a date. */
+    public static function offerPct(string $channelKey, string $date): float
+    {
+        return (float) self::activeOffers()
+            ->filter(fn (PricingOffer $offer) => $offer->channel === $channelKey
+                && $offer->starts_on->toDateString() <= $date
+                && $offer->ends_on->toDateString() >= $date)
+            ->max('discount_pct');
+    }
+
+    /** Forget the per-request offer memo (offer writes and tests call this). */
+    public static function flushOffers(): void
+    {
+        self::$offerCache = [];
+    }
+
+    /** @return \Illuminate\Support\Collection<int, PricingOffer> */
+    private static function activeOffers(): \Illuminate\Support\Collection
+    {
+        $tenantId = app(TenantContext::class)->id() ?? 0;
+
+        return self::$offerCache[$tenantId] ??= PricingOffer::query()
+            ->where('active', true)
+            ->get();
     }
 
     private static function discount(string $label, string $key, float $defaultPct = 10): ?array
