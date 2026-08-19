@@ -361,6 +361,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/reservations/{reservation}/request-cleaning', [ReservationController::class, 'requestCleaning'])->middleware(['module:housekeeping', 'permission:update_reservations'])->name('reservations.request-cleaning');
         Route::post('/reservations/{reservation}/cancel', [ReservationController::class, 'cancel'])->middleware('permission:update_reservations')->name('reservations.cancel');
         Route::post('/reservations/{reservation}/move-room', [ReservationController::class, 'moveRoom'])->middleware('permission:update_reservations')->name('reservations.move-room');
+        // Calendar drag-onto-a-bar: atomic two-way room swap ({other} binds
+        // through the same tenant scope, so a foreign reservation 404s).
+        Route::post('/reservations/{reservation}/swap-rooms/{other}', [ReservationController::class, 'swapRooms'])->middleware('permission:update_reservations')->name('reservations.swap-rooms');
         Route::post('/reservations/{reservation}/resolve-conflict', [ReservationController::class, 'resolveConflict'])->middleware('permission:update_reservations')->name('reservations.resolve-conflict');
         Route::post('/reservations/{reservation}/split-proposal/accept', [ReservationController::class, 'acceptSplitProposal'])->middleware('permission:update_reservations')->name('reservations.split-proposal.accept');
         Route::post('/reservations/{reservation}/split-proposal/decline', [ReservationController::class, 'declineSplitProposal'])->middleware('permission:update_reservations')->name('reservations.split-proposal.decline');

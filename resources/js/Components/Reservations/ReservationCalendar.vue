@@ -5,6 +5,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
+import Modal from '@/Components/UI/Modal.vue';
 import { channelMeta } from '@/channels';
 import {
     ArrowLeftRight,
@@ -435,22 +436,197 @@ function onGridOver(e) {
     if (c) extendDrag(c.roomId, c.date);
 }
 
+// ===== Bar drag: move / swap ROOMS (Renato 2026-08-19). Dates never change
+// by dragging — an OTA booking's dates belong to the OTA. The client checks
+// below are live feedback only; the server re-validates inside transactions.
+const barDrag = ref(null); // { id, x, y, active, overRoomId, overReservationId }
+const swapCandidate = ref(null); // { a, b } awaiting the named confirmation
+const undoAction = ref(null); // { label, run } — single level, ~15s
+const dragBusy = ref(false);
+let undoTimer = null;
+let suppressBarClick = false;
+
+function reservationById(id) {
+    return (props.reservations || []).find((reservation) => reservation.id === id);
+}
+function roomById(id) {
+    return (props.rooms || []).find((room) => room.id === id);
+}
+function overlapsExcluding(roomId, checkIn, checkOut, excludeIds) {
+    return (props.reservations || []).some((reservation) => reservation.room_id === roomId
+        && !excludeIds.includes(reservation.id)
+        && !['cancelled', 'checked_out'].includes(reservation.status)
+        && reservation.check_in_date < checkOut
+        && reservation.check_out_date > checkIn);
+}
+function canMoveTo(reservation, roomId) {
+    const room = roomById(roomId);
+    if (!room || room.status === 'maintenance' || roomId === reservation.room_id) return false;
+    return !overlapsExcluding(roomId, reservation.check_in_date, reservation.check_out_date, [reservation.id]);
+}
+function canSwap(a, b) {
+    if (!a || !b || a.id === b.id || a.room_id === b.room_id) return false;
+    const active = (reservation) => ['pending', 'confirmed', 'checked_in'].includes(reservation.status);
+    if (!active(a) || !active(b)) return false;
+    const roomA = roomById(a.room_id);
+    const roomB = roomById(b.room_id);
+    if (!roomA || !roomB || roomA.status === 'maintenance' || roomB.status === 'maintenance') return false;
+    return !overlapsExcluding(b.room_id, a.check_in_date, a.check_out_date, [a.id, b.id])
+        && !overlapsExcluding(a.room_id, b.check_in_date, b.check_out_date, [a.id, b.id]);
+}
+
+// Per-room validity is fixed for the duration of one drag, so this recomputes
+// only when the drag starts — not on every pointer move.
+const dragTargets = computed(() => {
+    const drag = barDrag.value;
+    if (!drag?.active) return {};
+    const dragged = reservationById(drag.id);
+    if (!dragged) return {};
+    const map = {};
+    for (const room of props.rooms || []) {
+        if (room.id !== dragged.room_id) map[room.id] = canMoveTo(dragged, room.id) ? 'ok' : 'bad';
+    }
+    return map;
+});
+
+function onBarPointerDown(event, reservation) {
+    if (!canUpdate || props.demo || dragBusy.value || event.button !== 0) return;
+    barDrag.value = { id: reservation.id, x: event.clientX, y: event.clientY, active: false, overRoomId: null, overReservationId: null };
+}
+function onBarDragMove(event) {
+    const drag = barDrag.value;
+    if (!drag) return;
+    if (!drag.active) {
+        if (Math.abs(event.clientX - drag.x) + Math.abs(event.clientY - drag.y) < 8) return;
+        drag.active = true; // threshold passed: it's a drag, not a click
+        document.body.classList.add('select-none');
+    }
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+    const barEl = element?.closest('[data-resbar]');
+    const cellEl = element?.closest('[data-room]');
+    drag.overReservationId = barEl ? Number(barEl.dataset.resbar) : null;
+    drag.overRoomId = barEl ? Number(barEl.dataset.resroom) : (cellEl ? Number(cellEl.dataset.room) : null);
+}
+function onBarDragUp() {
+    const drag = barDrag.value;
+    barDrag.value = null;
+    document.body.classList.remove('select-none');
+    if (!drag?.active) return; // plain click → the bar's own @click opens the detail
+    suppressBarClick = true;
+    window.setTimeout(() => { suppressBarClick = false; }, 0);
+
+    const dragged = reservationById(drag.id);
+    if (!dragged) return;
+    if (drag.overReservationId && drag.overReservationId !== drag.id) {
+        const other = reservationById(drag.overReservationId);
+        if (other && canSwap(dragged, other)) {
+            swapCandidate.value = { a: dragged, b: other };
+        } else {
+            toasts.value?.error(translate('calendarDrag.swapInvalid'));
+        }
+        return;
+    }
+    if (drag.overRoomId && drag.overRoomId !== dragged.room_id) {
+        if (canMoveTo(dragged, drag.overRoomId)) {
+            doMove(dragged, drag.overRoomId);
+        } else {
+            toasts.value?.error(translate('calendarDrag.moveInvalid'));
+        }
+    }
+}
+function onBarClick(reservation) {
+    if (suppressBarClick) return;
+    openDetail(reservation);
+}
+
+function doMove(reservation, roomId, isUndo = false) {
+    dragBusy.value = true;
+    const fromRoomId = reservation.room_id;
+    router.post(route('reservations.move-room', reservation.id), { room_id: roomId }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            toasts.value?.success(translate('calendarDrag.moved', { room: roomById(roomId)?.room_number ?? '' }));
+            setUndo(isUndo ? null : {
+                label: translate('calendarDrag.undoMoveLabel'),
+                run: () => doMove(reservationById(reservation.id) || reservation, fromRoomId, true),
+            });
+        },
+        onError: (errors) => toasts.value?.error(errors.room_id || translate('calendarDrag.moveFailed')),
+        onFinish: () => { dragBusy.value = false; },
+    });
+}
+function confirmSwap() {
+    const { a, b } = swapCandidate.value;
+    dragBusy.value = true;
+    router.post(route('reservations.swap-rooms', [a.id, b.id]), {}, {
+        preserveScroll: true,
+        onSuccess: () => {
+            swapCandidate.value = null;
+            toasts.value?.success(translate('calendarDrag.swapped'));
+            setUndo({ label: translate('calendarDrag.undoSwapLabel'), run: () => doSwap(a.id, b.id, true) });
+        },
+        onError: (errors) => {
+            swapCandidate.value = null;
+            toasts.value?.error(errors.swap || translate('calendarDrag.swapFailed'));
+        },
+        onFinish: () => { dragBusy.value = false; },
+    });
+}
+function doSwap(aId, bId, isUndo = false) {
+    dragBusy.value = true;
+    router.post(route('reservations.swap-rooms', [aId, bId]), {}, {
+        preserveScroll: true,
+        onSuccess: () => {
+            toasts.value?.success(translate(isUndo ? 'calendarDrag.undone' : 'calendarDrag.swapped'));
+            setUndo(null);
+        },
+        onError: (errors) => toasts.value?.error(errors.swap || translate('calendarDrag.undoFailed')),
+        onFinish: () => { dragBusy.value = false; },
+    });
+}
+function setUndo(action) {
+    window.clearTimeout(undoTimer);
+    undoAction.value = action;
+    if (action) undoTimer = window.setTimeout(() => { undoAction.value = null; }, 15000);
+}
+function runUndo() {
+    const action = undoAction.value;
+    undoAction.value = null;
+    window.clearTimeout(undoTimer);
+    action?.run();
+}
+
 // Finalize the selection even if the mouse is released off the grid.
 function onEscape(event) {
-    if (event.key === 'Escape' && showConflictCenter.value) {
+    if (event.key !== 'Escape') return;
+    if (barDrag.value) {
+        barDrag.value = null;
+        document.body.classList.remove('select-none');
+        return;
+    }
+    if (swapCandidate.value) {
+        swapCandidate.value = null;
+        return;
+    }
+    if (showConflictCenter.value) {
         showConflictCenter.value = false;
         return;
     }
-    if (event.key === 'Escape' && showDetailModal.value) closeDetail();
+    if (showDetailModal.value) closeDetail();
 }
 
 onMounted(() => {
     window.addEventListener('mouseup', endDrag);
     window.addEventListener('keydown', onEscape);
+    window.addEventListener('pointermove', onBarDragMove);
+    window.addEventListener('pointerup', onBarDragUp);
 });
 onBeforeUnmount(() => {
     window.removeEventListener('mouseup', endDrag);
     window.removeEventListener('keydown', onEscape);
+    window.removeEventListener('pointermove', onBarDragMove);
+    window.removeEventListener('pointerup', onBarDragUp);
+    window.clearTimeout(undoTimer);
 });
 
 function onReservationCreated() {
@@ -632,7 +808,13 @@ function doCheckOut(res) {
                                     <div class="min-w-0"><p class="text-body-sm font-extrabold text-primary-900">{{ room.room_number }}</p><p class="mt-0.5 max-w-32 truncate text-[11px] text-neutral-400">{{ room.room_type?.name }}</p></div>
                                     <span class="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white" :class="room.status === 'maintenance' ? 'bg-neutral-400' : 'bg-success-500'" />
                                 </div>
-                                <div class="relative grid h-16 min-w-0 flex-1" :style="{ minWidth: calendarTrackWidth, gridTemplateColumns: `repeat(${visibleDays}, minmax(76px, 1fr))` }" @mousedown="onGridDown" @mouseover="onGridOver">
+                                <div
+                                    class="relative grid h-16 min-w-0 flex-1 transition-colors"
+                                    :class="dragTargets[room.id] === 'ok' ? 'bg-success-50/70' : dragTargets[room.id] === 'bad' ? 'bg-error-50/50' : ''"
+                                    :style="{ minWidth: calendarTrackWidth, gridTemplateColumns: `repeat(${visibleDays}, minmax(76px, 1fr))` }"
+                                    @mousedown="onGridDown"
+                                    @mouseover="onGridOver"
+                                >
                                     <button
                                         v-for="day in days"
                                         :key="day.date"
@@ -652,13 +834,21 @@ function doCheckOut(res) {
                                         v-for="reservation in reservationsFor(room.id)"
                                         :key="reservation.id"
                                         type="button"
+                                        :data-resbar="reservation.id"
+                                        :data-resroom="room.id"
                                         class="absolute top-2 z-10 h-12 overflow-hidden rounded-lg border px-2.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                                         :class="[
                                             statusColors[reservation.status],
                                             conflictingReservationIds.has(reservation.id) ? 'ring-2 ring-error-500 ring-offset-1' : '',
+                                            barDrag?.active && barDrag.id === reservation.id ? 'opacity-40 ring-2 ring-accent-400' : '',
+                                            barDrag?.active && barDrag.overReservationId === reservation.id && barDrag.id !== reservation.id
+                                                ? (canSwap(reservationById(barDrag.id), reservation) ? 'ring-2 ring-accent-500 ring-offset-1' : 'ring-2 ring-error-400 ring-offset-1')
+                                                : '',
+                                            canUpdate && !demo ? 'cursor-grab active:cursor-grabbing' : '',
                                         ]"
                                         :style="reservationStyle(reservation)"
-                                        @click="openDetail(reservation)"
+                                        @pointerdown="onBarPointerDown($event, reservation)"
+                                        @click="onBarClick(reservation)"
                                     >
                                         <span class="flex items-center gap-1.5 text-[11px] font-extrabold"><span class="h-1.5 w-1.5 shrink-0 rounded-full" :style="{ backgroundColor: channelMeta(reservation.channel).color }" /><span class="truncate">{{ reservation.guest?.first_name }} {{ reservation.guest?.last_name }}</span><span
                                             v-if="canOpenGuestChat && reservation.message_thread_id"
@@ -880,6 +1070,49 @@ function doCheckOut(res) {
             @close="showEditModal = false"
             @updated="onReservationUpdated"
         />
+
+        <!-- Swap confirmation: names BOTH guests, warns for physical moves
+             and cross-type drops. The server re-validates atomically anyway. -->
+        <Modal :show="!!swapCandidate" :title="$t('calendarDrag.swapTitle')" max-width="md" @close="swapCandidate = null">
+            <template v-if="swapCandidate">
+                <p class="text-body-sm text-neutral-700">
+                    {{ $t('calendarDrag.swapBody') }}
+                </p>
+                <div class="mt-3 space-y-2">
+                    <div v-for="side in [[swapCandidate.a, swapCandidate.b], [swapCandidate.b, swapCandidate.a]]" :key="side[0].id" class="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-body-sm">
+                        <ArrowLeftRight class="h-4 w-4 shrink-0 text-neutral-400" />
+                        <span class="min-w-0 truncate">
+                            <strong>{{ side[0].guest?.first_name }} {{ side[0].guest?.last_name }}</strong>
+                            · {{ $t('calendarDrag.swapGoesTo') }} <strong>{{ roomById(side[1].room_id)?.room_number }}</strong>
+                        </span>
+                        <Badge v-if="side[0].status === 'checked_in'" variant="warning" size="sm" class="ml-auto shrink-0">{{ $t('calendarDrag.inHouse') }}</Badge>
+                    </div>
+                </div>
+                <p v-if="swapCandidate.a.status === 'checked_in' || swapCandidate.b.status === 'checked_in'" class="mt-3 rounded-lg border border-warning-200 bg-warning-50 px-3.5 py-2.5 text-small text-warning-800">
+                    ⚠ {{ $t('calendarDrag.swapCheckedInWarn') }}
+                </p>
+                <p v-if="roomById(swapCandidate.a.room_id)?.room_type?.name !== roomById(swapCandidate.b.room_id)?.room_type?.name" class="mt-2 rounded-lg border border-warning-200 bg-warning-50 px-3.5 py-2.5 text-small text-warning-800">
+                    ⚠ {{ $t('calendarDrag.swapCrossTypeWarn', { typeA: roomById(swapCandidate.a.room_id)?.room_type?.name || '—', typeB: roomById(swapCandidate.b.room_id)?.room_type?.name || '—' }) }}
+                </p>
+            </template>
+            <template #footer>
+                <Button variant="outline" @click="swapCandidate = null">{{ $t('calendarDrag.cancel') }}</Button>
+                <Button variant="primary" :loading="dragBusy" @click="confirmSwap">{{ $t('calendarDrag.confirmSwap') }}</Button>
+            </template>
+        </Modal>
+
+        <!-- Single-level undo snackbar (~15s) for the last drag action -->
+        <div
+            v-if="undoAction"
+            class="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full bg-primary-950 px-5 py-2.5 text-body-sm text-white shadow-lg"
+            role="status"
+            aria-live="polite"
+        >
+            <span>{{ undoAction.label }}</span>
+            <button type="button" class="font-extrabold underline underline-offset-2 hover:text-accent-200 disabled:opacity-50" :disabled="dragBusy" @click="runUndo">
+                {{ $t('calendarDrag.undoBtn') }}
+            </button>
+        </div>
 
         <ToastContainer ref="toasts" />
 </template>

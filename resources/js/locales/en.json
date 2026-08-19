@@ -6890,6 +6890,27 @@
     "strategyChanged": "Strategy updated — suggestions refreshed.",
     "strategySaveFailed": "Strategy was not saved."
   },
+  "calendarDrag": {
+    "moved": "Guest moved to room {room}.",
+    "undoMoveLabel": "Guest moved — you can undo this.",
+    "swapped": "Guests swapped successfully.",
+    "undoSwapLabel": "Guests swapped — you can undo this.",
+    "undone": "The action was undone.",
+    "undoFailed": "Undo is no longer possible — the state changed in the meantime. Check the calendar.",
+    "moveFailed": "The move failed.",
+    "swapFailed": "The swap failed.",
+    "moveInvalid": "The target room is not free for these dates.",
+    "swapInvalid": "The swap is not possible — there is no space without creating an overlap.",
+    "swapTitle": "Swap guests",
+    "swapBody": "The two guests will exchange rooms with each other:",
+    "swapGoesTo": "moves to room",
+    "inHouse": "In house",
+    "swapCheckedInWarn": "At least one guest is checked in — the swap is a PHYSICAL move and both rooms get cleaning tasks.",
+    "swapCrossTypeWarn": "The rooms are different types ({typeA} ↔ {typeB}) — the guests receive a different product than booked.",
+    "cancel": "Cancel",
+    "confirmSwap": "Yes, swap",
+    "undoBtn": "Undo"
+  },
   "pricingIndex": {
     "offers": {
       "add": "+ Add offer",
