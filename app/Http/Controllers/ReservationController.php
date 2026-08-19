@@ -1201,6 +1201,128 @@ class ReservationController extends Controller
         return back()->with('success', "Mysafiri u zhvendos te dhoma {$newRoom->room_number}.");
     }
 
+    /**
+     * Swap the rooms of two reservations in ONE transaction (the calendar's
+     * drag-onto-a-bar gesture). Two sequential moveRoom calls would either
+     * transiently overbook or strand a guest when the second fails — here both
+     * sides validate against everyone EXCEPT each other, then both flip or
+     * neither. Swap is its own inverse, so "Zhbëj" simply calls it again and
+     * re-validates naturally.
+     */
+    public function swapRooms(Reservation $reservation, Reservation $other): RedirectResponse
+    {
+        if (! auth()->user()->can('update_reservations')) {
+            abort(403);
+        }
+
+        if ($reservation->id === $other->id || (int) $reservation->room_id === (int) $other->room_id) {
+            throw ValidationException::withMessages([
+                'swap' => 'Zgjidh dy rezervime me dhoma të ndryshme.',
+            ]);
+        }
+
+        try {
+            DB::transaction(function () use ($reservation, $other) {
+                // Deterministic lock order (ids ascending) so two desks swapping
+                // the same pair from opposite directions cannot deadlock.
+                [$firstId, $secondId] = collect([$reservation->id, $other->id])->sort()->values();
+                $locked = Reservation::query()->whereIn('id', [$firstId, $secondId])
+                    ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+                $a = $locked[$reservation->id];
+                $b = $locked[$other->id];
+
+                foreach ([$a, $b] as $side) {
+                    if (! in_array($side->status, ['pending', 'confirmed', 'checked_in'], true)) {
+                        throw new \RuntimeException('status');
+                    }
+                }
+
+                $rooms = Room::query()->whereIn('id', [$a->room_id, $b->room_id])
+                    ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+                $roomA = $rooms[$a->room_id];
+                $roomB = $rooms[$b->room_id];
+
+                // Each guest must fit the counterpart's room against everyone
+                // EXCEPT the two swappers themselves (they both vacate).
+                foreach ([[$a, $roomB], [$b, $roomA]] as [$moving, $target]) {
+                    if ($target->status === 'maintenance') {
+                        throw new \RuntimeException('unavailable');
+                    }
+                    $blocked = Reservation::query()
+                        ->where('room_id', $target->id)
+                        ->whereNotIn('status', ['cancelled', 'checked_out'])
+                        ->whereNotIn('id', [$a->id, $b->id])
+                        ->where('check_in_date', '<', $moving->check_out_date->toDateString())
+                        ->where('check_out_date', '>', $moving->check_in_date->toDateString())
+                        ->exists();
+                    if ($blocked) {
+                        throw new \RuntimeException('unavailable');
+                    }
+                }
+
+                $a->update(['room_id' => $roomB->id]);
+                $b->update(['room_id' => $roomA->id]);
+
+                // Physical side effects per ROOM, decided by its FINAL occupant:
+                // in-house guest arriving → occupied (plus a stayover refresh
+                // when the room was just lived in by the other swapper); a
+                // not-yet-arrived guest inheriting a lived-in room → cleaning,
+                // mirroring moveRoom's checkout housekeeping.
+                foreach ([[$roomB, $a, $b], [$roomA, $b, $a]] as [$room, $newOccupant, $previous]) {
+                    if ($newOccupant->status === 'checked_in') {
+                        $room->update(['status' => 'occupied']);
+                        if ($previous->status === 'checked_in') {
+                            $this->queueSwapCleaning($room, 'stayover_clean');
+                        }
+                    } elseif ($previous->status === 'checked_in') {
+                        $room->update(['status' => 'cleaning']);
+                        $this->queueSwapCleaning($room, 'checkout_clean');
+                    }
+                }
+
+                AuditLog::record('reservation.rooms_swapped', $a, [
+                    'with_reservation_id' => $b->id,
+                    'room_from' => $roomA->room_number,
+                    'room_to' => $roomB->room_number,
+                ]);
+                AuditLog::record('reservation.rooms_swapped', $b, [
+                    'with_reservation_id' => $a->id,
+                    'room_from' => $roomB->room_number,
+                    'room_to' => $roomA->room_number,
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            throw ValidationException::withMessages([
+                'swap' => $e->getMessage() === 'status'
+                    ? 'Vetëm rezervimet aktive (pa përfunduar e pa anuluar) mund të ndërrohen.'
+                    : 'Ndërrimi nuk është i mundur — dhoma e synuar nuk është e lirë për këto data.',
+            ]);
+        }
+
+        return back()->with('success', 'Mysafirët u ndërruan me sukses.');
+    }
+
+    private function queueSwapCleaning(Room $room, string $type): void
+    {
+        if (! Setting::get('housekeeping.auto_create_on_checkout', true)) {
+            return;
+        }
+
+        $alreadyOpen = CleaningTask::where('room_id', $room->id)
+            ->where('type', $type)
+            ->whereIn('status', ['pending', 'in_progress'])
+            ->exists();
+
+        if (! $alreadyOpen) {
+            CleaningTask::create([
+                'room_id' => $room->id,
+                'type' => $type,
+                'status' => 'pending',
+                'priority' => Setting::get('housekeeping.default_priority', 'normal'),
+            ]);
+        }
+    }
+
     public function resolveConflict(Request $request, Reservation $reservation, ReservationConflictService $conflictService, RoomReshuffleService $reshuffler): RedirectResponse
     {
         $data = $request->validate([

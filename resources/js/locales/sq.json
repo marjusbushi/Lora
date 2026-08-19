@@ -6890,6 +6890,27 @@
     "strategyChanged": "Strategjia u ndryshua — sugjerimet u rifreskuan.",
     "strategySaveFailed": "Strategjia nuk u ruajt."
   },
+  "calendarDrag": {
+    "moved": "Mysafiri u zhvendos te dhoma {room}.",
+    "undoMoveLabel": "Mysafiri u zhvendos — mund ta kthesh mbrapsht.",
+    "swapped": "Mysafirët u ndërruan me sukses.",
+    "undoSwapLabel": "Mysafirët u ndërruan — mund ta kthesh mbrapsht.",
+    "undone": "Veprimi u kthye mbrapsht.",
+    "undoFailed": "Kthimi s'është më i mundur — gjendja ndryshoi ndërkohë. Kontrollo kalendarin.",
+    "moveFailed": "Zhvendosja dështoi.",
+    "swapFailed": "Ndërrimi dështoi.",
+    "moveInvalid": "Dhoma e synuar s'është e lirë për këto data.",
+    "swapInvalid": "Ndërrimi s'është i mundur — s'ka vend pa krijuar mbivendosje.",
+    "swapTitle": "Ndërro mysafirët",
+    "swapBody": "Dy mysafirët do të ndërrojnë dhomat me njëri-tjetrin:",
+    "swapGoesTo": "kalon te dhoma",
+    "inHouse": "Në shtëpi",
+    "swapCheckedInWarn": "Të paktën njëri mysafir është i futur — ndërrimi është lëvizje FIZIKE dhe dhomat marrin detyra pastrimi.",
+    "swapCrossTypeWarn": "Dhomat janë tipesh të ndryshme ({typeA} ↔ {typeB}) — mysafirët marrin produkt tjetër nga ai i rezervuar.",
+    "cancel": "Anulo",
+    "confirmSwap": "Po, ndërro",
+    "undoBtn": "Zhbëj"
+  },
   "pricingIndex": {
     "offers": {
       "add": "+ Shto ofertë",
