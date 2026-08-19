@@ -574,6 +574,11 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
             Route::put('/pricing/seasons/{season}', [PricingController::class, 'updateSeason'])->name('pricing.seasons.update');
             Route::delete('/pricing/seasons/{season}', [PricingController::class, 'destroySeason'])->name('pricing.seasons.destroy');
             Route::post('/pricing/rates', [PricingController::class, 'saveRates'])->name('pricing.rates.save');
+            // OTA offers — compensation for extranet campaigns ({pricingOffer}
+            // binds through the tenant scope, so foreign offers 404).
+            Route::post('/pricing/offers', [PricingController::class, 'storeOffer'])->name('pricing.offers.store');
+            Route::put('/pricing/offers/{pricingOffer}', [PricingController::class, 'updateOffer'])->name('pricing.offers.update');
+            Route::delete('/pricing/offers/{pricingOffer}', [PricingController::class, 'destroyOffer'])->name('pricing.offers.destroy');
         });
 
         Route::middleware('module:smart_pricing')->group(function () {
