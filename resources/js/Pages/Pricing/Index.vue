@@ -9,6 +9,8 @@ import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import Modal from '@/Components/UI/Modal.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
+import Badge from '@/Components/UI/Badge.vue';
+import Select from '@/Components/UI/Select.vue';
 import DatePicker from '@/Components/UI/DatePicker.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
@@ -17,6 +19,7 @@ import PricingTabs from '@/Components/Pricing/PricingTabs.vue';
 const props = defineProps({
     roomTypes: { type: Array, default: () => [] },
     seasons: { type: Array, default: () => [] },
+    offers: { type: Array, default: () => [] },
     otaWindow: { type: Object, default: () => ({}) },
     seasonCopy: { type: Object, default: () => ({}) },
     smartModule: { type: Object, default: () => ({}) },
@@ -529,6 +532,73 @@ function deleteSeason(s) {
     });
 }
 
+// ===== Ofertat OTA (kompensimi i fushatave të extranet-it) =====
+const showOffer = ref(false);
+const editingOffer = ref(null);
+const oform = useForm({ name: '', channel: 'booking', discount_pct: null, starts_on: '', ends_on: '', active: true });
+const offerChannelLabels = { booking: 'Booking.com', expedia: 'Expedia', airbnb: 'Airbnb' };
+const offerChannelOptions = Object.entries(offerChannelLabels).map(([value, label]) => ({ value, label }));
+
+// The transparency line: what the OTA shows vs what the guest pays, from the
+// cheapest base price as the worked example.
+const offerPreview = computed(() => {
+    const pct = Number(oform.discount_pct);
+    if (!(pct > 0) || pct > 70) return null;
+    const base = Math.min(...(props.roomTypes || []).map((t) => Number(t.base_price)).filter((p) => p > 0));
+    if (!Number.isFinite(base)) return null;
+    const pushed = Math.round((base / (1 - pct / 100)) * 100) / 100;
+    return { base: base.toFixed(2), pushed: pushed.toFixed(2) };
+});
+
+function openCreateOffer() {
+    editingOffer.value = null;
+    oform.reset();
+    oform.clearErrors();
+    showOffer.value = true;
+}
+function openEditOffer(o) {
+    editingOffer.value = o;
+    oform.name = o.name;
+    oform.channel = o.channel;
+    oform.discount_pct = o.discount_pct;
+    oform.starts_on = o.starts_on;
+    oform.ends_on = o.ends_on;
+    oform.active = o.active;
+    oform.clearErrors();
+    showOffer.value = true;
+}
+function submitOffer() {
+    const opts = {
+        preserveScroll: true,
+        onSuccess: () => { showOffer.value = false; toasts.value?.success(translate('pricingIndex.offers.saved')); },
+    };
+    if (editingOffer.value) {
+        oform.put(route('pricing.offers.update', editingOffer.value.id), opts);
+    } else {
+        oform.post(route('pricing.offers.store'), opts);
+    }
+}
+function deleteOffer(o) {
+    if (!confirm(translate('pricingIndex.offers.deleteConfirm', { name: o.name }))) return;
+    router.delete(route('pricing.offers.destroy', o.id), {
+        preserveScroll: true,
+        onSuccess: () => toasts.value?.success(translate('pricingIndex.offers.deleted')),
+    });
+}
+function offerStatus(o) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (!o.active) return 'inactive';
+    if (o.ends_on < today) return 'expired';
+    if (o.starts_on > today) return 'upcoming';
+    return 'active';
+}
+const offerStatusBadge = {
+    active: { variant: 'success', key: 'pricingIndex.offers.statusActive' },
+    upcoming: { variant: 'info', key: 'pricingIndex.offers.statusUpcoming' },
+    expired: { variant: 'neutral', key: 'pricingIndex.offers.statusExpired' },
+    inactive: { variant: 'warning', key: 'pricingIndex.offers.statusInactive' },
+};
+
 function fmtRange(s) {
     return `${s.start_date} → ${s.end_date}`;
 }
@@ -589,6 +659,7 @@ function fmtRange(s) {
                             >
 {{ $t('admin.generated.k_05a62a33ee40') }} </Button>
                             <Button size="sm" variant="primary" @click="openCreateSeason">{{ $t('admin.generated.k_b5b2a800444e') }}</Button>
+                            <Button size="sm" variant="outline" @click="openCreateOffer">{{ $t('pricingIndex.offers.add') }}</Button>
                         </div>
                     </div>
                 </template>
@@ -683,6 +754,58 @@ function fmtRange(s) {
                 </p>
             </Card>
 
+            <!-- OTA offers: compensation for extranet campaigns -->
+            <Card>
+                <template #header>
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h3 class="text-h4 text-primary-900">{{ $t('pricingIndex.offers.title') }}</h3>
+                            <p class="text-small text-neutral-500 mt-0.5">{{ $t('pricingIndex.offers.subtitle') }}</p>
+                        </div>
+                        <Button size="sm" variant="primary" @click="openCreateOffer">{{ $t('pricingIndex.offers.add') }}</Button>
+                    </div>
+                </template>
+
+                <div v-if="!offers.length" class="px-2 py-6 text-center">
+                    <p class="text-body-sm font-medium text-neutral-700">{{ $t('pricingIndex.offers.emptyTitle') }}</p>
+                    <p class="mt-1 text-small text-neutral-500">{{ $t('pricingIndex.offers.emptyHint') }}</p>
+                </div>
+
+                <div v-else class="overflow-x-auto">
+                    <table class="min-w-full text-body-sm">
+                        <thead>
+                            <tr class="border-b border-neutral-200 text-label uppercase tracking-wider text-neutral-500">
+                                <th class="py-2.5 pr-4 text-left">{{ $t('pricingIndex.offers.colName') }}</th>
+                                <th class="py-2.5 pr-4 text-left">{{ $t('pricingIndex.offers.colChannel') }}</th>
+                                <th class="py-2.5 pr-4 text-right">{{ $t('pricingIndex.offers.colDiscount') }}</th>
+                                <th class="py-2.5 pr-4 text-left">{{ $t('pricingIndex.offers.colWindow') }}</th>
+                                <th class="py-2.5 pr-4 text-left">{{ $t('pricingIndex.offers.colStatus') }}</th>
+                                <th class="py-2.5 text-right">{{ $t('pricingIndex.offers.colActions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-neutral-100">
+                            <tr v-for="o in offers" :key="o.id" class="hover:bg-neutral-50/70">
+                                <td class="py-2.5 pr-4 font-medium text-neutral-900 max-w-[220px] truncate" :title="o.name">{{ o.name }}</td>
+                                <td class="py-2.5 pr-4 text-neutral-600">{{ offerChannelLabels[o.channel] || o.channel }}</td>
+                                <td class="py-2.5 pr-4 text-right font-semibold tabular-nums text-neutral-900">−{{ o.discount_pct }}%</td>
+                                <td class="py-2.5 pr-4 whitespace-nowrap text-neutral-600">{{ formatDate(o.starts_on) }} – {{ formatDate(o.ends_on) }}</td>
+                                <td class="py-2.5 pr-4">
+                                    <Badge :variant="offerStatusBadge[offerStatus(o)].variant" size="sm" dot>{{ $t(offerStatusBadge[offerStatus(o)].key) }}</Badge>
+                                </td>
+                                <td class="py-2.5 text-right whitespace-nowrap">
+                                    <Button size="sm" variant="ghost" @click="openEditOffer(o)">{{ $t('pricingIndex.offers.edit') }}</Button>
+                                    <button type="button" class="ml-1 text-tiny font-bold text-error-600 hover:underline" @click="deleteOffer(o)">{{ $t('pricingIndex.offers.delete') }}</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <p class="mt-3 text-tiny text-neutral-500">
+                    💡 {{ $t('pricingIndex.offers.extranetNote') }}
+                </p>
+            </Card>
+
             <!-- Price matrix -->
             <Card>
                 <template #header>
@@ -766,6 +889,43 @@ function fmtRange(s) {
             <template #footer>
                 <Button variant="outline" @click="showSeason = false">{{ $t('admin.generated.k_b59ae1e356c9') }}</Button>
                 <Button variant="primary" :loading="sform.processing" @click="submitSeason">{{ editingSeason ? $t('admin.generated.k_4e4180955a51') : $t('admin.generated.k_fa00ecca163b') }}</Button>
+            </template>
+        </Modal>
+
+        <!-- OTA offer modal -->
+        <Modal :show="showOffer" :title="editingOffer ? $t('pricingIndex.offers.editTitle') : $t('pricingIndex.offers.addTitle')" @close="showOffer = false">
+            <form class="space-y-4" @submit.prevent="submitOffer">
+                <FormGroup :label="$t('pricingIndex.offers.fieldName')" :error="oform.errors.name" required>
+                    <TextInput v-model="oform.name" :placeholder="$t('pricingIndex.offers.namePlaceholder')" :error="oform.errors.name" />
+                </FormGroup>
+                <div class="grid grid-cols-2 gap-4">
+                    <FormGroup :label="$t('pricingIndex.offers.fieldChannel')" :error="oform.errors.channel" required>
+                        <Select v-model="oform.channel" :options="offerChannelOptions" :error="oform.errors.channel" />
+                    </FormGroup>
+                    <FormGroup :label="$t('pricingIndex.offers.fieldDiscount')" :error="oform.errors.discount_pct" required>
+                        <TextInput type="number" v-model="oform.discount_pct" min="1" max="70" step="0.5" :error="oform.errors.discount_pct" />
+                    </FormGroup>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <FormGroup :label="$t('pricingIndex.offers.fieldFrom')" :error="oform.errors.starts_on" required>
+                        <DatePicker v-model="oform.starts_on" :error="oform.errors.starts_on" />
+                    </FormGroup>
+                    <FormGroup :label="$t('pricingIndex.offers.fieldTo')" :error="oform.errors.ends_on" required>
+                        <DatePicker v-model="oform.ends_on" :error="oform.errors.ends_on" />
+                    </FormGroup>
+                </div>
+
+                <div v-if="offerPreview" class="rounded-lg border border-info-200 bg-info-50 px-3.5 py-3 text-small text-info-900">
+                    {{ $t('pricingIndex.offers.preview', { pushed: offerPreview.pushed, base: offerPreview.base, currency: currencyCode }) }}
+                </div>
+
+                <p class="rounded-lg border border-warning-200 bg-warning-50 px-3.5 py-3 text-small text-warning-800">
+                    ⚠ {{ $t('pricingIndex.offers.extranetNote') }}
+                </p>
+            </form>
+            <template #footer>
+                <Button variant="outline" @click="showOffer = false">{{ $t('admin.generated.k_b59ae1e356c9') }}</Button>
+                <Button variant="primary" :loading="oform.processing" @click="submitOffer">{{ editingOffer ? $t('pricingIndex.offers.save') : $t('pricingIndex.offers.create') }}</Button>
             </template>
         </Modal>
 
