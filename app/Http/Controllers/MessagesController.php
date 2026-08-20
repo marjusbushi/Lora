@@ -111,9 +111,8 @@ class MessagesController extends Controller
     }
 
     /**
-     * ID-të e bisedave me dështim AI ende AKTIV (auditi i fundit i dështimit
-     * më i ri se mesazhi i fundit i bisedës) — një query e vetme për gjithë
-     * listën, e njëjta semantikë si aiFailure() e bisedës së hapur.
+     * ID-të e bisedave me dështim AI ende AKTIV — një query auditësh + një
+     * query mesazhesh për gjithë listën, e njëjta semantikë si aiFailure().
      *
      * @param  \Illuminate\Database\Eloquent\Collection<int, MessageThread>  $threads
      * @return array<int, int>
@@ -124,30 +123,47 @@ class MessagesController extends Controller
             return [];
         }
 
-        return \App\Models\AuditLog::query()
+        $failures = \App\Models\AuditLog::query()
             ->where('action', 'message.ai_reply_failed')
             ->where('subject_type', MessageThread::class)
             ->whereIn('subject_id', $threads->pluck('id'))
             ->orderByDesc('id')
-            ->get(['subject_id', 'created_at'])
-            ->unique('subject_id')
-            ->filter(function ($audit) use ($threads) {
-                // Pa last_message_at s'ka bisedë reale — bie drejt PA shenje.
-                $thread = $threads->firstWhere('id', $audit->subject_id);
+            ->get(['subject_id', 'properties'])
+            ->unique('subject_id');
 
-                return $thread
-                    && $thread->last_message_at
-                    && $audit->created_at->gt($thread->last_message_at);
+        if ($failures->isEmpty()) {
+            return [];
+        }
+
+        // Mesazhi RELEVANT më i ri per bisedë (mysafir ose staf njerëzor —
+        // përgjigjet AI të job-eve të vjetra garuese s'e shuajnë alarmin).
+        $latestRelevant = Message::query()
+            ->whereIn('message_thread_id', $failures->pluck('subject_id'))
+            ->where(fn ($q) => $q->where('sender', Message::SENDER_GUEST)
+                ->orWhere(fn ($qq) => $qq->where('sender', Message::SENDER_HOST)->where('sent_by_ai', false)))
+            ->groupBy('message_thread_id')
+            ->pluck(\Illuminate\Support\Facades\DB::raw('MAX(id) as max_id'), 'message_thread_id');
+
+        return $failures
+            ->filter(function ($audit) use ($latestRelevant) {
+                $failedMessageId = $audit->properties['message_id'] ?? null;
+
+                return $failedMessageId !== null
+                    && (int) ($latestRelevant[$audit->subject_id] ?? 0) <= (int) $failedMessageId;
             })
             ->pluck('subject_id')
             ->all();
     }
 
     /**
-     * Dështimi i fundit i Lora-s për këtë bisedë, VETËM kur ende ka rëndësi:
-     * auditi 'message.ai_reply_failed' duhet të jetë më i ri se çdo mesazh i
-     * bisedës — një përgjigje stafi/AI pas tij e zgjidh, dhe një mesazh i ri
-     * mysafiri do të thotë se një përpjekje e re është në radhë.
+     * Dështimi i fundit i Lora-s për këtë bisedë, VETËM kur ende ka rëndësi.
+     * Krahasimi bëhet me RENDIN E ID-ve, jo me sent_at (Codex PR #502):
+     * WhatsApp sjell mesazhe me vulë kohore më të vjetër se mbërritja, ndaj
+     * vetëm ID-ja e mesazhit të dështuar (e ruajtur në audit) thotë saktë
+     * nëse mysafiri i fundit ende pret. E shuajnë alarmin: një mesazh MË I RI
+     * mysafiri (përpjekje e re në radhë) ose një përgjigje NJERËZORE më e re —
+     * jo përgjigja AI e një job-i të vjetër garues (mund të mos i jetë
+     * përgjigjur fare mesazhit të dështuar).
      *
      * @return array{at: string, error: ?string}|null
      */
@@ -160,12 +176,17 @@ class MessagesController extends Controller
             ->latest('id')
             ->first(['created_at', 'properties']);
 
-        if (! $failure) {
+        $failedMessageId = $failure?->properties['message_id'] ?? null;
+        if ($failedMessageId === null) {
             return null;
         }
 
-        $lastMessageAt = $thread->messages->max('sent_at');
-        if ($lastMessageAt && $failure->created_at->lte($lastMessageAt)) {
+        $superseded = $thread->messages
+            ->filter(fn (Message $m) => $m->sender === Message::SENDER_GUEST
+                || ($m->sender === Message::SENDER_HOST && ! $m->sent_by_ai))
+            ->max('id') > $failedMessageId;
+
+        if ($superseded) {
             return null;
         }
 
