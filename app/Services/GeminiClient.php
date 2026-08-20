@@ -121,29 +121,48 @@ class GeminiClient
 
             // Raundi i fundit lejon VETËM përgjigjen finale — cikli s'mbetet kurrë pa dalje.
             $allowed = $round === $maxToolRounds ? [$finalToolName] : $allNames;
-            $call = $this->generate($system, $contents, $functions, $allowed, $maxTokens, $remaining);
+            $turn = $this->generate($system, $contents, $functions, $allowed, $maxTokens, $remaining);
 
-            if ($call['name'] === $finalToolName) {
-                return ['args' => $call['args'], 'toolsUsed' => $toolsUsed];
+            foreach ($turn['calls'] as $call) {
+                if ($call['name'] === $finalToolName) {
+                    return ['args' => $call['args'], 'toolsUsed' => $toolsUsed];
+                }
             }
 
-            $runner = $executors[$call['name']] ?? null;
-            $result = $runner
-                ? $runner($call['args'])
-                : ['error' => 'Mjet i panjohur.'];
+            // Kthimi i radhës së modelit VERBATIM (me thoughtSignature + id):
+            // gemini-3.7-flash kthen 400 INVALID_ARGUMENT ("missing a
+            // thought_signature in functionCall parts") nëse historiku
+            // rindërtohet vetëm me name+args — prandaj heshtja e prod-it
+            // në çdo mesazh që kërkonte mjet (task #379).
+            $contents[] = $turn['content'];
 
-            $toolsUsed[] = $call['name'];
-            $contents[] = ['role' => 'model', 'parts' => [['functionCall' => ['name' => $call['name'], 'args' => $call['args'] ?: new \stdClass]]]];
-            $contents[] = ['role' => 'user', 'parts' => [['functionResponse' => ['name' => $call['name'], 'response' => $result ?: new \stdClass]]]];
+            $parts = [];
+            foreach ($turn['calls'] as $call) {
+                $runner = $executors[$call['name']] ?? null;
+                $result = $runner
+                    ? $runner($call['args'])
+                    : ['error' => 'Mjet i panjohur.'];
+
+                $toolsUsed[] = $call['name'];
+                $response = ['name' => $call['name'], 'response' => $result ?: new \stdClass];
+                if (isset($call['id'])) {
+                    $response['id'] = $call['id'];
+                }
+                $parts[] = ['functionResponse' => $response];
+            }
+            $contents[] = ['role' => 'user', 'parts' => $parts];
         }
 
         throw new RuntimeException("Modeli s'e mbylli përgjigjen brenda raundeve të lejuara.");
     }
 
     /**
-     * One generateContent round that MUST return a function call among $allowedNames.
+     * One generateContent round that MUST return at least one function call among
+     * $allowedNames. Returns the model's content VERBATIM (so thoughtSignature/id
+     * survive the round-trip — the API rejects reconstructed history with 400)
+     * plus the extracted calls in order.
      *
-     * @return array{name:string,args:array<string,mixed>}
+     * @return array{content:array<string,mixed>,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>}
      */
     private function generate(string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, int $timeoutSeconds): array
     {
@@ -174,11 +193,20 @@ class GeminiClient
             $this->throwHttpError($res->status(), (string) $res->body());
         }
 
+        $calls = [];
         foreach ($res->json('candidates.0.content.parts', []) as $part) {
             $call = $part['functionCall'] ?? null;
             if ($call && in_array($call['name'] ?? null, $allowedNames, true)) {
-                return ['name' => $call['name'], 'args' => $call['args'] ?? []];
+                $extracted = ['name' => $call['name'], 'args' => $call['args'] ?? []];
+                if (isset($call['id'])) {
+                    $extracted['id'] = (string) $call['id'];
+                }
+                $calls[] = $extracted;
             }
+        }
+
+        if ($calls !== []) {
+            return ['content' => $res->json('candidates.0.content'), 'calls' => $calls];
         }
 
         // No function call came back. The usual cause is the thinking budget eating the
