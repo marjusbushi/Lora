@@ -207,9 +207,54 @@ class FatureAlIntegrationTest extends TestCase
             && $request->hasHeader('Authorization', 'Bearer tenant-fiscal-token'));
     }
 
-    public function test_onboarding_wizard_rejects_production_until_live_fiscalization_is_supported(): void
+    public function test_production_onboarding_registers_on_live_with_the_production_partner_token(): void
     {
-        config(['services.fature_al.onboarding_token' => 'partner-onboarding-token']);
+        // Renato 2026-08-19: real registrations run on live. Invoice ISSUING
+        // stays sandbox-locked separately (proven below) — registering a
+        // company on production cannot create any invoice.
+        config([
+            'services.fature_al.onboarding_token' => 'sandbox-partner-token',
+            'services.fature_al.onboarding_token_production' => 'live-partner-token',
+        ]);
+        $tenant = Tenant::factory()->create();
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'https://fature.al/api/v1/register' => Http::response([
+                'status' => true,
+                'data' => [
+                    'user' => ['id' => 77, 'token' => 'live-company-token'],
+                    'branch' => ['id' => 88, 'name' => 'Villa Mucho - Selia'],
+                ],
+            ]),
+        ]);
+
+        $this->actingAs($this->superAdmin)
+            ->post(route('super-admin.onboarding.fiscalization.register', $tenant), [
+                'environment' => 'production', 'nuis' => 'K33713881K', 'name' => 'Villa Mucho',
+                'address' => 'Lagjja nr.4, Rruga Mitat Hoxha', 'administrator' => 'Luan Muco',
+                'phone' => '0690000000', 'email' => 'live@example.test', 'issuer_in_vat' => true,
+                'last_non_cash_einvoice_number' => null, 'uses_cash' => true,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        // The LIVE host and the PRODUCTION partner token — never the sandbox one.
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://fature.al/api/v1/register'
+            && $request->hasHeader('Authorization', 'Bearer live-partner-token'));
+
+        $integration = TenantIntegration::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)->where('provider', 'fature_al')->firstOrFail();
+        $this->assertSame('production', $integration->configuration['environment']);
+        $this->assertFalse((bool) $integration->enabled); // enabled only after final verify
+    }
+
+    public function test_production_onboarding_without_the_production_token_fails_loudly_and_sends_nothing(): void
+    {
+        config([
+            'services.fature_al.onboarding_token' => 'sandbox-partner-token',
+            'services.fature_al.onboarding_token_production' => null,
+        ]);
         $tenant = Tenant::factory()->create();
 
         Http::preventStrayRequests();
@@ -221,13 +266,34 @@ class FatureAlIntegrationTest extends TestCase
                 'email' => 'live@example.test', 'issuer_in_vat' => true,
                 'last_non_cash_einvoice_number' => null, 'uses_cash' => true,
             ])
-            ->assertSessionHasErrors('environment');
+            ->assertRedirect()
+            ->assertSessionHasErrors(['fature_al']);
 
+        // The sandbox token must never be cross-used on live.
         Http::assertNothingSent();
-        $this->assertDatabaseMissing('tenant_integrations', [
-            'tenant_id' => $tenant->id,
+    }
+
+    public function test_invoice_issuing_remains_sandbox_locked_even_for_a_production_configured_tenant(): void
+    {
+        // The other half of the unlock's safety story: a tenant configured for
+        // production can be REGISTERED, but fiscalizing anything refuses.
+        $tenant = Tenant::factory()->create();
+        app(TenantContext::class)->run($tenant, fn () => TenantIntegration::query()->create([
             'provider' => 'fature_al',
-        ]);
+            'enabled' => true,
+            'credentials' => ['api_token' => 'live-company-token'],
+            'configuration' => ['environment' => 'production', 'last_test_status' => 'success'],
+        ]));
+
+        app(TenantContext::class)->run($tenant, function () {
+            $reservation = new \App\Models\Reservation();
+            try {
+                app(\App\Services\ReservationFiscalizationService::class)->payload($reservation);
+                $this->fail('production fiscalization should have been refused');
+            } catch (\Illuminate\Validation\ValidationException $exception) {
+                $this->assertStringContainsString('sandbox', implode(' ', $exception->errors()['fiscalization'] ?? []));
+            }
+        });
     }
 
     public function test_client_identity_headers_are_sent_only_when_both_credentials_are_set(): void

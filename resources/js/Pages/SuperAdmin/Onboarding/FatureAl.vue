@@ -33,6 +33,15 @@ const registerForm = useForm({
     last_non_cash_einvoice_number: '', uses_cash: props.fiscalization.uses_cash ?? true,
 });
 const certificateForm = useForm({ certificate: null, password: '' });
+
+// Partner-token availability for the SELECTED environment (falls back to the
+// legacy sandbox-only flag for older payloads).
+const partnerTokens = props.fiscalization.partner_tokens
+    || { sandbox: props.fiscalization.has_partner_token, production: false };
+const hasTokenForSelectedEnv = () => !!partnerTokens[registerForm.environment];
+const tokenEnvName = () => registerForm.environment === 'production'
+    ? 'FATURE_AL_ONBOARDING_TOKEN_PRODUCTION'
+    : 'FATURE_AL_ONBOARDING_TOKEN';
 const branchForm = useForm({
     name: props.fiscalization.branch.name || props.tenant.name,
     business_unit_code: props.fiscalization.branch.business_unit_code || '',
@@ -82,7 +91,7 @@ function selectStep(key) {
                 <div class="flex items-center gap-3"><div class="text-right"><strong class="block text-lg">{{ fiscalization.progress }}%</strong><span class="text-[10px] text-neutral-500">{{ fiscalization.environment === 'production' ? 'Production' : 'Sandbox' }}</span></div><span class="grid h-11 w-11 place-items-center rounded-full bg-emerald-50 text-emerald-700"><ShieldCheck class="h-5 w-5" /></span></div>
             </header>
 
-            <div v-if="!fiscalization.has_partner_token" class="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800"><XCircle class="h-5 w-5 shrink-0" /><div><strong>{{ $t('superAdmin.onboarding.partnerTokenMissing') }}</strong><p class="mt-1">{{ $t('superAdmin.onboarding.setTokenPrefix') }} <code>FATURE_AL_ONBOARDING_TOKEN</code> {{ $t('superAdmin.onboarding.setTokenSuffix') }}</p></div></div>
+            <div v-if="!hasTokenForSelectedEnv()" class="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800"><XCircle class="h-5 w-5 shrink-0" /><div><strong>{{ $t('superAdmin.onboarding.partnerTokenMissing') }}</strong><p class="mt-1">{{ $t('superAdmin.onboarding.setTokenPrefix') }} <code>{{ tokenEnvName() }}</code> {{ $t('superAdmin.onboarding.setTokenSuffix') }}</p></div></div>
             <div v-if="error || fiscalization.last_error" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">{{ error || fiscalization.last_error }}</div>
 
             <section class="sa-card overflow-hidden">
@@ -99,7 +108,7 @@ function selectStep(key) {
                     <div class="border-b border-neutral-200 px-5 py-4"><p class="text-[9px] font-bold uppercase tracking-[.12em] text-emerald-700">{{ $t('superAdmin.onboarding.activeStep') }}</p><h2 class="mt-1 text-lg font-semibold">{{ activeDefinition.title }}</h2><p class="mt-1 text-[11px] text-neutral-500">{{ activeDefinition.subtitle }}</p></div>
 
                     <form v-if="activeStep === 'company'" class="grid gap-4 p-5 sm:grid-cols-2" @submit.prevent="submit(registerForm, 'register')">
-                        <label>{{ $t('superAdmin.tenantShow.environment') }}<select v-model="registerForm.environment" class="mt-1 w-full"><option value="sandbox">Sandbox · demo.fature.al</option></select><small class="mt-1 block text-[9px] text-neutral-500">{{ $t('superAdmin.onboarding.productionAfterApproval') }}</small></label>
+                        <label>{{ $t('superAdmin.tenantShow.environment') }}<select v-model="registerForm.environment" class="mt-1 w-full"><option value="sandbox">Sandbox · demo.fature.al</option><option value="production">Production · fature.al</option></select><small class="mt-1 block text-[9px]" :class="registerForm.environment === 'production' ? 'text-amber-700 font-semibold' : 'text-neutral-500'">{{ registerForm.environment === 'production' ? $t('superAdmin.onboarding.productionLiveNote') : $t('superAdmin.onboarding.productionAfterApproval') }}</small></label>
                         <label>NIPT<input v-model.trim="registerForm.nuis" required class="mt-1 w-full uppercase" placeholder="L12345678A" /><small v-if="registerForm.environment === 'sandbox'" class="mt-1 block text-[9px] text-blue-600">{{ $t('superAdmin.onboarding.sandboxTestNipt') }}</small></label>
                         <label>{{ $t('superAdmin.onboarding.companyName') }}<input v-model="registerForm.name" required class="mt-1 w-full" /></label>
                         <label>{{ $t('superAdmin.activity.administrator') }}<input v-model="registerForm.administrator" required class="mt-1 w-full" /></label>
@@ -109,7 +118,7 @@ function selectStep(key) {
                         <label>{{ $t('superAdmin.onboarding.vatStatus') }}<select v-model="registerForm.issuer_in_vat" class="mt-1 w-full"><option :value="null">{{ $t('superAdmin.onboarding.decidedLater') }}</option><option :value="true">{{ $t('superAdmin.onboarding.withVat') }}</option><option :value="false">{{ $t('superAdmin.onboarding.withoutVat') }}</option></select></label>
                         <label>{{ $t('superAdmin.onboarding.lastEinvoiceNumber') }}<input v-model="registerForm.last_non_cash_einvoice_number" class="mt-1 w-full" :placeholder="$t('superAdmin.onboarding.optional')" /></label>
                         <label class="flex items-center gap-2 rounded-xl border border-neutral-200 p-3 sm:col-span-2"><input v-model="registerForm.uses_cash" type="checkbox" /> {{ $t('superAdmin.onboarding.usesCashNote') }}</label>
-                        <div class="flex justify-end sm:col-span-2"><button class="sa-button sa-button-primary" :disabled="registerForm.processing || !fiscalization.has_partner_token"><LoaderCircle v-if="registerForm.processing" class="h-4 w-4 animate-spin" />{{ $t('superAdmin.onboarding.registerCompany') }}</button></div>
+                        <div class="flex justify-end sm:col-span-2"><button class="sa-button sa-button-primary" :disabled="registerForm.processing || !hasTokenForSelectedEnv()"><LoaderCircle v-if="registerForm.processing" class="h-4 w-4 animate-spin" />{{ $t('superAdmin.onboarding.registerCompany') }}</button></div>
                     </form>
 
                     <form v-else-if="activeStep === 'certificate'" class="space-y-4 p-5" @submit.prevent="uploadCertificate">
