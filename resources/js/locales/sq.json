@@ -7392,7 +7392,9 @@
     "recentAiActivity": "Aktiviteti i fundit AI",
     "noAiActions": "Nuk ka ende veprime të ekzekutuara nga AI.",
     "actionWhatsAppAutoReply": "Përgjigje automatike në WhatsApp",
-    "actionWhatsAppAutoReplyDesc": "I FIKUR në nisje, me vetëdije: WhatsApp-i lidhet me rrugën jo-zyrtare dhe një robot me volum rrit rrezikun e bllokimit nga Meta. Ndize vetëm kur të kesh testuar me numrin e dedikuar. Pa këtë çelës, Lora vetëm përgatit drafte për stafin."
+    "actionWhatsAppAutoReplyDesc": "I FIKUR në nisje, me vetëdije: WhatsApp-i lidhet me rrugën jo-zyrtare dhe një robot me volum rrit rrezikun e bllokimit nga Meta. Ndize vetëm kur të kesh testuar me numrin e dedikuar. Pa këtë çelës, Lora vetëm përgatit drafte për stafin.",
+    "actionWhatsAppBooking": "Rezervim nga biseda (me pagesë POK)",
+    "actionWhatsAppBookingDesc": "I FIKUR në nisje. Kur mysafiri zgjedh një ofertë në WhatsApp, Lora mban dhomën rreth 30 minuta, i dërgon linkun e pagesës me kartë dhe rezervimi konfirmohet VETËM pasi pagesa hyn — kurrë në bisedat e Booking/Airbnb. Kërkon POK të konfiguruar dhe përgjigjet automatike në WhatsApp të ndezura."
   },
   "posBeach": {
     "title": "Plazhi",

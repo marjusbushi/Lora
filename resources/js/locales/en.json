@@ -7392,7 +7392,9 @@
     "recentAiActivity": "Recent AI activity",
     "noAiActions": "No AI-executed actions yet.",
     "actionWhatsAppAutoReply": "Auto-reply on WhatsApp",
-    "actionWhatsAppAutoReplyDesc": "OFF by default, deliberately: WhatsApp uses the unofficial route and a high-volume bot increases the risk of Meta blocking the number. Enable it only after testing with the dedicated number. Without this switch, Lora only prepares drafts for staff."
+    "actionWhatsAppAutoReplyDesc": "OFF by default, deliberately: WhatsApp uses the unofficial route and a high-volume bot increases the risk of Meta blocking the number. Enable it only after testing with the dedicated number. Without this switch, Lora only prepares drafts for staff.",
+    "actionWhatsAppBooking": "Booking from the conversation (with POK payment)",
+    "actionWhatsAppBookingDesc": "OFF by default. When a guest picks an offer on WhatsApp, Lora holds the room for about 30 minutes, sends the card-payment link, and the booking is confirmed ONLY once payment arrives — never in Booking/Airbnb conversations. Requires POK configured and WhatsApp auto-replies enabled."
   },
   "posBeach": {
     "title": "Beach",
