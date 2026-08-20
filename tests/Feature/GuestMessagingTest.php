@@ -191,6 +191,54 @@ class GuestMessagingTest extends TestCase
                 ->where('threads.0.guest_name', 'Ana'));
     }
 
+    public function test_inbox_shows_the_ai_failure_banner_while_the_guest_waits(): void
+    {
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($home);
+        $context->set($home);
+
+        $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net']);
+        $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
+        \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => 1, 'error' => 'Gemini 429'], 'ai');
+
+        $admin = User::factory()->create(['current_tenant_id' => $home->id]);
+        $admin->assignRole('admin');
+        $context->clear();
+
+        $this->actingAs($admin)
+            ->withSession(['tenant_id' => $home->id])
+            ->get(route('messages.index', ['thread' => $thread->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('selected.ai_failure.error', 'Gemini 429'));
+    }
+
+    public function test_ai_failure_banner_disappears_once_anyone_answers_after_it(): void
+    {
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($home);
+        $context->set($home);
+
+        $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL-2', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net']);
+        $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
+        \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => 1, 'error' => 'Gemini 429'], 'ai');
+        // Stafi iu përgjigj mysafirit PAS dështimit — alarmi s'ka më punë.
+        $thread->messages()->create(['sender' => Message::SENDER_HOST, 'body' => 'Po, kemi!', 'sent_at' => now()->addMinute()]);
+
+        $admin = User::factory()->create(['current_tenant_id' => $home->id]);
+        $admin->assignRole('admin');
+        $context->clear();
+
+        $this->actingAs($admin)
+            ->withSession(['tenant_id' => $home->id])
+            ->get(route('messages.index', ['thread' => $thread->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('selected.ai_failure', null));
+    }
+
     public function test_reply_sends_to_channex_and_stores_a_host_message(): void
     {
         $this->fakeChannex();

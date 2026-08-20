@@ -6843,7 +6843,9 @@
     "learnTitle": "Lora s'e dinte këtë pyetje",
     "learnBody": "Ruaje përgjigjen tënde te Pyetje & Përgjigje që herës tjetër Lora t'i përgjigjet vetë.",
     "learnSave": "Ruaje te FAQ",
-    "learnDismiss": "Hidhe"
+    "learnDismiss": "Hidhe",
+    "failedTitle": "Lora s'u përgjigj dot këtu",
+    "failedBody": "Përpjekja automatike dështoi pas disa provave — mysafiri po pret. Përgjigjuni vetë, ose prisni mesazhin e radhës që Lora të provojë sërish."
   },
   "faqTab": {
     "title": "Pyetje & Përgjigje për Lora AI",

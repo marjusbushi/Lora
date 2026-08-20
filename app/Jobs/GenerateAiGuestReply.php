@@ -652,4 +652,46 @@ PROMPT;
             report($e);
         }
     }
+
+    /**
+     * Riprovat u ezauruan — mysafiri mbeti pa përgjigje dhe deri sot e vetmja
+     * gjurmë ishte failed_jobs + logu i worker-it në server (task #372).
+     * Worker-i e thërret KËTË JASHTË middleware-it UseTenantContext, ndaj
+     * konteksti tenant rikthehet ME DORË nga vlera e kapur në dispatch; pa
+     * tenant të vlefshëm nuk shkruhet ASGJË — kurrë fallback te një tjetër.
+     */
+    public function failed(?\Throwable $e): void
+    {
+        $tenant = $this->tenantId
+            ? \App\Models\Tenant::query()->active()->find($this->tenantId)
+            : null;
+
+        if (! $tenant) {
+            report(new \RuntimeException(
+                "GenerateAiGuestReply::failed pa kontekst tenant (tenantId={$this->tenantId}, thread={$this->threadId}) — gjurma u la vetëm në log.",
+            ));
+
+            return;
+        }
+
+        app(TenantContext::class)->run($tenant, function () use ($e): void {
+            $thread = MessageThread::query()->find($this->threadId);
+            if (! $thread) {
+                return;
+            }
+
+            AuditLog::record('message.ai_reply_failed', $thread, [
+                'message_id' => $this->messageId,
+                'error' => mb_substr($e?->getMessage() ?: 'Dështim i panjohur.', 0, 300),
+            ], 'ai');
+
+            // Rifresko inbox-in e hapur që shiriti i dështimit të shfaqet live —
+            // best-effort: një Reverb offline s'duhet ta fshehë gjurmën e auditit.
+            try {
+                event(new \App\Events\MessageReceived($thread->tenant_id, $thread->id));
+            } catch (\Throwable $broadcast) {
+                report($broadcast);
+            }
+        });
+    }
 }
