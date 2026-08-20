@@ -43,6 +43,12 @@ class FatureAlOnboardingService
             'status' => $steps['verify'] ? 'ready' : (collect($steps)->contains(true) ? 'in_progress' : 'not_started'),
             'progress' => (int) round($required->filter()->count() / max(1, $required->count()) * 100),
             'has_partner_token' => filled(config('services.fature_al.onboarding_token')),
+            // Per-environment availability, so the wizard can gate the submit
+            // by the SELECTED environment rather than only sandbox.
+            'partner_tokens' => [
+                'sandbox' => filled(config('services.fature_al.onboarding_token')),
+                'production' => filled(config('services.fature_al.onboarding_token_production')),
+            ],
             'has_api_token' => filled($integration?->credentials['api_token'] ?? null),
             'enabled' => (bool) ($integration?->enabled),
             'uses_cash' => $usesCash,
@@ -71,16 +77,12 @@ class FatureAlOnboardingService
     /** @param array<string, mixed> $data */
     public function registerCompany(Tenant $tenant, array $data): void
     {
-        if (($data['environment'] ?? null) !== 'sandbox') {
-            throw new RuntimeException('Onboarding-u Fature.al lejohet vetëm në sandbox në këtë fazë.');
-        }
-
-        $partnerToken = trim((string) config('services.fature_al.onboarding_token'));
-        if ($partnerToken === '') {
-            throw new RuntimeException('FATURE_AL_ONBOARDING_TOKEN mungon në konfigurimin e serverit.');
-        }
-
-        $environment = 'sandbox';
+        // Onboarding may run on EITHER environment (Renato 2026-08-19: real
+        // registrations are live). Invoice ISSUING remains sandbox-locked
+        // separately in Reservation/PosFiscalizationService until that phase
+        // ships — registering a company on live cannot create any invoice.
+        $environment = ($data['environment'] ?? null) === 'production' ? 'production' : 'sandbox';
+        $partnerToken = $this->partnerToken($environment);
         $response = $this->request($partnerToken)->post($this->baseUrl($environment).'/register', [
             'nuis' => $data['nuis'],
             'name' => $data['name'],
@@ -332,6 +334,21 @@ class FatureAlOnboardingService
         $this->mutate($tenant, function (TenantIntegration $integration, array &$credentials, array &$configuration) use ($values) {
             $configuration['onboarding'] = array_merge((array) ($configuration['onboarding'] ?? []), $values);
         });
+    }
+
+    /** The solution-provider token for an environment — never cross-used. */
+    private function partnerToken(string $environment): string
+    {
+        $key = $environment === 'production' ? 'onboarding_token_production' : 'onboarding_token';
+        $token = trim((string) config("services.fature_al.{$key}"));
+        if ($token === '') {
+            $envName = $environment === 'production'
+                ? 'FATURE_AL_ONBOARDING_TOKEN_PRODUCTION'
+                : 'FATURE_AL_ONBOARDING_TOKEN';
+            throw new RuntimeException("{$envName} mungon në konfigurimin e serverit.");
+        }
+
+        return $token;
     }
 
     private function request(string $token): PendingRequest
