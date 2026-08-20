@@ -38,10 +38,16 @@ class AiConversationBooking
         private PokClient $pok,
     ) {}
 
-    /** Çelësi i veçantë i Hapit 3 — default FIKUR derisa ta ndezë hoteli. */
+    /**
+     * Çelësi i veçantë i Hapit 3 — default FIKUR derisa ta ndezë hoteli.
+     * Kërkon EDHE auto-përgjigjet WhatsApp (gjetje Codex, PR #504): pa to,
+     * mbajtja do krijohej po linku i pagesës do mbetej draft — mysafiri pa
+     * link dhe dhoma e bllokuar. UI-ja e tregon të njëjtin varësi.
+     */
     public function enabled(): bool
     {
-        return filter_var(Setting::get('ai_mcp.whatsapp_booking_enabled', false), FILTER_VALIDATE_BOOL);
+        return filter_var(Setting::get('ai_mcp.whatsapp_booking_enabled', false), FILTER_VALIDATE_BOOL)
+            && filter_var(Setting::get('ai_mcp.whatsapp_auto_reply_enabled', false), FILTER_VALIDATE_BOOL);
     }
 
     /** A deklarohet fare mjeti i rezervimit për këtë bisedë. */
@@ -103,6 +109,30 @@ class AiConversationBooking
         }
         if ($adults > (int) $type->max_occupancy) {
             return ['error' => "Kjo tipologji lejon maksimumi {$type->max_occupancy} persona — ofroji një tipologji më të madhe."];
+        }
+
+        // IDEMPOTENCË ndër riprovat e job-it (gjetje Codex, PR #504): raundi
+        // final i Gemini-t mund të dështojë PASI mbajtja u krijua — riprova
+        // ri-ekzekuton gjithë bisedën. Një mbajtje AI ekzistuese e kësaj bisede
+        // me TË NJËJTAT të dhëna rikthehet siç është; me të dhëna të ndryshuara
+        // (mysafiri ndërroi mendje) lirohet para se të krijohet e reja.
+        $existing = $thread->reservation_id
+            ? Reservation::query()->with('room')->find($thread->reservation_id)
+            : null;
+        if ($existing
+            && $existing->status === 'pending'
+            && $existing->created_via === Reservation::CREATED_VIA_AI
+            && $existing->pok_order_id) {
+            $same = $existing->check_in_date?->toDateString() === $checkIn->toDateString()
+                && $existing->check_out_date?->toDateString() === $checkOut->toDateString()
+                && (int) $existing->adults === $adults
+                && (int) $existing->room?->room_type_id === (int) $type->id;
+
+            if ($same) {
+                return $this->holdPayload($existing, $type->name, $firstName, $nights, $adults);
+            }
+
+            Reservation::whereKey($existing->id)->where('status', 'pending')->update(['status' => 'cancelled']);
         }
 
         $creator = User::systemForCurrentTenant();
@@ -187,12 +217,18 @@ class AiConversationBooking
             'currency' => PricingCurrency::code(),
         ], 'ai');
 
+        return $this->holdPayload($reservation, $type->name, $firstName, $nights, $adults);
+    }
+
+    /** @return array<string,mixed> */
+    private function holdPayload(Reservation $reservation, string $typeName, string $firstName, int $nights, int $adults): array
+    {
         return [
             'status' => 'hold_created',
             'guest_first_name' => $firstName,
-            'room_type' => $type->name,
-            'check_in' => $checkIn->toDateString(),
-            'check_out' => $checkOut->toDateString(),
+            'room_type' => $typeName,
+            'check_in' => $reservation->check_in_date?->toDateString(),
+            'check_out' => $reservation->check_out_date?->toDateString(),
             'nights' => $nights,
             'adults' => $adults,
             'stay_total' => round((float) $reservation->total_amount, 2),

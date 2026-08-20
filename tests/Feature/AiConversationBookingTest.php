@@ -62,7 +62,13 @@ class AiConversationBookingTest extends TestCase
                 'id' => 'ord_ai_1', 'isCompleted' => true, 'isCanceled' => false,
                 'isRefunded' => false, 'finalAmount' => $amount, 'currencyCode' => 'EUR',
             ]]], 200),
-            '*/sdk-orders' => Http::response(['data' => ['sdkOrder' => ['id' => 'ord_ai_1', 'finalAmount' => $amount, 'currencyCode' => 'EUR']]], 200),
+            // Id UNIK per porosi (si POK reale) — reservations ka UNIQUE(pok_order_id).
+            '*/sdk-orders' => function () use ($amount) {
+                static $i = 0;
+                $i++;
+
+                return Http::response(['data' => ['sdkOrder' => ['id' => 'ord_ai_'.$i, 'finalAmount' => $amount, 'currencyCode' => 'EUR']]], 200);
+            },
         ]);
     }
 
@@ -85,7 +91,10 @@ class AiConversationBookingTest extends TestCase
 
     private function enableBooking(): void
     {
+        // Rezervimi kërkon EDHE auto-përgjigjet WhatsApp (Codex #504 P2) —
+        // pa to linku i pagesës do mbetej draft me dhomën të bllokuar.
         Setting::set('ai_mcp.whatsapp_booking_enabled', true, 'boolean');
+        Setting::set('ai_mcp.whatsapp_auto_reply_enabled', true, 'boolean');
     }
 
     private function holdArgs(array $overrides = []): array
@@ -168,6 +177,58 @@ class AiConversationBookingTest extends TestCase
         $this->assertArrayHasKey('error', $result);
         $this->assertSame(0, Reservation::query()->count());
         Http::assertNothingSent();
+    }
+
+    public function test_booking_switch_alone_is_not_enough_without_whatsapp_auto_replies(): void
+    {
+        $this->fakePok();
+        Setting::set('ai_mcp.whatsapp_booking_enabled', true, 'boolean');
+        // auto-përgjigjet WhatsApp mbeten OFF — mbajtja do krijohej po linku
+        // s'do t'i shkonte kurrë mysafirit (vetëm draft): refuzo që në burim.
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+
+        $booking = app(AiConversationBooking::class);
+
+        $this->assertFalse($booking->availableFor($thread));
+        $result = $booking->hold($thread, $this->holdArgs());
+
+        $this->assertArrayHasKey('error', $result);
+        $this->assertSame(0, Reservation::query()->count());
+    }
+
+    public function test_a_retry_with_the_same_confirmation_reuses_the_existing_hold(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+
+        $first = app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+        // Riprova e job-it ri-ekzekuton bisedën me TË NJËJTIN konfirmim —
+        // duhet të rikthehet e njëjta mbajtje, jo një dublikatë (Codex #504 P1).
+        $second = app(AiConversationBooking::class)->hold($thread->fresh(), $this->holdArgs());
+
+        $this->assertSame('hold_created', $second['status'] ?? null, json_encode($second));
+        $this->assertSame($first['payment_link'], $second['payment_link']);
+        $this->assertSame(1, Reservation::query()->count());
+    }
+
+    public function test_a_changed_confirmation_releases_the_old_hold_and_creates_a_new_one(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType('Dhomë Dyshe', 95, '101');
+        $this->roomOfType('Suitë', 150, '201');
+        $thread = $this->whatsappThread();
+
+        app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+        // Mysafiri ndërroi mendje → tipologji tjetër: mbajtja e vjetër lirohet.
+        $second = app(AiConversationBooking::class)->hold($thread->fresh(), $this->holdArgs(['room_type' => 'Suitë']));
+
+        $this->assertSame('hold_created', $second['status'] ?? null, json_encode($second));
+        $this->assertSame(1, Reservation::query()->where('status', 'pending')->count());
+        $this->assertSame(1, Reservation::query()->where('status', 'cancelled')->count());
     }
 
     public function test_pok_settle_confirms_and_sends_the_summary_into_the_thread(): void
