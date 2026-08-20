@@ -1,0 +1,73 @@
+# Kanari javor kundër API-së REALE të Gemini-t (task #380, mësimi i #379).
+#
+# PSE: modeli ynë përdor alias-in rrotullues `gemini-flash-latest` — Google e
+# ndërron modelin poshtë tij pa asnjë ndryshim kodi nga ne, dhe kontrata e
+# function-calling mund të prishet në heshtje (2026-08-20: gemini-3.7 nisi të
+# refuzonte me 400 historikun pa thoughtSignature — e zbuluan mysafirët, jo
+# testet, sepse CI-ja e mock-on Gemini-n komplet). Ky workflow xhiron testet
+# e integrimit @real-api kundër API-së së vërtetë një herë në javë, që drift-i
+# i radhës të kapet nga roboti para se ta ndjejnë bisedat live.
+#
+# Sekreti: GEMINI_API_KEY (Repository secret — e vendos pronari me
+# `gh secret set GEMINI_API_KEY`). Kosto: 2 thirrje të vogla/javë.
+# Kujdes: workflow-et e planifikuara xhirojnë vetëm nga dega DEFAULT (main).
+
+name: Gemini real-API canary
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # çdo të hënë 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:4Cq6c8e+3Yi8oFv3NgTQ8zrThm3nZI2uv8Y4OUYHiRw=
+      APP_URL: http://localhost
+      DB_CONNECTION: sqlite
+      DB_DATABASE: database/testing.sqlite
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+
+    steps:
+      # Sekreti VETËM te hapat që e përdorin — kurrë në env të job-it, ku do
+      # t'i ekspozohej edhe setup-php/composer (action të palëve të treta).
+      - name: Sekreti duhet të ekzistojë (kanari s'guxon të gënjejë green bosh)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::Sekreti GEMINI_API_KEY mungon — pa të, testet real-api vetë-kapërcehen dhe kanari s'provon ASGJË. Vendose me: gh secret set GEMINI_API_KEY"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_mysql
+          coverage: none
+
+      - name: Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare SQLite
+        run: touch database/testing.sqlite
+
+      - name: Gemini real-API contract tests
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_REAL_API: '1'
+        run: php artisan test --filter=GeminiConverseTest --compact
