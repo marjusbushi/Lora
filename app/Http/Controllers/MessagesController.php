@@ -34,6 +34,11 @@ class MessagesController extends Controller
             ->orderByDesc('id')
             ->get();
 
+        // Dështimet e Lora-s duken edhe në LISTË, jo vetëm te biseda e hapur
+        // (gjetje Codex, PR #501) — ndryshe operatori me inbox të hapur s'e
+        // mëson kurrë që një mysafir në bisedë tjetër po pret pa përgjigje.
+        $aiFailedThreadIds = $this->threadsWithActiveAiFailure($threads);
+
         $selectedId = $request->integer('thread') ?: $threads->first()?->id;
         $selected = null;
 
@@ -65,6 +70,11 @@ class MessagesController extends Controller
                         'total' => (float) $r->total_amount,
                     ] : null,
                     'ai_suggestion' => $thread->ai_suggestion,
+                    // Dështimi i Lora-s i dukshëm në panel (task #372): shfaqet
+                    // vetëm sa kohë mysafiri i fundit ka mbetur PA përgjigje —
+                    // një mesazh i ri stafi/AI ose një mesazh i ri mysafiri
+                    // (riprovë e re në radhë) e fsheh vetvetiu.
+                    'ai_failure' => $this->aiFailure($thread),
                     // Cikli i mësimit: sugjerimi pending i kësaj bisede — vetëm
                     // për userat që kanë të drejtë ta ruajnë te FAQ (view_settings).
                     'faq_suggestion' => $request->user()->can('view_settings')
@@ -93,10 +103,76 @@ class MessagesController extends Controller
                 'last_message_at' => $t->last_message_at?->toIso8601String(),
                 'unread' => $t->unread_count,
                 'status' => $t->status,
+                'ai_failed' => in_array($t->id, $aiFailedThreadIds, true),
             ]),
             'selected' => $selected,
             'quickReplies' => $this->quickReplies(),
         ]);
+    }
+
+    /**
+     * ID-të e bisedave me dështim AI ende AKTIV (auditi i fundit i dështimit
+     * më i ri se mesazhi i fundit i bisedës) — një query e vetme për gjithë
+     * listën, e njëjta semantikë si aiFailure() e bisedës së hapur.
+     *
+     * @param  \Illuminate\Database\Eloquent\Collection<int, MessageThread>  $threads
+     * @return array<int, int>
+     */
+    private function threadsWithActiveAiFailure($threads): array
+    {
+        if ($threads->isEmpty()) {
+            return [];
+        }
+
+        return \App\Models\AuditLog::query()
+            ->where('action', 'message.ai_reply_failed')
+            ->where('subject_type', MessageThread::class)
+            ->whereIn('subject_id', $threads->pluck('id'))
+            ->orderByDesc('id')
+            ->get(['subject_id', 'created_at'])
+            ->unique('subject_id')
+            ->filter(function ($audit) use ($threads) {
+                // Pa last_message_at s'ka bisedë reale — bie drejt PA shenje.
+                $thread = $threads->firstWhere('id', $audit->subject_id);
+
+                return $thread
+                    && $thread->last_message_at
+                    && $audit->created_at->gt($thread->last_message_at);
+            })
+            ->pluck('subject_id')
+            ->all();
+    }
+
+    /**
+     * Dështimi i fundit i Lora-s për këtë bisedë, VETËM kur ende ka rëndësi:
+     * auditi 'message.ai_reply_failed' duhet të jetë më i ri se çdo mesazh i
+     * bisedës — një përgjigje stafi/AI pas tij e zgjidh, dhe një mesazh i ri
+     * mysafiri do të thotë se një përpjekje e re është në radhë.
+     *
+     * @return array{at: string, error: ?string}|null
+     */
+    private function aiFailure(MessageThread $thread): ?array
+    {
+        $failure = \App\Models\AuditLog::query()
+            ->where('action', 'message.ai_reply_failed')
+            ->where('subject_type', MessageThread::class)
+            ->where('subject_id', $thread->id)
+            ->latest('id')
+            ->first(['created_at', 'properties']);
+
+        if (! $failure) {
+            return null;
+        }
+
+        $lastMessageAt = $thread->messages->max('sent_at');
+        if ($lastMessageAt && $failure->created_at->lte($lastMessageAt)) {
+            return null;
+        }
+
+        return [
+            'at' => $failure->created_at->toIso8601String(),
+            'error' => $failure->properties['error'] ?? null,
+        ];
     }
 
     /** Close a finished conversation — it moves to the "Të mbyllura" tab (Channex-synced). */
