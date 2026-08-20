@@ -112,6 +112,39 @@ const methodOptions = computed(() => [
     ...(isOtaChannel.value ? [{ value: 'ota', label: translate('reservationShow.methodPaidOnlineOta') }] : []),
 ]);
 
+// ===== No-Show (plotëson #7536) =====
+const showNoShowModal = ref(false);
+const noShowBusy = ref(false);
+const isNoShow = computed(() => Boolean(props.reservation.no_show_at));
+const localToday = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+})();
+// Eligible = active status + arrival date strictly in the past (server re-checks
+// in the hotel timezone — this only decides visibility).
+const noShowEligible = computed(() => canUpdate
+    && ['pending', 'confirmed'].includes(props.reservation.status)
+    && props.reservation.check_in_date < localToday);
+
+function submitNoShow() {
+    noShowBusy.value = true;
+    router.post(route('reservations.no-show', props.reservation.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => { showNoShowModal.value = false; },
+        onError: (errors) => { showNoShowModal.value = false; toasts.value?.error(errors.no_show || translate('reservationShow.noShowFailed')); },
+        onFinish: () => { noShowBusy.value = false; },
+    });
+}
+function undoNoShow() {
+    if (!confirm(translate('reservationShow.noShowUndoConfirm', { guest: props.reservation.guest?.name || '' }))) return;
+    noShowBusy.value = true;
+    router.post(route('reservations.no-show.undo', props.reservation.id), {}, {
+        preserveScroll: true,
+        onError: (errors) => toasts.value?.error(errors.no_show || translate('reservationShow.noShowUndoFailed')),
+        onFinish: () => { noShowBusy.value = false; },
+    });
+}
+
 const hasOpenOrders = computed(() => (props.openPosOrders?.length || 0) > 0);
 const unsettled = computed(() => Number(props.folio.outstanding) > 0.005);
 const canAddCharge = computed(() => canUpdate && ['pending', 'confirmed', 'checked_in'].includes(props.reservation.status));
@@ -595,6 +628,7 @@ function settleAndCheckout(method) {
                     <div class="flex flex-wrap items-center gap-2">
                         <h2 class="truncate text-lg font-semibold text-neutral-900">{{ reservation.guest?.name }}</h2>
                         <Badge :variant="statusBadge[reservation.status]?.variant" dot>{{ statusBadge[reservation.status]?.label }}</Badge>
+                        <Badge v-if="isNoShow" variant="error">{{ $t('reservationShow.noShowBadge') }}</Badge>
                     </div>
                     <p class="mt-1 truncate text-xs text-neutral-500">{{ channelMeta(reservation.channel).label }}<template v-if="reservation.channel_ref"> · #{{ reservation.channel_ref }}</template> · {{ reservation.adults }} {{ $t('reservationShow.adults') }}<template v-if="reservation.children">, {{ reservation.children }} {{ $t('reservationShow.children') }}</template></p>
                 </div>
@@ -602,6 +636,30 @@ function settleAndCheckout(method) {
             <div class="border-t border-neutral-100 pt-3 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0"><p class="text-xs text-neutral-400">{{ $t('reservationShow.room') }}</p><p class="mt-1 truncate text-sm font-semibold text-neutral-900">{{ reservation.room?.room_number }} · {{ reservation.room?.room_type }}</p></div>
             <div class="border-t border-neutral-100 pt-3 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0"><p class="text-xs text-neutral-400">{{ $t('reservationShow.stay') }}</p><p class="mt-1 text-sm font-semibold text-neutral-900">{{ reservation.nights }} {{ $t('reservationShow.nights') }}</p></div>
             <div class="border-t border-neutral-100 pt-3 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0"><p class="text-xs text-neutral-400">{{ $t('reservationShow.total') }}</p><p class="mt-1 text-sm font-semibold text-neutral-900">{{ money(folio.gross) }}</p></div>
+        </section>
+
+        <!-- Overdue arrival: offer the no-show action -->
+        <section v-if="noShowEligible && !isNoShow" class="mt-4 flex flex-col gap-3 rounded-xl border border-warning-200 bg-warning-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex items-start gap-3">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-warning-700 ring-1 ring-warning-200"><CircleAlert class="h-5 w-5" /></span>
+                <div>
+                    <p class="font-semibold text-warning-800">{{ $t('reservationShow.noShowBannerTitle', { date: formatDate(reservation.check_in_date) }) }}</p>
+                    <p class="mt-0.5 text-sm text-warning-700">{{ $t('reservationShow.noShowBannerHint') }}</p>
+                </div>
+            </div>
+            <Button variant="outline" @click="showNoShowModal = true">{{ $t('reservationShow.noShowButton') }}</Button>
+        </section>
+
+        <!-- Marked as no-show: context + guarded undo -->
+        <section v-if="isNoShow" class="mt-4 flex flex-col gap-3 rounded-xl border border-error-200 bg-error-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex items-start gap-3">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-error-700 ring-1 ring-error-200"><CircleAlert class="h-5 w-5" /></span>
+                <div>
+                    <p class="font-semibold text-error-800">{{ $t('reservationShow.noShowMarkedTitle') }}</p>
+                    <p class="mt-0.5 text-sm text-error-700">{{ $t('reservationShow.noShowMarkedInfo', { date: formatDate(reservation.check_in_date) }) }}</p>
+                </div>
+            </div>
+            <Button v-if="canUpdate" variant="outline" :loading="noShowBusy" @click="undoNoShow">{{ $t('reservationShow.noShowUndoButton') }}</Button>
         </section>
 
         <section v-if="earlyDeparturePlanned" class="mt-4 flex flex-col gap-3 rounded-xl border border-info-200 bg-info-50 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1070,6 +1128,25 @@ function settleAndCheckout(method) {
             @close="showStayExtension = false"
             @extended="toasts?.success($t('reservationShow.stayExtended'))"
         />
+        <!-- No-show confirmation: names the guest; the OTA commission step is
+             the desk's extranet action — impossible to miss here. -->
+        <Modal :show="showNoShowModal" :title="$t('reservationShow.noShowModalTitle')" max-width="md" @close="showNoShowModal = false">
+            <p class="text-body-sm text-neutral-700">
+                {{ $t('reservationShow.noShowModalBody') }} <strong>{{ reservation.guest?.name }}</strong>
+                ({{ $t('reservationShow.noShowModalArrival') }} {{ formatDate(reservation.check_in_date) }})?
+            </p>
+            <p class="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-small text-neutral-600">
+                {{ $t('reservationShow.noShowModalEffect') }}
+            </p>
+            <p v-if="isOtaChannel" class="mt-2 rounded-lg border border-warning-200 bg-warning-50 px-3.5 py-2.5 text-small font-semibold text-warning-800">
+                ⚠ {{ $t('reservationShow.noShowExtranetWarn', { channel: channelMeta(reservation.channel).label }) }}
+            </p>
+            <template #footer>
+                <Button variant="outline" @click="showNoShowModal = false">{{ $t('reservationShow.noShowModalCancel') }}</Button>
+                <Button variant="danger" :loading="noShowBusy" @click="submitNoShow">{{ $t('reservationShow.noShowModalConfirm') }}</Button>
+            </template>
+        </Modal>
+
         <ToastContainer ref="toasts" />
     </AppLayout>
 </template>
