@@ -37,11 +37,13 @@ jobs:
       SESSION_DRIVER: array
       QUEUE_CONNECTION: sync
       MAIL_MAILER: array
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GEMINI_REAL_API: '1'
 
     steps:
+      # Sekreti VETËM te hapat që e përdorin — kurrë në env të job-it, ku do
+      # t'i ekspozohej edhe setup-php/composer (action të palëve të treta).
       - name: Sekreti duhet të ekzistojë (kanari s'guxon të gënjejë green bosh)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           if [ -z "$GEMINI_API_KEY" ]; then
             echo "::error::Sekreti GEMINI_API_KEY mungon — pa të, testet real-api vetë-kapërcehen dhe kanari s'provon ASGJË. Vendose me: gh secret set GEMINI_API_KEY"
@@ -65,4 +67,7 @@ jobs:
         run: touch database/testing.sqlite
 
       - name: Gemini real-API contract tests
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_REAL_API: '1'
         run: php artisan test --filter=GeminiConverseTest --compact
