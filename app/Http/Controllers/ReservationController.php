@@ -488,6 +488,7 @@ class ReservationController extends Controller
                     ? (float) $reservation->early_departure_penalty_amount
                     : null,
                 'early_departure_reason' => $reservation->early_departure_reason,
+                'no_show_at' => $reservation->no_show_at?->toIso8601String(),
                 'nights' => $reservation->nights,
                 'total_amount' => $roomCharge,
                 'currency' => ReservationMoney::currency($reservation),
@@ -1898,6 +1899,85 @@ class ReservationController extends Controller
         $reservation->update(['status' => 'cancelled']);
 
         return back()->with('success', 'Rezervimi u anulua.');
+    }
+
+    /**
+     * Mark an overdue arrival as a NO-SHOW: status becomes 'cancelled' (which
+     * frees the room and pushes availability through the existing observer)
+     * plus the no_show_at/no_show_by stamps that keep no-shows separate from
+     * real cancellations in every report. For OTA bookings the commission
+     * waiver is the desk's extranet step — Lora only records the fact.
+     */
+    public function markNoShow(Reservation $reservation): RedirectResponse
+    {
+        if (! in_array($reservation->status, ['pending', 'confirmed'], true)) {
+            throw ValidationException::withMessages([
+                'no_show' => 'Vetëm rezervimet aktive të pa-futura mund të shënohen no-show.',
+            ]);
+        }
+
+        $hotelTimezone = app(TenantContext::class)->tenant()?->timezone ?: config('app.timezone');
+        if ($reservation->check_in_date?->toDateString() >= CarbonImmutable::today($hotelTimezone)->toDateString()) {
+            throw ValidationException::withMessages([
+                'no_show' => 'No-show shënohet vetëm pasi data e mbërritjes të ketë kaluar.',
+            ]);
+        }
+
+        $reservation->update([
+            'status' => 'cancelled',
+            'no_show_at' => now(),
+            'no_show_by' => auth()->id(),
+        ]);
+
+        AuditLog::record('reservation.no_show', $reservation, [
+            'channel' => $reservation->channel,
+            'check_in_date' => $reservation->check_in_date?->toDateString(),
+        ]);
+
+        return back()->with('success', 'Rezervimi u shënua no-show — dhoma u lirua.');
+    }
+
+    /**
+     * Undo a no-show mark. Restores 'confirmed' ONLY if the room is still free
+     * for the stay — it may have been resold since (the calendar-Zhbëj rule:
+     * every undo re-validates, never blindly reverses).
+     */
+    public function undoNoShow(Reservation $reservation): RedirectResponse
+    {
+        if (! $reservation->no_show_at) {
+            throw ValidationException::withMessages([
+                'no_show' => 'Ky rezervim nuk është i shënuar no-show.',
+            ]);
+        }
+
+        try {
+            DB::transaction(function () use ($reservation) {
+                Room::query()->whereKey($reservation->room_id)->lockForUpdate()->first();
+
+                if (! Reservation::isRoomAvailable(
+                    $reservation->room_id,
+                    $reservation->check_in_date->toDateString(),
+                    $reservation->check_out_date->toDateString(),
+                    $reservation->id,
+                )) {
+                    throw new \RuntimeException('unavailable');
+                }
+
+                $reservation->update([
+                    'status' => 'confirmed',
+                    'no_show_at' => null,
+                    'no_show_by' => null,
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            throw ValidationException::withMessages([
+                'no_show' => 'Dhoma u zu ndërkohë — zhvendos rezervimin në një dhomë tjetër përpara rikthimit.',
+            ]);
+        }
+
+        AuditLog::record('reservation.no_show_undone', $reservation);
+
+        return back()->with('success', 'Shënimi no-show u hoq — rezervimi u rikthye.');
     }
 
     public function destroy(Reservation $reservation): RedirectResponse

@@ -360,6 +360,10 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         // Front desk asks housekeeping for a stayover (daily) clean while the guest is in-house.
         Route::post('/reservations/{reservation}/request-cleaning', [ReservationController::class, 'requestCleaning'])->middleware(['module:housekeeping', 'permission:update_reservations'])->name('reservations.request-cleaning');
         Route::post('/reservations/{reservation}/cancel', [ReservationController::class, 'cancel'])->middleware('permission:update_reservations')->name('reservations.cancel');
+        // No-show: cancelled + stamp (frees the room, keeps metrics honest);
+        // the undo re-validates availability — the room may have been resold.
+        Route::post('/reservations/{reservation}/no-show', [ReservationController::class, 'markNoShow'])->middleware('permission:update_reservations')->name('reservations.no-show');
+        Route::post('/reservations/{reservation}/no-show/undo', [ReservationController::class, 'undoNoShow'])->middleware('permission:update_reservations')->name('reservations.no-show.undo');
         Route::post('/reservations/{reservation}/move-room', [ReservationController::class, 'moveRoom'])->middleware('permission:update_reservations')->name('reservations.move-room');
         // Calendar drag-onto-a-bar: atomic two-way room swap ({other} binds
         // through the same tenant scope, so a foreign reservation 404s).
