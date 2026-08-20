@@ -6822,7 +6822,9 @@
     "learnTitle": "Lora didn't know this one",
     "learnBody": "Save your answer to Questions & Answers so Lora can reply on her own next time.",
     "learnSave": "Save to FAQ",
-    "learnDismiss": "Dismiss"
+    "learnDismiss": "Dismiss",
+    "failedTitle": "Lora couldn't reply here",
+    "failedBody": "The automatic reply failed after several attempts — the guest is waiting. Reply yourself, or wait for their next message so Lora can try again."
   },
   "faqTab": {
     "title": "Questions & Answers for Lora AI",

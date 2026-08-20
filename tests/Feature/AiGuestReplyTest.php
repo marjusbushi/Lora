@@ -757,4 +757,83 @@ class AiGuestReplyTest extends TestCase
 
         $this->assertNull($thread->refresh()->ai_suggestion);
     }
+
+    public function test_failed_job_writes_a_visible_audit_trail_with_the_correct_tenant(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+
+        // failed() ekzekutohet nga worker-i JASHTË middleware-it — pa kontekst.
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException(str_repeat('Gemini 400 INVALID_ARGUMENT thought_signature ', 12)));
+        app(TenantContext::class)->set($this->tenant);
+
+        $audit = \App\Models\AuditLog::query()->where('action', 'message.ai_reply_failed')->sole();
+        $this->assertSame($this->tenant->id, $audit->tenant_id);
+        $this->assertSame(MessageThread::class, $audit->subject_type);
+        $this->assertSame($thread->id, $audit->subject_id);
+        $this->assertSame('ai', $audit->source);
+        $this->assertSame($message->id, $audit->properties['message_id']);
+        $this->assertSame(300, mb_strlen($audit->properties['error']));
+    }
+
+    public function test_failed_after_a_newer_human_or_guest_message_writes_no_stale_alarm(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+
+        // Stafi NJERËZOR u përgjigj ndërsa ky job dështonte — alarm fals jo.
+        $thread->messages()->create([
+            'sender' => Message::SENDER_HOST,
+            'sent_by_ai' => false,
+            'body' => 'U përgjigja vetë.',
+            'sent_at' => now(),
+        ]);
+
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('late failure'));
+        app(TenantContext::class)->set($this->tenant);
+
+        $this->assertSame(0, \App\Models\AuditLog::query()->where('action', 'message.ai_reply_failed')->count());
+    }
+
+    public function test_failed_still_alarms_when_only_a_racing_ai_reply_is_newer(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+
+        // Përgjigje AI e një job-i të VJETËR garues — mund të mos i jetë
+        // përgjigjur fare mesazhit tonë; alarmi DUHET të mbetet (Codex #502).
+        $thread->messages()->create([
+            'sender' => Message::SENDER_HOST,
+            'sent_by_ai' => true,
+            'body' => 'Përgjigje e vonuar e një job-i të vjetër.',
+            'sent_at' => now(),
+        ]);
+
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('late failure'));
+        app(TenantContext::class)->set($this->tenant);
+
+        $this->assertSame(1, \App\Models\AuditLog::query()->where('action', 'message.ai_reply_failed')->count());
+    }
+
+    public function test_failed_without_a_valid_tenant_writes_nothing_anywhere(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+
+        app(TenantContext::class)->clear();
+
+        // Payload i korruptuar: pa tenant të kapur — asnjë fallback.
+        $job->tenantId = null;
+        $job->failed(new \RuntimeException('boom'));
+
+        // Tenant inekzistent — po ashtu asgjë (dhe kurrë te një tenant tjetër).
+        $job->tenantId = 999999;
+        $job->failed(new \RuntimeException('boom'));
+
+        app(TenantContext::class)->set($this->tenant);
+        $this->assertSame(0, \App\Models\AuditLog::query()->where('action', 'message.ai_reply_failed')->count());
+    }
 }
