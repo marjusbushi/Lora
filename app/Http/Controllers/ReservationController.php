@@ -78,6 +78,8 @@ class ReservationController extends Controller
             $query->where('status', $request->status);
         }
 
+        $attention = $request->input('attention') === 'no_show' ? 'no_show' : null;
+
         // Reservation stays use a half-open interval [check-in, check-out).
         // The selected "to" date is inclusive for the user, so a stay checking
         // in on that date is included while one checking out on "from" is not.
@@ -112,6 +114,14 @@ class ReservationController extends Controller
         }
 
         $today = $this->hotelToday();
+
+        // Mirrors the dashboard's "mundësi no-show" count exactly — the card's
+        // badge and this filtered list must always agree.
+        if ($attention === 'no_show') {
+            $query->whereIn('status', ['pending', 'confirmed'])
+                ->whereNull('no_show_at')
+                ->whereDate('check_in_date', '<', $today);
+        }
 
         if ($sort === 'checkin') {
             $query
@@ -167,6 +177,9 @@ class ReservationController extends Controller
             'per_page' => $perPage,
             'sort' => $sort,
         ]);
+        if ($attention !== null) {
+            $filters['attention'] = $attention;
+        }
 
         $reservations = $query->paginate($perPage)->appends($filters)
             ->through(fn (Reservation $reservation) => $this->reservationListRow($reservation, $request));
