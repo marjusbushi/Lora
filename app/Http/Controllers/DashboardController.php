@@ -438,21 +438,18 @@ class DashboardController extends Controller
                 ->whereIn('status', ['pending', 'confirmed'])
                 ->whereNull('no_show_at')
                 ->whereDate('check_in_date', '<', $today);
-            $noShows = (clone $noShowQuery)->count();
+            $noShows = $noShowQuery->count();
             if ($noShows > 0) {
-                $noShowFrom = (clone $noShowQuery)->min('check_in_date');
                 $actions->push([
                     'type' => 'no_show',
                     'level' => 'warning',
                     'count' => $noShows,
                     'title' => "{$noShows} mundësi no-show",
-                    'detail' => 'Rezervime të pakontrolluara me hyrje të kaluar.',
-                    'href' => $permissions['view_financials']
-                        ? route('reports.cancellations', [
-                            'from' => substr((string) $noShowFrom, 0, 10),
-                            'to' => $today->copy()->subDay()->toDateString(),
-                        ])
-                        : route('reservations.index', ['sort' => 'checkin']),
+                    'detail' => 'Rezervime të pakontrolluara me hyrje të kaluar — hapi dhe shëno No-Show.',
+                    'href' => route('reservations.index', [
+                        'attention' => 'no_show',
+                        'sort' => 'checkin',
+                    ]),
                     'cta' => 'Kontrollo',
                 ]);
             }
