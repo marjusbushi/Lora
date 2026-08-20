@@ -29,6 +29,11 @@ class OtaReservationReconciliationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Koha e NGRIRË: helper-ët përdorin data të ngurtësuara (10-13 gusht 2026)
+        // dhe reconciler-i kapërcen qëndrimet me departure < sot-7 ditë — më
+        // 2026-08-21 e gjithë suita shpërtheu (checked=0). Me kohë të fiksuar
+        // datat literale mbeten koherente në çdo ditë reale ekzekutimi.
+        $this->travelTo('2026-08-12 12:00:00');
         Queue::fake();
         Http::preventStrayRequests();
         config([
