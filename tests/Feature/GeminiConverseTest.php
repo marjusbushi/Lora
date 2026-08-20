@@ -162,6 +162,47 @@ class GeminiConverseTest extends TestCase
         $this->assertSame(['balance' => 50.0], $parts[1]['functionResponse']['response']);
     }
 
+    public function test_premature_final_in_a_mixed_turn_is_rejected_and_tools_still_run(): void
+    {
+        Http::fakeSequence('generativelanguage.googleapis.com/*')
+            ->push($this->functionCallResponse([
+                [
+                    'functionCall' => ['name' => 'guest_reply', 'args' => ['confident' => true, 'reply' => 'Çmimi 999 EUR.', 'kind' => 'informative'], 'id' => 'call_early'],
+                    'thoughtSignature' => 'SIG-EARLY',
+                ],
+                [
+                    'functionCall' => ['name' => 'check_availability', 'args' => ['check_in' => '2026-08-28', 'check_out' => '2026-08-30'], 'id' => 'call_tool'],
+                ],
+            ]))
+            ->push($this->finalReplyResponse());
+
+        $executed = false;
+        $result = app(GeminiClient::class)->converse(
+            'SYSTEM',
+            'MYSAFIRI: 28-30 gusht, 2 persona',
+            self::TOOLS,
+            ['check_availability' => function (array $args) use (&$executed): array {
+                $executed = true;
+
+                return ['stay_total' => 190.0];
+            }],
+            'guest_reply',
+        );
+
+        // Finalja e parakohshme NUK pranohet — mjeti ekzekutohet dhe përgjigja
+        // e vërtetë vjen nga raundi pasues, e ankoruar në rezultatet e mjetit.
+        $this->assertTrue($executed);
+        $this->assertSame(['check_availability'], $result['toolsUsed']);
+        $this->assertSame('Totali 190 EUR.', $result['args']['reply']);
+
+        $parts = collect(Http::recorded())->last()[0]->data()['contents'][2]['parts'];
+        $this->assertCount(2, $parts);
+        $this->assertSame('call_early', $parts[0]['functionResponse']['id']);
+        $this->assertArrayHasKey('error', $parts[0]['functionResponse']['response']);
+        $this->assertSame('call_tool', $parts[1]['functionResponse']['id']);
+        $this->assertSame(['stay_total' => 190.0], $parts[1]['functionResponse']['response']);
+    }
+
     public function test_function_response_omits_id_when_the_model_sent_none(): void
     {
         Http::fakeSequence('generativelanguage.googleapis.com/*')

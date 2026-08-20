@@ -123,9 +123,16 @@ class GeminiClient
             $allowed = $round === $maxToolRounds ? [$finalToolName] : $allNames;
             $turn = $this->generate($system, $contents, $functions, $allowed, $maxTokens, $remaining);
 
-            foreach ($turn['calls'] as $call) {
-                if ($call['name'] === $finalToolName) {
-                    return ['args' => $call['args'], 'toolsUsed' => $toolsUsed];
+            // Finalja pranohet VETËM si thirrje e vetme e radhës (ose kur raundi
+            // lejon vetëm finalen). Në një radhë të përzier — guest_reply paralel
+            // me një mjet — pranimi i menjëhershëm do të kthente toolsUsed/quotes
+            // bosh dhe porta e besimit (me FAQ aktive) mund ta dërgonte një
+            // përgjigje me shifra të paverifikuara (gjetje Codex, PR #494).
+            if (count($turn['calls']) === 1 || $allowed === [$finalToolName]) {
+                foreach ($turn['calls'] as $call) {
+                    if ($call['name'] === $finalToolName) {
+                        return ['args' => $call['args'], 'toolsUsed' => $toolsUsed];
+                    }
                 }
             }
 
@@ -136,14 +143,22 @@ class GeminiClient
             // në çdo mesazh që kërkonte mjet (task #379).
             $contents[] = $turn['content'];
 
+            // ÇDO thirrje e radhës merr functionResponse-in e vet, në të njëjtin
+            // rend — API-ja pret përgjigje për të gjitha thirrjet paralele. Një
+            // finale e parakohshme brenda radhës së përzier refuzohet me gabim,
+            // që modeli ta ri-dërgojë të ankoruar në rezultatet e mjeteve.
             $parts = [];
             foreach ($turn['calls'] as $call) {
-                $runner = $executors[$call['name']] ?? null;
-                $result = $runner
-                    ? $runner($call['args'])
-                    : ['error' => 'Mjet i panjohur.'];
+                if ($call['name'] === $finalToolName) {
+                    $result = ['error' => 'Përfundo së pari raundin e mjeteve; dërgoje '.$finalToolName.' si thirrje të vetme, të bazuar në rezultatet e mjeteve.'];
+                } else {
+                    $runner = $executors[$call['name']] ?? null;
+                    $result = $runner
+                        ? $runner($call['args'])
+                        : ['error' => 'Mjet i panjohur.'];
+                    $toolsUsed[] = $call['name'];
+                }
 
-                $toolsUsed[] = $call['name'];
                 $response = ['name' => $call['name'], 'response' => $result ?: new \stdClass];
                 if (isset($call['id'])) {
                     $response['id'] = $call['id'];
