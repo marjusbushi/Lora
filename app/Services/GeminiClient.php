@@ -173,11 +173,11 @@ class GeminiClient
 
     /**
      * One generateContent round that MUST return at least one function call among
-     * $allowedNames. Returns the model's content VERBATIM (so thoughtSignature/id
-     * survive the round-trip — the API rejects reconstructed history with 400)
-     * plus the extracted calls in order.
+     * $allowedNames. Returns the model's content VERBATIM as decoded objects (so
+     * thoughtSignature/id and empty-object args survive the round-trip — the API
+     * rejects reconstructed history with 400) plus the extracted calls in order.
      *
-     * @return array{content:array<string,mixed>,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>}
+     * @return array{content:\stdClass,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>}
      */
     private function generate(string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, int $timeoutSeconds): array
     {
@@ -212,7 +212,7 @@ class GeminiClient
         foreach ($res->json('candidates.0.content.parts', []) as $part) {
             $call = $part['functionCall'] ?? null;
             if ($call && in_array($call['name'] ?? null, $allowedNames, true)) {
-                $extracted = ['name' => $call['name'], 'args' => $call['args'] ?? []];
+                $extracted = ['name' => $call['name'], 'args' => (array) ($call['args'] ?? [])];
                 if (isset($call['id'])) {
                     $extracted['id'] = (string) $call['id'];
                 }
@@ -221,7 +221,13 @@ class GeminiClient
         }
 
         if ($calls !== []) {
-            return ['content' => $res->json('candidates.0.content'), 'calls' => $calls];
+            // Content-i që i kthehet API-së dekodohet si OBJEKTE (stdClass), jo
+            // arrays: një mjet pa parametra vjen me `args: {}` dhe dekodimi në
+            // array do ta ri-enkodonte si `[]` — functionCall.args duhet të jetë
+            // objekt JSON, ndryshe raundi i jehonës kthen 400 (gjetje Codex).
+            $content = json_decode((string) $res->body())->candidates[0]->content;
+
+            return ['content' => $content, 'calls' => $calls];
         }
 
         // No function call came back. The usual cause is the thinking budget eating the

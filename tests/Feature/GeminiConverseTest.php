@@ -100,7 +100,7 @@ class GeminiConverseTest extends TestCase
             ->push($this->functionCallResponse($modelParts))
             ->push($this->finalReplyResponse());
 
-        $quote = ['currency' => 'EUR', 'nights' => 2, 'stay_total' => 190.0];
+        $quote = ['currency' => 'EUR', 'nights' => 2, 'stay_total' => 190.5];
         $result = app(GeminiClient::class)->converse(
             'SYSTEM',
             'MYSAFIRI: 28-30 gusht, 2 persona',
@@ -112,9 +112,9 @@ class GeminiConverseTest extends TestCase
         $this->assertSame(['check_availability'], $result['toolsUsed']);
         $this->assertSame('Totali 190 EUR.', $result['args']['reply']);
 
-        $second = collect(Http::recorded())->last()[0]->data();
-
-        // Radha e modelit kthehet VERBATIM — me thoughtSignature dhe id.
+        // Forma e telit (raw body i dekoduar): radha e modelit kthehet
+        // VERBATIM — me thoughtSignature dhe id.
+        $second = json_decode((string) collect(Http::recorded())->last()[0]->body(), true);
         $this->assertSame(['role' => 'model', 'parts' => $modelParts], $second['contents'][1]);
 
         // functionResponse mban id-në e thirrjes që i përket.
@@ -203,6 +203,31 @@ class GeminiConverseTest extends TestCase
         $this->assertSame(['stay_total' => 190.0], $parts[1]['functionResponse']['response']);
     }
 
+    public function test_zero_argument_tool_call_keeps_args_as_a_json_object_on_the_wire(): void
+    {
+        Http::fakeSequence('generativelanguage.googleapis.com/*')
+            ->push($this->functionCallResponse([[
+                'functionCall' => ['name' => 'get_thread_reservation', 'args' => new \stdClass, 'id' => 'call_res'],
+                'thoughtSignature' => 'SIG-RES',
+            ]]))
+            ->push($this->finalReplyResponse());
+
+        app(GeminiClient::class)->converse(
+            'SYSTEM',
+            'MYSAFIRI: sa kam për të paguar?',
+            self::TOOLS,
+            ['get_thread_reservation' => fn (array $args): array => ['balance' => 50.0]],
+            'guest_reply',
+        );
+
+        // Forma e telit, jo struktura e dekoduar: `args` duhet të mbetet `{}`
+        // (objekt JSON) — dekodimi array do ta bënte `[]` dhe API-ja kthen 400.
+        $rawBody = (string) collect(Http::recorded())->last()[0]->body();
+        $this->assertStringContainsString('"args":{}', $rawBody);
+        $this->assertStringNotContainsString('"args":[]', $rawBody);
+        $this->assertStringContainsString('"thoughtSignature":"SIG-RES"', $rawBody);
+    }
+
     public function test_function_response_omits_id_when_the_model_sent_none(): void
     {
         Http::fakeSequence('generativelanguage.googleapis.com/*')
@@ -269,5 +294,47 @@ class GeminiConverseTest extends TestCase
         $this->assertContains('check_availability', $result['toolsUsed']);
         $this->assertNotSame('', trim((string) $result['args']['reply']));
         $this->assertStringContainsString('190', $result['args']['reply']);
+    }
+
+    /**
+     * Rruga me mjet PA parametra kundër API-së reale — modeli dërgon `args: {}`
+     * dhe jehona duhet ta ruajë si objekt JSON (kategoria e dytë e 400-ës).
+     * Ekzekutohet vetëm me GEMINI_REAL_API=1 (shih testin më lart).
+     */
+    #[Group('real-api')]
+    public function test_real_api_completes_a_zero_argument_tool_round(): void
+    {
+        $key = (string) env('GEMINI_API_KEY', env('GOOGLE_API_KEY'));
+        if ($key === '' || ! env('GEMINI_REAL_API')) {
+            $this->markTestSkipped('Kërkon GEMINI_API_KEY dhe GEMINI_REAL_API=1 (thirrje e paguar kundër API-së reale).');
+        }
+
+        Http::allowStrayRequests();
+        config()->set('services.gemini.key', $key);
+        config()->set('services.gemini.model', 'gemini-flash-latest');
+
+        $result = app(GeminiClient::class)->converse(
+            'Je Lora, recepsionistja e hotelit. Kur mysafiri pyet për rezervimin e tij (datat, pagesën, bilancin), thirr get_thread_reservation dhe përgjigju vetëm me të dhënat e mjetit. Mbylle me guest_reply.',
+            "BISEDA:\nMYSAFIRI: Sa kam mbetur për të paguar nga rezervimi im?",
+            self::TOOLS,
+            [
+                'check_availability' => fn (array $args): array => ['error' => 'Jo për këtë pyetje.'],
+                'get_thread_reservation' => fn (array $args): array => [
+                    'guest_first_name' => 'Andi',
+                    'check_in' => '2026-08-28',
+                    'check_out' => '2026-08-30',
+                    'currency' => 'EUR',
+                    'total' => 190.0,
+                    'paid' => 140.0,
+                    'balance' => 50.0,
+                ],
+            ],
+            'guest_reply',
+            1024,
+            75,
+        );
+
+        $this->assertContains('get_thread_reservation', $result['toolsUsed']);
+        $this->assertStringContainsString('50', $result['args']['reply']);
     }
 }
