@@ -426,6 +426,8 @@ function statusLabel(s) {
                             <span class="min-w-0 flex-1">
                                 <span class="flex items-center gap-2">
                                     <span class="truncate text-[13px] font-semibold tracking-tight text-neutral-900">{{ t.guest_name }}</span>
+                                    <!-- Dështim AI aktiv: mysafiri i kësaj bisede pret pa përgjigje -->
+                                    <span v-if="t.ai_failed" class="shrink-0 text-[11px]" :title="$t('messagesAi.failedTitle')">⚠️</span>
                                     <span class="ml-auto shrink-0 text-[10.5px] text-neutral-400">{{ time(t.last_message_at) }}</span>
                                 </span>
                                 <span class="mt-0.5 flex items-center gap-2">

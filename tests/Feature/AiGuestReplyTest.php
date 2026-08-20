@@ -777,6 +777,27 @@ class AiGuestReplyTest extends TestCase
         $this->assertSame(300, mb_strlen($audit->properties['error']));
     }
 
+    public function test_failed_after_a_newer_message_writes_no_stale_alarm(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+
+        // Ndërsa ky job dështonte, dikush tjetër u përgjigj (ose erdhi mesazh
+        // i ri) — dështimi i vonuar s'guxon të ngrejë alarm fals (Codex #501).
+        $thread->messages()->create([
+            'sender' => Message::SENDER_HOST,
+            'sent_by_ai' => true,
+            'body' => 'E mori përgjigjen një job më i ri.',
+            'sent_at' => now(),
+        ]);
+
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('late failure'));
+        app(TenantContext::class)->set($this->tenant);
+
+        $this->assertSame(0, \App\Models\AuditLog::query()->where('action', 'message.ai_reply_failed')->count());
+    }
+
     public function test_failed_without_a_valid_tenant_writes_nothing_anywhere(): void
     {
         [$thread, $message] = $this->makeThreadWithGuestMessage();

@@ -34,6 +34,11 @@ class MessagesController extends Controller
             ->orderByDesc('id')
             ->get();
 
+        // Dështimet e Lora-s duken edhe në LISTË, jo vetëm te biseda e hapur
+        // (gjetje Codex, PR #501) — ndryshe operatori me inbox të hapur s'e
+        // mëson kurrë që një mysafir në bisedë tjetër po pret pa përgjigje.
+        $aiFailedThreadIds = $this->threadsWithActiveAiFailure($threads);
+
         $selectedId = $request->integer('thread') ?: $threads->first()?->id;
         $selected = null;
 
@@ -98,10 +103,44 @@ class MessagesController extends Controller
                 'last_message_at' => $t->last_message_at?->toIso8601String(),
                 'unread' => $t->unread_count,
                 'status' => $t->status,
+                'ai_failed' => in_array($t->id, $aiFailedThreadIds, true),
             ]),
             'selected' => $selected,
             'quickReplies' => $this->quickReplies(),
         ]);
+    }
+
+    /**
+     * ID-të e bisedave me dështim AI ende AKTIV (auditi i fundit i dështimit
+     * më i ri se mesazhi i fundit i bisedës) — një query e vetme për gjithë
+     * listën, e njëjta semantikë si aiFailure() e bisedës së hapur.
+     *
+     * @param  \Illuminate\Database\Eloquent\Collection<int, MessageThread>  $threads
+     * @return array<int, int>
+     */
+    private function threadsWithActiveAiFailure($threads): array
+    {
+        if ($threads->isEmpty()) {
+            return [];
+        }
+
+        return \App\Models\AuditLog::query()
+            ->where('action', 'message.ai_reply_failed')
+            ->where('subject_type', MessageThread::class)
+            ->whereIn('subject_id', $threads->pluck('id'))
+            ->orderByDesc('id')
+            ->get(['subject_id', 'created_at'])
+            ->unique('subject_id')
+            ->filter(function ($audit) use ($threads) {
+                // Pa last_message_at s'ka bisedë reale — bie drejt PA shenje.
+                $thread = $threads->firstWhere('id', $audit->subject_id);
+
+                return $thread
+                    && $thread->last_message_at
+                    && $audit->created_at->gt($thread->last_message_at);
+            })
+            ->pluck('subject_id')
+            ->all();
     }
 
     /**

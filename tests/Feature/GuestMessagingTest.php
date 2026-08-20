@@ -198,7 +198,7 @@ class GuestMessagingTest extends TestCase
         app(TenantRoleService::class)->provision($home);
         $context->set($home);
 
-        $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net']);
+        $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net', 'last_message_at' => now()->subMinutes(10)]);
         $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
         \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => 1, 'error' => 'Gemini 429'], 'ai');
 
@@ -211,7 +211,9 @@ class GuestMessagingTest extends TestCase
             ->get(route('messages.index', ['thread' => $thread->id]))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('selected.ai_failure.error', 'Gemini 429'));
+                ->where('selected.ai_failure.error', 'Gemini 429')
+                // Edhe LISTA e mban shenjën — jo vetëm biseda e hapur.
+                ->where('threads.0.ai_failed', true));
     }
 
     public function test_ai_failure_banner_disappears_once_anyone_answers_after_it(): void
@@ -221,7 +223,7 @@ class GuestMessagingTest extends TestCase
         app(TenantRoleService::class)->provision($home);
         $context->set($home);
 
-        $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL-2', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net']);
+        $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL-2', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net', 'last_message_at' => now()->addMinute()]);
         $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
         \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => 1, 'error' => 'Gemini 429'], 'ai');
         // Stafi iu përgjigj mysafirit PAS dështimit — alarmi s'ka më punë.
@@ -236,7 +238,8 @@ class GuestMessagingTest extends TestCase
             ->get(route('messages.index', ['thread' => $thread->id]))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('selected.ai_failure', null));
+                ->where('selected.ai_failure', null)
+                ->where('threads.0.ai_failed', false));
     }
 
     public function test_reply_sends_to_channex_and_stores_a_host_message(): void

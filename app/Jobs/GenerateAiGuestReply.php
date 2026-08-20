@@ -680,6 +680,14 @@ PROMPT;
                 return;
             }
 
+            // Një job i vonuar i tejkaluar s'guxon të shkruajë dështim FALS
+            // (gjetje Codex, PR #501): çdo mesazh më i ri se i yni do të thotë
+            // ose që dikush u përgjigj, ose që një përpjekje e re është në
+            // radhë — në të dy rastet ky dështim s'ka më rëndësi për panelin.
+            if ($thread->messages()->reorder()->where('id', '>', $this->messageId)->exists()) {
+                return;
+            }
+
             AuditLog::record('message.ai_reply_failed', $thread, [
                 'message_id' => $this->messageId,
                 'error' => mb_substr($e?->getMessage() ?: 'Dështim i panjohur.', 0, 300),
