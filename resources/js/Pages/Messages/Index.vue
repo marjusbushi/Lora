@@ -426,6 +426,8 @@ function statusLabel(s) {
                             <span class="min-w-0 flex-1">
                                 <span class="flex items-center gap-2">
                                     <span class="truncate text-[13px] font-semibold tracking-tight text-neutral-900">{{ t.guest_name }}</span>
+                                    <!-- Dështim AI aktiv: mysafiri i kësaj bisede pret pa përgjigje -->
+                                    <span v-if="t.ai_failed" class="shrink-0 text-[11px]" :title="$t('messagesAi.failedTitle')">⚠️</span>
                                     <span class="ml-auto shrink-0 text-[10.5px] text-neutral-400">{{ time(t.last_message_at) }}</span>
                                 </span>
                                 <span class="mt-0.5 flex items-center gap-2">
@@ -505,6 +507,15 @@ function statusLabel(s) {
                                 class="rounded-lg bg-[#15855c] px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-[#0c5a3e]">{{ $t('admin.generated.k_08ec770c051b') }}</button>
                         </div>
                         <template v-else-if="selected.can_reply">
+                            <!-- Dështimi i Lora-s (task #372): mysafiri pret pa përgjigje — alarm i qartë, jo heshtje -->
+                            <div v-if="selected?.ai_failure" class="border-t border-amber-200 bg-amber-50 px-3 py-2.5">
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-amber-700">⚠️ {{ $t('messagesAi.failedTitle') }}</p>
+                                <p class="mt-1 text-[12.5px] leading-relaxed text-amber-900">{{ $t('messagesAi.failedBody') }}</p>
+                                <p v-if="selected.ai_failure.error" class="mt-0.5 truncate text-[11px] text-amber-700/80" :title="selected.ai_failure.error">
+                                    {{ selected.ai_failure.error }}
+                                </p>
+                            </div>
+
                             <!-- Cikli i mësimit: stafi u përgjigj vetë — ruaje çiftin te FAQ -->
                             <div v-if="selected?.faq_suggestion && canManageFaqs" class="border-t border-[#dcd2f2] bg-[#f7f4fd] px-3 py-2.5">
                                 <p class="text-[10px] font-bold uppercase tracking-wide text-[#6d4fc1]">✨ {{ $t('messagesAi.learnTitle') }}</p>
