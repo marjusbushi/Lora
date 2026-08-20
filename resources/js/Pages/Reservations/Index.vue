@@ -78,6 +78,7 @@ const dateFrom = ref(props.filters?.date_from || '');
 const dateTo = ref(props.filters?.date_to || '');
 const perPage = ref(Number(props.filters?.per_page || props.reservations?.per_page || 25));
 const sortBy = ref(props.filters?.sort || 'latest');
+const attentionFilter = ref(props.filters?.attention || '');
 
 // The card displays in the selling currency (Monedha e çmimeve). Rows already
 // in that currency are summed exactly; rows in another currency are converted
@@ -112,6 +113,7 @@ function listParams() {
         date_to: dateTo.value || undefined,
         per_page: Number(perPage.value),
         sort: sortBy.value,
+        attention: attentionFilter.value || undefined,
     }).filter(([, value]) => value !== undefined && value !== ''));
 }
 let searchDebounce = null;
@@ -137,6 +139,11 @@ function clearFilters() {
     searchQuery.value = '';
     dateFrom.value = '';
     dateTo.value = '';
+    attentionFilter.value = '';
+    applyFilters();
+}
+function clearAttention() {
+    attentionFilter.value = '';
     applyFilters();
 }
 function goToPage(url) {
@@ -249,6 +256,7 @@ watch(() => props.filters, (filters) => {
     dateTo.value = filters?.date_to || '';
     perPage.value = Number(filters?.per_page || props.reservations?.per_page || 25);
     sortBy.value = filters?.sort || 'latest';
+    attentionFilter.value = filters?.attention || '';
 });
 watch(() => props.focusReservation, (reservation) => { if (reservation) details.value = reservation; });
 onMounted(() => window.addEventListener('popstate', onPopState));
@@ -332,8 +340,16 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                     </div>
                     <div class="flex items-center gap-3 lg:ml-auto">
                         <Button variant="outline" @click="applyFilters"><SlidersHorizontal class="mr-2 h-4 w-4" />{{ $t('reservationsIndex.filter') }}</Button>
-                        <button v-if="filterStatus || searchQuery || dateFrom || dateTo" type="button" class="text-small font-semibold text-accent-700 hover:text-accent-800" @click="clearFilters">{{ $t('reservationsIndex.clear') }}</button>
+                        <button v-if="filterStatus || searchQuery || dateFrom || dateTo || attentionFilter" type="button" class="text-small font-semibold text-accent-700 hover:text-accent-800" @click="clearFilters">{{ $t('reservationsIndex.clear') }}</button>
                     </div>
+                </div>
+
+                <div v-if="attentionFilter === 'no_show'" class="flex flex-col gap-2 rounded-xl border border-warning-200 bg-warning-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                    <p class="flex min-w-0 items-center gap-2 text-body-sm text-warning-800">
+                        <AlertTriangle class="h-4 w-4 shrink-0" />
+                        <span>{{ $t('reservationsIndex.attentionNoShow') }}</span>
+                    </p>
+                    <button type="button" class="shrink-0 self-start text-small font-semibold text-warning-800 underline-offset-2 hover:underline sm:self-auto" @click="clearAttention">{{ $t('reservationsIndex.attentionClear') }}</button>
                 </div>
             </div>
 

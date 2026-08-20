@@ -305,8 +305,11 @@ class DashboardLoadsTest extends TestCase
         $this->assertNotEmpty($noShow['detail']);
         $this->assertStringContainsString('2', $noShow['title'].' '.$noShow['detail']);
 
-        $reportProps = $this->props($this->actingAs($admin)->get($noShow['href'])->assertOk());
-        $this->assertSame(2, $reportProps['summary']['no_show_count']);
+        // The href lands on the reservations list filtered to exactly the
+        // counted candidates (attention=no_show), not the cancellations report.
+        $listProps = $this->props($this->actingAs($admin)->get($noShow['href'])->assertOk());
+        $this->assertSame('no_show', $listProps['filters']['attention']);
+        $this->assertSame(2, $listProps['reservations']['total']);
     }
 
     public function test_collected_today_uses_settlement_or_legacy_completion_date_not_creation_or_room_charge(): void

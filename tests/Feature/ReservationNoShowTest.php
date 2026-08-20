@@ -12,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 /**
@@ -155,6 +156,39 @@ class ReservationNoShowTest extends TestCase
 
         $this->actingAs($this->admin)->post(route('reservations.no-show.undo', $plain))
             ->assertSessionHasErrors(['no_show']);
+    }
+
+    public function test_attention_filter_lists_exactly_the_dashboard_candidates(): void
+    {
+        $overdueConfirmed = $this->reservation($this->room('801'), '2026-08-18', '2026-08-21');
+        $overduePending = $this->reservation($this->room('802'), '2026-08-19', '2026-08-22', 'pending');
+        $this->reservation($this->room('803'), '2026-08-20', '2026-08-23'); // arrival today — not yet
+        $this->reservation($this->room('804'), '2026-08-18', '2026-08-22', 'checked_in');
+        $marked = $this->reservation($this->room('805'), '2026-08-17', '2026-08-19');
+        $this->actingAs($this->admin)->post(route('reservations.no-show', $marked));
+
+        $this->actingAs($this->admin)
+            ->get(route('reservations.index', ['attention' => 'no_show']))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Reservations/Index')
+                ->where('filters.attention', 'no_show')
+                ->where('reservations.total', 2)
+                ->where('reservations.data', fn ($rows) => collect($rows)->pluck('id')->sort()->values()->all()
+                    === collect([$overdueConfirmed->id, $overduePending->id])->sort()->values()->all()));
+    }
+
+    public function test_dashboard_card_links_to_the_filtered_list(): void
+    {
+        $this->reservation($this->room('901'), '2026-08-18', '2026-08-21');
+
+        $this->actingAs($this->admin)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('actions', fn ($actions) => collect($actions)
+                    ->contains(fn ($action) => ($action['type'] ?? null) === 'no_show'
+                        && str_contains($action['href'], 'attention=no_show'))));
     }
 
     public function test_permission_boundary_holds(): void
