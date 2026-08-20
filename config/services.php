@@ -105,6 +105,10 @@ return [
         // Special partner token required only by POST /register. Tenant API
         // tokens returned by that endpoint remain encrypted per hotel.
         'onboarding_token' => env('FATURE_AL_ONBOARDING_TOKEN'),
+        // Live-environment partner token (solution-provider account on
+        // fature.al). Used ONLY by production onboarding — invoice issuing
+        // stays sandbox-locked in the fiscalization services.
+        'onboarding_token_production' => env('FATURE_AL_ONBOARDING_TOKEN_PRODUCTION'),
         'app_name' => env('FATURE_AL_APP_NAME', 'LoraPMS'),
         'build_version' => env('FATURE_AL_BUILD_VERSION', env('APP_VERSION', 'dev')),
         // Application identity (solution-provider layer, 2026-08): the SAME

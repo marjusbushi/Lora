@@ -34,9 +34,10 @@ class FatureAlOnboardingController extends Controller
     public function register(Request $request, Tenant $tenant, FatureAlOnboardingService $service): RedirectResponse
     {
         $data = $request->validate([
-            // Production fiscalization is intentionally unavailable until the
-            // reservation and POS services support the live provider flow.
-            'environment' => ['required', Rule::in(['sandbox'])],
+            // Onboarding runs on either environment (Renato 2026-08-19).
+            // Invoice ISSUING stays sandbox-locked in the fiscalization
+            // services — a live registration cannot create any invoice.
+            'environment' => ['required', Rule::in(['sandbox', 'production'])],
             'nuis' => ['required', 'string', 'regex:/^[A-Z]\d{8}[A-Z]$/'],
             'name' => ['required', 'string', 'max:255'],
             'address' => ['required', 'string', 'max:255'],
