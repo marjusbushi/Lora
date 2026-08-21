@@ -260,6 +260,37 @@ class BookingGroupTest extends TestCase
         $this->assertSame(2, Reservation::where('status', 'cancelled')->count());
     }
 
+    public function test_reverse_voids_a_soft_deleted_members_payment(): void
+    {
+        $this->configurePok();
+        $this->fakePok(['id' => 'ord_g1', 'isCompleted' => true, 'isCanceled' => false, 'isRefunded' => false, 'finalAmount' => 600, 'currencyCode' => 'EUR']);
+        [$primary, $member] = $this->pendingGroup();
+        app(PokPayments::class)->settle($primary);
+        // Staff soft-deletes the member of the PAID group — its captured payment still exists.
+        $member->fresh()->delete();
+
+        $this->assertTrue(app(PokPayments::class)->reverse($primary->fresh(), 'refund'));
+
+        // The trashed member is reversed too — the ledger never overstates after a full refund.
+        $this->assertSame('cancelled', Reservation::withTrashed()->find($member->id)->status);
+        $this->assertSame(2, Payment::where('is_voided', true)->count());
+    }
+
+    public function test_confirmation_shows_the_group_alive_when_only_the_primary_was_cancelled(): void
+    {
+        [$primary, $member] = $this->pendingGroup();
+        Reservation::whereIn('id', [$primary->id, $member->id])->update(['status' => 'confirmed', 'paid_at' => now()]);
+        // Staff cancels only the PRIMARY room — the guest's sole token still points at it.
+        Reservation::whereKey($primary->id)->update(['status' => 'cancelled']);
+
+        $this->get(route('website.booking.confirmation', $primary->confirmation_token))
+            ->assertOk()
+            ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+                ->where('status', 'confirmed')
+                ->has('reservation.rooms', 1)
+                ->where('reservation.total_amount', 300));
+    }
+
     public function test_confirmation_lists_only_the_rooms_still_held(): void
     {
         [$primary, $member] = $this->pendingGroup();
