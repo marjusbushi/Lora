@@ -22,6 +22,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import { money } from './financeShared.js';
 
 const props = defineProps({
@@ -302,8 +303,8 @@ onBeforeUnmount(() => {
                         <option value="hotel">{{ $t('admin.finance.salesInvoices.hotelSource') }}</option>
                         <option value="pos">{{ $t('admin.finance.salesInvoices.posSource') }}</option>
                     </select>
-                    <input v-model="localFilters.date_from" type="date" :aria-label="$t('admin.finance.salesInvoices.fromDate')" class="h-10 rounded-md border border-neutral-200 bg-white px-3 text-body-sm text-neutral-700 outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-100" @change="applyFilters()">
-                    <input v-model="localFilters.date_to" type="date" :aria-label="$t('admin.finance.salesInvoices.toDate')" class="h-10 rounded-md border border-neutral-200 bg-white px-3 text-body-sm text-neutral-700 outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-100" @change="applyFilters()">
+                    <DatePicker :model-value="localFilters.date_from" :aria-label="$t('admin.finance.salesInvoices.fromDate')" class="w-44" @update:model-value="(v) => { localFilters.date_from = v; applyFilters(); }" />
+                    <DatePicker :model-value="localFilters.date_to" :aria-label="$t('admin.finance.salesInvoices.toDate')" class="w-44" @update:model-value="(v) => { localFilters.date_to = v; applyFilters(); }" />
                     <Button v-if="activeFilterCount" variant="ghost" @click="clearFilters">
                         <X class="h-4 w-4" />
                         {{ $t('admin.finance.salesInvoices.clearFilters') }}
