@@ -273,10 +273,12 @@ class FatureAlIntegrationTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_invoice_issuing_remains_sandbox_locked_even_for_a_production_configured_tenant(): void
+    public function test_invoice_issuing_follows_the_tenants_environment_after_the_live_unlock(): void
     {
-        // The other half of the unlock's safety story: a tenant configured for
-        // production can be REGISTERED, but fiscalizing anything refuses.
+        // Live unlock (Renato, 2026-08-21): a production-configured tenant
+        // fiscalizes against the LIVE API. Manual-only stays true — the two
+        // button endpoints remain the only callers. The old sandbox refusal
+        // is gone; the remaining guards (verified, checked_out, VAT) hold.
         $tenant = Tenant::factory()->create();
         app(TenantContext::class)->run($tenant, fn () => TenantIntegration::query()->create([
             'provider' => 'fature_al',
@@ -286,12 +288,21 @@ class FatureAlIntegrationTest extends TestCase
         ]));
 
         app(TenantContext::class)->run($tenant, function () {
+            $configuration = app(\App\Services\FatureAlConfiguration::class);
+            $this->assertSame('production', $configuration->get('environment'));
+            $this->assertSame('https://fature.al/api/v1', $configuration->get('base_url'));
+
+            // The environment guard no longer refuses production; the next
+            // guard in line (reservation not checked out) speaks instead.
             $reservation = new \App\Models\Reservation();
+            $reservation->status = 'confirmed';
             try {
                 app(\App\Services\ReservationFiscalizationService::class)->payload($reservation);
-                $this->fail('production fiscalization should have been refused');
+                $this->fail('the checked-out guard should still refuse');
             } catch (\Illuminate\Validation\ValidationException $exception) {
-                $this->assertStringContainsString('sandbox', implode(' ', $exception->errors()['fiscalization'] ?? []));
+                $messages = implode(' ', $exception->errors()['fiscalization'] ?? []);
+                $this->assertStringNotContainsString('sandbox', $messages);
+                $this->assertStringContainsString('check-out', $messages);
             }
         });
     }
