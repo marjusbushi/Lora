@@ -107,6 +107,23 @@ class GeminiKeyHealthTest extends TestCase
         $this->assertTrue(Setting::get('ai.gemini_key_health')['ok']);
     }
 
+    public function test_a_key_changed_mid_check_discards_the_stale_result(): void
+    {
+        // Kërkesa HTTP "në fluturim" — pikërisht atëherë admini ndërron çelësin:
+        // rezultati i çelësit të VJETËR duhet hedhur poshtë (Codex #512).
+        Http::fake(function () {
+            Setting::set('ai.gemini_key', 'brand-new-key', 'string');
+
+            return Http::response(['error' => ['code' => 400, 'message' => 'API key not valid']], 400);
+        });
+        Setting::set('ai.gemini_key', 'old-broken-key', 'string');
+
+        $this->artisan('gemini:check-key', ['--tenant' => $this->tenant->id])->assertSuccessful();
+
+        // Asnjë gjendje s'u shkrua nga rezultati i vjetruar.
+        $this->assertNull(Setting::get('ai.gemini_key_health'));
+    }
+
     public function test_saving_a_new_key_clears_the_stale_broken_alarm(): void
     {
         app(TenantRoleService::class)->provision($this->tenant);

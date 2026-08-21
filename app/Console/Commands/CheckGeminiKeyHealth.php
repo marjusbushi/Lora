@@ -40,11 +40,21 @@ class CheckGeminiKeyHealth extends Command
             return self::SUCCESS;
         }
 
+        $checkedKey = $gemini->key();
         $health = $gemini->healthCheck();
 
         if ($health['ok'] === null) {
             // Kalimtar (429/5xx/rrjet) — mos e shëno të prishur, mbaj gjendjen e fundit.
             $this->info('Përgjigje kalimtare nga Google — gjendja e mëparshme ruhet.');
+
+            return self::SUCCESS;
+        }
+
+        // Admini e ndërroi/hoqi çelësin NDËRSA kërkesa ishte në fluturim
+        // (gjetje Codex, PR #512): rezultati i çelësit të vjetër s'guxon të
+        // mbishkruajë pastrimin që bëri updateAi() — hidhet poshtë.
+        if ($gemini->key() !== $checkedKey) {
+            $this->info('Çelësi ndryshoi gjatë kontrollit — rezultati u hodh poshtë.');
 
             return self::SUCCESS;
         }
