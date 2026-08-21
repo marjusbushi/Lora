@@ -478,16 +478,29 @@ PROMPT;
             }
         });
 
-        // Linku i pagesës (Hapi 3) hiqet VETËM kur përputhet SAKTËSISHT me atë
-        // që ktheu mjeti — token-i i tij mund të mbajë shifra që s'janë "numra
-        // motori", por një link i ndryshuar nga modeli s'fshihet dot dhe bie
-        // te porta e shifrave si çdo shpikje tjetër.
-        $scrubbed = $reply;
-        array_walk_recursive($quotes, function ($value, $key) use (&$scrubbed): void {
+        // ÇDO URL në përgjigje duhet të përputhet SAKTËSISHT me një payment_link
+        // të kthyer nga mjeti (gjetje Codex, PR #505): porta e shifrave s'e kap
+        // dot një link të falsifikuar PA shifra (p.sh. evil.example/pay/confirm).
+        // Pa payment_link në rezultate → asnjë URL s'lejohet fare (rregulli 6).
+        $allowedLinks = [];
+        array_walk_recursive($quotes, function ($value, $key) use (&$allowedLinks): void {
             if ($key === 'payment_link' && is_string($value) && $value !== '') {
-                $scrubbed = str_replace($value, ' ', $scrubbed);
+                $allowedLinks[] = $value;
             }
         });
+        preg_match_all('~https?://[^\s<>"\']+~iu', $reply, $urls);
+        foreach ($urls[0] as $url) {
+            if (! in_array(rtrim($url, '.,;:!?)]}'), $allowedLinks, true)) {
+                return false;
+            }
+        }
+
+        // Linqet e lejuara hiqen para skanimit të shifrave — token-i i tyre
+        // mban shifra që s'janë "numra motori".
+        $scrubbed = $reply;
+        foreach ($allowedLinks as $link) {
+            $scrubbed = str_replace($link, ' ', $scrubbed);
+        }
 
         $scrubbed = preg_replace(['/\b\d{4}-\d{2}-\d{2}\b/', '/\b\d{1,2}:\d{2}\b/'], ' ', $scrubbed);
         preg_match_all('/\d+(?:[.,]\d+)?/', $scrubbed, $matches);
@@ -758,6 +771,31 @@ PROMPT;
                 'message_id' => $this->messageId,
                 'error' => mb_substr($e?->getMessage() ?: 'Dështim i panjohur.', 0, 300),
             ], 'ai');
+
+            // Mbajtje e krijuar por link KURRË i dorëzuar (gjetje Codex, PR
+            // #505): pas dështimit terminal dhoma s'duhet të presë 35 min të
+            // bllokuar. Pajtimi me POK vjen i pari — një pagesë e kryer e
+            // konfirmon (settle), vetëm e PAPAGUARA lirohet; POK i paarritshëm
+            // → mos prek (komanda e lirimit mbetet rrjeta e fundit).
+            $hold = $thread->reservation_id
+                ? \App\Models\Reservation::query()->find($thread->reservation_id)
+                : null;
+            if ($hold
+                && $hold->status === 'pending'
+                && $hold->created_via === \App\Models\Reservation::CREATED_VIA_AI
+                && $hold->pok_order_id) {
+                try {
+                    if (! app(\App\Services\PokPayments::class)->settle($hold)) {
+                        \App\Models\Reservation::whereKey($hold->id)->where('status', 'pending')->update(['status' => 'cancelled']);
+                        AuditLog::record('message.ai_booking_hold_released', $hold, [
+                            'reason' => 'ai_reply_failed',
+                            'thread_id' => $thread->id,
+                        ], 'ai');
+                    }
+                } catch (\Throwable $pok) {
+                    report($pok);
+                }
+            }
 
             // Rifresko inbox-in e hapur që shiriti i dështimit të shfaqet live —
             // best-effort: një Reverb offline s'duhet ta fshehë gjurmën e auditit.

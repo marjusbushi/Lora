@@ -132,6 +132,21 @@ class AiConversationBooking
                 return $this->holdPayload($existing, $type->name, $firstName, $nights, $adults);
             }
 
+            // Para anulimit, pajtohu AUTORITATIVISHT me POK (gjetje Codex, PR
+            // #505): forma e vjetër mund të jetë ende e hapur — një kapje e
+            // kryer do linte mysafirin të paguar për rezervim të anuluar.
+            // E paguar → settle e konfirmon dhe ndryshimi refuzohet; POK i
+            // paarritshëm → mos prek asgjë (fail-closed).
+            try {
+                if (app(PokPayments::class)->settle($existing)) {
+                    return ['error' => 'Mysafiri e ka PAGUAR tashmë rezervimin e mëparshëm të kësaj bisede — ai është konfirmuar; ndryshimet i bën vetëm recepsioni.'];
+                }
+            } catch (\Throwable $e) {
+                report($e);
+
+                return ['error' => 'Nuk u verifikua dot pagesa e mbajtjes ekzistuese — mos krijo mbajtje të re; recepsioni do ta ndjekë.'];
+            }
+
             Reservation::whereKey($existing->id)->where('status', 'pending')->update(['status' => 'cancelled']);
         }
 

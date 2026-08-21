@@ -216,7 +216,21 @@ class AiConversationBookingTest extends TestCase
 
     public function test_a_changed_confirmation_releases_the_old_hold_and_creates_a_new_one(): void
     {
-        $this->fakePok();
+        // Porosia e vjetër POK e PAPAGUAR — vetëm atëherë ndërrimi i mendjes
+        // liron të vjetrën; e paguara refuzohet (testi më poshtë).
+        Http::fake([
+            '*/auth/sdk/login' => Http::response(['data' => ['accessToken' => 'tok', 'expiresIn' => 3600000]], 200),
+            '*/sdk-orders/*' => Http::response(['data' => ['sdkOrder' => [
+                'id' => 'ord_ai_1', 'isCompleted' => false, 'isCanceled' => false,
+                'isRefunded' => false, 'finalAmount' => 0, 'currencyCode' => 'EUR',
+            ]]], 200),
+            '*/sdk-orders' => function () {
+                static $i = 0;
+                $i++;
+
+                return Http::response(['data' => ['sdkOrder' => ['id' => 'ord_ai_'.$i, 'finalAmount' => 190, 'currencyCode' => 'EUR']]], 200);
+            },
+        ]);
         $this->enableBooking();
         $this->roomOfType('Dhomë Dyshe', 95, '101');
         $this->roomOfType('Suitë', 150, '201');
@@ -414,6 +428,122 @@ class AiConversationBookingTest extends TestCase
 
         $this->assertNotNull($thread->refresh()->ai_suggestion);
         $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    public function test_a_digit_free_tampered_link_still_falls_to_draft(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+        $message = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Po, e konfirmoj.', 'sent_at' => now()]);
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $hold = $executors['create_booking_hold']([
+                    'check_in' => now()->addDays(7)->toDateString(),
+                    'check_out' => now()->addDays(9)->toDateString(),
+                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi',
+                ]);
+
+                // Link i falsifikuar PA ASNJË shifër — portës së numrave i
+                // shpëton; porta e LINQEVE duhet ta kapë (Codex #505 P1).
+                return [
+                    'args' => ['confident' => true, 'reply' => "Paguani te https://evil.example/pay/confirm totalin {$hold['stay_total']} {$hold['currency']} brenda {$hold['payment_deadline_minutes']} minutash."],
+                    'toolsUsed' => ['create_booking_hold'],
+                ];
+            });
+        });
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('typing')->andReturn([]);
+            $mock->shouldReceive('send')->never();
+        });
+
+        app()->call([new GenerateAiGuestReply($thread->id, $message->id), 'handle']);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    public function test_a_changed_confirmation_is_refused_when_the_old_hold_was_already_paid(): void
+    {
+        $this->fakePok(); // GET e porosisë kthen TË PAGUAR (isCompleted=true, 190 EUR)
+        $this->enableBooking();
+        $this->roomOfType('Dhomë Dyshe', 95, '101');
+        $this->roomOfType('Suitë', 150, '201');
+        $thread = $this->whatsappThread();
+
+        // Përmbledhja e konfirmimit niset kur settle e gjen të paguar — mock-o urën.
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('send')->andReturn(['id' => 'wa-x']);
+        });
+
+        app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+        $old = Reservation::query()->sole();
+
+        // Mysafiri "ndërron mendje" — po forma e vjetër POK u pagua ndërkohë:
+        // pajtimi e konfirmon të vjetrën dhe ndryshimi refuzohet (Codex #505 P1).
+        $second = app(AiConversationBooking::class)->hold($thread->fresh(), $this->holdArgs(['room_type' => 'Suitë']));
+
+        $this->assertArrayHasKey('error', $second);
+        $this->assertStringContainsString('PAGUAR', $second['error']);
+        $this->assertSame('confirmed', $old->fresh()->status);
+        $this->assertSame(1, Reservation::query()->count());
+    }
+
+    public function test_terminal_job_failure_releases_the_undelivered_unpaid_hold(): void
+    {
+        // Porosia POK e PAPAGUAR — dështimi terminal duhet ta lirojë dhomën.
+        Http::fake([
+            '*/auth/sdk/login' => Http::response(['data' => ['accessToken' => 'tok', 'expiresIn' => 3600000]], 200),
+            '*/sdk-orders/*' => Http::response(['data' => ['sdkOrder' => [
+                'id' => 'ord_ai_1', 'isCompleted' => false, 'isCanceled' => false,
+                'isRefunded' => false, 'finalAmount' => 0, 'currencyCode' => 'EUR',
+            ]]], 200),
+            '*/sdk-orders' => Http::response(['data' => ['sdkOrder' => ['id' => 'ord_ai_1', 'finalAmount' => 190, 'currencyCode' => 'EUR']]], 200),
+        ]);
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+        $message = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Po, e konfirmoj.', 'sent_at' => now()]);
+
+        app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+        $hold = Reservation::query()->sole();
+
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('raundi final dështoi pas mbajtjes'));
+        app(TenantContext::class)->set($this->tenant);
+
+        $this->assertSame('cancelled', $hold->fresh()->status);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'message.ai_booking_hold_released', 'source' => 'ai']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'message.ai_reply_failed', 'source' => 'ai']);
+    }
+
+    public function test_terminal_job_failure_confirms_instead_of_releasing_when_the_hold_was_paid(): void
+    {
+        $this->fakePok(); // GET: E PAGUAR
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+        $message = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Po, e konfirmoj.', 'sent_at' => now()]);
+
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('send')->andReturn(['id' => 'wa-x']);
+        });
+
+        app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+        $hold = Reservation::query()->sole();
+
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('raundi final dështoi pas mbajtjes'));
+        app(TenantContext::class)->set($this->tenant);
+
+        // Pajtimi me POK fiton: e paguara KONFIRMOHET, kurrë s'lirohet.
+        $this->assertSame('confirmed', $hold->fresh()->status);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'message.ai_booking_hold_released']);
     }
 
     /**
