@@ -50,8 +50,10 @@ class WebsiteController extends Controller
 
     public function rooms(): Response
     {
+        // No availability numbers reach the public payload (owner decision 2026-08-21) —
+        // the catalog shows only the typology size, never how many are free.
         $roomTypes = RoomType::select('id', 'name', 'description', 'base_price', 'max_occupancy', 'amenities', 'breakfast_included')
-            ->withCount(['rooms', 'rooms as available_count' => fn ($q) => $q->where('status', 'available')])
+            ->withCount('rooms')
             ->with('images')
             ->get();
 
