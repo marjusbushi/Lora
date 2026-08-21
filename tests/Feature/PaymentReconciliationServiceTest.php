@@ -128,9 +128,11 @@ class PaymentReconciliationServiceTest extends TestCase
         $this->assertSame(20.0, $analytics['summary']['room_charge']);
         $this->assertSame(20.0, $analytics['summary']['refunds']);
         $this->assertSame(5.0, $analytics['summary']['voided']);
-        $this->assertSame(7, $analytics['summary']['expected_sources']);
-        $this->assertSame(6, $analytics['summary']['matched_sources']);
-        $this->assertSame(85.7, $analytics['summary']['reconciliation_rate']);
+        // Renato (2026-08-21): the drawer difference no longer posts, so a
+        // tender-era shift is NOT an expected ledger source at all.
+        $this->assertSame(6, $analytics['summary']['expected_sources']);
+        $this->assertSame(5, $analytics['summary']['matched_sources']);
+        $this->assertSame(83.3, $analytics['summary']['reconciliation_rate']);
         $this->assertSame(7, $analytics['summary']['transaction_count']);
         $this->assertSame(60.0, $analytics['summary']['unposted_total']);
         // Drawer over/short is NOT an issue row anymore — the Z-Report owns
