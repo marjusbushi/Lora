@@ -380,7 +380,7 @@ const server = createServer(async (req, res) => {
     }
 
     const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
-    const match = url.pathname.match(/^\/sessions\/(\d+)(?:\/(start|logout|send|typing))?$/);
+    const match = url.pathname.match(/^\/sessions\/(\d+)(?:\/(start|logout|send|send-image|typing))?$/);
     if (!match) return json(res, 404, { error: 'not found' });
 
     const tenantId = Number(match[1]);
@@ -435,6 +435,28 @@ const server = createServer(async (req, res) => {
                 }
                 const sent = await session.sock.sendMessage(jid, { text });
                 return json(res, 200, { id: sent?.key?.id || null });
+            }
+            case 'send-image': {
+                // Fotot e tipologjive nga Lora (task #396): vetëm URL https të
+                // vetë faqes së hotelit — ura s'shkarkon kurrë adresa arbitrare.
+                const session = sessions.get(tenantId);
+                if (session?.status !== 'connected') {
+                    return json(res, 409, { error: 'not connected' });
+                }
+                const jid = String(body.jid || '');
+                const imageUrl = String(body.url || '');
+                const caption = String(body.caption || '').slice(0, 300);
+                if (!(jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid'))) {
+                    return json(res, 422, { error: 'invalid jid' });
+                }
+                if (!/^https:\/\/[^\s]+$/i.test(imageUrl) || imageUrl.length > 2048) {
+                    return json(res, 422, { error: 'invalid url' });
+                }
+                const sentImg = await session.sock.sendMessage(jid, {
+                    image: { url: imageUrl },
+                    ...(caption ? { caption } : {}),
+                });
+                return json(res, 200, { id: sentImg?.key?.id || null });
             }
             case 'typing': {
                 // "Po shkruan..." DALËS (task #368): Lora AI e tregon veten si
