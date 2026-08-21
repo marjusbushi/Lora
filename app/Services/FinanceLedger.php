@@ -321,7 +321,8 @@ class FinanceLedger
     /**
      * Pasqyron mbylljen e një turni plazhi: vetëm diferencën e numërimit
      * (over/short) — vetë pagesat kanë hyrë në arkë në momentin e shënimit.
-     * Rihapja/diferenca zero s'lë asnjë rresht.
+     * Diferencat janë vetëm raportuese (vendimi i Renatos, 2026-08-21) —
+     * mbyllja e turnit të plazhit s'lë asnjë rresht në llogari.
      */
     public function recordBeachShiftClose(\App\Models\BeachShift $shift): ?FinancePayment
     {
@@ -331,38 +332,11 @@ class FinanceLedger
             return null;
         }
 
-        $variance = (float) $shift->over_short;
-        if ($variance == 0.0) {
-            $this->removeFor($shift);
+        // Renato (2026-08-21): differences are report-only — the beach close
+        // posts nothing to the accounts; the manager acts on the shift report.
+        $this->removeFor($shift);
 
-            return null;
-        }
-
-        $baseCurrency = BaseCurrency::code();
-        $currency = strtoupper(PricingCurrency::code());
-        $fx = $currency === $baseCurrency ? null : $this->fxRate($currency);
-
-        $ledger = FinancePayment::firstOrNew([
-            'sourceable_type' => \App\Models\BeachShift::class,
-            'sourceable_id' => $shift->id,
-        ]);
-        $ledger->fill([
-            'direction' => $variance > 0 ? 'in' : 'out',
-            'account_id' => self::accountFor('cash', null, unit: 'beach')->id,
-            'amount' => abs($variance),
-            'currency' => $currency,
-            'fx_rate' => $fx ? round($fx, 6) : null,
-            'method' => 'cash',
-            'source' => 'auto',
-            'description' => 'Diferencë turni plazhi — '
-                .($shift->user?->name ?? ('turni #'.$shift->id))
-                .sprintf(' (%+.2f)', $variance),
-            'paid_at' => $shift->closed_at,
-            'created_by' => $shift->closed_by,
-        ]);
-        $ledger->withFrozenAmountBase($fx ? round(abs($variance) / $fx, 2) : abs($variance))->save();
-
-        return $ledger;
+        return null;
     }
 
     /** Mirror one POS tender/refund. Room charges stay in the guest folio, not Arka/Banka. */
@@ -410,8 +384,9 @@ class FinanceLedger
     }
 
     /**
-     * Mirror a CLOSED POS shift. For the current tender workflow this records only
-     * the counted over/short adjustment; legacy shifts retain counted-yield behavior.
+     * Mirror a CLOSED POS shift. Differences are REPORT-ONLY (Renato,
+     * 2026-08-21) — only legacy pre-tender cash still posts here; the counted
+     * over/short stays on the shift record for the manager to act on.
      */
     public function recordShiftClose(PosShift $shift): ?FinancePayment
     {
@@ -422,7 +397,12 @@ class FinanceLedger
             return null;
         }
 
-        $this->recordShiftCurrencyVariances($shift);
+        // Renato (2026-08-21): shift DIFFERENCES live on the shift report only —
+        // they never touch the accounts. If money is missing, the MANAGER
+        // decides what to do (a deliberate ledger action, never automatic).
+        // A shift closing under this rule also clears any variance rows an
+        // older close of the same shift created.
+        $shift->currencies()->get()->each(fn (PosShiftCurrency $line) => $this->removeFor($line));
 
         // New tenders reach Arka/Banka at payment time. Orders completed before the
         // tender table existed are posted here, even when the shift spans deployment.
@@ -433,7 +413,7 @@ class FinanceLedger
             ->sum('total_amount');
         $hasNewTenders = $shift->payments()->where('direction', 'in')->exists();
         $yield = $hasNewTenders || $legacyCash > 0
-            ? round($legacyCash + (float) $shift->over_short, 2)
+            ? round($legacyCash, 2)
             : ($shift->counted_cash !== null
                 ? round((float) $shift->counted_cash - (float) $shift->opening_float, 2)
                 : round((float) $shift->cash_sales, 2));
@@ -453,53 +433,11 @@ class FinanceLedger
                 'fx_rate' => null,
                 'method' => 'cash',
                 'source' => 'auto',
-                'description' => ($legacyCash > 0 ? 'Mbyllje turni POS — ' : 'Diferencë turni POS — ')
-                    .($shift->user?->name ?? ('turni #'.$shift->id))
-                    .((float) $shift->over_short != 0.0 ? sprintf(' (%+.2f)', (float) $shift->over_short) : ''),
+                'description' => 'Mbyllje turni POS — '.($shift->user?->name ?? ('turni #'.$shift->id)),
                 'paid_at' => $shift->closed_at,
                 'created_by' => $shift->closed_by,
             ],
         );
-    }
-
-    /**
-     * Post each foreign currency's counted over/short into THAT currency's POS
-     * cash account (mirroring how foreign tenders land there), with the base
-     * equivalent frozen at the close-time rate. Zero variances leave no row.
-     */
-    protected function recordShiftCurrencyVariances(PosShift $shift): void
-    {
-        foreach ($shift->currencies()->get() as $line) {
-            $variance = (float) $line->over_short;
-
-            if ($variance == 0.0 || $line->counted_amount === null) {
-                $this->removeFor($line);
-
-                continue;
-            }
-
-            $fx = $this->fxRate($line->currency); // source units per 1 base unit
-
-            $ledger = FinancePayment::firstOrNew([
-                'sourceable_type' => PosShiftCurrency::class,
-                'sourceable_id' => $line->id,
-            ]);
-            $ledger->fill([
-                'direction' => $variance > 0 ? 'in' : 'out',
-                'account_id' => self::accountFor('cash', $line->currency, pos: true)->id,
-                'amount' => abs($variance),
-                'currency' => $line->currency,
-                'fx_rate' => round($fx, 6),
-                'method' => 'cash',
-                'source' => 'auto',
-                'description' => 'Diferencë turni POS ('.$line->currency.') — '
-                    .($shift->user?->name ?? ('turni #'.$shift->id))
-                    .sprintf(' (%+.2f)', $variance),
-                'paid_at' => $shift->closed_at,
-                'created_by' => $shift->closed_by,
-            ]);
-            $ledger->withFrozenAmountBase(round(abs($variance) / $fx, 2))->save();
-        }
     }
 
     public function removeFor(Model $source): void
