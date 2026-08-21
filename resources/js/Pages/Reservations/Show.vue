@@ -648,7 +648,18 @@ function settleAndCheckout(method) {
                     <p class="mt-0.5 text-sm text-warning-700">{{ $t('reservationShow.noShowBannerHint') }}</p>
                 </div>
             </div>
-            <Button variant="outline" @click="showNoShowModal = true">{{ $t('reservationShow.noShowButton') }}</Button>
+            <div class="flex flex-wrap items-center gap-2">
+                <a
+                    v-if="reservation.booking_extranet_url"
+                    :href="reservation.booking_extranet_url"
+                    target="_blank"
+                    rel="noopener"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-warning-200 bg-white px-3.5 py-2 text-small font-semibold text-warning-800 no-underline transition-colors hover:bg-warning-50"
+                >
+                    <ExternalLink class="h-4 w-4" />{{ $t('reservationShow.noShowOpenBooking') }}
+                </a>
+                <Button variant="outline" @click="showNoShowModal = true">{{ $t('reservationShow.noShowButton') }}</Button>
+            </div>
         </section>
 
         <!-- Marked as no-show: context + guarded undo -->
