@@ -175,10 +175,14 @@ function goBack(toStep) {
 const FIELD_IDS = { first_name: 'bk-first-name', last_name: 'bk-last-name', email: 'bk-email', phone: 'bk-phone', nationality: 'bk-nationality' };
 function focusId(id) { document.getElementById(id)?.focus(); }
 
+// Server errors that are not tied to a single input (the cart, a missing exchange
+// rate, …) all surface in the recovery banner — a submit must never fail silently.
+const blockingError = computed(() => guestForm.errors.selections || guestForm.errors.currency || '');
+
 function submitBooking() {
     guestForm.post('/book', {
         onError: (errors) => nextTick(() => {
-            if (errors.selections) {
+            if (errors.selections || errors.currency) {
                 roomErrorBox.value?.focus({ preventScroll: true });
                 roomErrorBox.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
@@ -372,8 +376,8 @@ watch(step, (current) => nextTick(() => {
                                 <div><span class="eyebrow-brass">{{ $t('book.direct.finalStep') }}</span><h1 class="mt-1 text-display-sm text-ink">{{ $t('book.guest.heading') }}</h1></div>
                                 <button class="text-body-sm font-medium text-ionian" @click="goBack(2)">{{ $t('book.guest.changeRoom') }}</button>
                             </div>
-                            <div v-if="guestForm.errors.selections" ref="roomErrorBox" role="alert" tabindex="-1" class="mb-6 rounded-xl border border-error-200 bg-error-50 p-4 focus:outline-none">
-                                <p class="text-body-sm text-error-700">{{ guestForm.errors.selections }}</p>
+                            <div v-if="blockingError" ref="roomErrorBox" role="alert" tabindex="-1" class="mb-6 rounded-xl border border-error-200 bg-error-50 p-4 focus:outline-none">
+                                <p class="text-body-sm text-error-700">{{ blockingError }}</p>
                                 <button type="button" class="mt-2 text-body-sm font-medium text-ionian underline" @click="chooseAnotherRoom">{{ $t('book.guest.chooseOther') }}</button>
                             </div>
                             <form class="space-y-4" @submit.prevent="submitBooking">
