@@ -106,6 +106,61 @@ class LoraAiSettingsCascadeTest extends TestCase
         $this->assertFalse((bool) Setting::get('ai_mcp.ai_price_recommendations_enabled'));
     }
 
+    public function test_partial_payload_cannot_enable_booking_over_a_stored_whatsapp_parent_that_is_off(): void
+    {
+        Setting::set('ai_mcp.whatsapp_auto_reply_enabled', false, 'boolean');
+
+        // Payload i pjesshëm: prindi mungon fare, fëmija vjen i ndezur —
+        // normalizimi duhet të konsultojë vlerën e RUAJTUR të prindit.
+        $this->actingAs($this->admin())->put(route('lora-ai.update'), [
+            'reservations_enabled' => true,
+            'messages_enabled' => true,
+            'guest_reply_enabled' => true,
+            'pricing_enabled' => true,
+            'price_apply_enabled' => false,
+            'whatsapp_booking_enabled' => true,
+        ])->assertRedirect();
+
+        $this->assertFalse((bool) Setting::get('ai_mcp.whatsapp_booking_enabled'));
+    }
+
+    public function test_booking_revenue_sums_the_frozen_base_snapshot_of_the_reservations(): void
+    {
+        $type = \App\Models\RoomType::create(['name' => 'Std', 'base_price' => 80, 'max_occupancy' => 3, 'amenities' => []]);
+        $room = \App\Models\Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
+        $guest = \App\Models\Guest::create(['first_name' => 'Ana', 'last_name' => 'Test', 'email' => 'ana@test.local', 'phone' => '+355 69 000 0000']);
+        $admin = $this->admin();
+        $reservation = \App\Models\Reservation::create([
+            'room_id' => $room->id, 'guest_id' => $guest->id, 'created_by' => $admin->id,
+            'check_in_date' => now()->addDays(3)->toDateString(),
+            'check_out_date' => now()->addDays(5)->toDateString(),
+            'status' => 'confirmed', 'total_amount' => 160, 'adults' => 2,
+        ]);
+        \Illuminate\Support\Facades\DB::table('audit_logs')->insert([
+            'tenant_id' => $this->tenant->id, 'source' => 'ai',
+            'action' => 'message.ai_booking_confirmed',
+            'subject_type' => \App\Models\Reservation::class, 'subject_id' => $reservation->id,
+            'properties' => json_encode(['total' => 999999]), // qëllimisht ndryshe — s'duhet lexuar më
+            'created_at' => now(),
+        ]);
+
+        $expected = round((float) $reservation->fresh()->total_amount_base, 2);
+
+        $this->actingAs($admin)->get(route('lora-ai.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('stats.bookings', 1)
+                ->where('stats.bookingRevenue', fn ($value) => abs((float) $value - $expected) < 0.005));
+
+        // Fshirja e butë e mëvonshme s'e zbraz statistikën e muajit — numërimi
+        // vjen nga audit-i append-only, shuma duhet të mbetet konsistente me të.
+        $reservation->delete();
+
+        $this->actingAs($admin)->get(route('lora-ai.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('stats.bookings', 1)
+                ->where('stats.bookingRevenue', fn ($value) => abs((float) $value - $expected) < 0.005));
+    }
+
     public function test_booking_revenue_is_hidden_from_roles_without_money_permissions(): void
     {
         Permission::findOrCreate('view_settings', 'web');
