@@ -332,10 +332,12 @@ class SettingsController extends Controller
         $data = $request->validate([
             'check_in_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
             'check_out_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
+            'booking_extranet_hotel_id' => ['nullable', 'string', 'regex:/^\d{1,12}$/'],
         ]);
 
         Setting::set('hotel.check_in_time', $data['check_in_time']);
         Setting::set('hotel.check_out_time', $data['check_out_time']);
+        Setting::set('hotel.booking_extranet_hotel_id', trim((string) ($data['booking_extranet_hotel_id'] ?? '')) ?: null);
 
         return back()->with('success', 'Politikat e rezervimeve u ruajtën.');
     }

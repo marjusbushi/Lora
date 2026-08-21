@@ -31,6 +31,7 @@ import {
     CircleAlert,
     CreditCard,
     DoorOpen,
+    ExternalLink,
     FileText,
     PackageOpen,
     Plus,
@@ -659,7 +660,18 @@ function settleAndCheckout(method) {
                     <p class="mt-0.5 text-sm text-error-700">{{ $t('reservationShow.noShowMarkedInfo', { date: formatDate(reservation.check_in_date) }) }}</p>
                 </div>
             </div>
-            <Button v-if="canUpdate" variant="outline" :loading="noShowBusy" @click="undoNoShow">{{ $t('reservationShow.noShowUndoButton') }}</Button>
+            <div class="flex flex-wrap items-center gap-2">
+                <a
+                    v-if="reservation.booking_extranet_url"
+                    :href="reservation.booking_extranet_url"
+                    target="_blank"
+                    rel="noopener"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-error-200 bg-white px-3.5 py-2 text-small font-semibold text-error-800 no-underline transition-colors hover:bg-error-50"
+                >
+                    <ExternalLink class="h-4 w-4" />{{ $t('reservationShow.noShowOpenBooking') }}
+                </a>
+                <Button v-if="canUpdate" variant="outline" :loading="noShowBusy" @click="undoNoShow">{{ $t('reservationShow.noShowUndoButton') }}</Button>
+            </div>
         </section>
 
         <section v-if="earlyDeparturePlanned" class="mt-4 flex flex-col gap-3 rounded-xl border border-info-200 bg-info-50 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1141,6 +1153,15 @@ function settleAndCheckout(method) {
             <p v-if="isOtaChannel" class="mt-2 rounded-lg border border-warning-200 bg-warning-50 px-3.5 py-2.5 text-small font-semibold text-warning-800">
                 ⚠ {{ $t('reservationShow.noShowExtranetWarn', { channel: channelMeta(reservation.channel).label }) }}
             </p>
+            <a
+                v-if="reservation.booking_extranet_url"
+                :href="reservation.booking_extranet_url"
+                target="_blank"
+                rel="noopener"
+                class="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3.5 py-2 text-small font-semibold text-primary-800 no-underline transition-colors hover:bg-neutral-50"
+            >
+                <ExternalLink class="h-4 w-4" />{{ $t('reservationShow.noShowOpenBooking') }}
+            </a>
             <template #footer>
                 <Button variant="outline" @click="showNoShowModal = false">{{ $t('reservationShow.noShowModalCancel') }}</Button>
                 <Button variant="danger" :loading="noShowBusy" @click="submitNoShow">{{ $t('reservationShow.noShowModalConfirm') }}</Button>
