@@ -1108,17 +1108,43 @@ class ReservationController extends Controller
             }
 
             $room = Room::query()->lockForUpdate()->find($lockedReservation->room_id);
-            $roomNotReady = ! $room
-                || $room->status !== 'available'
-                || CleaningTask::query()
-                    ->where('room_id', $lockedReservation->room_id)
-                    ->whereIn('status', ['pending', 'in_progress'])
-                    ->exists();
-            if ($roomNotReady) {
+            if (! $room) {
                 throw ValidationException::withMessages([
-                    'check_in' => $room
-                        ? "Dhoma {$room->room_number} eshte ende ne pastrim ose nuk eshte e lire. Perfundo pastrimin te Housekeeping para check-in."
-                        : 'Dhoma e lidhur me rezervimin nuk ekziston me. Cakto nje dhome tjeter para check-in.',
+                    'check_in' => 'Dhoma e lidhur me rezervimin nuk ekziston me. Cakto nje dhome tjeter para check-in.',
+                ]);
+            }
+
+            // Block only for REAL reasons, each with a message naming it. A
+            // stale room status alone (occupied/cleaning with no in-house
+            // guest and no open task) no longer blocks — four Saturn repairs
+            // in one day came from refusing a room whose only "occupant" was
+            // the very stay being checked in; check-in overwrites the status.
+            $inHouse = Reservation::query()
+                ->where('room_id', $room->id)
+                ->where('id', '!=', $lockedReservation->id)
+                ->where('status', 'checked_in')
+                ->with('guest:id,first_name,last_name')
+                ->first();
+            if ($inHouse) {
+                $guestName = trim("{$inHouse->guest?->first_name} {$inHouse->guest?->last_name}") ?: 'nje mysafir tjeter';
+                throw ValidationException::withMessages([
+                    'check_in' => "Dhoma {$room->room_number} e ka ende brenda {$guestName} (rez. #{$inHouse->id}) — beji check-out perpara se te futesh mysafirin e ri.",
+                ]);
+            }
+
+            $openCleaning = CleaningTask::query()
+                ->where('room_id', $room->id)
+                ->whereIn('status', ['pending', 'in_progress'])
+                ->exists();
+            if ($openCleaning) {
+                throw ValidationException::withMessages([
+                    'check_in' => "Dhoma {$room->room_number} ka pastrim te hapur — perfundoje te Housekeeping perpara check-in.",
+                ]);
+            }
+
+            if ($room->status === 'maintenance') {
+                throw ValidationException::withMessages([
+                    'check_in' => "Dhoma {$room->room_number} eshte ne mirembajtje — liroje nga mirembajtja te Dhomat perpara check-in.",
                 ]);
             }
 
