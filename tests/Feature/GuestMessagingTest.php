@@ -271,6 +271,92 @@ class GuestMessagingTest extends TestCase
                 ->where('threads.0.ai_failed', false));
     }
 
+    /** Task #403: riprova e ftohtë dërgoi me SUKSES pas dështimit → banner-i dhe shenja në listë shuhen. */
+    public function test_ai_failure_banner_clears_after_a_successful_cool_retry(): void
+    {
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($home);
+        $context->set($home);
+
+        $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL-4', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net', 'last_message_at' => now()]);
+        $failedMessage = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
+        \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => $failedMessage->id, 'error' => 'Google ktheu një gabim (503).'], 'ai');
+        // Riprova 5-min doli me sukses: audit ai_reply MË I RI se dështimi
+        // dhe për TË NJËJTIN mesazh (message_id — gjetje Codex #547).
+        \App\Models\AuditLog::record('message.ai_reply', $thread, ['message_id' => $failedMessage->id, 'preview' => 'Po, kemi dhoma të lira!'], 'ai');
+
+        $admin = User::factory()->create(['current_tenant_id' => $home->id]);
+        $admin->assignRole('admin');
+        $context->clear();
+
+        $this->actingAs($admin)
+            ->withSession(['tenant_id' => $home->id])
+            ->get(route('messages.index', ['thread' => $thread->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('selected.ai_failure', null)
+                ->where('threads.0.ai_failed', false));
+    }
+
+    /** Task #403: përgjigja e VONUAR e një job-i të vjetër (audit MË I VJETËR se dështimi) NUK e shuan alarmin — Codex #502. */
+    public function test_ai_failure_banner_survives_an_older_racing_ai_reply_audit(): void
+    {
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($home);
+        $context->set($home);
+
+        $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL-5', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net', 'last_message_at' => now()]);
+        // Përgjigja e një mesazhi të MËPARSHËM u auditua PARA dështimit tonë —
+        // mund të mos i jetë përgjigjur fare mesazhit që dështoi.
+        \App\Models\AuditLog::record('message.ai_reply', $thread, ['preview' => 'Përshëndetje!'], 'ai');
+        $failedMessage = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
+        \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => $failedMessage->id, 'error' => 'Google ktheu një gabim (503).'], 'ai');
+
+        $admin = User::factory()->create(['current_tenant_id' => $home->id]);
+        $admin->assignRole('admin');
+        $context->clear();
+
+        $this->actingAs($admin)
+            ->withSession(['tenant_id' => $home->id])
+            ->get(route('messages.index', ['thread' => $thread->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('selected.ai_failure.error', 'Google ktheu një gabim (503).')
+                ->where('threads.0.ai_failed', true));
+    }
+
+    /** Codex #547 P1: job i VJETËR që mbaron VONË (audit më i ri, message_id më i vogël) NUK e shuan alarmin e mesazhit të fundit. */
+    public function test_ai_failure_banner_survives_a_late_finishing_older_job(): void
+    {
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($home);
+        $context->set($home);
+
+        $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL-6', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net', 'last_message_at' => now()]);
+        $older = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Përshëndetje!', 'sent_at' => now()->subMinutes(12)]);
+        $failedMessage = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
+        \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => $failedMessage->id, 'error' => 'Google ktheu një gabim (503).'], 'ai');
+        // Job-i i mesazhit të VJETËR mbaron pas dështimit tonë — auditi i tij
+        // ka ID më të madhe, por message_id më të VOGËL: mesazhi i fundit i
+        // mysafirit mbetet ende pa përgjigje, alarmi s'guxon të shuhet.
+        \App\Models\AuditLog::record('message.ai_reply', $thread, ['message_id' => $older->id, 'preview' => 'Përshëndetje!'], 'ai');
+
+        $admin = User::factory()->create(['current_tenant_id' => $home->id]);
+        $admin->assignRole('admin');
+        $context->clear();
+
+        $this->actingAs($admin)
+            ->withSession(['tenant_id' => $home->id])
+            ->get(route('messages.index', ['thread' => $thread->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('selected.ai_failure.error', 'Google ktheu një gabim (503).')
+                ->where('threads.0.ai_failed', true));
+    }
+
     public function test_reply_sends_to_channex_and_stores_a_host_message(): void
     {
         $this->fakeChannex();

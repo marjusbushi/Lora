@@ -836,4 +836,55 @@ class AiGuestReplyTest extends TestCase
         app(TenantContext::class)->set($this->tenant);
         $this->assertSame(0, \App\Models\AuditLog::query()->where('action', 'message.ai_reply_failed')->count());
     }
+
+    /** Task #403: dështim kalimtar 5xx → SAKTËSISHT një riprovë e ftohtë 5-min per mesazh (e dyta no-op). */
+    public function test_transient_5xx_failure_schedules_exactly_one_cool_retry(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+
+        \Illuminate\Support\Facades\Queue::fake();
+
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('Google ktheu një gabim (503). Provo sërish.'));
+        // Dështon PRAP para se të skadojë kyçja — s'duhet riprovë e dytë.
+        $job->failed(new \RuntimeException('Google ktheu një gabim (503). Provo sërish.'));
+        app(TenantContext::class)->set($this->tenant);
+
+        \Illuminate\Support\Facades\Queue::assertPushed(GenerateAiGuestReply::class, 1);
+        \Illuminate\Support\Facades\Queue::assertPushed(GenerateAiGuestReply::class, fn (GenerateAiGuestReply $pushed) => $pushed->delay !== null);
+        // Auditi i dështimit shkruhet njësoj — banner-i tregohet derisa riprova të dalë.
+        $this->assertSame(2, \App\Models\AuditLog::query()->where('action', 'message.ai_reply_failed')->count());
+    }
+
+    /** Task #403 (dorëzimi i shpejtë): edhe ngecja "(timeout)" është kalimtare — riprovë njësoj. */
+    public function test_timeout_failure_also_schedules_the_cool_retry(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+
+        \Illuminate\Support\Facades\Queue::fake();
+
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('Google nuk u përgjigj në kohë (timeout). Provo sërish.'));
+        app(TenantContext::class)->set($this->tenant);
+
+        \Illuminate\Support\Facades\Queue::assertPushed(GenerateAiGuestReply::class, 1);
+    }
+
+    /** Task #403: gabimet JO-kalimtare (400/çelës/kuotë/logjikë) s'riprovohen — do dështonin njësoj. */
+    public function test_non_transient_failure_schedules_no_cool_retry(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+
+        \Illuminate\Support\Facades\Queue::fake();
+
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('Çelësi Gemini nuk është i vlefshëm. Kontrollo çelësin te Settings → Asistenti AI.'));
+        $job->failed(new \RuntimeException('Shumë kërkesa te Google (limiti u kalua). Prit pak minuta dhe provo sërish.'));
+        app(TenantContext::class)->set($this->tenant);
+
+        \Illuminate\Support\Facades\Queue::assertNotPushed(GenerateAiGuestReply::class);
+    }
 }

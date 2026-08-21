@@ -521,6 +521,38 @@ class AiConversationBookingTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'message.ai_reply_failed', 'source' => 'ai']);
     }
 
+    /** Task #403: dështim KALIMTAR (5xx) → riprova e ftohtë u planifikua — mbajtja NUK lirohet, riprova e ripërdor. */
+    public function test_transient_failure_keeps_the_undelivered_hold_for_the_cool_retry(): void
+    {
+        Http::fake([
+            '*/auth/sdk/login' => Http::response(['data' => ['accessToken' => 'tok', 'expiresIn' => 3600000]], 200),
+            '*/sdk-orders/*' => Http::response(['data' => ['sdkOrder' => [
+                'id' => 'ord_ai_1', 'isCompleted' => false, 'isCanceled' => false,
+                'isRefunded' => false, 'finalAmount' => 0, 'currencyCode' => 'EUR',
+            ]]], 200),
+            '*/sdk-orders' => Http::response(['data' => ['sdkOrder' => ['id' => 'ord_ai_1', 'finalAmount' => 190, 'currencyCode' => 'EUR']]], 200),
+        ]);
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+        $message = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Po, e konfirmoj.', 'sent_at' => now()]);
+
+        app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+        $hold = Reservation::query()->sole();
+
+        \Illuminate\Support\Facades\Queue::fake();
+
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('Google ktheu një gabim (503). Provo sërish.'));
+        app(TenantContext::class)->set($this->tenant);
+
+        // Mbajtja mbetet — riprova 5-min e ripërdor me idempotencë (i njëjti link).
+        $this->assertSame('pending', $hold->fresh()->status);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'message.ai_booking_hold_released']);
+        \Illuminate\Support\Facades\Queue::assertPushed(GenerateAiGuestReply::class, 1);
+    }
+
     public function test_a_bare_tampered_link_without_scheme_still_falls_to_draft(): void
     {
         $this->fakePok();
@@ -633,7 +665,7 @@ class AiConversationBookingTest extends TestCase
 
         Http::allowStrayRequests();
         config()->set('services.gemini.key', $key);
-        config()->set('services.gemini.model', 'gemini-flash-latest');
+        config()->set('services.gemini.model', 'gemini-3.7-flash');
         config()->set('services.gemini.base_url', 'https://generativelanguage.googleapis.com/v1beta');
 
         $tools = [

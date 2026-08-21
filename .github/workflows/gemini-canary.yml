@@ -1,12 +1,14 @@
 # Kanari javor kundër API-së REALE të Gemini-t (task #380, mësimi i #379).
 #
-# PSE: modeli ynë përdor alias-in rrotullues `gemini-flash-latest` — Google e
-# ndërron modelin poshtë tij pa asnjë ndryshim kodi nga ne, dhe kontrata e
-# function-calling mund të prishet në heshtje (2026-08-20: gemini-3.7 nisi të
-# refuzonte me 400 historikun pa thoughtSignature — e zbuluan mysafirët, jo
-# testet, sepse CI-ja e mock-on Gemini-n komplet). Ky workflow xhiron testet
-# e integrimit @real-api kundër API-së së vërtetë një herë në javë, që drift-i
-# i radhës të kapet nga roboti para se ta ndjejnë bisedat live.
+# PSE: modeli ynë është i FIKSUAR në një id të saktë (gemini-3.7-flash, task
+# #403 — alias-i rrotullues na hidhte te modelet e posa-lançuara në javën e
+# stuhive 503 dhe na ndërronte çmimin në heshtje). Google PENSIONON id të
+# vjetra (gemini-2.5-flash: 404 gusht 2026 pa lajmërim) dhe ndërron kontratën
+# e function-calling në heshtje (2026-08-20: gemini-3.7 nisi të refuzonte me
+# 400 historikun pa thoughtSignature — e zbuluan mysafirët, jo testet, sepse
+# CI-ja e mock-on Gemini-n komplet). Ky workflow xhiron testet @real-api
+# kundër API-së së vërtetë një herë në javë, që pensionimi i id-së sonë ose
+# drift-i i radhës të kapet nga roboti para se ta ndjejnë bisedat live.
 #
 # Sekreti: GEMINI_API_KEY (Repository secret — e vendos pronari me
 # `gh secret set GEMINI_API_KEY`). Kosto: 2 thirrje të vogla/javë.
