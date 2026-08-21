@@ -191,6 +191,36 @@ class ReservationNoShowTest extends TestCase
                         && str_contains($action['href'], 'attention=no_show'))));
     }
 
+    public function test_show_payload_links_the_booking_extranet(): void
+    {
+        $booking = $this->reservation($this->room('901'));
+        $booking->update(['channel_ref' => '5697150528']);
+
+        // Without the hotel id configured: extranet home, still one click away.
+        $this->actingAs($this->admin)->get(route('reservations.show', $booking))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('reservation.booking_extranet_url', 'https://admin.booking.com/'));
+
+        // With it: deep link straight to the booking's extranet page.
+        $this->actingAs($this->admin)->put(route('settings.booking-policies'), [
+            'check_in_time' => '14:00',
+            'check_out_time' => '11:00',
+            'booking_extranet_hotel_id' => '7654321',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->actingAs($this->admin)->get(route('reservations.show', $booking))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('reservation.booking_extranet_url', fn ($url) => str_contains((string) $url, 'hotel_id=7654321')
+                    && str_contains((string) $url, 'res_id=5697150528')));
+
+        // Non-Booking reservations get no extranet link at all.
+        $direct = $this->reservation($this->room('902'));
+        $direct->update(['channel' => 'direct']);
+        $this->actingAs($this->admin)->get(route('reservations.show', $direct))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('reservation.booking_extranet_url', null));
+    }
+
     public function test_permission_boundary_holds(): void
     {
         $reservation = $this->reservation($this->room('701'));

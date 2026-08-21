@@ -502,6 +502,7 @@ class ReservationController extends Controller
                     : null,
                 'early_departure_reason' => $reservation->early_departure_reason,
                 'no_show_at' => $reservation->no_show_at?->toIso8601String(),
+                'booking_extranet_url' => $this->bookingExtranetUrl($reservation),
                 'nights' => $reservation->nights,
                 'total_amount' => $roomCharge,
                 'currency' => ReservationMoney::currency($reservation),
@@ -1911,6 +1912,27 @@ class ReservationController extends Controller
         $timezone = app(TenantContext::class)->tenant()?->timezone ?: config('app.timezone');
 
         return CarbonImmutable::today($timezone)->toDateString();
+    }
+
+    /**
+     * Extranet jump for OTA-side actions (e.g. reporting a no-show for the
+     * commission waiver — Lora never mutates OTA terms itself). With the
+     * hotel id configured the link lands on the exact booking page;
+     * without it, on the extranet home where the desk searches the ref.
+     */
+    private function bookingExtranetUrl(Reservation $reservation): ?string
+    {
+        if ($reservation->channel !== 'booking.com' || ! $reservation->channel_ref) {
+            return null;
+        }
+
+        $hotelId = trim((string) Setting::get('hotel.booking_extranet_hotel_id', ''));
+        if ($hotelId === '') {
+            return 'https://admin.booking.com/';
+        }
+
+        return 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html?'
+            .http_build_query(['hotel_id' => $hotelId, 'res_id' => $reservation->channel_ref]);
     }
 
     private function reservationLinks(Reservation $reservation, Request $request): array
