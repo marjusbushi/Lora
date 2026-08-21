@@ -394,7 +394,10 @@ class FinanceController extends Controller
                 $p->direction === 'in' && $p->account_id === $selectedId => $amount,
                 $p->direction === 'out' && $p->account_id === $selectedId => -$amount,
                 $p->direction === 'transfer' && $p->account_id === $selectedId => -$amount,
-                default => $amount, // transfer INTO this account
+                // Transfer INTO this account: a cross-currency row is worth
+                // what actually arrived here (counter_amount, in THIS
+                // account's currency), not the sent amount.
+                default => $p->counter_amount !== null ? (float) $p->counter_amount : $amount,
             };
             $running = round($running + $delta, 2);
 
@@ -424,12 +427,29 @@ class FinanceController extends Controller
                 return $net;
             });
 
+        // Today's cross rates for every currency pair among the visible
+        // accounts — prefills the transfer form's editable exchange rate.
+        $accountCurrencies = $accounts->pluck('currency')->map(fn ($c) => strtoupper((string) $c))->unique()->values();
+        $transferRates = [];
+        foreach ($accountCurrencies as $fromCurrency) {
+            foreach ($accountCurrencies as $toCurrency) {
+                if ($fromCurrency === $toCurrency) {
+                    continue;
+                }
+                $rate = CurrencyRates::between($fromCurrency, $toCurrency);
+                if ($rate !== null) {
+                    $transferRates[$fromCurrency][$toCurrency] = $rate;
+                }
+            }
+        }
+
         return Inertia::render('Finance/Accounts', array_merge($this->shared($request), [
             'accounts' => $accounts,
             'selectedId' => $selectedId,
             'ledger' => $ledger,
             'todayNet' => round($todayNet, 2),
             'currencies' => config('lora.tenant_currencies', ['EUR', 'ALL']),
+            'transferRates' => $transferRates,
         ]));
     }
 
@@ -645,6 +665,7 @@ class FinanceController extends Controller
             'from_account_id' => ['required', 'integer', 'different:to_account_id'],
             'to_account_id' => ['required', 'integer'],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:999999'],
+            'exchange_rate' => ['nullable', 'numeric', 'gt:0', 'max:1000000'],
             'description' => ['nullable', 'string', 'max:300'],
         ]);
 
@@ -654,25 +675,42 @@ class FinanceController extends Controller
         if (! $from || ! $to) {
             abort(403);
         }
-        if ($from['currency'] !== $to['currency']) {
-            return back()->with('error', 'Transferta lejohet vetëm mes llogarive me të njëjtën monedhë (Faza 1).');
+
+        // Cross-currency: the applied rate (destination units per 1 source
+        // unit) comes from the form — prefilled with today's cross rate,
+        // editable so the books record the bank's REAL exchange result.
+        $crossCurrency = $from['currency'] !== $to['currency'];
+        $exchangeRate = isset($data['exchange_rate']) ? round((float) $data['exchange_rate'], 6) : null;
+        if ($crossCurrency && ! $exchangeRate) {
+            throw ValidationException::withMessages([
+                'exchange_rate' => "Kursi {$from['currency']} → {$to['currency']} kërkohet për transfertë mes monedhave.",
+            ]);
         }
+        $counterAmount = $crossCurrency ? round((float) $data['amount'] * $exchangeRate, 2) : null;
+        if ($crossCurrency && $counterAmount < 0.01) {
+            throw ValidationException::withMessages([
+                'exchange_rate' => 'Shuma që mbërrin del nën 0.01 — kontrollo kursin.',
+            ]);
+        }
+
         $fxRate = $from['currency'] === BaseCurrency::code() ? null : BaseCurrency::rate($from['currency']);
         if ($from['currency'] !== BaseCurrency::code() && ! $fxRate) {
             return back()->with('error', "Kursi {$from['currency']}/".BaseCurrency::code().' mungon. Përditëso kurset te Cilësimet → Monedhat.');
         }
 
-        DB::transaction(function () use ($data, $from, $to, $request, $fxRate) {
+        DB::transaction(function () use ($data, $from, $to, $request, $fxRate, $crossCurrency, $exchangeRate, $counterAmount) {
             FinancePayment::create([
                 'direction' => 'transfer',
                 'account_id' => $from['id'],
                 'counter_account_id' => $to['id'],
                 'amount' => $data['amount'],
+                'counter_amount' => $counterAmount,
                 'currency' => $from['currency'],
                 'fx_rate' => $fxRate,
                 'method' => $from['type'] === 'cash' ? 'cash' : 'bank',
                 'source' => 'manual',
-                'description' => ($data['description'] ?? null) ?: "Transfertë {$from['name']} → {$to['name']}",
+                'description' => (($data['description'] ?? null) ?: "Transfertë {$from['name']} → {$to['name']}")
+                    .($crossCurrency ? " · 1 {$from['currency']} = ".rtrim(rtrim(number_format($exchangeRate, 6, '.', ''), '0'), '.')." {$to['currency']}" : ''),
                 'paid_at' => now(),
                 'created_by' => $request->user()->id,
             ]);
@@ -2153,6 +2191,7 @@ class FinanceController extends Controller
             'counter_account_id' => $p->counter_account_id,
             'counter_account' => $p->counterAccount?->name,
             'amount' => (float) $p->amount,
+            'counter_amount' => $p->counter_amount !== null ? (float) $p->counter_amount : null,
             'currency' => $p->currency,
             'amount_base' => (float) $p->amount_base,
             'method' => $p->method,

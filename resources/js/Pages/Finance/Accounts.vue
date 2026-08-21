@@ -13,6 +13,7 @@ import {
     Download,
     Landmark,
     MoreHorizontal,
+    Pencil,
     Plus,
     Search,
     WalletCards,
@@ -34,6 +35,7 @@ const props = defineProps({
     baseCurrency: String,
     fxRate: Number,
     currencies: { type: Array, default: () => ['EUR', 'ALL'] },
+    transferRates: { type: Object, default: () => ({}) },
     can: Object,
 });
 
@@ -210,7 +212,27 @@ function exportLedger() {
 }
 
 const showTransfer = ref(false);
-const transfer = useForm({ from_account_id: props.selectedId, to_account_id: null, amount: null, description: '' });
+const transfer = useForm({ from_account_id: props.selectedId, to_account_id: null, amount: null, exchange_rate: null, description: '' });
+
+// Cross-currency transfer: the rate prefills with today's cross rate and the
+// pen lets the desk enter the bank's REAL applied rate.
+const editingRate = ref(false);
+const transferFrom = computed(() => activeAccounts.value.find((account) => account.id === transfer.from_account_id) || null);
+const transferTo = computed(() => activeAccounts.value.find((account) => account.id === transfer.to_account_id) || null);
+const transferCrossCurrency = computed(() => Boolean(
+    transferFrom.value && transferTo.value && transferFrom.value.currency !== transferTo.value.currency,
+));
+watch([() => transfer.from_account_id, () => transfer.to_account_id], () => {
+    editingRate.value = false;
+    transfer.exchange_rate = transferCrossCurrency.value
+        ? (props.transferRates?.[transferFrom.value.currency]?.[transferTo.value.currency] ?? null)
+        : null;
+});
+const transferArrives = computed(() => (
+    transferCrossCurrency.value && Number(transfer.amount) > 0 && Number(transfer.exchange_rate) > 0
+        ? Number(transfer.amount) * Number(transfer.exchange_rate)
+        : null
+));
 
 watch(() => props.selectedId, (selectedId) => {
     transfer.from_account_id = selectedId;
@@ -224,6 +246,7 @@ function submitTransfer() {
             showTransfer.value = false;
             transfer.reset();
             transfer.from_account_id = props.selectedId;
+            editingRate.value = false;
         },
     });
 }
@@ -459,9 +482,31 @@ function toggleAccount(accountToToggle) {
                     </div>
                 </div>
                 <div>
-                    <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_8f4c4f48eb66') }}</label>
+                    <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_8f4c4f48eb66') }}<span v-if="transferFrom"> ({{ transferFrom.currency }})</span></label>
                     <TextInput v-model="transfer.amount" type="number" min="0.01" step="0.01" class="w-full" placeholder="0.00" />
                     <p v-if="transfer.errors.amount" class="mt-1 text-tiny text-error-600">{{ transfer.errors.amount }}</p>
+                </div>
+                <div v-if="transferCrossCurrency" class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                    <div class="flex flex-wrap items-center gap-2 text-body-sm text-neutral-700">
+                        <span>{{ t('financeAccounts.transferRate') }}: 1 {{ transferFrom.currency }} =</span>
+                        <b v-if="!editingRate" class="tabular-nums text-primary-900">{{ transfer.exchange_rate ?? '—' }}</b>
+                        <TextInput v-else v-model="transfer.exchange_rate" type="number" min="0.000001" step="0.000001" class="w-40" />
+                        <span>{{ transferTo.currency }}</span>
+                        <button
+                            v-if="!editingRate"
+                            type="button"
+                            class="rounded p-1 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-primary-900"
+                            :aria-label="t('financeAccounts.transferRateEdit')"
+                            @click="editingRate = true"
+                        >
+                            <Pencil class="h-4 w-4" />
+                        </button>
+                    </div>
+                    <p v-if="transferArrives !== null" class="mt-2 text-body-sm text-neutral-700">
+                        {{ t('financeAccounts.transferArrives') }}: <b class="tabular-nums text-primary-900">{{ formatMoney(transferArrives, transferTo.currency) }}</b>
+                    </p>
+                    <p v-if="!transfer.exchange_rate" class="mt-1 text-tiny text-warning-700">{{ t('financeAccounts.transferRateMissing') }}</p>
+                    <p v-if="transfer.errors.exchange_rate" class="mt-1 text-tiny text-error-600">{{ transfer.errors.exchange_rate }}</p>
                 </div>
                 <div>
                     <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_8a16159d3a40') }}</label>
@@ -470,7 +515,7 @@ function toggleAccount(accountToToggle) {
             </form>
             <template #footer>
                 <Button variant="ghost" type="button" @click="showTransfer = false">{{ $t('admin.generated.k_83fe7c41f4fc') }}</Button>
-                <Button form="account-transfer-form" type="submit" :loading="transfer.processing" :disabled="!transfer.to_account_id || !transfer.amount">{{ $t('admin.generated.k_baaf04345068') }}</Button>
+                <Button form="account-transfer-form" type="submit" :loading="transfer.processing" :disabled="!transfer.to_account_id || !transfer.amount || (transferCrossCurrency && !transfer.exchange_rate)">{{ $t('admin.generated.k_baaf04345068') }}</Button>
             </template>
         </Modal>
 

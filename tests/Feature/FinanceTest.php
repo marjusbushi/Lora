@@ -180,6 +180,35 @@ class FinanceTest extends TestCase
         $this->assertSame(1, FinancePayment::where('direction', 'transfer')->count());
     }
 
+    public function test_cross_currency_transfer_uses_the_applied_rate_for_the_receiving_side(): void
+    {
+        $admin = $this->role('admin');
+        FinanceAccount::ensureDefaults();
+        $arka = FinanceAccount::where('type', 'cash')->first();
+        $lek = FinanceAccount::create(['name' => 'Banka Lek', 'type' => 'bank', 'currency' => 'ALL', 'is_active' => true]);
+        $res = $this->reservation();
+        Payment::create(['reservation_id' => $res->id, 'amount' => 1000, 'method' => 'cash', 'type' => 'payment']);
+
+        // Cross-currency without a rate → refused, nothing written.
+        $this->actingAs($admin)->post(route('finance.transfers.store'), [
+            'from_account_id' => $arka->id, 'to_account_id' => $lek->id, 'amount' => 100,
+        ])->assertSessionHasErrors(['exchange_rate']);
+        $this->assertSame(0, FinancePayment::where('direction', 'transfer')->count());
+
+        // The desk applies the bank's REAL rate (editable via the pen): 1 EUR = 92.50 ALL.
+        $this->actingAs($admin)->post(route('finance.transfers.store'), [
+            'from_account_id' => $arka->id, 'to_account_id' => $lek->id, 'amount' => 100, 'exchange_rate' => 92.5,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $row = FinancePayment::where('direction', 'transfer')->sole();
+        $this->assertSame(9250.0, (float) $row->counter_amount);
+        $this->assertStringContainsString('1 EUR = 92.5 ALL', $row->description);
+
+        // Each side moves in its OWN currency: −100 EUR, +9,250 L.
+        $this->assertSame(900.0, $arka->balance());
+        $this->assertSame(9250.0, $lek->balance());
+    }
+
     // -- permissions ------------------------------------------------------------
 
     public function test_receptionist_is_locked_out_of_the_finance_module_entirely(): void
