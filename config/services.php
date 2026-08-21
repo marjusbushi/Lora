@@ -73,11 +73,21 @@ return [
     // (Setting 'ai.gemini_key') or via env (GEMINI_API_KEY / GOOGLE_API_KEY).
     'gemini' => [
         'key' => env('GEMINI_API_KEY', env('GOOGLE_API_KEY')),
-        // Rolling alias, deliberately: Google RETIRES concrete model ids for
-        // new generateContent calls (gemini-2.5-flash died Aug 2026 with a 404
-        // while still appearing in ListModels) — the alias always tracks the
-        // current flash model, so pricing reports never break this way again.
-        'model' => env('GEMINI_MODEL', 'gemini-flash-latest'),
+        // PINNED id, deliberately (policy flipped 2026-08-21, task #403): the
+        // rolling alias hot-swapped us onto 3.7-flash in its LAUNCH WEEK — the
+        // historical 503-storm window (three real outage windows on Aug 21) —
+        // and silently changed the price. Pinning keeps model changes OUR
+        // decision. The old hazard (Google retiring concrete ids — the
+        // gemini-2.5-flash 404 of Aug 2026) is covered the other way now: the
+        // weekly canary pings this exact id and fails loud, and the fallback
+        // below keeps guests answered meanwhile.
+        'model' => env('GEMINI_MODEL', 'gemini-3.7-flash'),
+        // Modeli rezervë për dritaret e mbingarkesës (task #403): kur primari
+        // kthen 5xx OSE ngec (timeout), e njëjta kërkesë provohet MENJËHERË te
+        // "lite" (pishinë tjetër kapaciteti, më i lirë per token) dhe biseda i
+        // ngjitet deri në fund. I fiksuar për të njëjtën arsye si primari.
+        // Bosh = pa rezervë.
+        'fallback_model' => env('GEMINI_FALLBACK_MODEL', 'gemini-3.5-flash-lite'),
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
     ],
 

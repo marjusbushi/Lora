@@ -14,8 +14,16 @@ use RuntimeException;
  */
 class GeminiClient
 {
-    /** Cap on the flash models' "thinking" tokens so the forced function call is never starved (verified accepted by gemini-flash-latest). */
+    /** Cap on the flash models' "thinking" tokens so the forced function call is never starved (verified accepted by gemini-flash-latest and the pinned gemini-3.7-flash via the real-API tests). */
     private const THINKING_BUDGET = 512;
+
+    /**
+     * Tavan per-THIRRJE brenda converse(): në dritaret e mbingarkesës Google
+     * mban kërkesa pezull me minuta (504-t e forumit zyrtar; vonesat 2-min që
+     * pa Marjusi live). Më mirë e presim në 30s dhe provojmë modelin rezervë
+     * sesa ta lëmë mysafirin duke pritur (task #403).
+     */
+    private const CALL_TIMEOUT_CAP = 30;
 
     public function key(): ?string
     {
@@ -108,6 +116,11 @@ class GeminiClient
         $contents = [['role' => 'user', 'parts' => [['text' => $userMessage]]]];
         $toolsUsed = [];
 
+        // Modeli AKTIV i kësaj bisede: nis me primarin; nëse një raund shpëtohet
+        // nga rezerva, biseda NGJIT te rezerva deri në fund — ping-pong-u mes
+        // modeleve mes raundeve rrezikon 400 mbi thoughtSignature-t e huaja.
+        $activeModel = $this->model();
+
         // $timeoutSeconds është kufiri i GJITHË bisedës, jo i çdo kërkese — me
         // 3 raunde mjetesh nga 45s secili, job-i (timeout 90s) vritej në mes
         // dhe s'linte as draft (gjetje Codex, PR #462).
@@ -121,7 +134,8 @@ class GeminiClient
 
             // Raundi i fundit lejon VETËM përgjigjen finale — cikli s'mbetet kurrë pa dalje.
             $allowed = $round === $maxToolRounds ? [$finalToolName] : $allNames;
-            $turn = $this->generate($system, $contents, $functions, $allowed, $maxTokens, $remaining);
+            $turn = $this->generate($activeModel, $system, $contents, $functions, $allowed, $maxTokens, min($remaining, self::CALL_TIMEOUT_CAP));
+            $activeModel = $turn['model'];
 
             // Finalja pranohet VETËM si thirrje e vetme e radhës (ose kur raundi
             // lejon vetëm finalen). Në një radhë të përzier — guest_reply paralel
@@ -175,20 +189,14 @@ class GeminiClient
      * One generateContent round that MUST return at least one function call among
      * $allowedNames. Returns the model's content VERBATIM as decoded objects (so
      * thoughtSignature/id and empty-object args survive the round-trip — the API
-     * rejects reconstructed history with 400) plus the extracted calls in order.
+     * rejects reconstructed history with 400) plus the extracted calls in order,
+     * plus the model that actually served the round (converse sticks to it).
      *
-     * @return array{content:\stdClass,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>}
+     * @return array{content:\stdClass,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>,model:string}
      */
-    private function generate(string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, int $timeoutSeconds): array
+    private function generate(string $model, string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, int $timeoutSeconds): array
     {
-        // The key travels in the x-goog-api-key HEADER — never in the URL, so it
-        // can never leak via exception messages, access logs, or report() traces.
-        $url = $this->base().'/models/'.$this->model().':generateContent';
-
-        $res = Http::withHeaders([
-            'content-type' => 'application/json',
-            'x-goog-api-key' => (string) $this->key(),
-        ])->timeout($timeoutSeconds)->post($url, [
+        $payload = [
             'system_instruction' => ['parts' => [['text' => $system]]],
             'contents' => $contents,
             'tools' => [['function_declarations' => $functions]],
@@ -202,7 +210,42 @@ class GeminiClient
                 // parts). A small budget keeps light reasoning while guaranteeing output room.
                 'thinkingConfig' => ['thinkingBudget' => self::THINKING_BUDGET],
             ],
-        ]);
+        ];
+
+        // Ngecja (timeout/rrjet) trajtohet NJËSOJ si 5xx: në dritaret e
+        // mbingarkesës Google herë refuzon (503) e herë var pezull (504) —
+        // për mysafirin janë e njëjta heshtje (task #403).
+        $servedBy = $model;
+        try {
+            $res = $this->post($model, $payload, $timeoutSeconds);
+        } catch (\Illuminate\Http\Client\ConnectionException) {
+            $res = null;
+        }
+
+        // Dritaret 503 të mbingarkesës (task #403, tri herë live më 2026-08-21):
+        // alias-i flash-latest sapo kishte kaluar te 3.7 i posa-lançuar që
+        // ngjishet në orë piku. E njëjta kërkesë provohet MENJËHERË te modeli
+        // rezervë "lite" (kapacitet më i lirë, pishinë tjetër) — mysafiri merr
+        // përgjigje në sekonda; rezerva dështon → gabimi ORIGJINAL bublon
+        // (radha riprovon si zakonisht).
+        $fallback = trim((string) config('services.gemini.fallback_model'));
+        if (($res === null || $res->serverError()) && $fallback !== '' && $fallback !== $model) {
+            try {
+                $fallbackRes = $this->post($fallback, $payload, $timeoutSeconds);
+                if ($fallbackRes->successful()) {
+                    $res = $fallbackRes;
+                    $servedBy = $fallback;
+                }
+            } catch (\Illuminate\Http\Client\ConnectionException) {
+                // Rezerva ngeci edhe ajo — mbetet dështimi origjinal më poshtë.
+            }
+        }
+
+        if ($res === null) {
+            // Mesazhi mban "(timeout)" me qëllim: failed() e njeh si kalimtar
+            // dhe planifikon riprovën e ftohtë 5-min, njësoj si 5xx.
+            throw new RuntimeException('Google nuk u përgjigj në kohë (timeout). Provo sërish.');
+        }
 
         if (!$res->successful()) {
             $this->throwHttpError($res->status(), (string) $res->body());
@@ -227,7 +270,7 @@ class GeminiClient
             // objekt JSON, ndryshe raundi i jehonës kthen 400 (gjetje Codex).
             $content = json_decode((string) $res->body())->candidates[0]->content;
 
-            return ['content' => $content, 'calls' => $calls];
+            return ['content' => $content, 'calls' => $calls, 'model' => $servedBy];
         }
 
         // No function call came back. The usual cause is the thinking budget eating the
@@ -265,6 +308,18 @@ class GeminiClient
             $res->status() === 404 => ['ok' => false, 'error' => 'Modeli i AI nuk u gjet (404) — njoftoni mbështetjen.'],
             default => ['ok' => null, 'error' => null],
         };
+    }
+
+    /**
+     * Një thirrje generateContent te modeli i dhënë. Çelësi vetëm në HEADER —
+     * kurrë në URL (s'rrjedh dot via logje/exception/report).
+     */
+    private function post(string $model, array $payload, int $timeoutSeconds): \Illuminate\Http\Client\Response
+    {
+        return Http::withHeaders([
+            'content-type' => 'application/json',
+            'x-goog-api-key' => (string) $this->key(),
+        ])->timeout($timeoutSeconds)->post($this->base().'/models/'.$model.':generateContent', $payload);
     }
 
     private function throwHttpError(int $status, string $body): never

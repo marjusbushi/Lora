@@ -128,12 +128,24 @@ class MessagesController extends Controller
             ->where('subject_type', MessageThread::class)
             ->whereIn('subject_id', $threads->pluck('id'))
             ->orderByDesc('id')
-            ->get(['subject_id', 'properties'])
+            ->get(['id', 'subject_id', 'properties'])
             ->unique('subject_id');
 
         if ($failures->isEmpty()) {
             return [];
         }
+
+        // Dërgim AI i SUKSESSHËM PAS dështimit (riprova e ftohtë e task #403)
+        // e shuan alarmin — krahasim me rend ID auditësh: auditi ai_reply i
+        // riprovës shkruhet PAS atij të dështimit (id më e madhe), ndërsa
+        // përgjigja e vonuar e një job-i të VJETËR garues ka id më të vogël
+        // se dështimi dhe s'e shuan (semantika e Codex PR #502 e paprekur).
+        $recoveries = \App\Models\AuditLog::query()
+            ->where('action', 'message.ai_reply')
+            ->where('subject_type', MessageThread::class)
+            ->whereIn('subject_id', $failures->pluck('subject_id'))
+            ->groupBy('subject_id')
+            ->pluck(\Illuminate\Support\Facades\DB::raw('MAX(id) as max_id'), 'subject_id');
 
         // Mesazhi RELEVANT më i ri per bisedë (mysafir ose staf njerëzor —
         // përgjigjet AI të job-eve të vjetra garuese s'e shuajnë alarmin).
@@ -145,11 +157,12 @@ class MessagesController extends Controller
             ->pluck(\Illuminate\Support\Facades\DB::raw('MAX(id) as max_id'), 'message_thread_id');
 
         return $failures
-            ->filter(function ($audit) use ($latestRelevant) {
+            ->filter(function ($audit) use ($latestRelevant, $recoveries) {
                 $failedMessageId = $audit->properties['message_id'] ?? null;
 
                 return $failedMessageId !== null
-                    && (int) ($latestRelevant[$audit->subject_id] ?? 0) <= (int) $failedMessageId;
+                    && (int) ($latestRelevant[$audit->subject_id] ?? 0) <= (int) $failedMessageId
+                    && (int) ($recoveries[$audit->subject_id] ?? 0) < (int) $audit->id;
             })
             ->pluck('subject_id')
             ->all();
@@ -174,10 +187,23 @@ class MessagesController extends Controller
             ->where('subject_type', MessageThread::class)
             ->where('subject_id', $thread->id)
             ->latest('id')
-            ->first(['created_at', 'properties']);
+            ->first(['id', 'created_at', 'properties']);
 
         $failedMessageId = $failure?->properties['message_id'] ?? null;
         if ($failedMessageId === null) {
+            return null;
+        }
+
+        // Riprova e ftohtë dërgoi me sukses PAS dështimit → alarmi shuhet.
+        // Rend ID auditësh, jo kohe: reply-i i një job-i të vjetër garues ka
+        // id më të vogël se dështimi i vonuar dhe NUK e shuan (Codex #502).
+        $recovered = \App\Models\AuditLog::query()
+            ->where('action', 'message.ai_reply')
+            ->where('subject_type', MessageThread::class)
+            ->where('subject_id', $thread->id)
+            ->where('id', '>', $failure->id)
+            ->exists();
+        if ($recovered) {
             return null;
         }
 

@@ -906,6 +906,18 @@ PROMPT;
                 'error' => mb_substr($e?->getMessage() ?: 'Dështim i panjohur.', 0, 300),
             ], 'ai');
 
+            // Riprova e ftohtë 5-min për dështimet KALIMTARE (task #403):
+            // dritaret e mbingarkesës së Google zgjasin minuta — pa këtë,
+            // mysafiri priste derisa të shkruante vetë sërish. VETËM një herë
+            // per mesazh (kyçje atomike) dhe VETËM për 5xx ose ngecje
+            // "(timeout)" — 400/403/kuotë s'riprovohen (do dështonin njësoj).
+            $coolRetry = false;
+            if (preg_match('/gabim \((5\d\d)\)|\(timeout\)/u', (string) $e?->getMessage())
+                && Cache::add(sprintf('ai-cool-retry:%d:%d', $thread->tenant_id, $this->messageId), 1, now()->addHour())) {
+                self::dispatch($this->threadId, $this->messageId)->delay(now()->addMinutes(5));
+                $coolRetry = true;
+            }
+
             // Mbajtje e krijuar nga KY job por link KURRË i dorëzuar (gjetje
             // Codex, PR #505/#506): pas dështimit terminal dhoma s'duhet të
             // presë 35 min të bllokuar. VETËM mbajtja e përpjekjes SONË: e
@@ -928,7 +940,14 @@ PROMPT;
                     ->where('sent_by_ai', true)
                     ->where('sent_at', '>=', $hold->created_at)
                     ->exists();
-            if ($ours
+            // Kur riprova e ftohtë u planifikua, mbajtja NUK lirohet — riprova
+            // e ripërdor me idempotencë (të njëjtat detaje → i njëjti link,
+            // AiConversationBooking::holdPayload) dhe mysafiri paguan pa e
+            // rikrijuar. Nëse edhe riprova dështon, kalon KËTU pa $coolRetry
+            // (kyçja s'lë të dytë) dhe lirimi bëhet atëherë; rrjeta
+            // pok:release-unpaid mbetet gjithsesi e fundit.
+            if (! $coolRetry
+                && $ours
                 && $hold->status === 'pending'
                 && $hold->created_via === \App\Models\Reservation::CREATED_VIA_AI
                 && $hold->pok_order_id) {
