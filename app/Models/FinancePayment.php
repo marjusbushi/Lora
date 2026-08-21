@@ -17,7 +17,7 @@ class FinancePayment extends TenantModel
     private ?float $frozenAmountBase = null;
 
     protected $fillable = [
-        'direction', 'movement', 'account_id', 'counter_account_id', 'amount', 'currency',
+        'direction', 'movement', 'account_id', 'counter_account_id', 'amount', 'counter_amount', 'currency',
         'fx_rate', 'amount_base', 'method', 'source', 'bill_id', 'invoice_id',
         'sourceable_type', 'sourceable_id', 'description', 'paid_at', 'created_by',
     ];
@@ -25,6 +25,9 @@ class FinancePayment extends TenantModel
     protected $casts = [
         'amount' => 'decimal:2',
         'amount_base' => 'decimal:2',
+        // Cross-currency transfer: what arrived in the destination account's
+        // own currency. Null when both accounts share a currency.
+        'counter_amount' => 'decimal:2',
         'fx_rate' => 'decimal:6',
         'paid_at' => 'datetime',
     ];
