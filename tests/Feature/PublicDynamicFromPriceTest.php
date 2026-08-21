@@ -190,8 +190,8 @@ class PublicDynamicFromPriceTest extends TestCase
             'room_type_id' => $roomType->id,
         ])->assertOk();
 
-        $quote->assertJsonPath('rooms.0.price_per_night', 65)
-            ->assertJsonPath('rooms.0.total_price', 65);
+        $quote->assertJsonPath('room_types.0.price_per_night', 65)
+            ->assertJsonPath('room_types.0.total_price', 65);
 
         $otaRates = app(ChannelSync::class)->priceByDate(
             $roomType,
@@ -203,7 +203,7 @@ class PublicDynamicFromPriceTest extends TestCase
         $publicProps = $this->publicRoomTypeProps('website.home', $roomType);
         $this->assertArrayHasKey('from_price', $publicProps);
         $this->assertSame(65.0, (float) $publicProps['from_price']);
-        $this->assertSame((float) $quote->json('rooms.0.total_price'), $otaRates[$dateString]);
+        $this->assertSame((float) $quote->json('room_types.0.total_price'), $otaRates[$dateString]);
         $this->assertSame((float) $publicProps['from_price'], $otaRates[$dateString]);
     }
 }
