@@ -62,6 +62,11 @@ class BankPaymentsReportService
             $own = strtoupper((string) $account['currency']) === $base
                 ? (float) $payment->amount_base
                 : (float) $payment->amount;
+            // The incoming leg of a cross-currency transfer arrives as
+            // counter_amount in THIS bank's own currency.
+            if ($incoming && $payment->counter_amount !== null) {
+                $own = (float) $payment->counter_amount;
+            }
 
             $key = $incoming ? 'in' : 'out';
             $summaries[$bankAccountId][$key] = round($account[$key] + $own, 2);
