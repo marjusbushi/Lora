@@ -150,6 +150,15 @@ class LoraAiSettingsCascadeTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->where('stats.bookings', 1)
                 ->where('stats.bookingRevenue', fn ($value) => abs((float) $value - $expected) < 0.005));
+
+        // Fshirja e butë e mëvonshme s'e zbraz statistikën e muajit — numërimi
+        // vjen nga audit-i append-only, shuma duhet të mbetet konsistente me të.
+        $reservation->delete();
+
+        $this->actingAs($admin)->get(route('lora-ai.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('stats.bookings', 1)
+                ->where('stats.bookingRevenue', fn ($value) => abs((float) $value - $expected) < 0.005));
     }
 
     public function test_booking_revenue_is_hidden_from_roles_without_money_permissions(): void

@@ -134,7 +134,10 @@ class LoraAiController extends Controller
                     // (total_amount_base) — properties.total mban monedhën e shitjes
                     // të momentit dhe një ndryshim monedhe brenda muajit do t'i
                     // përzinte shifrat (Codex, PR #548).
-                    'bookingRevenue' => $seesMoney ? round((float) \App\Models\Reservation::query()
+                    // withTrashed: numërimi vjen nga audit-i append-only, ndaj
+                    // edhe shuma duhet ta mbajë rezervimin e fshirë më vonë —
+                    // statistika e muajit s'zbrazet nga fshirjet (Codex, PR #549).
+                    'bookingRevenue' => $seesMoney ? round((float) \App\Models\Reservation::withTrashed()
                         ->whereIn('id', $confirmedIds)
                         ->sum('total_amount_base'), 2) : null,
                 ];
