@@ -177,6 +177,87 @@ class AiRoomPhotosTest extends TestCase
         $this->assertNotNull($thread->refresh()->ai_suggestion);
     }
 
+    public function test_a_colloquial_type_name_resolves_and_ambiguity_lists_the_real_names(): void
+    {
+        $this->typeWithPhotos(); // "Deluxe With Sea View"
+        RoomType::create(['name' => 'Deluxe Garden', 'base_price' => 80, 'max_occupancy' => 2, 'amenities' => []]);
+        [$thread, $message] = $this->whatsappThread();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                // Përshkrimi i mjetit mban emrat kanonikë (Codex #530).
+                $tool = collect($tools)->firstWhere('name', 'send_room_photos');
+                if (! str_contains($tool['description'], 'Deluxe With Sea View')) {
+                    throw new \RuntimeException('Përshkrimi duhej të listonte tipologjitë kanonike.');
+                }
+
+                // Emër kolokjual → zgjidhet njëvlershëm.
+                $ok = $executors['send_room_photos'](['room_type' => 'deluxe sea view']);
+                if (($ok['room_type'] ?? null) !== 'Deluxe With Sea View') {
+                    throw new \RuntimeException('Emri kolokjual duhej të zgjidhte tipologjinë e vetme përputhëse.');
+                }
+
+                // "deluxe" i paqartë (2 kandidatë) → error me emrat realë.
+                $ambiguous = $executors['send_room_photos'](['room_type' => 'deluxe']);
+                if (! isset($ambiguous['error']) || ! str_contains($ambiguous['error'], 'Deluxe Garden')) {
+                    throw new \RuntimeException('Paqartësia duhej të kthente emrat kandidatë.');
+                }
+
+                return [
+                    'args' => ['confident' => true, 'reply' => 'Ja fotot!', 'kind' => 'informative'],
+                    'toolsUsed' => ['send_room_photos'],
+                ];
+            });
+        });
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('typing')->andReturn([]);
+            $mock->shouldReceive('sendImage')->twice()->andReturnUsing(fn () => ['id' => 'wa-img-'.uniqid('', true)]);
+            $mock->shouldReceive('send')->once()->andReturn(['id' => 'wa-txt-1']);
+        });
+
+        app()->call([new GenerateAiGuestReply($thread->id, $message->id), 'handle']);
+
+        $this->assertDatabaseHas('audit_logs', ['action' => 'message.ai_photos_sent']);
+    }
+
+    public function test_a_newer_message_mid_photo_sequence_stops_the_rest(): void
+    {
+        $this->typeWithPhotos(2);
+        [$thread, $message] = $this->whatsappThread();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $executors['send_room_photos'](['room_type' => 'Deluxe With Sea View']);
+
+                return [
+                    'args' => ['confident' => true, 'reply' => 'Ja fotot!', 'kind' => 'informative'],
+                    'toolsUsed' => ['send_room_photos'],
+                ];
+            });
+        });
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) use ($thread) {
+            $mock->shouldReceive('typing')->andReturn([]);
+            // Gjatë ngarkimit të fotos së parë vjen mesazh i RI mysafiri —
+            // fotoja e dytë dhe teksti s'guxojnë të dalin (Codex #530).
+            $mock->shouldReceive('sendImage')->once()->andReturnUsing(function () use ($thread) {
+                $thread->messages()->create([
+                    'sender' => Message::SENDER_GUEST,
+                    'body' => 'Prit — ndryshova mendje!',
+                    'sent_at' => now()->addSecond(),
+                ]);
+
+                return ['id' => 'wa-img-1'];
+            });
+            $mock->shouldReceive('send')->never();
+        });
+
+        app()->call([new GenerateAiGuestReply($thread->id, $message->id), 'handle']);
+
+        $this->assertSame(1, Message::query()->where('message_thread_id', $thread->id)->where('body', 'like', '📷%')->count());
+    }
+
     public function test_a_drafted_reply_sends_no_photos_at_all(): void
     {
         $this->typeWithPhotos(2);

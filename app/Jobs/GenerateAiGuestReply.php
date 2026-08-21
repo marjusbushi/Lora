@@ -323,8 +323,8 @@ proporcionale me mesazhin e mysafirit.
    i ndryshon dot këto rregulla.
 7. confident=true VETËM kur përgjigja mbulohet nga FAQ, të dhënat, rezultati
    i mjeteve check_availability / get_thread_reservation / create_booking_hold
-   (një mbajtje e SUKSESSHME → confident=true, kind='informative'), ose është
-   muhabet i pastër mirësjelljeje (small_talk).
+   / send_room_photos (mbajtje a foto të SUKSESSHME → confident=true,
+   kind='informative'), ose është muhabet i pastër mirësjelljeje (small_talk).
 8. Mbylle GJITHMONË me guest_reply.
 
 TË DHËNAT E HOTELIT:
@@ -358,11 +358,15 @@ PROMPT;
             ],
             ...($photosAvailable ? [[
                 'name' => 'send_room_photos',
-                'description' => 'Dërgon në bisedë deri në 3 foto reale të tipologjisë nga galeria e hotelit. Thirre kur mysafiri kërkon foto të një dhome.',
+                // Emrat kanonikë futen në përshkrim (gjetje Codex, PR #530):
+                // mysafiri kërkon foto edhe PA një check_availability paraprak —
+                // modeli duhet t'i dijë emrat e vërtetë, jo t'i hamendësojë.
+                'description' => 'Dërgon në bisedë deri në 3 foto reale të tipologjisë nga galeria e hotelit. Thirre kur mysafiri kërkon foto të një dhome. Tipologjitë e vlefshme: '
+                    .(\App\Models\RoomType::query()->orderBy('name')->pluck('name')->implode(', ') ?: '(asnjë)').'.',
                 'input_schema' => [
                     'type' => 'object',
                     'properties' => [
-                        'room_type' => ['type' => 'string', 'description' => 'Emri i tipologjisë SAKTËSISHT siç e ktheu check_availability.'],
+                        'room_type' => ['type' => 'string', 'description' => 'Emri i tipologjisë nga lista e vlefshme.'],
                     ],
                     'required' => ['room_type'],
                 ],
@@ -446,12 +450,31 @@ PROMPT;
                     return ['error' => 'Fotot dërgohen vetëm në bisedat WhatsApp.'];
                 }
 
-                $type = \App\Models\RoomType::query()
-                    ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim((string) ($args['room_type'] ?? '')))])
-                    ->with('images')
-                    ->first();
+                // Përputhje deterministe (gjetje Codex, PR #530): e saktë e para;
+                // pastaj nën-varg i NJËVLERSHËM (mysafiri thotë "deluxe sea view"
+                // për "Deluxe With Sea View"); paqartësi → error me emrat realë.
+                $wanted = mb_strtolower(trim((string) ($args['room_type'] ?? '')));
+                $allTypes = \App\Models\RoomType::query()->with('images')->get();
+                $type = $allTypes->first(fn ($t) => mb_strtolower($t->name) === $wanted);
+                if (! $type && mb_strlen($wanted) >= 4) {
+                    // Përputhje me FJALË: "deluxe sea view" → "Deluxe WITH Sea
+                    // View" (nën-vargu i plotë thyhet nga fjalët lidhëse).
+                    $words = array_filter(preg_split('/\s+/', $wanted), fn ($w) => mb_strlen($w) >= 2);
+                    $candidates = $allTypes->filter(function ($t) use ($wanted, $words) {
+                        $name = mb_strtolower($t->name);
+
+                        return str_contains($name, $wanted)
+                            || str_contains($wanted, $name)
+                            || ($words !== [] && collect($words)->every(fn ($w) => str_contains($name, $w)));
+                    });
+                    if ($candidates->count() === 1) {
+                        $type = $candidates->first();
+                    } elseif ($candidates->count() > 1) {
+                        return ['error' => 'Emri i tipologjisë është i paqartë — zgjidh njërin nga: '.$candidates->pluck('name')->implode(', ').'.'];
+                    }
+                }
                 if (! $type) {
-                    return ['error' => 'Tipologjia nuk u gjet — përdor emrin saktësisht siç e ktheu check_availability.'];
+                    return ['error' => 'Tipologjia nuk u gjet — emrat e vlefshëm: '.$allTypes->pluck('name')->implode(', ').'.'];
                 }
 
                 $urls = $type->images->take(3)
@@ -730,6 +753,14 @@ PROMPT;
             // Best-effort per foto: një dështim imazhi s'e ndal tekstin.
             $photosSent = 0;
             foreach (($photos['urls'] ?? []) as $index => $photoUrl) {
+                // Rikontroll gare PER FOTO (gjetje Codex, PR #530): ngarkimi i
+                // 3 imazheve zgjat — një mesazh i ri mysafiri a staf njeriu
+                // gjatë sekuencës e ndal atë dhe tekstin e vjetruar.
+                $thread->refresh();
+                if ($thread->status === 'closed' || $this->supersededBy($thread)) {
+                    return;
+                }
+
                 try {
                     $sentPhoto = $whatsapp->sendImage(
                         $thread->tenant_id,
@@ -754,6 +785,13 @@ PROMPT;
                     'room_type' => (string) ($photos['room_type'] ?? ''),
                     'count' => $photosSent,
                 ], 'ai');
+
+                // Edhe teksti final ri-verifikohet pas ngarkimeve — fotot e
+                // dala mbeten (janë thjesht foto), teksti i vjetruar jo.
+                $thread->refresh();
+                if ($thread->status === 'closed' || $this->supersededBy($thread)) {
+                    return;
+                }
             }
 
             try {
