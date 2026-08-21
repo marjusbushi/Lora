@@ -46,7 +46,7 @@ class RealtimeReservationsTest extends TestCase
 
         // 1) BURIMI WEB PUBLIK — rruga reale e mysafirit, fund-më-fund.
         $this->post(route('website.book.submit'), [
-            'room_id' => $room->id,
+            'selections' => [['room_type_id' => $room->room_type_id, 'quantity' => 1]],
             'check_in' => today()->addDays(3)->toDateString(),
             'check_out' => today()->addDays(5)->toDateString(),
             'first_name' => 'Rina', 'last_name' => 'T', 'email' => 'rina@t.local', 'phone' => '+355 69 111',

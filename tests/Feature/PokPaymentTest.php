@@ -74,7 +74,7 @@ class PokPaymentTest extends TestCase
         $room = $this->room(150);
 
         $res = $this->post(route('website.book.submit'), [
-            'room_id' => $room->id,
+            'selections' => [['room_type_id' => $room->room_type_id, 'quantity' => 1]],
             'check_in' => now()->addDays(3)->toDateString(),
             'check_out' => now()->addDays(4)->toDateString(),
             'first_name' => 'Ana', 'last_name' => 'Test', 'email' => 'ana@test.al',
@@ -307,7 +307,7 @@ class PokPaymentTest extends TestCase
         Guest::create(['first_name' => 'Marjus', 'last_name' => 'B', 'email' => 'repeat@test.al', 'phone' => '069000000']);
 
         $this->post(route('website.book.submit'), [
-            'room_id' => $room->id,
+            'selections' => [['room_type_id' => $room->room_type_id, 'quantity' => 1]],
             'check_in' => now()->addDays(3)->toDateString(),
             'check_out' => now()->addDays(4)->toDateString(),
             'first_name' => 'Marjus', 'last_name' => 'B', 'email' => 'repeat@test.al',
@@ -329,7 +329,7 @@ class PokPaymentTest extends TestCase
         Guest::create(['first_name' => 'Ita', 'last_name' => 'G', 'email' => 'ita@test.al', 'phone' => '3551111', 'nationality' => 'IT']);
 
         $this->post(route('website.book.submit'), [
-            'room_id' => $room->id,
+            'selections' => [['room_type_id' => $room->room_type_id, 'quantity' => 1]],
             'check_in' => now()->addDays(3)->toDateString(),
             'check_out' => now()->addDays(4)->toDateString(),
             'first_name' => 'Ita', 'last_name' => 'G', 'email' => 'ita@test.al',

@@ -121,7 +121,7 @@ class ReservationChannelTest extends TestCase
         [, $room] = $this->setupHotel();
 
         $this->post(route('website.book.submit'), [
-            'room_id' => $room->id,
+            'selections' => [['room_type_id' => $room->room_type_id, 'quantity' => 1]],
             'check_in' => now()->addDays(4)->toDateString(),
             'check_out' => now()->addDays(6)->toDateString(),
             'first_name' => 'Web',

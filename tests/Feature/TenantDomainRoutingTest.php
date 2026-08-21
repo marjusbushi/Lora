@@ -174,13 +174,13 @@ class TenantDomainRoutingTest extends TestCase
         $staff = $this->makeStaffFor($home);
 
         app(TenantContext::class)->set($other);
-        $roomId = Room::query()->sole()->id;
+        $roomTypeId = Room::query()->sole()->room_type_id;
         app(TenantContext::class)->clear();
 
         $this->actingAs($staff)
             ->withSession(['tenant_id' => $home->id])
             ->post('https://hotelb.test/book', [
-                'room_id' => $roomId,
+                'selections' => [['room_type_id' => $roomTypeId, 'quantity' => 1]],
                 'check_in' => today()->addDays(3)->toDateString(),
                 'check_out' => today()->addDays(5)->toDateString(),
                 'first_name' => 'Ana',
