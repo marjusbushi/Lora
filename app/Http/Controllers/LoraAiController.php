@@ -110,7 +110,7 @@ class LoraAiController extends Controller
                 ->where('tenant_id', $tenant->id)->where('source', 'ai')
                 ->latest('id')->limit(6)->get(['action', 'created_at']),
             // Kartela e Lorës (task #402): vlera e saj e dukshme — jo konfigurim.
-            'stats' => (function () use ($tenant) {
+            'stats' => (function () use ($tenant, $request) {
                 $monthStart = now()->startOfMonth();
                 $monthly = DB::table('audit_logs')
                     ->where('tenant_id', $tenant->id)->where('source', 'ai')
@@ -122,14 +122,18 @@ class LoraAiController extends Controller
                     ->where('action', 'message.ai_booking_confirmed')
                     ->get(['properties']);
 
+                // Të ardhurat janë sipërfaqe financiare — rruga mbrohet vetëm me
+                // view_settings, ndaj shuma jepet vetëm kujt sheh paratë (Codex, PR #542).
+                $seesMoney = $request->user()->can('view_financials') || $request->user()->can('view_finance');
+
                 return [
                     'replies' => (clone $monthly)
                         ->whereIn('action', ['message.ai_reply', 'ai.guest_reply.sent'])
                         ->count(),
                     'bookings' => $confirmed->count(),
-                    'bookingRevenue' => round($confirmed->sum(
+                    'bookingRevenue' => $seesMoney ? round($confirmed->sum(
                         fn ($row) => (float) (json_decode((string) $row->properties, true)['total'] ?? 0)
-                    ), 2),
+                    ), 2) : null,
                 ];
             })(),
         ]);
@@ -156,6 +160,25 @@ class LoraAiController extends Controller
             'pos_enabled' => ['sometimes', 'boolean'],
             'inventory_enabled' => ['sometimes', 'boolean'],
         ]);
+
+        // Zinxhiri i varësive zbatohet edhe në SERVER — job-et (p.sh.
+        // GenerateAiGuestReply) lexojnë çelësin e vet direkt, ndaj një vlerë e
+        // varur e mbetur ndezur do t'i mbante aktive pas fikjes së nivelit nën
+        // të (gjetje Codex, PR #542). UI-ja kaskadon vetë; kjo është rrjeta.
+        if (! ($data['messages_enabled'] ?? true)) {
+            $data['guest_reply_enabled'] = false;
+        }
+        if (! ($data['guest_reply_enabled'] ?? true)) {
+            $data['guest_auto_reply_enabled'] = false;
+            $data['whatsapp_auto_reply_enabled'] = false;
+        }
+        if (! ($data['whatsapp_auto_reply_enabled'] ?? true)) {
+            $data['whatsapp_booking_enabled'] = false;
+        }
+        if (! ($data['pricing_enabled'] ?? true)) {
+            $data['price_apply_enabled'] = false;
+            $data['ai_price_recommendations_enabled'] = false;
+        }
 
         // Identiteti/karakteri janë TEKST — jo çelësa on/off (task #370). Bosh →
         // ruhet '' dhe job-i bie vetë te default-i i para-shkruar.

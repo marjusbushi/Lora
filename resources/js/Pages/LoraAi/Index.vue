@@ -1,6 +1,6 @@
 <script setup>
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
@@ -60,6 +60,27 @@ const revenueLabel = computed(() => {
         return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency, maximumFractionDigits: 0 }).format(Number(props.stats.bookingRevenue || 0));
     } catch {
         return `${props.stats.bookingRevenue}`;
+    }
+});
+
+// Fikja e një shkalle FIK realisht vlerat e varura — jo vetëm i çaktivizon në UI:
+// job-et e backend-it lexojnë çelësin e vet direkt (gjetje Codex, PR #542).
+watch(() => form.messages_enabled, (on) => {
+    if (!on) form.guest_reply_enabled = false;
+});
+watch(() => form.guest_reply_enabled, (on) => {
+    if (!on) {
+        form.guest_auto_reply_enabled = false;
+        form.whatsapp_auto_reply_enabled = false;
+    }
+});
+watch(() => form.whatsapp_auto_reply_enabled, (on) => {
+    if (!on) form.whatsapp_booking_enabled = false;
+});
+watch(() => form.pricing_enabled, (on) => {
+    if (!on) {
+        form.price_apply_enabled = false;
+        form.ai_price_recommendations_enabled = false;
     }
 });
 
@@ -268,7 +289,7 @@ function selectSettingsPage(tabId) {
                                     <b class="block text-xl font-extrabold tracking-tight text-neutral-900">{{ stats.bookings }}</b>
                                     <span class="text-tiny text-neutral-500">{{ $t('loraAi.statBookings') }}</span>
                                 </div>
-                                <div class="px-5 last:pr-0">
+                                <div v-if="stats.bookingRevenue !== null" class="px-5 last:pr-0">
                                     <b class="block text-xl font-extrabold tracking-tight text-amber-600">{{ revenueLabel }}</b>
                                     <span class="text-tiny text-neutral-500">{{ $t('loraAi.statRevenue') }}</span>
                                 </div>
