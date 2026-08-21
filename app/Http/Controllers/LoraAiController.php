@@ -59,10 +59,17 @@ class LoraAiController extends Controller
             'geminiKeyHealth' => (function () {
                 $health = Setting::get('ai.gemini_key_health');
 
-                return is_array($health) && ($health['ok'] ?? null) === false ? [
-                    'error' => (string) ($health['error'] ?? ''),
-                    'checked_at' => (string) ($health['checked_at'] ?? ''),
-                ] : null;
+                // Alarmi vlen VETËM për çelësin AKTUAL (gjetje Codex, PR #514):
+                // gjurma e çelësit të testuar duhet të përputhet — një rezultat
+                // i shkruar vonë për një çelës të ndërruar nuk shfaqet kurrë.
+                $currentFp = hash('sha256', (string) app(\App\Services\GeminiClient::class)->key());
+
+                return is_array($health)
+                    && ($health['ok'] ?? null) === false
+                    && ($health['key_fp'] ?? null) === $currentFp ? [
+                        'error' => (string) ($health['error'] ?? ''),
+                        'checked_at' => (string) ($health['checked_at'] ?? ''),
+                    ] : null;
             })(),
             'aiSettings' => [
                 'universal_search_enabled' => $this->boolSetting('universal_search_enabled', true),

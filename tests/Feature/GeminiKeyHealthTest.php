@@ -124,6 +124,24 @@ class GeminiKeyHealthTest extends TestCase
         $this->assertNull(Setting::get('ai.gemini_key_health'));
     }
 
+    public function test_a_late_written_result_for_an_old_key_never_reaches_the_panel(): void
+    {
+        app(TenantRoleService::class)->provision($this->tenant);
+        $admin = User::factory()->create(['current_tenant_id' => $this->tenant->id]);
+        $admin->assignRole('admin');
+
+        // Rezultat i vjetruar që "fitoi" garën e shkrimit pas ndërrimit të
+        // çelësit — gjurma s'përputhet me çelësin aktual → paneli s'e sheh.
+        Setting::set('ai.gemini_key', 'brand-new-key', 'string');
+        Setting::set('ai.gemini_key_health', ['ok' => false, 'checked_at' => now()->toIso8601String(), 'error' => 'i vjetruar', 'key_fp' => hash('sha256', 'old-broken-key')], 'json');
+
+        $this->actingAs($admin)
+            ->withSession(['tenant_id' => $this->tenant->id])
+            ->get(route('lora-ai.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('geminiKeyHealth', null));
+    }
+
     public function test_saving_a_new_key_clears_the_stale_broken_alarm(): void
     {
         app(TenantRoleService::class)->provision($this->tenant);
@@ -148,7 +166,8 @@ class GeminiKeyHealthTest extends TestCase
         $admin = User::factory()->create(['current_tenant_id' => $this->tenant->id]);
         $admin->assignRole('admin');
 
-        Setting::set('ai.gemini_key_health', ['ok' => false, 'checked_at' => now()->toIso8601String(), 'error' => 'Çelësi u refuzua nga Google (400).'], 'json');
+        Setting::set('ai.gemini_key', 'broken-key', 'string');
+        Setting::set('ai.gemini_key_health', ['ok' => false, 'checked_at' => now()->toIso8601String(), 'error' => 'Çelësi u refuzua nga Google (400).', 'key_fp' => hash('sha256', 'broken-key')], 'json');
 
         $this->actingAs($admin)
             ->withSession(['tenant_id' => $this->tenant->id])
@@ -158,7 +177,7 @@ class GeminiKeyHealthTest extends TestCase
                 ->where('geminiKeyHealth.error', 'Çelësi u refuzua nga Google (400).'));
 
         // Çelës në rregull → asnjë paralajmërim.
-        Setting::set('ai.gemini_key_health', ['ok' => true, 'checked_at' => now()->toIso8601String(), 'error' => null], 'json');
+        Setting::set('ai.gemini_key_health', ['ok' => true, 'checked_at' => now()->toIso8601String(), 'error' => null, 'key_fp' => hash('sha256', 'broken-key')], 'json');
 
         $this->actingAs($admin)
             ->withSession(['tenant_id' => $this->tenant->id])
