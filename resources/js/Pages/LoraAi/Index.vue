@@ -290,6 +290,10 @@ const actions = {
                                 <span class="flex items-center justify-between gap-3"><b class="text-sm text-neutral-900">{{ $t('loraAi.actionWhatsAppAutoReply') }}</b><input v-model="form.whatsapp_auto_reply_enabled" type="checkbox" :disabled="!form.messages_enabled || !form.guest_reply_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600" /></span>
                                 <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.actionWhatsAppAutoReplyDesc') }}</span>
                             </label>
+                            <label data-ui="inner-panel" class="border border-[#c9ecd9]" :class="(!form.messages_enabled || !form.guest_reply_enabled || !form.whatsapp_auto_reply_enabled) && 'opacity-50'">
+                                <span class="flex items-center justify-between gap-3"><b class="text-sm text-neutral-900">{{ $t('loraAi.actionWhatsAppBooking') }}</b><input v-model="form.whatsapp_booking_enabled" type="checkbox" :disabled="!form.messages_enabled || !form.guest_reply_enabled || !form.whatsapp_auto_reply_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600" /></span>
+                                <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.actionWhatsAppBookingDesc') }}</span>
+                            </label>
                             <label data-ui="inner-panel" class="border border-neutral-200" :class="!form.pricing_enabled && 'opacity-50'">
                                 <span class="flex items-center justify-between gap-3"><b class="text-sm text-neutral-900">{{ $t('loraAi.actionApplyPrices') }}</b><input v-model="form.price_apply_enabled" type="checkbox" :disabled="!form.pricing_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600" /></span>
                                 <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.actionApplyPricesDesc') }}</span>
