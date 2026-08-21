@@ -20,6 +20,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue';
 import Button from '@/Components/UI/Button.vue';
 import Modal from '@/Components/UI/Modal.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import TransactionDetailsDrawer from './Components/TransactionDetailsDrawer.vue';
 import { money, sourceBadge } from './financeShared.js';
 
@@ -278,8 +279,8 @@ function submit() {
                 </div>
 
                 <div class="flex flex-wrap items-end gap-3 border-b border-neutral-100 bg-neutral-50/60 px-4 py-3">
-                    <label class="text-tiny font-semibold text-neutral-500"><span class="mb-1 block">{{ $t('admin.generated.k_41fe934f47c2') }}</span><input v-model="localFilters.date_from" type="date" class="rounded-lg border-neutral-200 py-1.5 text-body-sm text-neutral-700 focus:border-accent-500 focus:ring-accent-500" @change="applyFilters()" /></label>
-                    <label class="text-tiny font-semibold text-neutral-500"><span class="mb-1 block">{{ $t('admin.generated.k_3b9cdc2b0dd0') }}</span><input v-model="localFilters.date_to" type="date" class="rounded-lg border-neutral-200 py-1.5 text-body-sm text-neutral-700 focus:border-accent-500 focus:ring-accent-500" @change="applyFilters()" /></label>
+                    <label class="text-tiny font-semibold text-neutral-500"><span class="mb-1 block">{{ $t('admin.generated.k_41fe934f47c2') }}</span><DatePicker :model-value="localFilters.date_from" class="w-44" @update:model-value="(v) => { localFilters.date_from = v; applyFilters(); }" /></label>
+                    <label class="text-tiny font-semibold text-neutral-500"><span class="mb-1 block">{{ $t('admin.generated.k_3b9cdc2b0dd0') }}</span><DatePicker :model-value="localFilters.date_to" class="w-44" @update:model-value="(v) => { localFilters.date_to = v; applyFilters(); }" /></label>
                     <label class="text-tiny font-semibold text-neutral-500">
                         <span class="mb-1 block">{{ $t('admin.generated.k_fc0e8f7c7cf0') }}</span>
                         <span class="relative block"><SlidersHorizontal class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><select v-model="localFilters.source" class="rounded-lg border-neutral-200 py-1.5 pl-9 pr-8 text-body-sm text-neutral-700 focus:border-accent-500 focus:ring-accent-500" @change="applyFilters()"><option value="">{{ $t('admin.generated.k_6d8cb08fb247') }}</option><option value="auto">{{ $t('admin.generated.k_87666132e6df') }}</option><option value="manual">{{ $t('admin.generated.k_ee1dc7d60c27') }}</option></select></span>
@@ -339,7 +340,7 @@ function submit() {
                         <div v-if="form.currency !== baseCurrency" class="mt-2 rounded-lg bg-neutral-50 p-2"><label class="mb-1 block text-tiny font-semibold text-neutral-500">{{ $t('admin.finance.payments.rateHelp', { base: baseCurrency, currency: form.currency }) }}</label><TextInput v-model="form.fx_rate" type="number" min="0.000001" step="0.000001" class="w-full" /><p class="mt-1 text-tiny text-neutral-400">{{ $t('admin.finance.payments.baseValue', { currency: baseCurrency, amount: fxEquivalent }) }}</p><p v-if="form.errors.fx_rate" class="mt-1 text-tiny text-error-600">{{ form.errors.fx_rate }}</p></div>
                     </div>
                     <div class="sm:col-span-2"><label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_5ed8e9c8f4d2') }}</label><textarea v-model="form.description" maxlength="300" rows="3" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" :placeholder="$t('admin.generated.k_859da1bc6b2d')" /><p v-if="form.errors.description" class="mt-1 text-tiny text-error-600">{{ form.errors.description }}</p></div>
-                    <div class="sm:col-span-2"><label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_0238235638a7') }}</label><input v-model="form.paid_at" type="datetime-local" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" /><p v-if="form.errors.paid_at" class="mt-1 text-tiny text-error-600">{{ form.errors.paid_at }}</p></div>
+                    <div class="sm:col-span-2"><label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.generated.k_0238235638a7') }}</label><DatePicker v-model="form.paid_at" time :error="form.errors.paid_at" class="w-full" /><p v-if="form.errors.paid_at" class="mt-1 text-tiny text-error-600">{{ form.errors.paid_at }}</p></div>
                 </div>
             </form>
             <template #footer>
