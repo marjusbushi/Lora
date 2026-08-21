@@ -464,21 +464,28 @@ class ReservationFiscalizationTest extends TestCase
         $this->assertSame(0, FiscalDocument::query()->count());
     }
 
-    public function test_production_configuration_is_blocked_by_this_sandbox_phase(): void
+    public function test_production_tenant_fiscalizes_against_the_live_api(): void
     {
+        // Live unlock (Renato, 2026-08-21): a VERIFIED production tenant issues
+        // against fature.al/api/v1 with its live token; the document records
+        // environment=production so idempotency never crosses environments.
         $reservation = $this->checkedOutStay('cash');
         TenantIntegration::query()->where('provider', 'fature_al')->firstOrFail()->update([
-            'configuration' => ['environment' => 'production'],
+            'credentials' => ['api_token' => 'live-company-token'],
+            'configuration' => ['environment' => 'production', 'last_test_status' => 'success'],
         ]);
 
-        Http::preventStrayRequests();
+        Http::fake(['https://fature.al/api/v1/invoice/cash' => Http::response($this->successResponse())]);
 
         $this->actingAs($this->admin)
             ->post(route('reservations.fiscalize', $reservation))
-            ->assertSessionHasErrors('fiscalization');
+            ->assertSessionHas('success');
 
-        Http::assertNothingSent();
-        $this->assertSame(0, FiscalDocument::query()->count());
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://fature.al/api/v1/invoice/cash'
+            && $request->hasHeader('Authorization', 'Bearer live-company-token'));
+        $document = FiscalDocument::query()->sole();
+        $this->assertSame('production', $document->environment);
+        $this->assertSame(FiscalDocument::STATUS_FISCALIZED, $document->status);
     }
 
     public function test_connection_must_be_verified_before_an_invoice_is_sent(): void
