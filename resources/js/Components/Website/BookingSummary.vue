@@ -10,7 +10,7 @@ defineProps({
     dateLabel: Function,
     money: Function,
 });
-const currencySymbol = computed(() => usePage().props.settings?.currency_symbol || '€');
+const currencySymbol = computed(() => usePage().props.settings?.pricing_currency_symbol || '€');
 </script>
 
 <template>

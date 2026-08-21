@@ -8,7 +8,7 @@ import RoomGallery from '@/Components/Website/RoomGallery.vue';
 import { amenityIcon } from '@/Components/Website/amenities';
 
 const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
-const currencySymbol = computed(() => usePage().props.settings?.currency_symbol || '€');
+const currencySymbol = computed(() => usePage().props.settings?.pricing_currency_symbol || '€');
 
 const { t } = useI18n();
 const bookingEnabled = computed(() => usePage().props.modules?.booking_engine === true);

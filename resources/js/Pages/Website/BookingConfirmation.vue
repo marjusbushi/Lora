@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 
 const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
-const currencySymbol = computed(() => usePage().props.settings?.currency_symbol || '€');
+const currencySymbol = computed(() => usePage().props.settings?.pricing_currency_symbol || '€');
 
 defineProps({ reservation: Object, hotel: Object, status: { type: String, default: 'confirmed' } });
 
