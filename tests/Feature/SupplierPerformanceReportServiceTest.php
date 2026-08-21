@@ -93,6 +93,33 @@ class SupplierPerformanceReportServiceTest extends TestCase
         $this->assertSame(30.0, $historical['summary']['overdue_exposure']);
     }
 
+    public function test_supplier_billed_in_one_foreign_currency_exposes_the_original_amount(): void
+    {
+        // Base-first display (Renato, Saturn): the row leads with the base
+        // figure; a supplier documented entirely in ONE non-base currency
+        // also exposes the original sum for the sub-line.
+        $foreignSupplier = Supplier::create(['name' => 'Booking.com B.V', 'category' => 'OTA', 'payment_terms_days' => 0, 'is_active' => true]);
+        $mixedSupplier = Supplier::create(['name' => 'Mikse', 'category' => 'Ushqim', 'payment_terms_days' => 0, 'is_active' => true]);
+
+        foreach ([['F-1', 100.0], ['F-2', 50.0]] as [$number, $total]) {
+            $bill = $this->bill($foreignSupplier, $number, '2026-07-04', '2026-07-20', $total, 'OTA');
+            // The Bill saving hook derives total_base = total / fx_rate.
+            $bill->forceFill(['currency' => 'USD', 'fx_rate' => 0.5])->save();
+        }
+
+        // Mixed document currencies → no single original sum, no sub-line.
+        $this->bill($mixedSupplier, 'M-1', '2026-07-05', '2026-07-20', 40, 'Ushqim');
+        $usd = $this->bill($mixedSupplier, 'M-2', '2026-07-06', '2026-07-20', 10, 'Ushqim');
+        $usd->forceFill(['currency' => 'USD', 'fx_rate' => 0.5])->save();
+
+        $rows = collect(app(SupplierPerformanceReportService::class)
+            ->summary(new ReportingPeriod('2026-07-01', '2026-07-15'))['suppliers'])->keyBy('name');
+
+        $this->assertSame(['currency' => 'USD', 'total' => 150.0], $rows['Booking.com B.V']['foreign']);
+        $this->assertSame(300.0, $rows['Booking.com B.V']['spend']);
+        $this->assertNull($rows['Mikse']['foreign']);
+    }
+
     private function bill(Supplier $supplier, string $number, string $issueDate, string $dueDate, float $total, string $category): Bill
     {
         return Bill::create([

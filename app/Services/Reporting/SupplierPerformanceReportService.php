@@ -4,6 +4,7 @@ namespace App\Services\Reporting;
 
 use App\Models\Bill;
 use App\Models\InventoryCategory;
+use App\Services\BaseCurrency;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -185,6 +186,22 @@ final class SupplierPerformanceReportService
             ->filter(fn ($item) => $item->inventory_item_id && $item->item?->type !== 'service');
         $received = $stockItems->filter(fn ($item) => $item->received_at && $item->received_at->lte($end))->count();
 
+        // Original-currency sub-line (base-first display): when every bill of
+        // this supplier in the period is documented in the SAME non-base
+        // currency, expose that original sum so the row can show it under the
+        // base figure. Mixed or base-currency suppliers get no sub-line.
+        $baseCode = BaseCurrency::code();
+        $documentCurrencies = $current
+            ->map(fn (Bill $bill) => strtoupper((string) ($bill->currency ?: $baseCode)))
+            ->unique()
+            ->values();
+        $foreign = $documentCurrencies->count() === 1 && $documentCurrencies->first() !== $baseCode
+            ? [
+                'currency' => $documentCurrencies->first(),
+                'total' => round((float) $current->sum('total'), 2),
+            ]
+            : null;
+
         return [
             'id' => $supplier?->id,
             'name' => $supplier?->name ?? '—',
@@ -192,6 +209,7 @@ final class SupplierPerformanceReportService
             'payment_terms_days' => (int) ($supplier?->payment_terms_days ?? 0),
             'is_active' => (bool) ($supplier?->is_active ?? false),
             'bill_count' => $current->count(),
+            'foreign' => $foreign,
             'spend' => round((float) $current->sum('total_base'), 2),
             'average_bill' => $current->isNotEmpty() ? round((float) $current->avg('total_base'), 2) : 0.0,
             'outstanding' => round((float) $outstanding, 2),
