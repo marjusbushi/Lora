@@ -72,6 +72,33 @@ class PosFiscalizationTest extends TestCase
         $this->assertSame(0, PosFiscalDocument::query()->count());
     }
 
+    public function test_provider_status_false_surfaces_the_providers_own_message(): void
+    {
+        // Villa Mucho's first live invoice: fature.al answers business errors
+        // as HTTP 200 + status:false + message ("[92] provo pas disa
+        // minutash") — the desk must read the provider's words, not a
+        // generic "response not valid".
+        [$order] = $this->openOrder();
+        $this->actingAs($this->admin)->post(route('pos.complete', $order), ['payment_method' => 'cash']);
+
+        Http::fake([
+            'https://demo.fature.al/api/v1/invoice/cash' => Http::response([
+                'status' => false,
+                'message' => 'Fiskalizimi po perditesohet automatikisht. Provojeni faturen perseri pas disa minutash. [92]',
+            ]),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('pos.fiscalize', $order))
+            ->assertRedirect()
+            ->assertInvalid(['fiscalization' => '[92]'])
+            ->assertInvalid(['fiscalization' => 'Provojeni faturen perseri']);
+
+        $document = \App\Models\PosFiscalDocument::query()->where('pos_order_id', $order->id)->first();
+        $this->assertSame(\App\Models\PosFiscalDocument::STATUS_FAILED, $document->status);
+        $this->assertStringContainsString('[92]', (string) $document->last_error);
+    }
+
     public function test_paid_cash_pos_sale_is_fiscalized_only_after_the_manual_action(): void
     {
         [$order] = $this->openOrder();
