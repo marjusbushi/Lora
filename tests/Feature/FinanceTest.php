@@ -160,6 +160,33 @@ class FinanceTest extends TestCase
         ]);
     }
 
+    public function test_foreign_cash_folio_payment_lands_in_its_own_currency_arka(): void
+    {
+        // Renato (2026-08-21): "this is why we have accounts with different
+        // currencies" — desk cash routes by the PAID currency, like POS
+        // tenders, so each drawer is countable against its own book balance.
+        $res = $this->reservation();
+        $payment = Payment::create([
+            'reservation_id' => $res->id, 'amount' => 500, 'currency' => 'ALL',
+            'exchange_rate' => 0.0108, 'method' => 'cash', 'type' => 'payment',
+        ]);
+
+        $ledger = FinancePayment::where('sourceable_type', Payment::class)
+            ->where('sourceable_id', $payment->id)->sole();
+        $arkaAll = FinanceAccount::where('type', 'cash')->where('currency', 'ALL')
+            ->where('scope', 'general')->sole();
+
+        $this->assertTrue((bool) $arkaAll->is_system);
+        $this->assertSame('Arka ALL', $arkaAll->name);
+        $this->assertSame($arkaAll->id, $ledger->account_id);
+        $this->assertSame('ALL', $ledger->currency);
+        $this->assertSame(500.0, (float) $ledger->amount);
+
+        // The lek drawer counts lek; the base Arka is untouched.
+        $this->assertSame(500.0, $arkaAll->balance());
+        $this->assertSame(0.0, $this->arka()->balance());
+    }
+
     // -- transfers ------------------------------------------------------------
 
     public function test_transfer_is_one_row_and_moves_both_balances(): void
