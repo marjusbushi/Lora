@@ -44,7 +44,9 @@ class FatureAlClient
 
         $payload = $response->json();
         if (($payload['status'] ?? false) !== true || ! is_array($payload['data'] ?? null)) {
-            throw new RuntimeException('Përgjigjja nga fature.al nuk ishte e vlefshme.');
+            // fature.al signals business errors as HTTP 200 + status:false —
+            // surface the provider's own message instead of a generic one.
+            throw new RuntimeException($this->providerError($response, 'Përgjigjja nga fature.al nuk ishte e vlefshme.'));
         }
 
         $issuerInVat = filter_var(
@@ -115,7 +117,9 @@ class FatureAlClient
         $body = $response->json();
         $invoice = $body['data']['invoice'] ?? null;
         if (($body['status'] ?? false) !== true || ! is_array($invoice)) {
-            throw new RuntimeException('Përgjigjja e fiskalizimit nga fature.al nuk ishte e vlefshme.');
+            // Live sends transient refusals (e.g. "[92] provo pas disa
+            // minutash") as 200 + status:false — the desk must see them.
+            throw new RuntimeException($this->providerError($response, 'Përgjigjja e fiskalizimit nga fature.al nuk ishte e vlefshme.'));
         }
 
         return $invoice;
@@ -161,7 +165,7 @@ class FatureAlClient
         $body = $response->json();
         $invoice = $body['data']['invoice'] ?? null;
         if (($body['status'] ?? false) !== true || ! is_array($invoice)) {
-            throw new RuntimeException('Përgjigjja e kontrollit nga fature.al nuk ishte e vlefshme.');
+            throw new RuntimeException($this->providerError($response, 'Përgjigjja e kontrollit nga fature.al nuk ishte e vlefshme.'));
         }
 
         return [

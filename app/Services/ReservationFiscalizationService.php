@@ -17,14 +17,23 @@ class ReservationFiscalizationService
 {
     private const PROVIDER = 'fature_al';
 
-    private const ENVIRONMENT = 'sandbox';
-
     public function __construct(
         private readonly FatureAlConfiguration $configuration,
         private readonly FatureAlClient $client,
         private readonly TenantContext $tenantContext,
         private readonly VatConfiguration $vatConfiguration,
     ) {}
+
+    /**
+     * The tenant's configured environment decides where invoices go (live
+     * unlock, Renato 2026-08-21). Fiscalization stays MANUAL-only either way;
+     * idempotency is scoped per environment so sandbox tests never collide
+     * with production documents.
+     */
+    private function environment(): string
+    {
+        return (string) ($this->configuration->get('environment') ?: 'sandbox');
+    }
 
     public function fiscalize(Reservation $reservation): FiscalDocument
     {
@@ -33,7 +42,7 @@ class ReservationFiscalizationService
         $existing = FiscalDocument::query()
             ->where('reservation_id', $reservation->id)
             ->where('provider', self::PROVIDER)
-            ->where('environment', self::ENVIRONMENT)
+            ->where('environment', $this->environment())
             ->first();
 
         if ($existing?->status === FiscalDocument::STATUS_FISCALIZED) {
@@ -74,7 +83,7 @@ class ReservationFiscalizationService
         if ($payloadChanged) {
             AuditLog::record('fiscalization.retry_payload_updated', $reservation, [
                 'provider' => self::PROVIDER,
-                'environment' => self::ENVIRONMENT,
+                'environment' => $this->environment(),
                 'internal_id' => $document->internal_id,
                 'previous_request_hash' => $previousRequestHash,
                 'request_hash' => $requestHash,
@@ -132,7 +141,7 @@ class ReservationFiscalizationService
 
         AuditLog::record('fiscalization.completed', $reservation, [
             'provider' => self::PROVIDER,
-            'environment' => self::ENVIRONMENT,
+            'environment' => $this->environment(),
             'internal_id' => $document->internal_id,
             'fiscal_number' => $document->fiscal_number,
             'payment_method' => $document->payment_method,
@@ -152,7 +161,7 @@ class ReservationFiscalizationService
 
         AuditLog::record('fiscalization.failed', $reservation, [
             'provider' => self::PROVIDER,
-            'environment' => self::ENVIRONMENT,
+            'environment' => $this->environment(),
             'internal_id' => $document->internal_id,
             'total' => (float) $document->total,
         ]);
@@ -166,12 +175,6 @@ class ReservationFiscalizationService
         if (! $this->configuration->configured()) {
             throw ValidationException::withMessages([
                 'fiscalization' => 'Aktivizo dhe testo fature.al për këtë hotel përpara fiskalizimit.',
-            ]);
-        }
-
-        if ($this->configuration->get('environment') !== self::ENVIRONMENT) {
-            throw ValidationException::withMessages([
-                'fiscalization' => 'Kjo fazë lejon fiskalizim vetëm në sandbox, jo në production.',
             ]);
         }
 
@@ -272,7 +275,7 @@ class ReservationFiscalizationService
             $document = FiscalDocument::query()
                 ->where('reservation_id', $reservation->id)
                 ->where('provider', self::PROVIDER)
-                ->where('environment', self::ENVIRONMENT)
+                ->where('environment', $this->environment())
                 ->lockForUpdate()
                 ->first();
 
@@ -297,7 +300,7 @@ class ReservationFiscalizationService
 
             $values = [
                 'provider' => self::PROVIDER,
-                'environment' => self::ENVIRONMENT,
+                'environment' => $this->environment(),
                 'document_type' => 'cash_invoice',
                 'internal_id' => $payload['internalId'],
                 'payment_method' => $payload['payment_method'],
