@@ -850,6 +850,10 @@ PROMPT;
         Cache::increment($rateKey);
 
         AuditLog::record('message.ai_reply', $thread, [
+            // message_id: cilit mesazh mysafiri iu përgjigj KY dërgim — pa të,
+            // shuarja e banner-it të dështimit s'dallon dot riprovën e ftohtë
+            // nga një job i vjetër garues që mbaron vonë (gjetje Codex #547).
+            'message_id' => $this->messageId,
             'preview' => mb_substr($reply, 0, 160),
         ], 'ai');
 
