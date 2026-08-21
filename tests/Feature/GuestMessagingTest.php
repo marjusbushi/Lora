@@ -199,8 +199,8 @@ class GuestMessagingTest extends TestCase
         $context->set($home);
 
         $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net', 'last_message_at' => now()->subMinutes(10)]);
-        $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
-        \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => 1, 'error' => 'Gemini 429'], 'ai');
+        $failedMessage = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
+        \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => $failedMessage->id, 'error' => 'Gemini 429'], 'ai');
 
         $admin = User::factory()->create(['current_tenant_id' => $home->id]);
         $admin->assignRole('admin');
@@ -224,10 +224,39 @@ class GuestMessagingTest extends TestCase
         $context->set($home);
 
         $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL-2', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net', 'last_message_at' => now()->addMinute()]);
-        $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
-        \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => 1, 'error' => 'Gemini 429'], 'ai');
+        $failedMessage = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
+        \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => $failedMessage->id, 'error' => 'Gemini 429'], 'ai');
         // Stafi iu përgjigj mysafirit PAS dështimit — alarmi s'ka më punë.
-        $thread->messages()->create(['sender' => Message::SENDER_HOST, 'body' => 'Po, kemi!', 'sent_at' => now()->addMinute()]);
+        $thread->messages()->create(['sender' => Message::SENDER_HOST, 'sent_by_ai' => false, 'body' => 'Po, kemi!', 'sent_at' => now()->addMinute()]);
+
+        $admin = User::factory()->create(['current_tenant_id' => $home->id]);
+        $admin->assignRole('admin');
+        $context->clear();
+
+        $this->actingAs($admin)
+            ->withSession(['tenant_id' => $home->id])
+            ->get(route('messages.index', ['thread' => $thread->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('selected.ai_failure', null)
+                ->where('threads.0.ai_failed', false));
+    }
+
+    public function test_ai_failure_clears_by_arrival_order_even_with_an_older_whatsapp_timestamp(): void
+    {
+        $context = app(TenantContext::class);
+        $home = Tenant::query()->sole();
+        app(TenantRoleService::class)->provision($home);
+        $context->set($home);
+
+        $thread = MessageThread::create(['channex_thread_id' => 'TH-FAIL-3', 'channel' => 'whatsapp', 'guest_name' => 'Ana', 'status' => 'open', 'whatsapp_jid' => '355691234567@s.whatsapp.net', 'last_message_at' => now()]);
+        $failedMessage = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'A ka dhoma?', 'sent_at' => now()->subMinutes(10)]);
+        \App\Models\AuditLog::record('message.ai_reply_failed', $thread, ['message_id' => $failedMessage->id, 'error' => 'Gemini 429'], 'ai');
+
+        // WhatsApp: mesazhi i RI i mysafirit mbërrin PAS dështimit por me vulë
+        // kohore pajisjeje MË TË VJETËR se auditi — rendi i ID-ve e shuaj
+        // alarmin njësoj (përpjekja e re është në radhë), sent_at s'pyetet.
+        $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Provoj përsëri?', 'sent_at' => now()->subMinutes(30)]);
 
         $admin = User::factory()->create(['current_tenant_id' => $home->id]);
         $admin->assignRole('admin');

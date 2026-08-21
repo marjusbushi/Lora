@@ -777,17 +777,16 @@ class AiGuestReplyTest extends TestCase
         $this->assertSame(300, mb_strlen($audit->properties['error']));
     }
 
-    public function test_failed_after_a_newer_message_writes_no_stale_alarm(): void
+    public function test_failed_after_a_newer_human_or_guest_message_writes_no_stale_alarm(): void
     {
         [$thread, $message] = $this->makeThreadWithGuestMessage();
         $job = new GenerateAiGuestReply($thread->id, $message->id);
 
-        // Ndërsa ky job dështonte, dikush tjetër u përgjigj (ose erdhi mesazh
-        // i ri) — dështimi i vonuar s'guxon të ngrejë alarm fals (Codex #501).
+        // Stafi NJERËZOR u përgjigj ndërsa ky job dështonte — alarm fals jo.
         $thread->messages()->create([
             'sender' => Message::SENDER_HOST,
-            'sent_by_ai' => true,
-            'body' => 'E mori përgjigjen një job më i ri.',
+            'sent_by_ai' => false,
+            'body' => 'U përgjigja vetë.',
             'sent_at' => now(),
         ]);
 
@@ -796,6 +795,27 @@ class AiGuestReplyTest extends TestCase
         app(TenantContext::class)->set($this->tenant);
 
         $this->assertSame(0, \App\Models\AuditLog::query()->where('action', 'message.ai_reply_failed')->count());
+    }
+
+    public function test_failed_still_alarms_when_only_a_racing_ai_reply_is_newer(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+        $job = new GenerateAiGuestReply($thread->id, $message->id);
+
+        // Përgjigje AI e një job-i të VJETËR garues — mund të mos i jetë
+        // përgjigjur fare mesazhit tonë; alarmi DUHET të mbetet (Codex #502).
+        $thread->messages()->create([
+            'sender' => Message::SENDER_HOST,
+            'sent_by_ai' => true,
+            'body' => 'Përgjigje e vonuar e një job-i të vjetër.',
+            'sent_at' => now(),
+        ]);
+
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('late failure'));
+        app(TenantContext::class)->set($this->tenant);
+
+        $this->assertSame(1, \App\Models\AuditLog::query()->where('action', 'message.ai_reply_failed')->count());
     }
 
     public function test_failed_without_a_valid_tenant_writes_nothing_anywhere(): void

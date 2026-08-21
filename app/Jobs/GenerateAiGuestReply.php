@@ -745,10 +745,12 @@ PROMPT;
             }
 
             // Një job i vonuar i tejkaluar s'guxon të shkruajë dështim FALS
-            // (gjetje Codex, PR #501): çdo mesazh më i ri se i yni do të thotë
-            // ose që dikush u përgjigj, ose që një përpjekje e re është në
-            // radhë — në të dy rastet ky dështim s'ka më rëndësi për panelin.
-            if ($thread->messages()->reorder()->where('id', '>', $this->messageId)->exists()) {
+            // (gjetje Codex, PR #501): mesazh më i ri mysafiri = përpjekje e re
+            // në radhë; përgjigje NJERËZORE më e re = u zgjidh. Përgjigja AI e
+            // një job-i të vjetër garues NUK e shtyp alarmin (Codex PR #502) —
+            // i njëjti predikat si supersededBy(): ajo mund të mos i jetë
+            // përgjigjur fare mesazhit TONË, dhe mysafiri do priste në heshtje.
+            if ($this->supersededBy($thread)) {
                 return;
             }
 
