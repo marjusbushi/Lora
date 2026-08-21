@@ -161,7 +161,10 @@ class PokPayments
         // confirmed member together (a single reservation is just a group of one).
         $members = $this->members($reservation);
 
-        $flipped = Reservation::whereIn('id', $members->pluck('id'))
+        // withTrashed on the flip too — the default scope would skip a soft-deleted member,
+        // leaving its captured payment un-voided after a full refund (Codex P1, PR #527).
+        $flipped = Reservation::withTrashed()
+            ->whereIn('id', $members->pluck('id'))
             ->where('status', 'confirmed')
             ->whereNotNull('paid_at')
             ->update(['status' => 'cancelled']);
@@ -202,7 +205,12 @@ class PokPayments
             return collect([$reservation]);
         }
 
-        return Reservation::where('booking_group_id', $reservation->booking_group_id)
+        // withTrashed: a soft-deleted member still belongs to the ORDER — its amount is part
+        // of what POK captured, its folio payment must be voided on refund, and a deleted
+        // pending member must trip the partial-group guard, never silently shrink the sum
+        // (Codex P1, PR #527).
+        return Reservation::withTrashed()
+            ->where('booking_group_id', $reservation->booking_group_id)
             ->orderBy('id')
             ->get();
     }
