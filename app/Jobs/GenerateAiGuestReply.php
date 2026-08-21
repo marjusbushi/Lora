@@ -226,7 +226,11 @@ class GenerateAiGuestReply implements ShouldQueue
             : $faqs->map(fn ($faq) => "P: {$faq->question}\nPËRGJIGJE: {$faq->answer}")->implode("\n\n");
 
         $conversation = $thread->messages()
-            ->reorder()->latest('sent_at')->latest('id')->limit(10)->get()
+            // 50 mesazhet e fundit (vendim i Marjusit, task #398): 10-shi i parë
+            // "harronte" fillimin e dialogëve të gjatë të rezervimit. Faktet
+            // kritike mbeten të strukturuara jashtë bisedës (thread↔reservation,
+            // holds, guest by phone) — transkripti mban vetëm rrjedhën.
+            ->reorder()->latest('sent_at')->latest('id')->limit(50)->get()
             ->reverse()
             ->map(fn (Message $message) => ($message->sender === Message::SENDER_GUEST ? 'MYSAFIRI' : 'HOTELI').': '.$message->body)
             ->implode("\n");
