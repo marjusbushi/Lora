@@ -6,9 +6,11 @@ import { useI18n } from 'vue-i18n';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 
 const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
-const currencySymbol = computed(() => usePage().props.settings?.currency_symbol || '€');
 
-defineProps({ reservation: Object, hotel: Object, status: { type: String, default: 'confirmed' } });
+const props = defineProps({ reservation: Object, hotel: Object, status: { type: String, default: 'confirmed' } });
+
+// Prefer the reservation's own frozen symbol; the shared setting is only a fallback.
+const currencySymbol = computed(() => props.reservation?.currency_symbol || usePage().props.settings?.pricing_currency_symbol || '€');
 
 const { t } = useI18n();
 
