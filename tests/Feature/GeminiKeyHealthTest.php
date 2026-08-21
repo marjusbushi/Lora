@@ -107,6 +107,24 @@ class GeminiKeyHealthTest extends TestCase
         $this->assertTrue(Setting::get('ai.gemini_key_health')['ok']);
     }
 
+    public function test_saving_a_new_key_clears_the_stale_broken_alarm(): void
+    {
+        app(TenantRoleService::class)->provision($this->tenant);
+        $admin = User::factory()->create(['current_tenant_id' => $this->tenant->id]);
+        $admin->assignRole('admin');
+
+        // Çelësi i vjetër u shënua i prishur nga kontrolli ditor…
+        Setting::set('ai.gemini_key_health', ['ok' => false, 'checked_at' => now()->toIso8601String(), 'error' => 'i prishur'], 'json');
+
+        // …admini vendos çelës të RI: alarmi i të vjetrit s'vlen më (Codex #511).
+        $this->actingAs($admin)
+            ->withSession(['tenant_id' => $this->tenant->id])
+            ->put(route('settings.ai'), ['gemini_key' => 'brand-new-key'])
+            ->assertRedirect();
+
+        $this->assertSame('', Setting::get('ai.gemini_key_health'));
+    }
+
     public function test_panel_warns_only_when_the_stored_health_is_broken(): void
     {
         app(TenantRoleService::class)->provision($this->tenant);
