@@ -364,7 +364,7 @@ watch(step, (current) => nextTick(() => {
                         <!-- The WRAPPER is the grid item now, so the sticky must live here — on the
                              inner aside it has no room to stick (items-start collapses the wrapper
                              to content height) and the cart + Vazhdo scroll away (owner report). -->
-                        <div class="space-y-4 lg:sticky lg:top-24">
+                        <div class="space-y-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
                             <BookingSummary :lines="cartLines" :totals="cartTotals" :rooms-count="cartRooms" :search="searchForm" :nights="nights" :date-label="dateLabel" :money="money" />
                             <div v-if="cartError" ref="cartErrorBox" role="alert" tabindex="-1" class="rounded-xl border border-error-200 bg-error-50 p-4 text-body-sm text-error-700 focus:outline-none">{{ cartError }}</div>
                             <button type="button" class="btn-reserve flex w-full items-center justify-center gap-2 py-4" @click="continueToDetails">{{ $t('book.cart.continue') }} <ArrowRight class="h-4 w-4" /></button>
