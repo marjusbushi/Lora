@@ -378,7 +378,9 @@ watch(step, (current) => nextTick(() => {
                             </div>
                             <div v-if="blockingError" ref="roomErrorBox" role="alert" tabindex="-1" class="mb-6 rounded-xl border border-error-200 bg-error-50 p-4 focus:outline-none">
                                 <p class="text-body-sm text-error-700">{{ blockingError }}</p>
-                                <button type="button" class="mt-2 text-body-sm font-medium text-ionian underline" @click="chooseAnotherRoom">{{ $t('book.guest.chooseOther') }}</button>
+                                <!-- "Choose other rooms" only helps AVAILABILITY failures — a config error
+                                     (e.g. missing exchange rate) would just loop the guest (Codex P2, PR #525). -->
+                                <button v-if="guestForm.errors.selections" type="button" class="mt-2 text-body-sm font-medium text-ionian underline" @click="chooseAnotherRoom">{{ $t('book.guest.chooseOther') }}</button>
                             </div>
                             <form class="space-y-4" @submit.prevent="submitBooking">
                                 <input v-model="guestForm.website" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" class="absolute -left-[9999px] h-0 w-0 opacity-0" />
