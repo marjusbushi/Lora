@@ -238,6 +238,35 @@ class GeminiClient
             : "Modeli s'ktheu një plan të vlefshëm. Provo sërish.");
     }
 
+    /**
+     * Kontroll shëndeti pothuaj-falas i çelësit (task #382): GET metadata e
+     * modelit — 0 tokena. Kthen ok=true (çelësi punon), ok=false + error
+     * (i pavlefshëm/i revokuar/model i hequr — dështim DEFINITIV), ose
+     * ok=null (kalimtar: 429/5xx/rrjet — mos e shëno të prishur).
+     *
+     * @return array{ok: ?bool, error: ?string}
+     */
+    public function healthCheck(): array
+    {
+        try {
+            $res = Http::withHeaders(['x-goog-api-key' => (string) $this->key()])
+                ->timeout(10)
+                ->get($this->base().'/models/'.$this->model());
+        } catch (\Throwable) {
+            return ['ok' => null, 'error' => null];
+        }
+
+        if ($res->successful()) {
+            return ['ok' => true, 'error' => null];
+        }
+
+        return match (true) {
+            in_array($res->status(), [400, 401, 403], true) => ['ok' => false, 'error' => 'Çelësi u refuzua nga Google ('.$res->status().') — kontrolloni çelësin te Cilësimet → Asistenti AI.'],
+            $res->status() === 404 => ['ok' => false, 'error' => 'Modeli i AI nuk u gjet (404) — njoftoni mbështetjen.'],
+            default => ['ok' => null, 'error' => null],
+        };
+    }
+
     private function throwHttpError(int $status, string $body): never
     {
         // The key lives only in a request header, so reading the body here

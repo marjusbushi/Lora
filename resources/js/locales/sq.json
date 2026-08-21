@@ -7316,6 +7316,8 @@
   "loraAi": {
     "title": "Konfigurimi i Lora AI",
     "subtitle": "Lidhja me ChatGPT, kërkimi universal dhe lejet e kontrolluara.",
+    "keyHealthTitle": "Çelësi juaj Gemini nuk punon",
+    "keyHealthBody": "Kontrolli i përditshëm dështoi — Lora s'do t'u përgjigjet dot mysafirëve derisa ta përditësoni çelësin te Cilësimet → Asistenti AI.",
     "promptDailySummary": "Më jep përmbledhjen operative të sotme.",
     "promptFindReservation": "Gjej rezervimin ose referencën që do të të jap dhe më jep linkun.",
     "promptCheckins": "Cilat dhoma kanë check-in sot dhe kërkojnë vëmendje?",

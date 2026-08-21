@@ -54,6 +54,16 @@ class LoraAiController extends Controller
                 'chatgptUrl' => config('services.openai.chatgpt_connect_url', 'https://chatgpt.com/'),
                 'hotel' => $tenant->name,
             ],
+            // Shëndeti i çelësit Gemini (task #382): kontrolli ditor e shkruan;
+            // paneli paralajmëron VETËM kur ok=false — para se Lora të heshtë.
+            'geminiKeyHealth' => (function () {
+                $health = Setting::get('ai.gemini_key_health');
+
+                return is_array($health) && ($health['ok'] ?? null) === false ? [
+                    'error' => (string) ($health['error'] ?? ''),
+                    'checked_at' => (string) ($health['checked_at'] ?? ''),
+                ] : null;
+            })(),
             'aiSettings' => [
                 'universal_search_enabled' => $this->boolSetting('universal_search_enabled', true),
                 'reservations_enabled' => $this->boolSetting('reservations_enabled', true),
