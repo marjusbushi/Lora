@@ -109,6 +109,29 @@ class LoraAiController extends Controller
             'recentActions' => DB::table('audit_logs')
                 ->where('tenant_id', $tenant->id)->where('source', 'ai')
                 ->latest('id')->limit(6)->get(['action', 'created_at']),
+            // Kartela e Lorës (task #402): vlera e saj e dukshme — jo konfigurim.
+            'stats' => (function () use ($tenant) {
+                $monthStart = now()->startOfMonth();
+                $monthly = DB::table('audit_logs')
+                    ->where('tenant_id', $tenant->id)->where('source', 'ai')
+                    ->where('created_at', '>=', $monthStart);
+
+                // Shuma mblidhet në PHP nga properties.total — pa funksione JSON
+                // në SQL, që sjellja të jetë identike në MySQL dhe SQLite (teste).
+                $confirmed = (clone $monthly)
+                    ->where('action', 'message.ai_booking_confirmed')
+                    ->get(['properties']);
+
+                return [
+                    'replies' => (clone $monthly)
+                        ->whereIn('action', ['message.ai_reply', 'ai.guest_reply.sent'])
+                        ->count(),
+                    'bookings' => $confirmed->count(),
+                    'bookingRevenue' => round($confirmed->sum(
+                        fn ($row) => (float) (json_decode((string) $row->properties, true)['total'] ?? 0)
+                    ), 2),
+                ];
+            })(),
         ]);
     }
 
