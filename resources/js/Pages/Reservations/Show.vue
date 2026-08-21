@@ -127,12 +127,52 @@ const noShowEligible = computed(() => canUpdate
     && ['pending', 'confirmed'].includes(props.reservation.status)
     && props.reservation.check_in_date < localToday);
 
+// Tarifa e no-show: arkëtimi i kartës bëhet në terminal/extranet — Lora
+// regjistron vetëm rezultatin si pagesë në folio (karta s'hyn kurrë këtu).
+const noShowFeeCollected = ref(false);
+const noShowFeeAmount = ref('');
+const noShowFeeMethod = ref('card');
+const showNoShowFeeModal = ref(false);
+const noShowFeeMethodOptions = [
+    { value: 'card', label: translate('admin.generated.k_6d64b27daef1') },
+    { value: 'cash', label: translate('admin.generated.k_da508864861c') },
+];
+const noShowOutstanding = computed(() => Math.max(0, Number(props.folio.outstanding) || 0));
+watch(noShowFeeCollected, (on) => {
+    if (on && !noShowFeeAmount.value) noShowFeeAmount.value = noShowOutstanding.value.toFixed(2);
+});
+function openNoShowFeeModal() {
+    noShowFeeAmount.value = noShowOutstanding.value.toFixed(2);
+    noShowFeeMethod.value = 'card';
+    showNoShowFeeModal.value = true;
+}
+function submitNoShowFee() {
+    noShowBusy.value = true;
+    router.post(route('reservations.no-show.fee', props.reservation.id), {
+        amount: noShowFeeAmount.value,
+        method: noShowFeeMethod.value,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => { showNoShowFeeModal.value = false; },
+        onError: (errors) => toasts.value?.error(errors.no_show_fee || errors.amount || translate('reservationShow.noShowFeeFailed')),
+        onFinish: () => { noShowBusy.value = false; },
+    });
+}
+
 function submitNoShow() {
     noShowBusy.value = true;
-    router.post(route('reservations.no-show', props.reservation.id), {}, {
+    const payload = noShowFeeCollected.value
+        ? { fee_amount: noShowFeeAmount.value, fee_method: noShowFeeMethod.value }
+        : {};
+    router.post(route('reservations.no-show', props.reservation.id), payload, {
         preserveScroll: true,
         onSuccess: () => { showNoShowModal.value = false; },
-        onError: (errors) => { showNoShowModal.value = false; toasts.value?.error(errors.no_show || translate('reservationShow.noShowFailed')); },
+        onError: (errors) => {
+            const feeError = errors.fee_amount || errors.fee_method;
+            if (feeError) { toasts.value?.error(feeError); return; }
+            showNoShowModal.value = false;
+            toasts.value?.error(errors.no_show || translate('reservationShow.noShowFailed'));
+        },
         onFinish: () => { noShowBusy.value = false; },
     });
 }
@@ -681,6 +721,7 @@ function settleAndCheckout(method) {
                 >
                     <ExternalLink class="h-4 w-4" />{{ $t('reservationShow.noShowOpenBooking') }}
                 </a>
+                <Button v-if="canUpdate && noShowOutstanding > 0.005" variant="outline" @click="openNoShowFeeModal">{{ $t('reservationShow.noShowFeeButton') }}</Button>
                 <Button v-if="canUpdate" variant="outline" :loading="noShowBusy" @click="undoNoShow">{{ $t('reservationShow.noShowUndoButton') }}</Button>
             </div>
         </section>
@@ -1173,9 +1214,40 @@ function settleAndCheckout(method) {
             >
                 <ExternalLink class="h-4 w-4" />{{ $t('reservationShow.noShowOpenBooking') }}
             </a>
+            <div v-if="noShowOutstanding > 0.005" class="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-2.5">
+                <label class="flex items-center gap-2 text-body-sm text-neutral-700">
+                    <input v-model="noShowFeeCollected" type="checkbox" class="rounded border-neutral-300 text-accent-600 focus:ring-accent-500" />
+                    <span>{{ $t('reservationShow.noShowFeeToggle') }}</span>
+                </label>
+                <div v-if="noShowFeeCollected" class="mt-2 grid grid-cols-2 gap-2">
+                    <FormGroup :label="$t('reservationShow.noShowFeeAmount', { currency: reservation.currency })">
+                        <TextInput v-model="noShowFeeAmount" type="number" step="0.01" min="0.01" :max="noShowOutstanding" />
+                    </FormGroup>
+                    <FormGroup :label="$t('reservationShow.noShowFeeMethod')">
+                        <Select v-model="noShowFeeMethod" :options="noShowFeeMethodOptions" placeholder="" />
+                    </FormGroup>
+                </div>
+            </div>
             <template #footer>
                 <Button variant="outline" @click="showNoShowModal = false">{{ $t('reservationShow.noShowModalCancel') }}</Button>
                 <Button variant="danger" :loading="noShowBusy" @click="submitNoShow">{{ $t('reservationShow.noShowModalConfirm') }}</Button>
+            </template>
+        </Modal>
+
+        <Modal :show="showNoShowFeeModal" :title="$t('reservationShow.noShowFeeModalTitle')" max-width="sm" @close="showNoShowFeeModal = false">
+            <p class="text-body-sm text-neutral-700">{{ $t('reservationShow.noShowFeeModalBody') }}</p>
+            <p class="mt-2 text-small text-neutral-500">{{ $t('reservationShow.noShowFeeOutstanding', { amount: money(noShowOutstanding) }) }}</p>
+            <div class="mt-3 grid grid-cols-2 gap-2">
+                <FormGroup :label="$t('reservationShow.noShowFeeAmount', { currency: reservation.currency })">
+                    <TextInput v-model="noShowFeeAmount" type="number" step="0.01" min="0.01" :max="noShowOutstanding" />
+                </FormGroup>
+                <FormGroup :label="$t('reservationShow.noShowFeeMethod')">
+                    <Select v-model="noShowFeeMethod" :options="noShowFeeMethodOptions" placeholder="" />
+                </FormGroup>
+            </div>
+            <template #footer>
+                <Button variant="outline" @click="showNoShowFeeModal = false">{{ $t('reservationShow.noShowModalCancel') }}</Button>
+                <Button variant="primary" :loading="noShowBusy" @click="submitNoShowFee">{{ $t('reservationShow.noShowFeeConfirm') }}</Button>
             </template>
         </Modal>
 
