@@ -14,6 +14,7 @@ import {
 
 const props = defineProps({
     connection: { type: Object, required: true },
+    geminiKeyHealth: { type: Object, default: null },
     aiSettings: { type: Object, required: true },
     aiModules: { type: Object, required: true },
     pricingPolicy: { type: Object, required: true },
@@ -104,6 +105,13 @@ const actions = {
     <Head title="Lora AI" />
     <AppLayout>
         <div class="pms-settings-shell mx-auto w-full max-w-[1480px]">
+            <!-- Shëndeti i çelësit Gemini (task #382): alarmi ditor PARA se Lora të heshtë live -->
+            <div v-if="geminiKeyHealth" class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <p class="text-sm font-bold text-red-800">⚠️ {{ $t('loraAi.keyHealthTitle') }}</p>
+                <p class="mt-1 text-[13px] leading-relaxed text-red-700">{{ $t('loraAi.keyHealthBody') }}</p>
+                <p v-if="geminiKeyHealth.error" class="mt-0.5 text-[12px] text-red-600/90">{{ geminiKeyHealth.error }}</p>
+            </div>
+
             <header class="settings-page-heading flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                     <PageHeader :title="$t('loraAi.title')" :breadcrumbs="breadcrumbs" />

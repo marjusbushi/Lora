@@ -7295,6 +7295,8 @@
   "loraAi": {
     "title": "Lora AI configuration",
     "subtitle": "The ChatGPT connection, universal search and controlled permissions.",
+    "keyHealthTitle": "Your Gemini key is not working",
+    "keyHealthBody": "The daily check failed — Lora cannot reply to guests until you update the key in Settings → AI Assistant.",
     "promptDailySummary": "Give me today's operational summary.",
     "promptFindReservation": "Find the reservation or the reference I give you and give me the link.",
     "promptCheckins": "Which rooms have a check-in today and need attention?",
