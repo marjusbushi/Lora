@@ -726,6 +726,8 @@ class SettingsController extends Controller
 
         if ($request->boolean('clear')) {
             Setting::set('ai.gemini_key', '', 'text');
+            // Pa çelës s'ka çfarë kontrollohet — alarmi i vjetër hiqet menjëherë.
+            Setting::set('ai.gemini_key_health', '', 'text');
 
             return back()->with('success', 'Çelësi AI u hoq.');
         }
@@ -736,6 +738,10 @@ class SettingsController extends Controller
         }
 
         Setting::set('ai.gemini_key', $key, 'text');
+        // Çelës i RI = shëndeti i të vjetrit s'vlen më (gjetje Codex, PR #511):
+        // pa këtë, paneli do e quante të prishur çelësin e ri deri në kontrollin
+        // e radhës ditor. Kontrolli i 06:30 (ose një dështim real) e rimbush.
+        Setting::set('ai.gemini_key_health', '', 'text');
 
         return back()->with('success', 'Çelësi AI u ruajt. Asistenti i çmimeve tani është aktiv.');
     }
