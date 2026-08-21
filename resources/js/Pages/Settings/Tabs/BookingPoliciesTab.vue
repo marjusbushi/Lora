@@ -11,6 +11,7 @@ const props = defineProps({ settings: Object, toasts: Object });
 const form = useForm({
     check_in_time: props.settings.check_in_time || '14:00',
     check_out_time: props.settings.check_out_time || '11:00',
+    booking_extranet_hotel_id: props.settings.booking_extranet_hotel_id || '',
 });
 
 function submit() {
@@ -39,6 +40,11 @@ function submit() {
                     <TextInput v-model="form.check_out_time" type="time" :error="form.errors.check_out_time" />
                 </FormGroup>
             </div>
+
+            <FormGroup :label="$t('settingsTabs.bookingPolicies.bookingHotelIdLabel')" :error="form.errors.booking_extranet_hotel_id">
+                <TextInput v-model="form.booking_extranet_hotel_id" inputmode="numeric" placeholder="1234567" :error="form.errors.booking_extranet_hotel_id" />
+                <p class="mt-1 text-small text-neutral-500">{{ $t('settingsTabs.bookingPolicies.bookingHotelIdHint') }}</p>
+            </FormGroup>
 
             <div class="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-body-sm text-neutral-600">
                 {{ $t('settingsTabs.bookingPolicies.futureNote') }}
