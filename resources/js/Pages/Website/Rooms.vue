@@ -59,8 +59,8 @@ const hasFromPrice = (room) => room?.from_price !== null
 
                                     <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mt-5 text-body-sm text-ink/55">
                                         <span class="inline-flex items-center gap-1.5"><Users class="h-4 w-4 text-ionian" :stroke-width="1.5" /> {{ $t('rooms.card.maxOccupancy', { count: room.max_occupancy }) }}</span>
+                                        <!-- No availability numbers anywhere on the public site (owner decision 2026-08-21). -->
                                         <span class="inline-flex items-center gap-1.5"><BedDouble class="h-4 w-4 text-ionian" :stroke-width="1.5" /> {{ $t('rooms.card.roomsCount', { count: room.rooms_count }) }}</span>
-                                        <span class="text-ionian font-medium">{{ $t('rooms.card.available', { count: room.available_count }) }}</span>
                                     </div>
 
                                     <div v-if="room.breakfast_included" class="mt-4 inline-flex items-center gap-2.5 px-4 py-2 bg-ionian text-bone text-body-sm font-medium tracking-wide shadow-sm">
