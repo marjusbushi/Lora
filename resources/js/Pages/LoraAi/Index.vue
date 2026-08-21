@@ -55,7 +55,8 @@ const breadcrumbs = computed(() => isAdmin.value
 const assistantName = computed(() => form.assistant_name?.trim() || 'Lora');
 const onDuty = computed(() => form.messages_enabled && form.guest_reply_enabled);
 const revenueLabel = computed(() => {
-    const currency = page.props.settings?.pricing_currency || 'EUR';
+    // Shuma vjen nga total_amount_base — monedha BAZË e hotelit, jo ajo e shitjes.
+    const currency = page.props.settings?.currency || 'EUR';
     try {
         return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency, maximumFractionDigits: 0 }).format(Number(props.stats.bookingRevenue || 0));
     } catch {
