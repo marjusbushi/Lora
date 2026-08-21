@@ -67,6 +67,9 @@ class LoraAiController extends Controller
                 // WhatsApp: default FIKUR — rruga QR-lite mban risk bllokimi nga
                 // Meta, roboti aty ndizet vetëm me dorën e pronarit (task #337).
                 'whatsapp_auto_reply_enabled' => $this->boolSetting('whatsapp_auto_reply_enabled', false),
+                // Hapi 3 (task #365): Lora rezervon vetë nga biseda — default
+                // FIKUR; e ndez pronari vetëm kur POK-u është gati për pagesa.
+                'whatsapp_booking_enabled' => $this->boolSetting('whatsapp_booking_enabled', false),
                 'pricing_enabled' => $this->boolSetting('pricing_enabled', true),
                 'ai_price_recommendations_enabled' => $this->boolSetting('ai_price_recommendations_enabled', true),
                 'price_apply_enabled' => $this->boolSetting('price_apply_enabled', false),
@@ -101,6 +104,7 @@ class LoraAiController extends Controller
             'guest_reply_enabled' => ['required', 'boolean'],
             'guest_auto_reply_enabled' => ['sometimes', 'boolean'],
             'whatsapp_auto_reply_enabled' => ['sometimes', 'boolean'],
+            'whatsapp_booking_enabled' => ['sometimes', 'boolean'],
             'assistant_name' => ['sometimes', 'nullable', 'string', 'max:40'],
             'assistant_character' => ['sometimes', 'nullable', 'string', 'max:600'],
             'pricing_enabled' => ['required', 'boolean'],

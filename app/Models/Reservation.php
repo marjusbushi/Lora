@@ -34,6 +34,9 @@ class Reservation extends TenantModel
 
     public const CREATED_VIA_IMPORT = 'import';
 
+    /** Rezervim i krijuar nga Lora në bisedë (Hapi 3, task #365) — pending deri në pagesën POK. */
+    public const CREATED_VIA_AI = 'ai_chat';
+
     protected $fillable = [
         'room_id',
         'guest_id',
