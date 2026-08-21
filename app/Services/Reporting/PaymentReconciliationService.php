@@ -162,8 +162,11 @@ final class PaymentReconciliationService
                 ->where('payment_method', 'cash')
                 ->sum('total_amount');
             $hasNewTenders = $shift->payments->contains('direction', 'in');
+            // Mirrors FinanceLedger::recordShiftClose EXACTLY: since Renato's
+            // 2026-08-21 decision the over/short never posts — a shift is an
+            // expected ledger source only for legacy pre-tender cash.
             $yield = $hasNewTenders || $legacyCash > 0
-                ? round($legacyCash + (float) $shift->over_short, 2)
+                ? round($legacyCash, 2)
                 : ($shift->counted_cash !== null
                     ? round((float) $shift->counted_cash - (float) $shift->opening_float, 2)
                     : round((float) $shift->cash_sales, 2));
