@@ -50,10 +50,10 @@ class DirectBookingPricingTest extends TestCase
             'room_type_id' => $room->room_type_id,
         ])->assertOk();
         $response
-            ->assertJsonPath('rooms.0.smart_total_price', 100)
-            ->assertJsonPath('rooms.0.direct_discount_pct', 10)
-            ->assertJsonPath('rooms.0.direct_discount_amount', 10)
-            ->assertJsonPath('rooms.0.total_price', 90);
+            ->assertJsonPath('room_types.0.smart_total_price', 100)
+            ->assertJsonPath('room_types.0.direct_discount_pct', 10)
+            ->assertJsonPath('room_types.0.direct_discount_amount', 10)
+            ->assertJsonPath('room_types.0.total_price', 90);
     }
 
     public function test_booking_recalculates_and_persists_the_discount_snapshot_server_side(): void
@@ -69,7 +69,7 @@ class DirectBookingPricingTest extends TestCase
         ]);
 
         $this->post(route('website.book.submit'), [
-            'room_id' => $room->id,
+            'selections' => [['room_type_id' => $room->room_type_id, 'quantity' => 1]],
             'check_in' => $checkIn->toDateString(),
             'check_out' => $checkIn->copy()->addDay()->toDateString(),
             'first_name' => 'Direct',

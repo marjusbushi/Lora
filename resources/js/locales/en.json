@@ -202,6 +202,20 @@
       "noHiddenFees": "No hidden fees. Secure booking.",
       "finalStep": "Final step",
       "secureBooking": "Secure booking with instant confirmation."
+    },
+    "qty": {
+      "decrease": "Remove one {name} room",
+      "increase": "Add one {name} room",
+      "inCart": "{qty} × {name}"
+    },
+    "cart": {
+      "heading": "Selected rooms",
+      "roomsCount": "no rooms selected | 1 room selected | {count} rooms selected",
+      "continue": "Continue",
+      "noneSelected": "Select at least one room to continue.",
+      "capacity": "The selected rooms sleep up to {cap} guests — add another room for {guests} guests.",
+      "adultsPerRoom": "Each room needs at least one adult — you selected {rooms} rooms.",
+      "perRoom": "per room"
     }
   },
   "contact": {
@@ -3877,7 +3891,8 @@
       "room": "Room",
       "checkIn": "Check-in",
       "checkOut": "Check-out",
-      "total": "Total"
+      "total": "Total",
+      "rooms": "Rooms"
     },
     "cta": {
       "home": "Back to homepage"

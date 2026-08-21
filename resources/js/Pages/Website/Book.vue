@@ -31,13 +31,17 @@ const isoDate = (date) => {
 };
 
 const step = ref(1);
-const availableRooms = ref([]);
-const selectedRoom = ref(null);
+// One row per TYPOLOGY (Booking.com model) — the guest picks quantities, never rooms.
+const availableTypes = ref([]);
+// room_type_id -> chosen quantity. available_count only CAPS the stepper; it is never displayed.
+const selectedQty = ref({});
+const cartError = ref('');
 const loading = ref(false);
 const checkError = ref('');
 const nights = ref(0);
 const step2Heading = ref(null);
 const roomErrorBox = ref(null);
+const cartErrorBox = ref(null);
 
 const searchForm = ref({
     check_in: isoDate(today),
@@ -48,7 +52,7 @@ const searchForm = ref({
 });
 
 const guestForm = useForm({
-    room_id: '',
+    selections: [],
     check_in: '',
     check_out: '',
     first_name: '',
@@ -64,28 +68,32 @@ const guestForm = useForm({
 
 const flashError = computed(() => usePage().props.flash?.error);
 const selectedType = computed(() => props.roomTypes.find((room) => String(room.id) === String(searchForm.value.room_type_id)) || null);
-const maxOcc = computed(() => selectedType.value?.max_occupancy || 8);
-const adultsOptions = computed(() => Array.from({ length: maxOcc.value }, (_, index) => index + 1));
-const childrenOptions = computed(() => Array.from({ length: maxOcc.value }, (_, index) => index));
-const summaryRoom = computed(() => selectedRoom.value || availableRooms.value[0] || null);
+// Multi-room bookings: the party can span several rooms, so the pickers are no longer
+// capped by a single typology's occupancy — capacity is validated against the CART.
+const adultsOptions = computed(() => Array.from({ length: 10 }, (_, index) => index + 1));
+const childrenOptions = computed(() => Array.from({ length: 11 }, (_, index) => index));
 const displayRoomTypes = computed(() => selectedType.value ? [selectedType.value] : props.roomTypes);
-const previewByType = computed(() => availableRooms.value.reduce((prices, room) => {
-    if (!prices[room.room_type_id]) prices[room.room_type_id] = room;
-    return prices;
-}, {}));
+
+// The cart: chosen typologies with quantity + line totals. Drives the sidebar and the submit.
+const cartLines = computed(() => availableTypes.value
+    .map((type) => ({ ...type, qty: Number(selectedQty.value[type.room_type_id] || 0) }))
+    .filter((line) => line.qty > 0));
+const cartRooms = computed(() => cartLines.value.reduce((sum, line) => sum + line.qty, 0));
+const cartCapacity = computed(() => cartLines.value.reduce((sum, line) => sum + line.qty * (line.max_occupancy || 0), 0));
+const cartTotals = computed(() => ({
+    smart: cartLines.value.reduce((sum, line) => sum + line.qty * Number(line.smart_total_price || 0), 0),
+    discount: cartLines.value.reduce((sum, line) => sum + line.qty * Number(line.direct_discount_amount || 0), 0),
+    total: cartLines.value.reduce((sum, line) => sum + line.qty * Number(line.total_price || 0), 0),
+    discountPct: cartLines.value.find((line) => Number(line.direct_discount_pct) > 0)?.direct_discount_pct || 0,
+}));
 const priorityCountries = PRIORITY_COUNTRIES.map((code) => countryOptions.find((country) => country.value === code)).filter(Boolean);
 const otherCountries = countryOptions.filter((country) => !PRIORITY_COUNTRIES.includes(country.value));
 
 const money = (value) => Number(value || 0).toFixed(2);
-const previewFor = (roomType) => previewByType.value[roomType.id] || null;
+const previewFor = (roomType) => availableTypes.value.find((type) => type.room_type_id === roomType.id) || null;
 const dateLabel = (value) => value
     ? new Intl.DateTimeFormat(locale.value === 'sq' ? 'sq-AL' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`))
     : '—';
-
-watch(selectedType, () => {
-    if (searchForm.value.adults > maxOcc.value) searchForm.value.adults = maxOcc.value;
-    if (searchForm.value.children > maxOcc.value - 1) searchForm.value.children = Math.max(0, maxOcc.value - 1);
-});
 
 watch(() => searchForm.value.check_in, (value) => {
     if (value && (!searchForm.value.check_out || searchForm.value.check_out <= value)) {
@@ -108,9 +116,11 @@ async function runCheck({ advance = false } = {}) {
             room_type_id: searchForm.value.room_type_id || null,
         });
         if (seq !== checkSeq) return;
-        availableRooms.value = response.data.rooms;
+        availableTypes.value = response.data.room_types;
         nights.value = response.data.nights;
-        selectedRoom.value = response.data.rooms[0] || null;
+        // New dates = new availability and new prices → the cart starts clean.
+        selectedQty.value = {};
+        cartError.value = '';
         if (advance) step.value = 2;
     } catch (error) {
         if (seq !== checkSeq) return;
@@ -126,14 +136,36 @@ watch(
 );
 onMounted(() => runCheck());
 
-function selectRoom(room) {
-    selectedRoom.value = room;
-    guestForm.room_id = room.id;
-    guestForm.check_in = searchForm.value.check_in;
-    guestForm.check_out = searchForm.value.check_out;
-    guestForm.adults = searchForm.value.adults;
-    guestForm.children = searchForm.value.children;
-    step.value = 3;
+// The quantity stepper — capped SILENTLY at the free-room count (never shown as text).
+function adjustQty(type, delta) {
+    const current = Number(selectedQty.value[type.room_type_id] || 0);
+    const next = Math.min(Math.max(current + delta, 0), Number(type.available_count || 0));
+    selectedQty.value = { ...selectedQty.value, [type.room_type_id]: next };
+    cartError.value = '';
+}
+
+function continueToDetails() {
+    const guests = Number(searchForm.value.adults) + Number(searchForm.value.children);
+    if (!cartRooms.value) {
+        cartError.value = t('book.cart.noneSelected');
+    } else if (guests > cartCapacity.value) {
+        cartError.value = t('book.cart.capacity', { cap: cartCapacity.value, guests });
+    } else if (Number(searchForm.value.adults) < cartRooms.value) {
+        cartError.value = t('book.cart.adultsPerRoom', { rooms: cartRooms.value });
+    } else {
+        cartError.value = '';
+        guestForm.selections = cartLines.value.map((line) => ({ room_type_id: line.room_type_id, quantity: line.qty }));
+        guestForm.check_in = searchForm.value.check_in;
+        guestForm.check_out = searchForm.value.check_out;
+        guestForm.adults = searchForm.value.adults;
+        guestForm.children = searchForm.value.children;
+        step.value = 3;
+        return;
+    }
+    nextTick(() => {
+        cartErrorBox.value?.focus({ preventScroll: true });
+        cartErrorBox.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
 }
 
 function goBack(toStep) {
@@ -146,7 +178,7 @@ function focusId(id) { document.getElementById(id)?.focus(); }
 function submitBooking() {
     guestForm.post('/book', {
         onError: (errors) => nextTick(() => {
-            if (errors.room_id) {
+            if (errors.selections) {
                 roomErrorBox.value?.focus({ preventScroll: true });
                 roomErrorBox.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
@@ -160,7 +192,7 @@ function submitBooking() {
 }
 
 async function chooseAnotherRoom() {
-    guestForm.clearErrors('room_id');
+    guestForm.clearErrors('selections');
     await runCheck();
     step.value = 2;
 }
@@ -274,30 +306,46 @@ watch(step, (current) => nextTick(() => {
                                 <button type="button" class="text-body-sm font-medium text-ionian" @click="goBack(1)">{{ $t('book.rooms.changeDates') }}</button>
                             </div>
 
-                            <div v-if="availableRooms.length" class="space-y-5">
-                                <article v-for="room in availableRooms" :key="room.id" :class="['overflow-hidden rounded-2xl border bg-white transition', selectedRoom?.id === room.id ? 'border-ionian shadow-md' : 'border-driftwood/20']">
+                            <div v-if="availableTypes.length" class="space-y-5">
+                                <article v-for="type in availableTypes" :key="type.room_type_id" :class="['overflow-hidden rounded-2xl border bg-white transition', selectedQty[type.room_type_id] > 0 ? 'border-ionian shadow-md' : 'border-driftwood/20']">
                                     <div class="grid md:grid-cols-[280px_1fr]">
-                                        <RoomGallery :images="room.images" :alt="room.room_type" aspect="aspect-[16/10] md:aspect-auto md:min-h-[280px]" />
+                                        <RoomGallery :images="type.images" :alt="type.room_type" aspect="aspect-[16/10] md:aspect-auto md:min-h-[280px]" />
                                         <div class="flex flex-col justify-between p-5 sm:p-6">
                                             <div>
-                                                <h2 class="text-display-sm text-ink">{{ room.room_type }}</h2>
-                                                <p class="mt-2 text-body-sm text-ink/55">{{ $t('book.rooms.room') }} {{ room.room_number }} · {{ $t('book.rooms.floor') }} {{ room.floor }} · {{ $t('book.rooms.max') }} {{ room.max_occupancy }} {{ $t('book.rooms.persons') }}</p>
-                                                <p v-if="room.description" class="mt-4 line-clamp-2 text-body-sm leading-relaxed text-ink/55">{{ room.description }}</p>
+                                                <h2 class="text-display-sm text-ink">{{ type.room_type }}</h2>
+                                                <p class="mt-2 text-body-sm text-ink/55">{{ $t('book.rooms.max') }} {{ type.max_occupancy }} {{ $t('book.rooms.persons') }} {{ $t('book.cart.perRoom') }}</p>
+                                                <p v-if="type.description" class="mt-4 line-clamp-2 text-body-sm leading-relaxed text-ink/55">{{ type.description }}</p>
                                                 <div class="mt-4 flex flex-wrap gap-2 text-tiny text-ink/60">
-                                                    <span v-for="amenity in (room.amenities || []).slice(0, 4)" :key="amenity" class="rounded-full border border-driftwood/20 px-2.5 py-1">{{ amenity }}</span>
-                                                    <span v-if="room.breakfast_included" class="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-success-800"><Coffee class="h-3.5 w-3.5" />{{ $t('book.direct.breakfast') }}</span>
+                                                    <span v-for="amenity in (type.amenities || []).slice(0, 4)" :key="amenity" class="rounded-full border border-driftwood/20 px-2.5 py-1">{{ amenity }}</span>
+                                                    <span v-if="type.breakfast_included" class="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-success-800"><Coffee class="h-3.5 w-3.5" />{{ $t('book.direct.breakfast') }}</span>
                                                 </div>
                                             </div>
                                             <div class="mt-6 flex flex-wrap items-end justify-between gap-4 border-t border-driftwood/15 pt-5">
                                                 <div class="flex items-end gap-4">
-                                                    <span v-if="room.direct_discount_pct > 0" class="rounded-lg bg-success-50 px-2.5 py-2 text-tiny font-semibold text-success-800">-{{ room.direct_discount_pct }}% {{ $t('book.direct.direct') }}</span>
+                                                    <span v-if="type.direct_discount_pct > 0" class="rounded-lg bg-success-50 px-2.5 py-2 text-tiny font-semibold text-success-800">-{{ type.direct_discount_pct }}% {{ $t('book.direct.direct') }}</span>
                                                     <div>
                                                         <p class="flex items-center gap-1.5 text-tiny font-semibold text-success-700"><span class="h-2 w-2 rounded-full bg-success-500" />{{ $t('book.direct.liveSmartPrice') }}</p>
-                                                        <p v-if="room.direct_discount_pct > 0" class="text-body-sm text-ink/35 line-through">{{ currencySymbol }}{{ money(room.smart_price_per_night) }}</p>
-                                                        <p class="font-serif text-3xl text-ink">{{ currencySymbol }}{{ money(room.price_per_night) }} <span class="font-sans text-tiny text-ink/45">/ {{ $t('book.search.perNight') }}</span></p>
+                                                        <p v-if="type.direct_discount_pct > 0" class="text-body-sm text-ink/35 line-through">{{ currencySymbol }}{{ money(type.smart_price_per_night) }}</p>
+                                                        <p class="font-serif text-3xl text-ink">{{ currencySymbol }}{{ money(type.price_per_night) }} <span class="font-sans text-tiny text-ink/45">/ {{ $t('book.search.perNight') }}</span></p>
                                                     </div>
                                                 </div>
-                                                <button type="button" class="rounded-lg border border-ionian px-5 py-3 text-body-sm font-medium text-ionian transition hover:bg-ionian hover:text-bone" @click="selectRoom(room)">{{ $t('book.direct.selectRoom') }}</button>
+                                                <div class="flex items-center gap-3" role="group" :aria-label="type.room_type">
+                                                    <button
+                                                        type="button"
+                                                        :disabled="!selectedQty[type.room_type_id]"
+                                                        :aria-label="$t('book.qty.decrease', { name: type.room_type })"
+                                                        class="flex h-11 w-11 items-center justify-center rounded-lg border border-driftwood/30 text-xl text-ink transition hover:border-ionian hover:text-ionian disabled:cursor-not-allowed disabled:opacity-35"
+                                                        @click="adjustQty(type, -1)"
+                                                    >−</button>
+                                                    <span class="w-8 text-center font-serif text-2xl text-ink" aria-live="polite">{{ selectedQty[type.room_type_id] || 0 }}</span>
+                                                    <button
+                                                        type="button"
+                                                        :disabled="(selectedQty[type.room_type_id] || 0) >= type.available_count"
+                                                        :aria-label="$t('book.qty.increase', { name: type.room_type })"
+                                                        class="flex h-11 w-11 items-center justify-center rounded-lg border border-ionian text-xl text-ionian transition hover:bg-ionian hover:text-bone disabled:cursor-not-allowed disabled:opacity-35"
+                                                        @click="adjustQty(type, 1)"
+                                                    >+</button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -309,7 +357,11 @@ watch(step, (current) => nextTick(() => {
                                 <button class="mt-3 text-body-sm font-medium text-ionian" @click="goBack(1)">{{ $t('book.rooms.tryOtherDates') }}</button>
                             </div>
                         </div>
-                        <BookingSummary :room="summaryRoom" :search="searchForm" :nights="nights" :date-label="dateLabel" :money="money" />
+                        <div class="space-y-4">
+                            <BookingSummary :lines="cartLines" :totals="cartTotals" :rooms-count="cartRooms" :search="searchForm" :nights="nights" :date-label="dateLabel" :money="money" />
+                            <div v-if="cartError" ref="cartErrorBox" role="alert" tabindex="-1" class="rounded-xl border border-error-200 bg-error-50 p-4 text-body-sm text-error-700 focus:outline-none">{{ cartError }}</div>
+                            <button type="button" class="btn-reserve flex w-full items-center justify-center gap-2 py-4" @click="continueToDetails">{{ $t('book.cart.continue') }} <ArrowRight class="h-4 w-4" /></button>
+                        </div>
                     </div>
                 </template>
 
@@ -320,8 +372,8 @@ watch(step, (current) => nextTick(() => {
                                 <div><span class="eyebrow-brass">{{ $t('book.direct.finalStep') }}</span><h1 class="mt-1 text-display-sm text-ink">{{ $t('book.guest.heading') }}</h1></div>
                                 <button class="text-body-sm font-medium text-ionian" @click="goBack(2)">{{ $t('book.guest.changeRoom') }}</button>
                             </div>
-                            <div v-if="guestForm.errors.room_id" ref="roomErrorBox" role="alert" tabindex="-1" class="mb-6 rounded-xl border border-error-200 bg-error-50 p-4 focus:outline-none">
-                                <p class="text-body-sm text-error-700">{{ guestForm.errors.room_id }}</p>
+                            <div v-if="guestForm.errors.selections" ref="roomErrorBox" role="alert" tabindex="-1" class="mb-6 rounded-xl border border-error-200 bg-error-50 p-4 focus:outline-none">
+                                <p class="text-body-sm text-error-700">{{ guestForm.errors.selections }}</p>
                                 <button type="button" class="mt-2 text-body-sm font-medium text-ionian underline" @click="chooseAnotherRoom">{{ $t('book.guest.chooseOther') }}</button>
                             </div>
                             <form class="space-y-4" @submit.prevent="submitBooking">
@@ -338,7 +390,7 @@ watch(step, (current) => nextTick(() => {
                                 <p class="flex items-center justify-center gap-2 text-center text-body-sm text-ink/55"><ShieldCheck class="h-4 w-4 text-success-700" />{{ paymentRequired ? $t('book.guest.paymentNote') : $t('book.direct.secureBooking') }}</p>
                             </form>
                         </div>
-                        <BookingSummary :room="selectedRoom" :search="searchForm" :nights="nights" :date-label="dateLabel" :money="money" />
+                        <BookingSummary :lines="cartLines" :totals="cartTotals" :rooms-count="cartRooms" :search="searchForm" :nights="nights" :date-label="dateLabel" :money="money" />
                     </div>
                 </template>
             </div>
