@@ -9,6 +9,7 @@ import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import Select from '@/Components/UI/Select.vue';
 import ActionMenu from '@/Components/UI/ActionMenu.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import ReservationCreateModal from '@/Components/Reservations/ReservationCreateModal.vue';
 import ReservationEditModal from '@/Components/Reservations/ReservationEditModal.vue';
@@ -331,11 +332,11 @@ onBeforeUnmount(() => window.removeEventListener('popstate', onPopState));
                     <div class="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-md">
                         <label class="block">
                             <span class="mb-1 block text-small font-medium text-neutral-600">{{ $t('reservationsIndex.dateFrom') }}</span>
-                            <input v-model="dateFrom" type="date" :max="dateTo || undefined" class="w-full rounded-lg border-neutral-200 bg-white py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="applyFilters" />
+                            <DatePicker :model-value="dateFrom" :max="dateTo" class="w-full" @update:model-value="(v) => { dateFrom = v; applyFilters(); }" />
                         </label>
                         <label class="block">
                             <span class="mb-1 block text-small font-medium text-neutral-600">{{ $t('reservationsIndex.dateTo') }}</span>
-                            <input v-model="dateTo" type="date" :min="dateFrom || undefined" class="w-full rounded-lg border-neutral-200 bg-white py-2 text-body-sm focus:border-accent-500 focus:ring-accent-500" @change="applyFilters" />
+                            <DatePicker :model-value="dateTo" :min="dateFrom" class="w-full" @update:model-value="(v) => { dateTo = v; applyFilters(); }" />
                         </label>
                     </div>
                     <div class="flex items-center gap-3 lg:ml-auto">

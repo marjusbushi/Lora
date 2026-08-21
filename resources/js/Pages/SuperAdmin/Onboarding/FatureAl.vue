@@ -1,6 +1,7 @@
 <script setup>
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import { translate } from '@/i18n';
 import { Building2, Check, ChevronRight, FileKey2, Landmark, LoaderCircle, MonitorSmartphone, ShieldCheck, UserRound, XCircle } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
@@ -135,7 +136,7 @@ function selectStep(key) {
                     </form>
 
                     <form v-else-if="activeStep === 'device'" class="grid gap-4 p-5 sm:grid-cols-2" @submit.prevent="submit(deviceForm, 'device')">
-                        <label class="sm:col-span-2">{{ $t('superAdmin.onboarding.deviceName') }}<input v-model="deviceForm.name" required class="mt-1 w-full" /></label><label>{{ $t('superAdmin.onboarding.activeFrom') }}<input v-model="deviceForm.from_date" required type="date" class="mt-1 w-full" /></label><label>{{ $t('superAdmin.onboarding.activeUntil') }}<input v-model="deviceForm.to_date" type="date" class="mt-1 w-full" /></label>
+                        <label class="sm:col-span-2">{{ $t('superAdmin.onboarding.deviceName') }}<input v-model="deviceForm.name" required class="mt-1 w-full" /></label><label>{{ $t('superAdmin.onboarding.activeFrom') }}<DatePicker v-model="deviceForm.from_date" :input-attrs="{ required: true }" class="mt-1 w-full" /></label><label>{{ $t('superAdmin.onboarding.activeUntil') }}<DatePicker v-model="deviceForm.to_date" :min="deviceForm.from_date" class="mt-1 w-full" /></label>
                         <div class="flex justify-end sm:col-span-2"><button class="sa-button sa-button-primary" :disabled="deviceForm.processing">{{ $t('superAdmin.onboarding.createTcr') }}</button></div>
                     </form>
 

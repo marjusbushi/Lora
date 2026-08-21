@@ -5,6 +5,7 @@ import { AlertTriangle, CalendarClock, CalendarMinus, CheckCircle2, CreditCard, 
 import Modal from '@/Components/UI/Modal.vue';
 import Button from '@/Components/UI/Button.vue';
 import Select from '@/Components/UI/Select.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import { getIntlLocale, translate } from '@/i18n';
 
 const props = defineProps({
@@ -208,12 +209,12 @@ function cancelPlan() {
             <div class="grid gap-4 sm:grid-cols-2">
                 <label class="block">
                     <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">{{ $t('reservationModals.earlyDeparture.departureDateLabel') }}</span>
-                    <input
+                    <DatePicker
                         v-model="form.departure_date"
-                        type="date"
                         :min="earliestDeparture"
                         :max="latestDeparture"
-                        class="w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500"
+                        :error="form.errors.departure_date"
+                        class="w-full"
                     />
                     <span v-if="form.errors.departure_date" class="mt-1 block text-small text-error-600">{{ form.errors.departure_date }}</span>
                 </label>
