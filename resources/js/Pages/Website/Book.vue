@@ -175,10 +175,14 @@ function goBack(toStep) {
 const FIELD_IDS = { first_name: 'bk-first-name', last_name: 'bk-last-name', email: 'bk-email', phone: 'bk-phone', nationality: 'bk-nationality' };
 function focusId(id) { document.getElementById(id)?.focus(); }
 
+// Server errors that are not tied to a single input (the cart, a missing exchange
+// rate, …) all surface in the recovery banner — a submit must never fail silently.
+const blockingError = computed(() => guestForm.errors.selections || guestForm.errors.currency || '');
+
 function submitBooking() {
     guestForm.post('/book', {
         onError: (errors) => nextTick(() => {
-            if (errors.selections) {
+            if (errors.selections || errors.currency) {
                 roomErrorBox.value?.focus({ preventScroll: true });
                 roomErrorBox.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
@@ -357,7 +361,10 @@ watch(step, (current) => nextTick(() => {
                                 <button class="mt-3 text-body-sm font-medium text-ionian" @click="goBack(1)">{{ $t('book.rooms.tryOtherDates') }}</button>
                             </div>
                         </div>
-                        <div class="space-y-4">
+                        <!-- The WRAPPER is the grid item now, so the sticky must live here — on the
+                             inner aside it has no room to stick (items-start collapses the wrapper
+                             to content height) and the cart + Vazhdo scroll away (owner report). -->
+                        <div class="space-y-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
                             <BookingSummary :lines="cartLines" :totals="cartTotals" :rooms-count="cartRooms" :search="searchForm" :nights="nights" :date-label="dateLabel" :money="money" />
                             <div v-if="cartError" ref="cartErrorBox" role="alert" tabindex="-1" class="rounded-xl border border-error-200 bg-error-50 p-4 text-body-sm text-error-700 focus:outline-none">{{ cartError }}</div>
                             <button type="button" class="btn-reserve flex w-full items-center justify-center gap-2 py-4" @click="continueToDetails">{{ $t('book.cart.continue') }} <ArrowRight class="h-4 w-4" /></button>
@@ -372,9 +379,11 @@ watch(step, (current) => nextTick(() => {
                                 <div><span class="eyebrow-brass">{{ $t('book.direct.finalStep') }}</span><h1 class="mt-1 text-display-sm text-ink">{{ $t('book.guest.heading') }}</h1></div>
                                 <button class="text-body-sm font-medium text-ionian" @click="goBack(2)">{{ $t('book.guest.changeRoom') }}</button>
                             </div>
-                            <div v-if="guestForm.errors.selections" ref="roomErrorBox" role="alert" tabindex="-1" class="mb-6 rounded-xl border border-error-200 bg-error-50 p-4 focus:outline-none">
-                                <p class="text-body-sm text-error-700">{{ guestForm.errors.selections }}</p>
-                                <button type="button" class="mt-2 text-body-sm font-medium text-ionian underline" @click="chooseAnotherRoom">{{ $t('book.guest.chooseOther') }}</button>
+                            <div v-if="blockingError" ref="roomErrorBox" role="alert" tabindex="-1" class="mb-6 rounded-xl border border-error-200 bg-error-50 p-4 focus:outline-none">
+                                <p class="text-body-sm text-error-700">{{ blockingError }}</p>
+                                <!-- "Choose other rooms" only helps AVAILABILITY failures — a config error
+                                     (e.g. missing exchange rate) would just loop the guest (Codex P2, PR #525). -->
+                                <button v-if="guestForm.errors.selections" type="button" class="mt-2 text-body-sm font-medium text-ionian underline" @click="chooseAnotherRoom">{{ $t('book.guest.chooseOther') }}</button>
                             </div>
                             <form class="space-y-4" @submit.prevent="submitBooking">
                                 <input v-model="guestForm.website" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" class="absolute -left-[9999px] h-0 w-0 opacity-0" />

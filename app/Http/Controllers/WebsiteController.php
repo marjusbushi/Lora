@@ -635,6 +635,16 @@ class WebsiteController extends Controller
         $held = $members->reject(fn (Reservation $member) => $member->status === 'cancelled')->values();
         $display = $held->isNotEmpty() ? $held : $members;
 
+        // The guest's ONLY token is the primary's — if staff cancelled just the primary room
+        // while other rooms stand, the page must NOT show a whole-booking cancellation. The
+        // shown status reflects the GROUP: any room still held wins (Codex P2, PR #527).
+        $status = $reservation->status;
+        if ($status === 'cancelled' && $held->isNotEmpty()) {
+            $status = $held->contains(fn (Reservation $member) => $member->status === 'confirmed')
+                ? 'confirmed'
+                : $held->first()->status;
+        }
+
         // Payment not finished yet (pending with a POK order) → send the guest back to pay,
         // never show a "booked successfully" screen for an unpaid hold.
         if ($reservation->status === 'pending' && $primary->pok_order_id) {
@@ -644,7 +654,7 @@ class WebsiteController extends Controller
         // Pass ONLY the fields this page renders — never the full Guest model
         // (document_number, date_of_birth, etc. must not reach the public props).
         return Inertia::render('Website/BookingConfirmation', [
-            'status' => $reservation->status, // 'confirmed' (paid) | 'pending' (no online payment) | 'cancelled'
+            'status' => $status, // 'confirmed' (paid) | 'pending' (no online payment) | 'cancelled' — group-derived
             'reservation' => [
                 'reference' => strtoupper(substr($primary->confirmation_token, 0, 8)),
                 // The booker's submitted name (flashed) — NOT the stored guest's name,
