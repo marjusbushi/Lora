@@ -6,6 +6,7 @@ import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import Select from '@/Components/UI/Select.vue';
 
 const props = defineProps({ settings: Object, accountMode: { type: String, default: 'shared' }, posOutlets: { type: Array, default: () => [] }, toasts: Object });
@@ -70,10 +71,10 @@ function submit() {
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormGroup :label="$t('beach.settings.seasonStart')" :error="form.errors.season_start">
-                    <TextInput v-model="form.season_start" type="date" :error="form.errors.season_start" />
+                    <DatePicker v-model="form.season_start" :error="form.errors.season_start" />
                 </FormGroup>
                 <FormGroup :label="$t('beach.settings.seasonEnd')" :error="form.errors.season_end">
-                    <TextInput v-model="form.season_end" type="date" :error="form.errors.season_end" />
+                    <DatePicker v-model="form.season_end" :min="form.season_start" :error="form.errors.season_end" />
                 </FormGroup>
             </div>
             <p class="text-small text-neutral-500 -mt-2">{{ $t('beach.settings.seasonHint') }}</p>

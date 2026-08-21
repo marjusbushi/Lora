@@ -18,6 +18,7 @@ import {
     X,
 } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 
 const { t, locale } = useI18n();
 const fatureName = 'fature.al';
@@ -805,7 +806,7 @@ function statusLabel(status) {
                                         </label>
                                         <label class="block text-sm font-medium text-neutral-700">
                                             {{ t('superAdmin.dynamic.renewalDate') }}
-                                            <input v-model="billingForm.current_period_ends_at" type="date" class="mt-1.5 w-full rounded-xl border-neutral-300 py-2.5 text-sm" />
+                                            <DatePicker v-model="billingForm.current_period_ends_at" class="mt-1.5 w-full" />
                                         </label>
                                     </div>
                                 </aside>
