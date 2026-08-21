@@ -187,7 +187,8 @@ function dayLabel(dateStr) {
                     @click="pick(c)"
                 >
                     <span>{{ Number(c.slice(-2)) }}</span>
-                    <span v-if="!isPast(c) && free(c) > 0 && c !== checkIn && c !== checkOut" class="text-[9px] leading-none mt-0.5 opacity-70">{{ free(c) }}</span>
+                    <!-- No free-room COUNT in the cell — green/grey already says free/full
+                         (owner decision 2026-08-21: no availability numbers on the public site). -->
                 </button>
             </template>
         </div>
