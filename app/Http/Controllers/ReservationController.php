@@ -1969,7 +1969,7 @@ class ReservationController extends Controller
      * real cancellations in every report. For OTA bookings the commission
      * waiver is the desk's extranet step — Lora only records the fact.
      */
-    public function markNoShow(Reservation $reservation): RedirectResponse
+    public function markNoShow(Request $request, Reservation $reservation): RedirectResponse
     {
         if (! in_array($reservation->status, ['pending', 'confirmed'], true)) {
             throw ValidationException::withMessages([
@@ -1984,18 +1984,91 @@ class ReservationController extends Controller
             ]);
         }
 
-        $reservation->update([
-            'status' => 'cancelled',
-            'no_show_at' => now(),
-            'no_show_by' => auth()->id(),
+        // Optional: the desk already charged the no-show fee on the terminal
+        // (policy permitting — the card charge itself NEVER happens in Lora)
+        // and records the outcome together with the mark.
+        $data = $request->validate([
+            'fee_amount' => ['nullable', 'numeric', 'gt:0'],
+            'fee_method' => ['nullable', 'in:card,cash'],
         ]);
+        $feeAmount = isset($data['fee_amount']) ? round((float) $data['fee_amount'], 2) : null;
+        if ($feeAmount !== null) {
+            $reservation->loadMissing('folioItems', 'payments');
+            $outstanding = ReservationMoney::totals($reservation)['outstanding'];
+            if ($feeAmount > $outstanding + 0.005) {
+                throw ValidationException::withMessages([
+                    'no_show' => 'Tarifa nuk mund të kalojë detyrimin e mbetur ('.number_format($outstanding, 2).' '.ReservationMoney::currency($reservation).').',
+                ]);
+            }
+        }
+
+        DB::transaction(function () use ($reservation, $feeAmount, $data) {
+            $reservation->update([
+                'status' => 'cancelled',
+                'no_show_at' => now(),
+                'no_show_by' => auth()->id(),
+            ]);
+
+            if ($feeAmount !== null) {
+                $this->recordNoShowFee($reservation, $feeAmount, $data['fee_method'] ?? 'card');
+            }
+        });
 
         AuditLog::record('reservation.no_show', $reservation, [
             'channel' => $reservation->channel,
             'check_in_date' => $reservation->check_in_date?->toDateString(),
         ]);
 
-        return back()->with('success', 'Rezervimi u shënua no-show — dhoma u lirua.');
+        return back()->with('success', $feeAmount !== null
+            ? 'Rezervimi u shënua no-show — dhoma u lirua dhe tarifa u regjistrua.'
+            : 'Rezervimi u shënua no-show — dhoma u lirua.');
+    }
+
+    /**
+     * Record a no-show fee collected AFTER the mark (the desk charged the
+     * card later, or decided later that the policy applies).
+     */
+    public function noShowFee(Request $request, Reservation $reservation): RedirectResponse
+    {
+        if (! $reservation->no_show_at) {
+            throw ValidationException::withMessages([
+                'no_show_fee' => 'Ky rezervim nuk është i shënuar no-show.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'method' => ['nullable', 'in:card,cash'],
+        ]);
+        $amount = round((float) $data['amount'], 2);
+
+        $reservation->loadMissing('folioItems', 'payments');
+        $outstanding = ReservationMoney::totals($reservation)['outstanding'];
+        if ($amount > $outstanding + 0.005) {
+            throw ValidationException::withMessages([
+                'no_show_fee' => 'Tarifa nuk mund të kalojë detyrimin e mbetur ('.number_format($outstanding, 2).' '.ReservationMoney::currency($reservation).').',
+            ]);
+        }
+
+        $this->recordNoShowFee($reservation, $amount, $data['method'] ?? 'card');
+
+        return back()->with('success', 'Tarifa e no-show u regjistrua.');
+    }
+
+    private function recordNoShowFee(Reservation $reservation, float $amount, string $method): void
+    {
+        $reservation->payments()->create([
+            'amount' => $amount,
+            'method' => $method,
+            'currency' => ReservationMoney::currency($reservation),
+            'exchange_rate' => ReservationMoney::exchangeRate($reservation),
+            'created_by' => auth()->id(),
+        ]);
+
+        AuditLog::record('reservation.no_show_fee', $reservation, [
+            'amount' => $amount,
+            'method' => $method,
+        ]);
     }
 
     /**
