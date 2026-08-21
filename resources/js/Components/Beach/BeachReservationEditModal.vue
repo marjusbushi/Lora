@@ -7,6 +7,7 @@ import Button from '@/Components/UI/Button.vue';
 import Badge from '@/Components/UI/Badge.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import FormGroup from '@/Components/UI/FormGroup.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import Select from '@/Components/UI/Select.vue';
 
 const props = defineProps({
@@ -130,10 +131,10 @@ const methodLabel = computed(() => ({
             </FormGroup>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormGroup :label="$t('beach.calendar.startDate')" :error="form.errors.start_date" required>
-                    <TextInput v-model="form.start_date" type="date" :error="form.errors.start_date" />
+                    <DatePicker v-model="form.start_date" :error="form.errors.start_date" />
                 </FormGroup>
                 <FormGroup :label="$t('beach.calendar.endDate')" :error="form.errors.end_date" required>
-                    <TextInput v-model="form.end_date" type="date" :error="form.errors.end_date" />
+                    <DatePicker v-model="form.end_date" :min="form.start_date" :error="form.errors.end_date" />
                 </FormGroup>
             </div>
             <FormGroup :label="$t('beach.calendar.guestName')" :error="form.errors.guest_name" required>

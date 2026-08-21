@@ -6,13 +6,16 @@ import '@vuepic/vue-datepicker/dist/main.css';
 
 // Drop-in replacement for <input type="date">: v-model stays a 'YYYY-MM-DD'
 // string (in AND out), so every form/validation/back-end contract is unchanged.
+// With `time`, it replaces <input type="datetime-local"> instead: the v-model
+// string becomes 'YYYY-MM-DDTHH:mm' — the exact shape datetime-local emits.
 const props = defineProps({
     modelValue: { type: String, default: '' },
     min: { type: String, default: '' },
     max: { type: String, default: '' },
-    placeholder: { type: String, default: 'dd/mm/vvvv' },
+    placeholder: { type: String, default: '' },
     disabled: { type: Boolean, default: false },
     error: { type: String, default: '' },
+    time: { type: Boolean, default: false },
     inputAttrs: { type: Object, default: () => ({}) },
     ariaLabel: { type: String, default: translate('admin.generated.k_63d1bbbb8ca7') },
 });
@@ -21,8 +24,13 @@ const emit = defineEmits(['update:modelValue']);
 // Parse/format as LOCAL date parts — never toISOString() (UTC off-by-one).
 function toDate(str) {
     if (!str || typeof str !== 'string') return null;
-    const [y, m, d] = str.split('-').map(Number);
+    const [datePart, timePart] = str.split(/[T ]/);
+    const [y, m, d] = datePart.split('-').map(Number);
     if (!y || !m || !d) return null;
+    if (props.time && timePart) {
+        const [hh, mi] = timePart.split(':').map(Number);
+        return new Date(y, m - 1, d, hh || 0, mi || 0);
+    }
     return new Date(y, m - 1, d);
 }
 function toStr(date) {
@@ -31,7 +39,10 @@ function toStr(date) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${dd}`;
+    if (!props.time) return `${y}-${m}-${dd}`;
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${y}-${m}-${dd}T${hh}:${mi}`;
 }
 
 const inner = computed({
@@ -40,6 +51,7 @@ const inner = computed({
 });
 const minDate = computed(() => toDate(props.min) || undefined);
 const maxDate = computed(() => toDate(props.max) || undefined);
+const resolvedPlaceholder = computed(() => props.placeholder || (props.time ? 'dd/mm/vvvv --:--' : 'dd/mm/vvvv'));
 const resolvedInputAttrs = computed(() => ({ ...props.inputAttrs }));
 const ariaLabels = computed(() => ({ input: props.ariaLabel }));
 </script>
@@ -51,12 +63,12 @@ const ariaLabels = computed(() => ({ input: props.ariaLabel }));
          IGNORED (that regression shipped datetime pickers app-wide). -->
     <VueDatePicker
         v-model="inner"
-        :time-config="{ enableTimePicker: false }"
-        :formats="{ input: 'dd/MM/yyyy' }"
+        :time-config="{ enableTimePicker: time }"
+        :formats="{ input: time ? 'dd/MM/yyyy HH:mm' : 'dd/MM/yyyy' }"
         :floating="{ placement: 'bottom-start' }"
         :min-date="minDate"
         :max-date="maxDate"
-        :placeholder="placeholder"
+        :placeholder="resolvedPlaceholder"
         :input-attrs="resolvedInputAttrs"
         :aria-labels="ariaLabels"
         :disabled="disabled"

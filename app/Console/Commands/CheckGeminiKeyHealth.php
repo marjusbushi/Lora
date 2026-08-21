@@ -40,6 +40,7 @@ class CheckGeminiKeyHealth extends Command
             return self::SUCCESS;
         }
 
+        $checkedKey = $gemini->key();
         $health = $gemini->healthCheck();
 
         if ($health['ok'] === null) {
@@ -49,10 +50,24 @@ class CheckGeminiKeyHealth extends Command
             return self::SUCCESS;
         }
 
+        // Admini e ndërroi/hoqi çelësin NDËRSA kërkesa ishte në fluturim
+        // (gjetje Codex, PR #512): rezultati i çelësit të vjetër s'guxon të
+        // mbishkruajë pastrimin që bëri updateAi() — hidhet poshtë.
+        if ($gemini->key() !== $checkedKey) {
+            $this->info('Çelësi ndryshoi gjatë kontrollit — rezultati u hodh poshtë.');
+
+            return self::SUCCESS;
+        }
+
+        // key_fp e bën garën të parrezikshme NGA ANA E LEXUESIT (gjetje Codex,
+        // PR #514): edhe nëse ky shkrim ulet një çast PAS një ndërrimi çelësi,
+        // paneli e shfaq alarmin VETËM kur gjurma përputhet me çelësin aktual —
+        // një rezultat i vjetruar s'ka më fuqi, pavarësisht kur shkruhet.
         Setting::set('ai.gemini_key_health', [
             'ok' => $health['ok'],
             'checked_at' => now()->toIso8601String(),
             'error' => $health['error'],
+            'key_fp' => hash('sha256', (string) $checkedKey),
         ], 'json');
 
         $this->info($health['ok'] ? 'Çelësi Gemini punon.' : 'Çelësi Gemini DËSHTOI: '.$health['error']);

@@ -5,6 +5,7 @@ import axios from 'axios';
 import { AlertTriangle, CalendarCheck2, CalendarPlus, CheckCircle2, LoaderCircle } from 'lucide-vue-next';
 import Modal from '@/Components/UI/Modal.vue';
 import Button from '@/Components/UI/Button.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import { getIntlLocale, translate } from '@/i18n';
 
 const props = defineProps({
@@ -150,11 +151,11 @@ function submit() {
             <div class="grid gap-4 sm:grid-cols-2">
                 <label class="block">
                     <span class="mb-1.5 block text-body-sm font-semibold text-primary-900">{{ $t('reservationModals.stayExtension.newCheckOut') }}</span>
-                    <input
+                    <DatePicker
                         v-model="form.new_check_out_date"
-                        type="date"
                         :min="minCheckOut"
-                        class="w-full rounded-lg border-neutral-200 text-body-sm focus:border-accent-500 focus:ring-accent-500"
+                        :error="form.errors.new_check_out_date || quoteError"
+                        class="w-full"
                     />
                     <span v-if="form.errors.new_check_out_date || quoteError" class="mt-1 block text-small text-error-600">
                         {{ form.errors.new_check_out_date || quoteError }}

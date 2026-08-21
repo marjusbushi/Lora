@@ -4,7 +4,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Button from '@/Components/UI/Button.vue';
-import TextInput from '@/Components/UI/TextInput.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import { Banknote, TrendingDown, TrendingUp } from 'lucide-vue-next';
 import { money } from './financeShared';
 
@@ -82,11 +82,11 @@ function formatDate(value) {
                     </div>
                     <div>
                         <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ t('financeMovements.from') }}</label>
-                        <TextInput :model-value="filterState.from" type="date" class="w-full" @update:model-value="applyFilters({ from: $event })" />
+                        <DatePicker :model-value="filterState.from" class="w-full" @update:model-value="applyFilters({ from: $event })" />
                     </div>
                     <div>
                         <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ t('financeMovements.to') }}</label>
-                        <TextInput :model-value="filterState.to" type="date" class="w-full" @update:model-value="applyFilters({ to: $event })" />
+                        <DatePicker :model-value="filterState.to" class="w-full" @update:model-value="applyFilters({ to: $event })" />
                     </div>
                     <div class="flex items-end">
                         <Button variant="ghost" type="button" @click="applyFilters({ account_id: '', movement: '', from: '', to: '' })">{{ t('financeMovements.clear') }}</Button>

@@ -17,6 +17,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import { money } from './financeShared.js';
 
 const props = defineProps({
@@ -297,12 +298,12 @@ function submit() {
                             </div>
                             <div>
                                 <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.issueDate') }}</label>
-                                <TextInput v-model="form.issue_date" :disabled="readOnly" type="date" class="w-full" />
+                                <DatePicker v-model="form.issue_date" :disabled="readOnly" :error="form.errors.issue_date" class="w-full" />
                                 <p v-if="form.errors.issue_date" class="mt-1 text-tiny text-error-600">{{ form.errors.issue_date }}</p>
                             </div>
                             <div>
                                 <label class="mb-1 block text-body-sm font-semibold text-primary-900">{{ $t('admin.finance.billCreate.dueDate') }}</label>
-                                <TextInput v-model="form.due_date" :disabled="readOnly" type="date" class="w-full" />
+                                <DatePicker v-model="form.due_date" :disabled="readOnly" :error="form.errors.due_date" class="w-full" />
                                 <p v-if="form.errors.due_date" class="mt-1 text-tiny text-error-600">{{ form.errors.due_date }}</p>
                             </div>
                             <div>
