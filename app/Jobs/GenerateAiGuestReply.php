@@ -488,7 +488,13 @@ PROMPT;
                 $allowedLinks[] = $value;
             }
         });
-        preg_match_all('~https?://[^\s<>"\']+~iu', $reply, $urls);
+        // Edhe format "lakuriqe" numërohen si link (gjetje Codex, PR #506):
+        // WhatsApp i bën klikueshëm edhe evil.example/pay dhe www.evil.example.
+        // Etiketat e domain-it kërkojnë ≥2 shkronja që "p.sh." shqip të mos
+        // kapet; TLD vetëm shkronja, që datat/çmimet (28.08, 190.50) të mos
+        // preken. Format lakuriqe s'barazohen kurrë me linkun e plotë https të
+        // mjetit → bien në draft — modeli e kopjon linkun VETËM të pandryshuar.
+        preg_match_all('~(?:https?://|www\.)[^\s<>"\']+|\b(?:[a-z0-9][a-z0-9-]+\.)+[a-z]{2,}(?:/[^\s<>"\']*)?~iu', $reply, $urls);
         foreach ($urls[0] as $url) {
             if (! in_array(rtrim($url, '.,;:!?)]}'), $allowedLinks, true)) {
                 return false;
@@ -772,25 +778,50 @@ PROMPT;
                 'error' => mb_substr($e?->getMessage() ?: 'Dështim i panjohur.', 0, 300),
             ], 'ai');
 
-            // Mbajtje e krijuar por link KURRË i dorëzuar (gjetje Codex, PR
-            // #505): pas dështimit terminal dhoma s'duhet të presë 35 min të
-            // bllokuar. Pajtimi me POK vjen i pari — një pagesë e kryer e
-            // konfirmon (settle), vetëm e PAPAGUARA lirohet; POK i paarritshëm
-            // → mos prek (komanda e lirimit mbetet rrjeta e fundit).
+            // Mbajtje e krijuar nga KY job por link KURRË i dorëzuar (gjetje
+            // Codex, PR #505/#506): pas dështimit terminal dhoma s'duhet të
+            // presë 35 min të bllokuar. VETËM mbajtja e përpjekjes SONË: e
+            // krijuar pas mesazhit tonë DHE pa asnjë dërgim AI pas krijimit —
+            // një mbajtje me link tashmë të dorëzuar (ose draft i një mesazhi
+            // të mëparshëm) NUK preket, mysafiri mund ta paguajë. Pajtimi me
+            // POK vjen i pari — e paguara konfirmohet, vetëm e PAPAGUARA
+            // lirohet; POK i paarritshëm → mos prek (komanda e lirimit mbetet
+            // rrjeta e fundit).
+            $own = $thread->messages()->reorder()->find($this->messageId);
             $hold = $thread->reservation_id
                 ? \App\Models\Reservation::query()->find($thread->reservation_id)
                 : null;
-            if ($hold
+            $ours = $own
+                && $hold
+                && $hold->created_at
+                && $own->sent_at
+                && $hold->created_at->gte($own->sent_at)
+                && ! $thread->messages()->reorder()
+                    ->where('sent_by_ai', true)
+                    ->where('sent_at', '>=', $hold->created_at)
+                    ->exists();
+            if ($ours
                 && $hold->status === 'pending'
                 && $hold->created_via === \App\Models\Reservation::CREATED_VIA_AI
                 && $hold->pok_order_id) {
                 try {
                     if (! app(\App\Services\PokPayments::class)->settle($hold)) {
-                        \App\Models\Reservation::whereKey($hold->id)->where('status', 'pending')->update(['status' => 'cancelled']);
-                        AuditLog::record('message.ai_booking_hold_released', $hold, [
-                            'reason' => 'ai_reply_failed',
-                            'thread_id' => $thread->id,
-                        ], 'ai');
+                        $released = \App\Models\Reservation::whereKey($hold->id)->where('status', 'pending')->update(['status' => 'cancelled']);
+                        if ($released > 0) {
+                            AuditLog::record('message.ai_booking_hold_released', $hold, [
+                                'reason' => 'ai_reply_failed',
+                                'thread_id' => $thread->id,
+                            ], 'ai');
+
+                            // UPDATE-i bulk e kapërcen observer-in me qëllim —
+                            // kalendarët e hapur njoftohen me dorë, si te
+                            // pok:release-unpaid (gjetje Codex, PR #506).
+                            try {
+                                event(new \App\Events\ReservationChanged((int) $hold->tenant_id, (int) $hold->id));
+                            } catch (\Throwable $broadcast) {
+                                report($broadcast);
+                            }
+                        }
                     }
                 } catch (\Throwable $pok) {
                     report($pok);
