@@ -10,7 +10,7 @@ import { countryOptions, PRIORITY_COUNTRIES } from '@/countries';
 
 const { t, locale } = useI18n();
 const brandName = computed(() => usePage().props.settings?.hotel_name || 'Hotel');
-const currencySymbol = computed(() => usePage().props.settings?.currency_symbol || '€');
+const currencySymbol = computed(() => usePage().props.settings?.pricing_currency_symbol || '€');
 
 const props = defineProps({
     roomTypes: Array,

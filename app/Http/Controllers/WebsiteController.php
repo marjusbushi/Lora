@@ -12,6 +12,7 @@ use App\Models\WebsiteSearchLog;
 use App\Services\DirectBookingPricing;
 use App\Services\PokClient;
 use App\Services\PokConfiguration;
+use App\Services\BaseCurrency;
 use App\Services\PokPayments;
 use App\Services\PricingCurrency;
 use App\Services\PublicRoomPricing;
@@ -403,7 +404,10 @@ class WebsiteController extends Controller
             'orderId' => $reservation->pok_order_id,
             'env' => app(PokConfiguration::class)->get('production', false) ? 'production' : 'staging',
             'amount' => (float) $reservation->total_amount,
-            'currency' => PricingCurrency::symbol(),
+            // The reservation's SNAPSHOTTED currency (frozen at booking), not the hotel's
+            // current pricing currency — an old EUR booking must not render as "$" after
+            // the hotel switches its pricing currency.
+            'currency' => BaseCurrency::symbol($reservation->currency),
             'guestName' => session('book_guest_name'),
             'confirmUrl' => route('website.pay.confirm', $token),
             // Pre-fill POK's card form from the PERSISTED guest (survives refresh + POK round-trip),
@@ -529,6 +533,9 @@ class WebsiteController extends Controller
                 'check_in_date' => $reservation->check_in_date?->toDateString(),
                 'check_out_date' => $reservation->check_out_date?->toDateString(),
                 'total_amount' => $reservation->total_amount,
+                // Frozen at booking (Reservation::booted) — stays correct even if the
+                // hotel later switches its pricing currency.
+                'currency_symbol' => BaseCurrency::symbol($reservation->currency),
             ],
             'hotel' => Setting::getGroup('hotel'),
         ]);
