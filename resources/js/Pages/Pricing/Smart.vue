@@ -7,6 +7,7 @@ import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import Modal from '@/Components/UI/Modal.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import PricingTabs from '@/Components/Pricing/PricingTabs.vue';
 
@@ -1065,11 +1066,11 @@ function syncLabel(ts) {
                 <div class="col-span-2 grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-label text-neutral-600 mb-1">{{ $t('admin.generated.k_fbb42ae4802f') }}</label>
-                        <input v-model="apForm.pause_from" type="date" :disabled="autopilotSaving" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                        <DatePicker v-model="apForm.pause_from" :disabled="autopilotSaving" class="w-full" />
                     </div>
                     <div>
                         <label class="block text-label text-neutral-600 mb-1">{{ $t('admin.generated.k_aa592d4c6917') }}</label>
-                        <input v-model="apForm.pause_to" type="date" :disabled="autopilotSaving" class="w-full rounded-lg border border-neutral-200 px-3 py-2 text-body-sm" />
+                        <DatePicker v-model="apForm.pause_to" :min="apForm.pause_from" :disabled="autopilotSaving" class="w-full" />
                     </div>
                 </div>
             </div>
