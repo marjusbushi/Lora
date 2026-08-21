@@ -89,6 +89,18 @@ class PokPayments
         // konfirmuar me shuma bosh (gjetje Codex #454).
         $this->broadcastChange($reservation);
 
+        // Hapi 3 (task #365): rezervim i krijuar nga biseda e Lora-s → pas
+        // pagesës mysafiri merr përmbledhjen e konfirmimit në të njëjtin
+        // thread. Vetëm në flip-in e parë (idempotent më lart) dhe best-effort
+        // — një radhë e ngecur s'e prek dot konfirmimin e pagesës.
+        if ($reservation->created_via === Reservation::CREATED_VIA_AI) {
+            try {
+                \App\Jobs\SendAiBookingConfirmation::dispatch($reservation->id);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
         return true;
     }
 
