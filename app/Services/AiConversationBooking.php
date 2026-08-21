@@ -147,7 +147,16 @@ class AiConversationBooking
                 return ['error' => 'Nuk u verifikua dot pagesa e mbajtjes ekzistuese — mos krijo mbajtje të re; recepsioni do ta ndjekë.'];
             }
 
-            Reservation::whereKey($existing->id)->where('status', 'pending')->update(['status' => 'cancelled']);
+            $released = Reservation::whereKey($existing->id)->where('status', 'pending')->update(['status' => 'cancelled']);
+            if ($released > 0) {
+                // UPDATE-i bulk e kapërcen observer-in — kalendarët e hapur
+                // njoftohen me dorë (i njëjti model si pok:release-unpaid).
+                try {
+                    event(new \App\Events\ReservationChanged((int) $existing->tenant_id, (int) $existing->id));
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
         }
 
         $creator = User::systemForCurrentTenant();

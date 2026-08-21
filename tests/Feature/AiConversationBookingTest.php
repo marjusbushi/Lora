@@ -521,6 +521,77 @@ class AiConversationBookingTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'message.ai_reply_failed', 'source' => 'ai']);
     }
 
+    public function test_a_bare_tampered_link_without_scheme_still_falls_to_draft(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+        $message = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Po, e konfirmoj.', 'sent_at' => now()]);
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $hold = $executors['create_booking_hold']([
+                    'check_in' => now()->addDays(7)->toDateString(),
+                    'check_out' => now()->addDays(9)->toDateString(),
+                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi',
+                ]);
+
+                // Link LAKURIQ pa https:// — WhatsApp e bën klikueshëm njësoj
+                // (Codex #506 P1): duhet të bjerë në draft.
+                return [
+                    'args' => ['confident' => true, 'reply' => "Paguani te evil.example/pay/confirm totalin {$hold['stay_total']} {$hold['currency']}."],
+                    'toolsUsed' => ['create_booking_hold'],
+                ];
+            });
+        });
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('typing')->andReturn([]);
+            $mock->shouldReceive('send')->never();
+        });
+
+        app()->call([new GenerateAiGuestReply($thread->id, $message->id), 'handle']);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    public function test_terminal_failure_of_a_later_job_never_cancels_a_delivered_hold(): void
+    {
+        // Porosia POK e PAPAGUAR — po mbajtja i përket një mesazhi TË MËPARSHËM
+        // linku i së cilës u DORËZUA: mysafiri mund të paguajë me të.
+        Http::fake([
+            '*/auth/sdk/login' => Http::response(['data' => ['accessToken' => 'tok', 'expiresIn' => 3600000]], 200),
+            '*/sdk-orders/*' => Http::response(['data' => ['sdkOrder' => [
+                'id' => 'ord_ai_1', 'isCompleted' => false, 'isCanceled' => false,
+                'isRefunded' => false, 'finalAmount' => 0, 'currencyCode' => 'EUR',
+            ]]], 200),
+            '*/sdk-orders' => Http::response(['data' => ['sdkOrder' => ['id' => 'ord_ai_1', 'finalAmount' => 190, 'currencyCode' => 'EUR']]], 200),
+        ]);
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+        $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Po, e konfirmoj.', 'sent_at' => now()->subMinutes(10)]);
+
+        app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+        $hold = Reservation::query()->sole();
+
+        // Linku u DORËZUA (mesazh AI pas krijimit të mbajtjes)…
+        $thread->messages()->create(['sender' => Message::SENDER_HOST, 'sent_by_ai' => true, 'body' => 'Linku i pagesës: ...', 'sent_at' => now()->addSecond()]);
+        // …dhe një mesazh i RI mysafiri sjell një job të ri që dështon terminal.
+        $later = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Faleminderit!', 'sent_at' => now()->addSeconds(2)]);
+
+        $job = new GenerateAiGuestReply($thread->id, $later->id);
+        app(TenantContext::class)->clear();
+        $job->failed(new \RuntimeException('gemini down'));
+        app(TenantContext::class)->set($this->tenant);
+
+        // Mbajtja e dorëzuar mbetet e paprekur — kurrë anulim i një linku live.
+        $this->assertSame('pending', $hold->fresh()->status);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'message.ai_booking_hold_released']);
+    }
+
     public function test_terminal_job_failure_confirms_instead_of_releasing_when_the_hold_was_paid(): void
     {
         $this->fakePok(); // GET: E PAGUAR
