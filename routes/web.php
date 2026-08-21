@@ -364,6 +364,7 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         // the undo re-validates availability — the room may have been resold.
         Route::post('/reservations/{reservation}/no-show', [ReservationController::class, 'markNoShow'])->middleware('permission:update_reservations')->name('reservations.no-show');
         Route::post('/reservations/{reservation}/no-show/undo', [ReservationController::class, 'undoNoShow'])->middleware('permission:update_reservations')->name('reservations.no-show.undo');
+        Route::post('/reservations/{reservation}/no-show/fee', [ReservationController::class, 'noShowFee'])->middleware('permission:update_reservations')->name('reservations.no-show.fee');
         Route::post('/reservations/{reservation}/move-room', [ReservationController::class, 'moveRoom'])->middleware('permission:update_reservations')->name('reservations.move-room');
         // Calendar drag-onto-a-bar: atomic two-way room swap ({other} binds
         // through the same tenant scope, so a foreign reservation 404s).
