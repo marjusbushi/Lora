@@ -59,10 +59,15 @@ class CheckGeminiKeyHealth extends Command
             return self::SUCCESS;
         }
 
+        // key_fp e bën garën të parrezikshme NGA ANA E LEXUESIT (gjetje Codex,
+        // PR #514): edhe nëse ky shkrim ulet një çast PAS një ndërrimi çelësi,
+        // paneli e shfaq alarmin VETËM kur gjurma përputhet me çelësin aktual —
+        // një rezultat i vjetruar s'ka më fuqi, pavarësisht kur shkruhet.
         Setting::set('ai.gemini_key_health', [
             'ok' => $health['ok'],
             'checked_at' => now()->toIso8601String(),
             'error' => $health['error'],
+            'key_fp' => hash('sha256', (string) $checkedKey),
         ], 'json');
 
         $this->info($health['ok'] ? 'Çelësi Gemini punon.' : 'Çelësi Gemini DËSHTOI: '.$health['error']);
