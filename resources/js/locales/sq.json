@@ -3735,6 +3735,7 @@
     "noShowModalArrival": "mbërritja më",
     "noShowModalEffect": "Rezervimi anulohet me vulën no-show: dhoma lirohet menjëherë, disponueshmëria u shtyhet kanaleve, dhe raporti i anulimeve e dallon nga anulimet e vërteta.",
     "noShowExtranetWarn": "Mos harro: heqja e komisionit bëhet në extranet-in e {channel} — shënoje no-show edhe atje.",
+    "noShowOpenBooking": "Hape në Booking.com",
     "noShowModalCancel": "Anulo",
     "noShowModalConfirm": "Po, shëno no-show",
     "noShowMarkedTitle": "Ky rezervim është shënuar No-Show.",
@@ -7237,6 +7238,8 @@
       "checkInLabel": "Ora standarde e check-in",
       "checkOutLabel": "Ora standarde e check-out",
       "futureNote": "Politikat e anulimit, parapagimit dhe no-show do të shtohen këtu kur të aktivizohet motori i politikave.",
+      "bookingHotelIdLabel": "ID e hotelit në Booking.com (extranet)",
+      "bookingHotelIdHint": "E gjen te URL-ja e extranet-it pas hyrjes (hotel_id=...). Me të, butoni \"Hape në Booking.com\" te no-show të çon direkt te rezervimi; pa të, te faqja kryesore e extranet-it.",
       "save": "Ruaj politikat"
     },
     "whatsapp": {

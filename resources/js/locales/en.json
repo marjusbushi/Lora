@@ -3735,6 +3735,7 @@
     "noShowModalArrival": "arrival on",
     "noShowModalEffect": "The reservation is cancelled with the no-show stamp: the room frees immediately, availability pushes to the channels, and the cancellations report keeps it separate from real cancellations.",
     "noShowExtranetWarn": "Don't forget: the commission waiver happens in the {channel} extranet — mark it no-show there too.",
+    "noShowOpenBooking": "Open on Booking.com",
     "noShowModalCancel": "Cancel",
     "noShowModalConfirm": "Yes, mark no-show",
     "noShowMarkedTitle": "This reservation is marked No-Show.",
@@ -7237,6 +7238,8 @@
       "checkInLabel": "Standard check-in time",
       "checkOutLabel": "Standard check-out time",
       "futureNote": "Cancellation, prepayment and no-show policies will be added here once the policy engine is enabled.",
+      "bookingHotelIdLabel": "Booking.com hotel ID (extranet)",
+      "bookingHotelIdHint": "Found in the extranet URL after login (hotel_id=...). With it, the no-show \"Open on Booking.com\" button jumps straight to the reservation; without it, to the extranet home.",
       "save": "Save policies"
     },
     "whatsapp": {
