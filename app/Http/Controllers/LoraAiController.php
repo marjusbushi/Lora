@@ -116,11 +116,10 @@ class LoraAiController extends Controller
                     ->where('tenant_id', $tenant->id)->where('source', 'ai')
                     ->where('created_at', '>=', $monthStart);
 
-                // Shuma mblidhet në PHP nga properties.total — pa funksione JSON
-                // në SQL, që sjellja të jetë identike në MySQL dhe SQLite (teste).
-                $confirmed = (clone $monthly)
+                $confirmedIds = (clone $monthly)
                     ->where('action', 'message.ai_booking_confirmed')
-                    ->get(['properties']);
+                    ->where('subject_type', \App\Models\Reservation::class)
+                    ->pluck('subject_id')->filter();
 
                 // Të ardhurat janë sipërfaqe financiare — rruga mbrohet vetëm me
                 // view_settings, ndaj shuma jepet vetëm kujt sheh paratë (Codex, PR #542).
@@ -130,10 +129,14 @@ class LoraAiController extends Controller
                     'replies' => (clone $monthly)
                         ->whereIn('action', ['message.ai_reply', 'ai.guest_reply.sent'])
                         ->count(),
-                    'bookings' => $confirmed->count(),
-                    'bookingRevenue' => $seesMoney ? round($confirmed->sum(
-                        fn ($row) => (float) (json_decode((string) $row->properties, true)['total'] ?? 0)
-                    ), 2) : null,
+                    'bookings' => $confirmedIds->count(),
+                    // Shuma nga snapshot-i i ngrirë në monedhën BAZË të hotelit
+                    // (total_amount_base) — properties.total mban monedhën e shitjes
+                    // të momentit dhe një ndryshim monedhe brenda muajit do t'i
+                    // përzinte shifrat (Codex, PR #548).
+                    'bookingRevenue' => $seesMoney ? round((float) \App\Models\Reservation::query()
+                        ->whereIn('id', $confirmedIds)
+                        ->sum('total_amount_base'), 2) : null,
                 ];
             })(),
         ]);
@@ -172,7 +175,14 @@ class LoraAiController extends Controller
             $data['guest_auto_reply_enabled'] = false;
             $data['whatsapp_auto_reply_enabled'] = false;
         }
-        if (! ($data['whatsapp_auto_reply_enabled'] ?? true)) {
+        // Prindi 'whatsapp_auto_reply_enabled' është opsional në payload — kur
+        // mungon, konsultohet vlera e RUAJTUR (jo një default optimist), që një
+        // kërkesë e pjesshme të mos ruajë booking=ON mbi një prind të fikur
+        // (Codex, PR #548).
+        $whatsAppAutoOn = array_key_exists('whatsapp_auto_reply_enabled', $data)
+            ? (bool) $data['whatsapp_auto_reply_enabled']
+            : $this->boolSetting('whatsapp_auto_reply_enabled', false);
+        if (! $whatsAppAutoOn) {
             $data['whatsapp_booking_enabled'] = false;
         }
         if (! ($data['pricing_enabled'] ?? true)) {
