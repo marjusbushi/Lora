@@ -5438,7 +5438,7 @@
       "dbForecast": "Occupancy for the next 14 days from reservations ON THE BOOKS today — not a statistical forecast. Each bar: rooms occupied that night / sellable.",
       "dbPulse": "Real collections (voided excluded): PMS payments + settled POS sales, in the selling currency with the base beneath. The month compares against the same period last month; top channel = the channel with the most revenue in the last 30 days.",
       "dbChannex": "PMS → Channex sync health: checks every room type for availability and rates, incomplete mappings, and sync age. \"Selling until\" = how far ahead OTAs have published rates and availability.",
-      "spSpend": "Gross value of supplier bills issued in the period, in the selling currency with the base beneath.",
+      "spSpend": "Gross value of supplier bills issued in the period, in the hotel's base currency. Suppliers billed in another currency also show the original document amount beneath.",
       "spOnTime": "Share of dued bills paid within their term. Only bills whose due date has arrived, or that are settled, count.",
       "spOverdue": "Unpaid value of bills past their due date — money suppliers are waiting for. The small line: total unpaid, due or not.",
       "spCategories": "Spend by the category tree, read from bill LINES: a mixed bill splits correctly across branches, and an item in a sub-category also counts toward its parent. Bills without lines follow their document category; \"Të tjera\" = uncategorized.",
