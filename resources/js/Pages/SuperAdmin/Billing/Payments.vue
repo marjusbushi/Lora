@@ -3,12 +3,13 @@ import { computed, ref, watch } from 'vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import BillingPageHeader from '@/Components/SuperAdmin/BillingPageHeader.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import { translate } from '@/i18n';
 import { Banknote, CreditCard, Landmark, WalletCards, X } from 'lucide-vue-next';
 
 const props = defineProps({ payments: Object, openInvoices: Array, stats: Object, tenants: Array, filters: Object });
 const modalOpen = ref(false);
-const form = useForm({ billing_invoice_id: props.filters?.invoice_id || '', amount: '', method: 'bank_transfer', reference: '', paid_at: new Date().toISOString().slice(0, 16), note: '' });
+const form = useForm({ billing_invoice_id: props.filters?.invoice_id || '', amount: '', method: 'bank_transfer', reference: '', paid_at: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16), note: '' });
 const selectedInvoice = computed(() => props.openInvoices.find((invoice) => invoice.id === Number(form.billing_invoice_id)));
 
 watch(selectedInvoice, (invoice) => {
@@ -69,7 +70,7 @@ function filter(key, value) { router.get('/super-admin/billing/payments', { ...p
                         <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.amount') }}<input v-model="form.amount" required min="0.01" step="0.01" type="number" class="mt-1 w-full rounded-xl border-neutral-300 text-sm" /><span v-if="form.errors.amount" class="mt-1 block text-xs text-red-600">{{ form.errors.amount }}</span></label>
                         <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.method') }}<select v-model="form.method" class="mt-1 w-full rounded-xl border-neutral-300 text-sm"><option value="bank_transfer">{{ $t('superAdmin.billing.methodBankTransfer') }}</option><option value="cash">Cash</option><option value="other">{{ $t('superAdmin.billing.methodOther') }}</option></select></label>
                         <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.reference') }}<input v-model="form.reference" type="text" class="mt-1 w-full rounded-xl border-neutral-300 text-sm" placeholder="BKT-882104" /></label>
-                        <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.paymentDate') }}<input v-model="form.paid_at" required type="datetime-local" class="mt-1 w-full rounded-xl border-neutral-300 text-sm" /></label>
+                        <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.paymentDate') }}<DatePicker v-model="form.paid_at" time :input-attrs="{ required: true }" class="mt-1 w-full" /></label>
                         <label class="text-sm font-medium text-neutral-700 sm:col-span-2">{{ $t('superAdmin.billing.note') }}<textarea v-model="form.note" rows="3" class="mt-1 w-full rounded-xl border-neutral-300 text-sm" /></label>
                         <p v-if="Object.keys(form.errors).length" class="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{{ $t('superAdmin.billing.checkFields') }}</p>
                     </div>

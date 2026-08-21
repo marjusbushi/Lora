@@ -4,6 +4,7 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { CalendarDays, Umbrella, ShieldCheck } from 'lucide-vue-next';
 import WebsiteLayout from '@/Layouts/WebsiteLayout.vue';
 import SunbedSpot from '@/Components/Website/SunbedSpot.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 
 const props = defineProps({
     zones: { type: Array, default: () => [] },
@@ -177,11 +178,11 @@ function submit() {
                     <div class="grid gap-4 sm:grid-cols-2">
                         <label>
                             <span class="mb-2 flex items-center gap-2 text-tiny font-semibold uppercase tracking-wider text-ink/45"><CalendarDays class="h-4 w-4" />{{ $t('beach.public.fromDate') }}</span>
-                            <input v-model="dates.start" type="date" :min="minDate" :max="maxDate" class="w-full rounded-xl border-driftwood/30 text-body font-medium text-ink focus:border-ionian focus:ring-ionian" />
+                            <DatePicker v-model="dates.start" :min="minDate" :max="maxDate" class="w-full" />
                         </label>
                         <label>
                             <span class="mb-2 flex items-center gap-2 text-tiny font-semibold uppercase tracking-wider text-ink/45"><CalendarDays class="h-4 w-4" />{{ $t('beach.public.toDate') }}</span>
-                            <input v-model="dates.end" type="date" :min="dates.start || minDate" :max="maxDate" class="w-full rounded-xl border-driftwood/30 text-body font-medium text-ink focus:border-ionian focus:ring-ionian" />
+                            <DatePicker v-model="dates.end" :min="dates.start || minDate" :max="maxDate" class="w-full" />
                         </label>
                     </div>
                     <p v-if="days > 0" class="mt-3 text-body-sm text-driftwood">{{ $t('beach.public.daysCount', { days }) }}</p>

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import BillingPageHeader from '@/Components/SuperAdmin/BillingPageHeader.vue';
+import DatePicker from '@/Components/UI/DatePicker.vue';
 import { translate } from '@/i18n';
 import { CircleAlert, Clock3, FilePlus2, ReceiptText, X } from 'lucide-vue-next';
 
@@ -128,9 +129,9 @@ function voidInvoice(invoice) {
                     <div class="flex items-start justify-between border-b border-neutral-200 px-5 py-4"><div><h2 class="text-lg font-semibold text-neutral-900">{{ $t('superAdmin.billing.createInvoice') }}</h2><p class="mt-1 text-sm text-neutral-500">{{ $t('superAdmin.billing.createInvoiceSubtitle') }}</p></div><button type="button" class="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100" @click="createOpen = false"><X class="h-5 w-5" /></button></div>
                     <div class="grid gap-4 p-5 sm:grid-cols-2">
                         <label class="text-sm font-medium text-neutral-700 sm:col-span-2">{{ $t('superAdmin.compact.hotel') }}<select v-model="form.tenant_id" required class="mt-1 w-full rounded-xl border-neutral-300 text-sm"><option value="" disabled>{{ $t('superAdmin.billing.chooseHotel') }}</option><option v-for="tenant in tenants.filter(t => t.has_subscription)" :key="tenant.id" :value="tenant.id">{{ tenant.name }}</option></select><span v-if="form.errors.tenant_id" class="mt-1 block text-xs text-red-600">{{ form.errors.tenant_id }}</span></label>
-                        <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.periodStarts') }}<input v-model="form.period_starts_on" required type="date" class="mt-1 w-full rounded-xl border-neutral-300 text-sm" /></label>
-                        <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.periodEnds') }}<input v-model="form.period_ends_on" type="date" class="mt-1 w-full rounded-xl border-neutral-300 text-sm" /></label>
-                        <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.paymentDueDate') }}<input v-model="form.due_on" required type="date" class="mt-1 w-full rounded-xl border-neutral-300 text-sm" /></label>
+                        <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.periodStarts') }}<DatePicker v-model="form.period_starts_on" :input-attrs="{ required: true }" class="mt-1 w-full" /></label>
+                        <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.periodEnds') }}<DatePicker v-model="form.period_ends_on" :min="form.period_starts_on" class="mt-1 w-full" /></label>
+                        <label class="text-sm font-medium text-neutral-700">{{ $t('superAdmin.billing.paymentDueDate') }}<DatePicker v-model="form.due_on" :input-attrs="{ required: true }" class="mt-1 w-full" /></label>
                         <label class="flex items-center gap-3 self-end rounded-xl border border-neutral-200 p-3 text-sm font-medium text-neutral-700"><input v-model="form.issue_now" type="checkbox" class="rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500" /> {{ $t('superAdmin.billing.publishImmediately') }}</label>
                         <label class="text-sm font-medium text-neutral-700 sm:col-span-2">{{ $t('superAdmin.billing.notes') }}<textarea v-model="form.notes" rows="3" class="mt-1 w-full rounded-xl border-neutral-300 text-sm" /></label>
                         <p v-if="Object.keys(form.errors).length" class="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{{ $t('superAdmin.billing.checkFields') }}</p>
