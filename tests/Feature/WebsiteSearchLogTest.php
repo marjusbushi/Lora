@@ -80,7 +80,7 @@ class WebsiteSearchLogTest extends TestCase
         $this->post(route('website.book.check'), [
             'check_in' => now()->addDays(3)->toDateString(),
             'check_out' => now()->addDays(5)->toDateString(),
-        ])->assertOk()->assertJsonStructure(['rooms', 'nights']);
+        ])->assertOk()->assertJsonStructure(['room_types', 'nights']);
     }
 
     public function test_table_holds_no_pii(): void

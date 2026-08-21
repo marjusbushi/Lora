@@ -22,7 +22,7 @@ class BookingChildrenTest extends TestCase
     private function payload(Room $room, int $adults, int $children): array
     {
         return [
-            'room_id' => $room->id,
+            'selections' => [['room_type_id' => $room->room_type_id, 'quantity' => 1]],
             'check_in' => today()->addDays(3)->toDateString(),
             'check_out' => today()->addDays(5)->toDateString(),
             'first_name' => 'Ana', 'last_name' => 'B', 'email' => 'a@b.local', 'phone' => '+355 69 000',
@@ -46,10 +46,10 @@ class BookingChildrenTest extends TestCase
     {
         $room = $this->room(4);
 
-        // Capacity failures are now VALIDATION errors (room_id) so the booking wizard
+        // Capacity failures are now VALIDATION errors (selections) so the booking wizard
         // preserves everything the guest typed instead of resetting to step 1.
         $this->post(route('website.book.submit'), $this->payload($room, 3, 3)) // total 6 > 4
-            ->assertSessionHasErrors('room_id');
+            ->assertSessionHasErrors('selections');
 
         $this->assertSame(0, Reservation::count());
     }
