@@ -243,6 +243,37 @@ class BookingGroupTest extends TestCase
         $this->assertSame(2, Payment::where('is_voided', true)->count());
     }
 
+    public function test_failed_pok_order_releases_the_whole_group(): void
+    {
+        $this->configurePok();
+        // Order creation itself fails → the just-held rooms must ALL be released (model-level,
+        // so the observer compensates Channex/realtime side-effects — Codex P1, PR #518).
+        Http::fake([
+            '*/auth/sdk/login' => Http::response(['data' => ['accessToken' => 'tok', 'expiresIn' => 3600000]], 200),
+            '*/sdk-orders' => Http::response(['message' => 'boom'], 500),
+        ]);
+        $deluxe = $this->type('Deluxe', 2);
+
+        $this->submit([['room_type_id' => $deluxe->id, 'quantity' => 2]])->assertSessionHasErrors('selections');
+
+        $this->assertSame(2, Reservation::count());
+        $this->assertSame(2, Reservation::where('status', 'cancelled')->count());
+    }
+
+    public function test_confirmation_lists_only_the_rooms_still_held(): void
+    {
+        [$primary, $member] = $this->pendingGroup();
+        Reservation::whereIn('id', [$primary->id, $member->id])->update(['status' => 'confirmed', 'paid_at' => now()]);
+        // Staff cancels ONE room of the confirmed group in the PMS (Codex P2, PR #518).
+        Reservation::whereKey($member->id)->update(['status' => 'cancelled']);
+
+        $this->get(route('website.booking.confirmation', $primary->confirmation_token))
+            ->assertOk()
+            ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+                ->has('reservation.rooms', 1)
+                ->where('reservation.total_amount', 300));
+    }
+
     public function test_release_unpaid_holds_frees_the_whole_group(): void
     {
         $this->configurePok();

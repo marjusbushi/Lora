@@ -398,8 +398,11 @@ class WebsiteController extends Controller
             } catch (\Throwable $e) {
                 report($e);
                 // Couldn't reach POK — release the just-held rooms (the WHOLE group) and ask
-                // the guest to retry. Validation error (not a flash) keeps everything typed.
-                Reservation::whereIn('id', $reservations->pluck('id'))->update(['status' => 'cancelled']);
+                // the guest to retry. MODEL-level updates on purpose: the observer must
+                // compensate the creation side-effects (Channex availability push, realtime
+                // broadcast) — a bulk query update would bypass it and leave the rooms
+                // marked occupied on the OTAs (Codex P1, PR #518).
+                $reservations->each(fn (Reservation $held) => $held->update(['status' => 'cancelled']));
 
                 throw ValidationException::withMessages([
                     'selections' => 'Nuk u lidh dot pagesa me kartë. Provo sërish pas pak.',
@@ -626,6 +629,11 @@ class WebsiteController extends Controller
         // The POK order lives on the group's primary — resolve it so a member token can
         // never show "booked successfully" while the group's payment is still open.
         $primary = $members->firstWhere('pok_order_id', '!=', null) ?? $members->first();
+        // Staff may cancel ONE room of a confirmed group in the PMS — the guest's
+        // confirmation must list only the rooms still held (Codex P2, PR #518). If the
+        // whole group is cancelled the page renders its explicit cancelled state anyway.
+        $held = $members->reject(fn (Reservation $member) => $member->status === 'cancelled')->values();
+        $display = $held->isNotEmpty() ? $held : $members;
 
         // Payment not finished yet (pending with a POK order) → send the guest back to pay,
         // never show a "booked successfully" screen for an unpaid hold.
@@ -646,13 +654,13 @@ class WebsiteController extends Controller
                 // Typology model: guests book room TYPES; the concrete room is the hotel's
                 // internal assignment, so no room number is exposed here.
                 'room_type' => $reservation->room?->roomType?->name,
-                'rooms' => $members->map(fn ($m) => [
+                'rooms' => $display->map(fn ($m) => [
                     'room_type' => $m->room?->roomType?->name,
                     'total_amount' => (float) $m->total_amount,
                 ])->values(),
                 'check_in_date' => $reservation->check_in_date?->toDateString(),
                 'check_out_date' => $reservation->check_out_date?->toDateString(),
-                'total_amount' => round((float) $members->sum('total_amount'), 2),
+                'total_amount' => round((float) $display->sum('total_amount'), 2),
                 // Frozen at booking (Reservation::booted) — stays correct even if the
                 // hotel later switches its pricing currency.
                 'currency_symbol' => BaseCurrency::symbol($reservation->currency),
