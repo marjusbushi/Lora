@@ -197,7 +197,6 @@ jobs:
 
             trusted_paths=(
               .github/CODEOWNERS
-              .github/workflows/deploy.yml
               .github/workflows/production-release-rehearsal.yml
               .github/workflows/tests.yml
               deploy/scripts/configure-control-panel-domain.sh
