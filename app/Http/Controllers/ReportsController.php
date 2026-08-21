@@ -17,6 +17,7 @@ use App\Models\Setting;
 use App\Services\BaseCurrency;
 use App\Services\CurrencyRates;
 use App\Services\PricingCurrency;
+use App\Services\ReservationMoney;
 use App\Services\Reporting\BankPaymentsReportService;
 use App\Services\Reporting\BookingBehaviorService;
 use App\Services\Reporting\BudgetTargetService;
@@ -525,12 +526,49 @@ class ReportsController extends Controller
             'no_show_value' => round((float) $overdueArrivals->sum('value'), 2),
         ];
 
+        // TRUE no-shows: reservations actually STAMPED in the period, with the
+        // fee money story — collected on the terminal vs still outstanding.
+        // (Distinct from noShows above, which are unresolved candidates.)
+        $stamped = Reservation::query()
+            ->whereNotNull('no_show_at')
+            ->whereDate('no_show_at', '>=', $from)
+            ->whereDate('no_show_at', '<=', $to)
+            ->with(['guest:id,first_name,last_name', 'room:id,room_number', 'folioItems', 'payments'])
+            ->orderByDesc('no_show_at')
+            ->get();
+        $feeRows = $stamped->map(function (Reservation $r) {
+            $totals = ReservationMoney::totals($r);
+
+            return [
+                'id' => $r->id,
+                'guest' => trim(($r->guest?->first_name ?? '').' '.($r->guest?->last_name ?? '')) ?: 'Mysafir',
+                'room' => $r->room?->room_number,
+                'channel' => $r->channel,
+                'check_in_date' => $r->check_in_date?->toDateString(),
+                'no_show_at' => $r->no_show_at?->toDateString(),
+                'gross' => $totals['gross'],
+                'paid' => $totals['paid'],
+                'outstanding' => $totals['outstanding'],
+                'settled' => $totals['outstanding'] <= 0.005,
+            ];
+        })->values();
+
         return Inertia::render('Reports/Cancellations', [
             'filters' => $period->toArray(),
             'analytics' => $analytics,
             'summary' => $legacySummary,
             'cancelled' => collect($current['losses'])->where('type', 'cancelled')->values(),
             'noShows' => $overdueArrivals,
+            'noShowFees' => [
+                'rows' => $feeRows,
+                'summary' => [
+                    'total_count' => $feeRows->count(),
+                    'paid_count' => $feeRows->where('settled', true)->count(),
+                    'outstanding_count' => $feeRows->where('settled', false)->count(),
+                    'collected_value' => round((float) $feeRows->sum('paid'), 2),
+                    'outstanding_value' => round((float) $feeRows->sum('outstanding'), 2),
+                ],
+            ],
             'canViewReservations' => (bool) $request->user()?->can('view_reservations'),
             'currency' => $this->currency(),
             'pricingCurrency' => PricingCurrency::code(),

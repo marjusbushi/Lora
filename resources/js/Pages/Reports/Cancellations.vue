@@ -14,6 +14,7 @@ import { AlertTriangle, Ban, CirclePercent, WalletCards } from 'lucide-vue-next'
 const props = defineProps({
     filters: Object,
     analytics: { type: Object, default: () => ({}) },
+    noShowFees: { type: Object, default: () => ({ rows: [], summary: {} }) },
     canViewReservations: { type: Boolean, default: false },
     currency: { type: String, default: '€' },
     pricingCurrency: { type: String, default: '' },
@@ -29,6 +30,9 @@ const atRisk = computed(() => current.value.at_risk || []);
 const riskLevels = computed(() => current.value.risk_levels || {});
 const changes = computed(() => props.analytics.changes || {});
 const maxDailyLoss = computed(() => Math.max(1, ...daily.value.flatMap((day) => [day.cancelled_value || 0, day.no_show_value || 0])));
+
+const feeSummary = computed(() => props.noShowFees?.summary || {});
+const feeRows = computed(() => props.noShowFees?.rows || []);
 
 const { pricingCode, displayRate, showBase, money, moneyBase } = useReportCurrency(props);
 const baseLine = (value) => (showBase.value ? moneyBase(value) : null);
@@ -268,6 +272,62 @@ const kpis = computed(() => [
                     </tbody>
                 </table>
             </div>
+        </Card>
+
+        <Card class="mt-4" :padding="false">
+            <div class="border-b border-neutral-200 px-5 py-4">
+                <h2 class="flex items-center gap-1 text-body font-semibold text-primary-900">{{ $t('reports360.cancellationRisk.noShowFeesTitle') }}<InfoTip :text="$t('reports360.help.noShowFees')" :label="$t('reports360.cancellationRisk.noShowFeesTitle')" /></h2>
+            </div>
+            <div class="grid gap-3 px-5 py-4 sm:grid-cols-3">
+                <div class="rounded-lg bg-neutral-50 px-3 py-2">
+                    <span class="block text-tiny text-neutral-600">{{ $t('reports360.cancellationRisk.noShowFeesTotal') }}</span>
+                    <b class="text-body text-primary-900">{{ feeSummary.total_count || 0 }}</b>
+                </div>
+                <div class="rounded-lg bg-success-50 px-3 py-2">
+                    <span class="block text-tiny text-success-700">{{ $t('reports360.cancellationRisk.noShowFeesPaid') }}</span>
+                    <b class="text-body text-success-800">{{ feeSummary.paid_count || 0 }} · {{ money(feeSummary.collected_value) }}</b>
+                    <small v-if="showBase" class="block text-tiny text-neutral-400">{{ moneyBase(feeSummary.collected_value) }}</small>
+                </div>
+                <div class="rounded-lg bg-warning-50 px-3 py-2">
+                    <span class="block text-tiny text-warning-700">{{ $t('reports360.cancellationRisk.noShowFeesOutstanding') }}</span>
+                    <b class="text-body text-warning-800">{{ feeSummary.outstanding_count || 0 }} · {{ money(feeSummary.outstanding_value) }}</b>
+                    <small v-if="showBase" class="block text-tiny text-neutral-400">{{ moneyBase(feeSummary.outstanding_value) }}</small>
+                </div>
+            </div>
+            <div v-if="feeRows.length" class="overflow-x-auto border-t border-neutral-200">
+                <table class="min-w-full divide-y divide-neutral-200">
+                    <thead class="bg-neutral-50 text-left text-label text-neutral-600">
+                        <tr>
+                            <th class="px-5 py-3">{{ $t('reports360.cancellationRisk.guest') }}</th>
+                            <th class="px-4 py-3">{{ $t('reports360.cancellationRisk.room') }}</th>
+                            <th class="px-4 py-3">Check-in</th>
+                            <th class="px-4 py-3">{{ $t('reports360.cancellationRisk.noShowFeesMarkedOn') }}</th>
+                            <th class="px-4 py-3">{{ $t('reports360.channel') }}</th>
+                            <th class="px-4 py-3 text-right">{{ $t('reports360.cancellationRisk.value') }}</th>
+                            <th class="px-4 py-3 text-right">{{ $t('reports360.cancellationRisk.noShowFeesPaid') }}</th>
+                            <th class="px-5 py-3 text-right">{{ $t('reports360.cancellationRisk.noShowFeesOutstanding') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-neutral-100">
+                        <tr v-for="row in feeRows" :key="row.id" class="hover:bg-neutral-50">
+                            <td class="px-5 py-3">
+                                <Link v-if="canViewReservations" :href="route('reservations.show', row.id)" class="text-body-sm font-medium text-primary-900 hover:underline">{{ row.guest }}</Link>
+                                <span v-else class="text-body-sm font-medium text-primary-900">{{ row.guest }}</span>
+                            </td>
+                            <td class="px-4 py-3 text-body-sm text-neutral-600">{{ row.room || '—' }}</td>
+                            <td class="px-4 py-3 text-body-sm text-neutral-600">{{ row.check_in_date }}</td>
+                            <td class="px-4 py-3 text-body-sm text-neutral-600">{{ row.no_show_at }}</td>
+                            <td class="px-4 py-3 text-body-sm text-neutral-600">{{ channelMeta(row.channel).label }}</td>
+                            <td class="px-4 py-3 text-right text-body-sm text-primary-900">{{ money(row.gross) }}<small v-if="showBase" class="block text-tiny font-normal text-neutral-400">{{ moneyBase(row.gross) }}</small></td>
+                            <td class="px-4 py-3 text-right text-body-sm text-success-700">{{ money(row.paid) }}</td>
+                            <td class="px-5 py-3 text-right">
+                                <Badge :variant="row.settled ? 'success' : 'warning'">{{ row.settled ? $t('reports360.cancellationRisk.noShowFeesSettled') : money(row.outstanding) }}</Badge>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div v-else class="border-t border-neutral-200 px-5 py-6 text-center text-body-sm text-neutral-400">{{ $t('reports360.cancellationRisk.noShowFeesEmpty') }}</div>
         </Card>
     </ReportShell>
 </template>
