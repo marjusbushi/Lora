@@ -136,29 +136,31 @@ class WebsiteController extends Controller
             Log::warning('Website search log failed: '.$e->getMessage());
         }
 
+        // One row per TYPOLOGY (Booking.com model) — the guest picks a quantity, never a
+        // physical room. available_count exists ONLY to cap the quantity stepper; the UI
+        // must not display it (owner decision 2026-08-21).
         return response()->json([
-            'rooms' => $rooms->map(function ($r) use ($request) {
-                $quote = $this->directBookingPricing->quote($r->roomType, $request->check_in, $request->check_out);
+            'room_types' => $rooms->groupBy('room_type_id')->map(function ($roomsOfType) use ($request) {
+                $type = $roomsOfType->first()->roomType;
+                $quote = $this->directBookingPricing->quote($type, $request->check_in, $request->check_out);
 
                 return [
-                    'id' => $r->id,
-                    'room_number' => $r->room_number,
-                    'room_type_id' => $r->room_type_id,
-                    'floor' => $r->floor,
-                    'room_type' => $r->roomType->name,
+                    'room_type_id' => $type->id,
+                    'room_type' => $type->name,
+                    'available_count' => $roomsOfType->count(),
                     'price_per_night' => $quote['price_per_night'],
                     'total_price' => $quote['total'],
                     'smart_price_per_night' => $quote['original_per_night'],
                     'smart_total_price' => $quote['original_total'],
                     'direct_discount_pct' => $quote['discount_pct'],
                     'direct_discount_amount' => $quote['discount_amount'],
-                    'max_occupancy' => $r->roomType->max_occupancy,
-                    'amenities' => $r->roomType->amenities,
-                    'description' => $r->roomType->description,
-                    'breakfast_included' => (bool) $r->roomType->breakfast_included,
-                    'images' => $r->roomType->images,
+                    'max_occupancy' => $type->max_occupancy,
+                    'amenities' => $type->amenities,
+                    'description' => $type->description,
+                    'breakfast_included' => (bool) $type->breakfast_included,
+                    'images' => $type->images,
                 ];
-            }),
+            })->values(),
             'nights' => $nights,
         ]);
     }
@@ -224,7 +226,10 @@ class WebsiteController extends Controller
         }
 
         $request->validate([
-            'room_id' => ['required', TenantRule::exists('rooms')],
+            // Booking.com model: the guest picks TYPOLOGIES and quantities, never rooms.
+            'selections' => ['required', 'array', 'min:1', 'max:10'],
+            'selections.*.room_type_id' => ['required', 'distinct', TenantRule::exists('room_types')],
+            'selections.*.quantity' => ['required', 'integer', 'min:1', 'max:10'],
             'check_in' => ['required', 'date', 'after_or_equal:today'],
             'check_out' => ['required', 'date', 'after:check_in'],
             'first_name' => ['required', 'string', 'max:255', new \App\Rules\ContainsLetters(2)],
@@ -237,17 +242,26 @@ class WebsiteController extends Controller
             'children' => ['sometimes', 'integer', 'min:0', 'max:10'],
         ]);
 
-        $room = Room::with('roomType')->findOrFail($request->room_id);
+        $selections = collect($request->input('selections'))->map(fn ($s) => [
+            'room_type_id' => (int) $s['room_type_id'],
+            'quantity' => (int) $s['quantity'],
+        ])->values();
+        $types = RoomType::whereIn('id', $selections->pluck('room_type_id'))->get()->keyBy('id');
+        $totalRooms = $selections->sum('quantity');
+        $capacity = $selections->sum(fn ($s) => $s['quantity'] * (int) $types[$s['room_type_id']]->max_occupancy);
 
-        // A VALIDATION error (not a flash) so Inertia preserves the wizard's state — the guest
+        // VALIDATION errors (not flashes) so Inertia preserves the wizard's state — the guest
         // keeps everything typed and recovers in-step instead of being reset to step 1.
-        if ($room->roomType && ((int) $request->adults + (int) $request->children) > $room->roomType->max_occupancy) {
+        if (((int) $request->adults + (int) $request->children) > $capacity) {
             throw ValidationException::withMessages([
-                'room_id' => "Kjo dhomë lejon maksimumi {$room->roomType->max_occupancy} persona — zgjidh një dhomë më të madhe.",
+                'selections' => "Dhomat e zgjedhura nxënë maksimumi {$capacity} persona — shto një dhomë ose zgjidh një tipologji më të madhe.",
             ]);
         }
-
-        $nights = now()->parse($request->check_in)->diffInDays($request->check_out);
+        if ((int) $request->adults < $totalRooms) {
+            throw ValidationException::withMessages([
+                'selections' => "Duhet të paktën një i rritur për çdo dhomë — ke zgjedhur {$totalRooms} dhoma.",
+            ]);
+        }
 
         // Attribute public bookings to a stable system user (self-seeding) — never a hardcoded
         // id, so a missing/renumbered user 1 can't 500 the public booking funnel.
@@ -259,13 +273,29 @@ class WebsiteController extends Controller
         $creator = User::systemForCurrentTenant();
 
         try {
-            // Lock the room row + re-check availability INSIDE the transaction so two
-            // concurrent bookings for the same room can't both pass the check (no double-book).
-            $reservation = DB::transaction(function () use ($request, $room, $creator) {
-                Room::where('id', $room->id)->lockForUpdate()->first();
+            // Lock ALL candidate rooms of the requested types + re-check availability INSIDE
+            // the transaction, then assign concrete rooms server-side. Two concurrent bookings
+            // for the same typology each get DIFFERENT free rooms (no double-book) — and a
+            // shortfall rolls the whole group back atomically.
+            $reservations = DB::transaction(function () use ($request, $selections, $types, $creator) {
+                $candidates = Room::whereIn('room_type_id', $selections->pluck('room_type_id'))
+                    ->where('status', '!=', 'maintenance')
+                    ->orderBy('id') // deterministic lock order — avoids deadlocks between concurrent groups
+                    ->lockForUpdate()
+                    ->get(['id', 'room_type_id']);
 
-                if (! Reservation::isRoomAvailable($room->id, $request->check_in, $request->check_out)) {
-                    throw new \RuntimeException('room_unavailable');
+                $assigned = collect();
+                foreach ($selections as $selection) {
+                    $free = $candidates->where('room_type_id', $selection['room_type_id'])
+                        ->filter(fn ($room) => Reservation::isRoomAvailable($room->id, $request->check_in, $request->check_out))
+                        ->take($selection['quantity'])
+                        ->values();
+
+                    if ($free->count() < $selection['quantity']) {
+                        throw new \RuntimeException('room_unavailable');
+                    }
+
+                    $assigned = $assigned->concat($free);
                 }
 
                 // Match an existing guest by normalized email and REUSE it WITHOUT
@@ -297,70 +327,147 @@ class WebsiteController extends Controller
                     }
                 }
 
-                $quote = $this->directBookingPricing->quote($room->roomType, $request->check_in, $request->check_out);
-
-                return Reservation::create([
-                    'room_id' => $room->id,
-                    'guest_id' => $guest->id,
-                    'check_in_date' => $request->check_in,
-                    'check_out_date' => $request->check_out,
-                    'status' => 'pending',
-                    'total_amount' => $quote['total'],
-                    'rate_before_discount' => $quote['original_total'],
-                    'direct_discount_pct' => $quote['discount_pct'],
-                    'direct_discount_amount' => $quote['discount_amount'],
-                    'adults' => $request->adults,
-                    'children' => (int) $request->children,
-                    'notes' => $request->notes,
-                    'channel' => 'direct',
-                    'created_via' => Reservation::CREATED_VIA_WEBSITE,
-                    'created_by' => $creator->id,
+                $quotesByType = $selections->mapWithKeys(fn ($selection) => [
+                    $selection['room_type_id'] => $this->directBookingPricing->quote(
+                        $types[$selection['room_type_id']], $request->check_in, $request->check_out
+                    ),
                 ]);
+
+                $groupId = $assigned->count() > 1 ? (string) \Illuminate\Support\Str::uuid() : null;
+                $occupancy = $this->distributeGuests(
+                    $assigned->map(fn ($room) => (int) $types[$room->room_type_id]->max_occupancy),
+                    (int) $request->adults,
+                    (int) $request->children
+                );
+
+                return $assigned->values()->map(function ($room, $i) use ($request, $guest, $creator, $groupId, $quotesByType, $occupancy) {
+                    $quote = $quotesByType[$room->room_type_id];
+
+                    return Reservation::create([
+                        'room_id' => $room->id,
+                        'guest_id' => $guest->id,
+                        'check_in_date' => $request->check_in,
+                        'check_out_date' => $request->check_out,
+                        'status' => 'pending',
+                        'total_amount' => $quote['total'],
+                        'rate_before_discount' => $quote['original_total'],
+                        'direct_discount_pct' => $quote['discount_pct'],
+                        'direct_discount_amount' => $quote['discount_amount'],
+                        'adults' => $occupancy[$i]['adults'],
+                        'children' => $occupancy[$i]['children'],
+                        'notes' => $i === 0 ? $request->notes : null,
+                        'channel' => 'direct',
+                        'created_via' => Reservation::CREATED_VIA_WEBSITE,
+                        'created_by' => $creator->id,
+                        'booking_group_id' => $groupId,
+                    ]);
+                });
             });
         } catch (\RuntimeException $e) {
             // Validation error (not a flash) → the wizard keeps every typed field and shows
             // an in-step recovery banner instead of resetting the guest to step 1.
             throw ValidationException::withMessages([
-                'room_id' => 'Kjo dhomë nuk është më e disponueshme për këto data — zgjidh një dhomë tjetër.',
+                'selections' => 'Disa nga dhomat e zgjedhura nuk janë më të lira për këto data — përditëso zgjedhjen.',
             ]);
         }
 
-        $guestName = trim("{$request->first_name} {$request->last_name}");
+        $primary = $reservations->first();
 
-        // Full prepayment (MANDATORY when POK is configured): create the order and send the
-        // guest to the embedded card form. If POK is NOT configured, fall back to the old
-        // no-payment confirmation so the public site never breaks before go-live.
+        $guestName = trim("{$request->first_name} {$request->last_name}");
+        $groupTotal = round((float) $reservations->sum('total_amount'), 2);
+
+        // Full prepayment (MANDATORY when POK is configured): ONE order for the whole group,
+        // held by the PRIMARY reservation (reservations.pok_order_id is UNIQUE — the members
+        // are found via booking_group_id). The guest's token is always the primary's. If POK
+        // is NOT configured, fall back to the no-payment confirmation as before.
         $pok = app(PokClient::class);
-        if ($pok->configured() && (float) $reservation->total_amount > 0) {
+        if ($pok->configured() && $groupTotal > 0) {
             try {
-                $order = $pok->createOrder((float) $reservation->total_amount, PricingCurrency::code(), [
+                $order = $pok->createOrder($groupTotal, PricingCurrency::code(), [
                     'webhook' => route('website.pay.webhook'),
                     // Return to the payment page — it re-verifies with POK and forwards a paid
                     // booking to confirmation (works for BOTH the embedded flow and the hosted-page fallback).
-                    'redirect' => route('website.pay.show', $reservation->confirmation_token),
-                    'fail' => route('website.pay.show', $reservation->confirmation_token),
+                    'redirect' => route('website.pay.show', $primary->confirmation_token),
+                    'fail' => route('website.pay.show', $primary->confirmation_token),
                     'expires' => 30,
                 ]);
-                $reservation->update(['pok_order_id' => $order['id']]);
+                $primary->update(['pok_order_id' => $order['id']]);
 
-                return redirect()->route('website.pay.show', $reservation->confirmation_token)
+                return redirect()->route('website.pay.show', $primary->confirmation_token)
                     ->with('book_guest_name', $guestName);
             } catch (\Throwable $e) {
                 report($e);
-                // Couldn't reach POK — release the just-held room and ask the guest to retry.
-                // Validation error (not a flash) so the wizard keeps everything typed.
-                $reservation->update(['status' => 'cancelled']);
+                // Couldn't reach POK — release the just-held rooms (the WHOLE group) and ask
+                // the guest to retry. MODEL-level updates on purpose: the observer must
+                // compensate the creation side-effects (Channex availability push, realtime
+                // broadcast) — a bulk query update would bypass it and leave the rooms
+                // marked occupied on the OTAs (Codex P1, PR #518).
+                $reservations->each(fn (Reservation $held) => $held->update(['status' => 'cancelled']));
 
                 throw ValidationException::withMessages([
-                    'room_id' => 'Nuk u lidh dot pagesa me kartë. Provo sërish pas pak.',
+                    'selections' => 'Nuk u lidh dot pagesa me kartë. Provo sërish pas pak.',
                 ]);
             }
         }
 
         // Flash the name the booker just typed so the confirmation can greet THEM
         // without reading the stored guest's name (which may belong to someone else).
-        return redirect()->route('website.booking.confirmation', $reservation->confirmation_token)
+        return redirect()->route('website.booking.confirmation', $primary->confirmation_token)
             ->with('book_guest_name', $guestName);
+    }
+
+    /**
+     * Spread the party across the assigned rooms: one adult in every room first (validated
+     * upstream: adults >= rooms), then round-robin the rest without exceeding any room's
+     * max occupancy (validated upstream: total guests <= total capacity).
+     *
+     * @param  \Illuminate\Support\Collection<int,int>  $capacities
+     * @return array<int, array{adults:int, children:int}>
+     */
+    private function distributeGuests($capacities, int $adults, int $children): array
+    {
+        $rooms = $capacities->map(fn ($cap) => ['cap' => (int) $cap, 'adults' => 0, 'children' => 0])->values()->all();
+        $count = count($rooms);
+
+        for ($i = 0; $i < $count && $adults > 0; $i++) {
+            $rooms[$i]['adults']++;
+            $adults--;
+        }
+
+        foreach (['adults' => $adults, 'children' => $children] as $key => $remaining) {
+            $i = 0;
+            $guard = 0;
+            while ($remaining > 0 && $guard < 500) {
+                $slot = $i % $count;
+                if ($rooms[$slot]['adults'] + $rooms[$slot]['children'] < $rooms[$slot]['cap']) {
+                    $rooms[$slot][$key]++;
+                    $remaining--;
+                }
+                $i++;
+                $guard++;
+            }
+        }
+
+        return array_map(fn ($room) => ['adults' => $room['adults'], 'children' => $room['children']], $rooms);
+    }
+
+    /**
+     * All reservations paid/managed together: the whole booking group when one exists,
+     * otherwise just the reservation itself. Ordered by id — first row is the PRIMARY
+     * (the one holding pok_order_id and the guest-facing confirmation token).
+     *
+     * @return \Illuminate\Support\Collection<int, Reservation>
+     */
+    private function groupMembers(Reservation $reservation)
+    {
+        if (! $reservation->booking_group_id) {
+            return collect([$reservation->loadMissing('room.roomType')]);
+        }
+
+        return Reservation::where('booking_group_id', $reservation->booking_group_id)
+            ->with('room.roomType')
+            ->orderBy('id')
+            ->get();
     }
 
     /** The embedded POK card-payment page for a pending reservation. */
@@ -400,10 +507,14 @@ class WebsiteController extends Controller
     /** @return array<string,mixed> */
     private function paymentProps(Reservation $reservation, string $token): array
     {
+        // Multi-room bookings pay ONE order for the whole group — the amount shown must be
+        // the group total, and the room line summarizes the typologies ("2× Deluxe, 1× Standard").
+        $members = $this->groupMembers($reservation);
+
         return [
             'orderId' => $reservation->pok_order_id,
             'env' => app(PokConfiguration::class)->get('production', false) ? 'production' : 'staging',
-            'amount' => (float) $reservation->total_amount,
+            'amount' => round((float) $members->sum('total_amount'), 2),
             // The reservation's SNAPSHOTTED currency (frozen at booking), not the hotel's
             // current pricing currency — an old EUR booking must not render as "$" after
             // the hotel switches its pricing currency.
@@ -420,10 +531,12 @@ class WebsiteController extends Controller
             // redirects to (no longer a visible competing button). The guest pays here and POK
             // returns them to pay.show.
             'payUrl' => rtrim(app(PokConfiguration::class)->payUrl(), '/').'/sdk-orders/'.$reservation->pok_order_id,
-            'roomName' => $reservation->room?->roomType?->name,
+            'roomName' => $members->groupBy(fn ($m) => (string) $m->room?->roomType?->name)
+                ->map(fn ($group, $name) => ($group->count() > 1 ? $group->count().'× ' : '').$name)
+                ->implode(', '),
             'nights' => (int) now()->parse($reservation->check_in_date)->diffInDays($reservation->check_out_date),
-            'adults' => (int) $reservation->adults,
-            'children' => (int) $reservation->children,
+            'adults' => (int) $members->sum('adults'),
+            'children' => (int) $members->sum('children'),
             // The POK order expires 30 min after creation (createOrder 'expires' => 30) and the
             // release cron frees unpaid holds — show the guest the same clock that's running.
             'holdExpiresAt' => $reservation->created_at?->copy()->addMinutes(30)->toIso8601String(),
@@ -512,10 +625,20 @@ class WebsiteController extends Controller
             ->with(['room.roomType', 'guest'])
             ->firstOrFail();
 
+        $members = $this->groupMembers($reservation);
+        // The POK order lives on the group's primary — resolve it so a member token can
+        // never show "booked successfully" while the group's payment is still open.
+        $primary = $members->firstWhere('pok_order_id', '!=', null) ?? $members->first();
+        // Staff may cancel ONE room of a confirmed group in the PMS — the guest's
+        // confirmation must list only the rooms still held (Codex P2, PR #518). If the
+        // whole group is cancelled the page renders its explicit cancelled state anyway.
+        $held = $members->reject(fn (Reservation $member) => $member->status === 'cancelled')->values();
+        $display = $held->isNotEmpty() ? $held : $members;
+
         // Payment not finished yet (pending with a POK order) → send the guest back to pay,
         // never show a "booked successfully" screen for an unpaid hold.
-        if ($reservation->status === 'pending' && $reservation->pok_order_id) {
-            return redirect()->route('website.pay.show', $token);
+        if ($reservation->status === 'pending' && $primary->pok_order_id) {
+            return redirect()->route('website.pay.show', $primary->confirmation_token);
         }
 
         // Pass ONLY the fields this page renders — never the full Guest model
@@ -523,16 +646,21 @@ class WebsiteController extends Controller
         return Inertia::render('Website/BookingConfirmation', [
             'status' => $reservation->status, // 'confirmed' (paid) | 'pending' (no online payment) | 'cancelled'
             'reservation' => [
-                'reference' => strtoupper(substr($reservation->confirmation_token, 0, 8)),
+                'reference' => strtoupper(substr($primary->confirmation_token, 0, 8)),
                 // The booker's submitted name (flashed) — NOT the stored guest's name,
                 // which could belong to a different person if the email already existed.
                 // Null on a later refresh (flash gone) -> the confirmation hides the row.
                 'guest_name' => session('book_guest_name'),
-                'room_number' => $reservation->room?->room_number,
+                // Typology model: guests book room TYPES; the concrete room is the hotel's
+                // internal assignment, so no room number is exposed here.
                 'room_type' => $reservation->room?->roomType?->name,
+                'rooms' => $display->map(fn ($m) => [
+                    'room_type' => $m->room?->roomType?->name,
+                    'total_amount' => (float) $m->total_amount,
+                ])->values(),
                 'check_in_date' => $reservation->check_in_date?->toDateString(),
                 'check_out_date' => $reservation->check_out_date?->toDateString(),
-                'total_amount' => $reservation->total_amount,
+                'total_amount' => round((float) $display->sum('total_amount'), 2),
                 // Frozen at booking (Reservation::booted) — stays correct even if the
                 // hotel later switches its pricing currency.
                 'currency_symbol' => BaseCurrency::symbol($reservation->currency),

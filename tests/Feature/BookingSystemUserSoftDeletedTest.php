@@ -37,7 +37,7 @@ class BookingSystemUserSoftDeletedTest extends TestCase
         $room = Room::create(['room_type_id' => $type->id, 'room_number' => 'A', 'floor' => 1, 'status' => 'available']);
 
         $response = $this->post(route('website.book.submit'), [
-            'room_id' => $room->id,
+            'selections' => [['room_type_id' => $type->id, 'quantity' => 1]],
             'check_in' => today()->addDays(3)->toDateString(),
             'check_out' => today()->addDays(5)->toDateString(),
             'first_name' => 'Ana',
@@ -71,7 +71,7 @@ class BookingSystemUserSoftDeletedTest extends TestCase
 
         // No system user seeded yet — the funnel must self-seed it (original task-65 behaviour).
         $response = $this->post(route('website.book.submit'), [
-            'room_id' => $room->id,
+            'selections' => [['room_type_id' => $type->id, 'quantity' => 1]],
             'check_in' => today()->addDays(3)->toDateString(),
             'check_out' => today()->addDays(5)->toDateString(),
             'first_name' => 'Beni',

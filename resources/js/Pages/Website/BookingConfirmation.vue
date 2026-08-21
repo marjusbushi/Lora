@@ -12,6 +12,23 @@ const props = defineProps({ reservation: Object, hotel: Object, status: { type: 
 // Prefer the reservation's own frozen symbol; the shared setting is only a fallback.
 const currencySymbol = computed(() => props.reservation?.currency_symbol || usePage().props.settings?.pricing_currency_symbol || '€');
 
+// Typology lines ("2 × Deluxe") — a multi-room booking is a group of reservations, and the
+// guest booked room TYPES, never numbered rooms. Falls back to the single room_type field.
+const roomLines = computed(() => {
+    const rooms = props.reservation?.rooms || [];
+    if (!rooms.length) {
+        return props.reservation?.room_type ? [{ name: props.reservation.room_type, qty: 1 }] : [];
+    }
+    const grouped = new Map();
+    rooms.forEach((room) => {
+        const entry = grouped.get(room.room_type) || { name: room.room_type, qty: 0 };
+        entry.qty += 1;
+        grouped.set(room.room_type, entry);
+    });
+    return [...grouped.values()];
+});
+const isMultiRoom = computed(() => roomLines.value.reduce((sum, line) => sum + line.qty, 0) > 1);
+
 const { t } = useI18n();
 
 // Arriving from the payment redirect leaves focus on <body> — announce the outcome
@@ -57,9 +74,11 @@ onMounted(() => headingEl.value?.focus({ preventScroll: true }));
                         <span class="text-body-sm text-neutral-500">{{ $t('confirmation.labels.guest') }}</span>
                         <span class="text-body-sm text-primary-900">{{ reservation.guest_name }}</span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-body-sm text-neutral-500">{{ $t('confirmation.labels.room') }}</span>
-                        <span class="text-body-sm text-primary-900">{{ reservation.room_number }} — {{ reservation.room_type }}</span>
+                    <div class="flex justify-between gap-4">
+                        <span class="text-body-sm text-neutral-500">{{ isMultiRoom ? $t('confirmation.labels.rooms') : $t('confirmation.labels.room') }}</span>
+                        <span class="text-body-sm text-primary-900 text-right">
+                            <span v-for="line in roomLines" :key="line.name" class="block">{{ line.qty > 1 ? `${line.qty} × ` : '' }}{{ line.name }}</span>
+                        </span>
                     </div>
                     <div class="flex justify-between">
                         <span class="text-body-sm text-neutral-500">{{ $t('confirmation.labels.checkIn') }}</span>

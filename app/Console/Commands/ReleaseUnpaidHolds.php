@@ -43,14 +43,21 @@ class ReleaseUnpaidHolds extends Command
         $pok = app(PokPayments::class);
 
         foreach ($stale as $reservation) {
-            // Belt-and-suspenders: never cancel one that already carries a card payment.
-            if (Payment::where('reservation_id', $reservation->id)->where('method', 'card')->exists()) {
+            // Multi-room bookings: the order lives on the PRIMARY (this row); its group
+            // members share the hold and must be released together — never one by one.
+            $memberIds = $reservation->booking_group_id
+                ? Reservation::where('booking_group_id', $reservation->booking_group_id)->pluck('id')
+                : collect([$reservation->id]);
+
+            // Belt-and-suspenders: never cancel a group that already carries a card payment.
+            if (Payment::whereIn('reservation_id', $memberIds)->where('method', 'card')->exists()) {
                 continue;
             }
 
             // CRITICAL: POK captures money immediately (autoCapture), so NEVER cancel on local
             // state alone. Ask POK first. settle() re-verifies via getOrder and, if the guest
-            // actually paid, confirms + records the folio payment (idempotent) — we then keep it.
+            // actually paid, confirms + records the folio payments (idempotent) — we then keep it.
+            // A paid-but-partially-released group THROWS (never returns false) — skipped below.
             try {
                 if ($pok->settle($reservation)) {
                     $settled++;
@@ -62,8 +69,9 @@ class ReleaseUnpaidHolds extends Command
             }
 
             // settle() returned false with no error → POK confirms the order is NOT completed →
-            // genuinely unpaid/expired → safe to release. Atomic guard wins any last-second race.
-            $affected = Reservation::whereKey($reservation->id)
+            // genuinely unpaid/expired → safe to release the WHOLE group. Atomic guard wins any
+            // last-second race.
+            $affected = Reservation::whereIn('id', $memberIds)
                 ->where('status', 'pending')
                 ->whereNull('paid_at')
                 ->update(['status' => 'cancelled']);
@@ -73,13 +81,15 @@ class ReleaseUnpaidHolds extends Command
             // observer-in me qëllim (garda e race-it), ndaj kalendarët e hapur
             // njoftohen këtu me dorë — ndryshe dhoma dukej e zënë deri në refresh.
             if ($affected > 0) {
-                try {
-                    event(new \App\Events\ReservationChanged(
-                        (int) $reservation->tenant_id,
-                        (int) $reservation->id,
-                    ));
-                } catch (\Throwable $e) {
-                    report($e);
+                foreach ($memberIds as $memberId) {
+                    try {
+                        event(new \App\Events\ReservationChanged(
+                            (int) $reservation->tenant_id,
+                            (int) $memberId,
+                        ));
+                    } catch (\Throwable $e) {
+                        report($e);
+                    }
                 }
             }
         }

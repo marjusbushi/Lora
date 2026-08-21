@@ -188,6 +188,20 @@
       "noHiddenFees": "Pa tarifa të fshehura. Rezervim i sigurt.",
       "finalStep": "Hapi i fundit",
       "secureBooking": "Rezervim i sigurt dhe konfirmim i menjëhershëm."
+    },
+    "qty": {
+      "decrease": "Hiq një dhomë {name}",
+      "increase": "Shto një dhomë {name}",
+      "inCart": "{qty} × {name}"
+    },
+    "cart": {
+      "heading": "Dhomat e zgjedhura",
+      "roomsCount": "asnjë dhomë e zgjedhur | 1 dhomë e zgjedhur | {count} dhoma të zgjedhura",
+      "continue": "Vazhdo",
+      "noneSelected": "Zgjidh të paktën një dhomë për të vazhduar.",
+      "capacity": "Dhomat e zgjedhura nxënë deri në {cap} persona — për {guests} mysafirë shto një dhomë tjetër.",
+      "adultsPerRoom": "Duhet të paktën një i rritur për çdo dhomë — ke zgjedhur {rooms} dhoma.",
+      "perRoom": "për dhomë"
     }
   },
   "contact": {
@@ -3863,7 +3877,8 @@
       "room": "Dhoma",
       "checkIn": "Check-in",
       "checkOut": "Check-out",
-      "total": "Total"
+      "total": "Total",
+      "rooms": "Dhomat"
     },
     "cta": {
       "home": "Kthehu ne faqen kryesore"
