@@ -221,15 +221,17 @@ class FinanceLedger
         $channel = $payment->reservation?->channel;
         $ledger->fill([
             'direction' => $type === 'refund' ? 'out' : 'in',
-            // Card/bank/POK money in a foreign currency lands on THAT
-            // currency's bank account (auto-created: "Banka EUR"), mirroring
-            // the POS tender path. Cash deliberately stays base-routed — the
-            // desk runs ONE drawer; POS multicurrency covers foreign drawers.
+            // Money in a foreign currency lands on THAT currency's account —
+            // card/bank/POK on "Banka {CUR}", and since Renato's 2026-08-21
+            // decision cash too, on "Arka {CUR}" (auto-created), mirroring the
+            // POS tender path. Per-currency drawers must be countable against
+            // their own book balance; the old base-routing of desk cash made
+            // that impossible and bred phantom shift differences.
             'account_id' => ($method === 'ota'
                 ? self::channelAccountFor($channel)
                 : self::accountFor(
                     $method,
-                    $method !== 'cash' && $currency !== $baseCurrency ? $currency : null,
+                    $currency !== $baseCurrency ? $currency : null,
                 ))->id,
             'amount' => $payment->amount,
             'currency' => $currency,

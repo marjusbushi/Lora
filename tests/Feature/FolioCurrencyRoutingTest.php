@@ -109,16 +109,21 @@ class FolioCurrencyRoutingTest extends TestCase
         $this->assertSame('Banka', $this->ledgerFor($payment)->account->name);
     }
 
-    public function test_cash_stays_base_routed_single_drawer(): void
+    public function test_cash_routes_to_the_paid_currencys_arka(): void
     {
         $payment = Payment::create([
             'reservation_id' => $this->reservation()->id,
             'amount' => 100, 'method' => 'cash', 'created_by' => $this->admin->id,
         ]);
 
-        // EUR cash still lands on the base drawer — the desk runs ONE drawer;
-        // POS multicurrency covers per-currency drawer lines.
-        $this->assertSame('Arka', $this->ledgerFor($payment)->account->name);
+        // Renato 2026-08-21: each drawer counts its own currency — EUR cash
+        // lands on the auto-created "Arka EUR", exactly like POS tenders and
+        // foreign card payments. (The old single-drawer base-routing hid EUR
+        // inside Arka Lek and bred phantom shift differences.)
+        $ledger = $this->ledgerFor($payment);
+        $this->assertSame('Arka EUR', $ledger->account->name);
+        $this->assertSame('EUR', $ledger->account->currency);
+        $this->assertTrue((bool) $ledger->account->is_system);
     }
 
     public function test_payment_freezes_the_reservations_rate_not_todays(): void
