@@ -235,6 +235,13 @@ class DashboardController extends Controller
             'arrival' => Setting::get('hotel.check_in_time', '14:00'),
             'departure' => Setting::get('hotel.check_out_time', '11:00'),
         ];
+        // Same readiness truth as ReservationController::checkIn — a room is
+        // unready only for a real reason: someone still in-house, an open
+        // cleaning task, or maintenance. A stale status alone doesn't count.
+        $inHouseRoomIds = Reservation::query()
+            ->where('status', 'checked_in')
+            ->distinct()
+            ->pluck('room_id');
         $roomFlow = $this->roomFlow(
             $rooms,
             $arrivalsByRoom,
@@ -244,6 +251,7 @@ class DashboardController extends Controller
             $defaultMovementTimes,
             $movementBalances,
             $permissions,
+            $inHouseRoomIds,
         );
 
         return Inertia::render('Dashboard', [
@@ -277,6 +285,7 @@ class DashboardController extends Controller
         array $defaultMovementTimes,
         Collection $movementBalances,
         array $permissions,
+        Collection $inHouseRoomIds,
     ): Collection {
         return $rooms->map(function (Room $room) use (
             $arrivalsByRoom,
@@ -286,6 +295,7 @@ class DashboardController extends Controller
             $defaultMovementTimes,
             $movementBalances,
             $permissions,
+            $inHouseRoomIds,
         ) {
             $arrival = $arrivalsByRoom->get($room->id);
             $departure = $departuresByRoom->get($room->id);
@@ -330,7 +340,7 @@ class DashboardController extends Controller
                         $movementBalances,
                         $permissions['view_financials'],
                         $defaultMovementTimes,
-                        $room->status === 'available' && ! $task,
+                        ! $inHouseRoomIds->contains($room->id) && ! $task && $room->status !== 'maintenance',
                     )
                     : null;
             }
@@ -456,8 +466,11 @@ class DashboardController extends Controller
 
             $notReady = $arrivals
                 ->whereIn('status', ['pending', 'confirmed'])
+                // Real reasons only, matching the check-in guard: maintenance
+                // or an open cleaning task — a stale 'cleaning' status alone
+                // no longer counts a room as unready.
                 ->filter(fn (Reservation $reservation) => $reservation->room
-                    && (in_array($reservation->room->status, ['cleaning', 'maintenance'], true)
+                    && ($reservation->room->status === 'maintenance'
                         || $openCleaningRoomIds->contains($reservation->room_id)))
                 ->pluck('room_id')
                 ->unique()
