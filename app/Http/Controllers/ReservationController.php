@@ -596,7 +596,6 @@ class ReservationController extends Controller
                 'checkout_in_future' => $checkoutInFuture,
                 'can_issue' => $fatureAlConfiguration->configured()
                     && $fatureAlConfiguration->verified()
-                    && $fiscalEnvironment === 'sandbox'
                     && $vatConfiguration->configured()
                     && $providerVatMatches
                     && $reservation->status === 'checked_out'

@@ -16,14 +16,23 @@ class PosFiscalizationService
 {
     private const PROVIDER = 'fature_al';
 
-    private const ENVIRONMENT = 'sandbox';
-
     public function __construct(
         private readonly FatureAlConfiguration $configuration,
         private readonly FatureAlClient $client,
         private readonly TenantContext $tenantContext,
         private readonly VatConfiguration $vatConfiguration,
     ) {}
+
+    /**
+     * The tenant's configured environment decides where invoices go (live
+     * unlock, Renato 2026-08-21). Fiscalization stays MANUAL-only either way;
+     * idempotency is scoped per environment so sandbox tests never collide
+     * with production documents.
+     */
+    private function environment(): string
+    {
+        return (string) ($this->configuration->get('environment') ?: 'sandbox');
+    }
 
     public function fiscalize(PosOrder $order): PosFiscalDocument
     {
@@ -55,12 +64,6 @@ class PosFiscalizationService
         if (! $this->configuration->configured()) {
             throw ValidationException::withMessages([
                 'fiscalization' => 'Aktivizo fature.al për këtë hotel përpara fiskalizimit të POS-it.',
-            ]);
-        }
-
-        if ($this->configuration->get('environment') !== self::ENVIRONMENT) {
-            throw ValidationException::withMessages([
-                'fiscalization' => 'Kjo fazë lejon fiskalizim vetëm në sandbox, jo në production.',
             ]);
         }
 
@@ -148,7 +151,7 @@ class PosFiscalizationService
             $document = PosFiscalDocument::query()
                 ->where('pos_order_id', $order->id)
                 ->where('provider', self::PROVIDER)
-                ->where('environment', self::ENVIRONMENT)
+                ->where('environment', $this->environment())
                 ->lockForUpdate()
                 ->first();
 
@@ -171,7 +174,7 @@ class PosFiscalizationService
 
             $values = [
                 'provider' => self::PROVIDER,
-                'environment' => self::ENVIRONMENT,
+                'environment' => $this->environment(),
                 'document_type' => 'cash_invoice',
                 'internal_id' => $payload['internalId'],
                 'payment_method' => $payload['payment_method'],

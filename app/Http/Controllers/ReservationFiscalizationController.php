@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Reservation;
+use App\Services\FatureAlConfiguration;
 use App\Services\ReservationFiscalizationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
@@ -13,6 +14,7 @@ class ReservationFiscalizationController extends Controller
     public function store(
         Reservation $reservation,
         ReservationFiscalizationService $fiscalization,
+        FatureAlConfiguration $configuration,
     ): RedirectResponse {
         try {
             $document = $fiscalization->fiscalize($reservation);
@@ -23,7 +25,8 @@ class ReservationFiscalizationController extends Controller
         }
 
         return back()->with('success', sprintf(
-            'Fatura sandbox u fiskalizua me sukses%s.',
+            'Fatura %s u fiskalizua me sukses%s.',
+            $configuration->get('environment') === 'production' ? 'LIVE' : 'sandbox',
             $document->fiscal_number ? ' · '.$document->fiscal_number : '',
         ));
     }

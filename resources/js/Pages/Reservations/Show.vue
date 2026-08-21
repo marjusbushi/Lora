@@ -1111,6 +1111,7 @@ function settleAndCheckout(method) {
                             </div>
                             <Badge v-if="fiscalized" variant="success">{{ $t('reservationShow.fiscalized') }}</Badge>
                             <Badge v-else-if="fiscalDocument?.status === 'failed'" variant="error">{{ $t('reservationShow.fiscalRetry') }}</Badge>
+                            <Badge v-else-if="fiscalization.environment === 'production'" variant="warning">LIVE</Badge>
                             <Badge v-else variant="info">{{ $t('reservationShow.fiscalEnvironmentSandbox') }}</Badge>
                         </div>
 
@@ -1120,7 +1121,6 @@ function settleAndCheckout(method) {
                         </div>
 
                         <p v-else-if="!fiscalization.configured" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalNotConfigured') }}</p>
-                        <p v-else-if="fiscalization.environment !== 'sandbox'" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalProductionBlocked') }}</p>
                         <p v-else-if="!fiscalization.verified" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.fiscalNotVerified') }}</p>
                         <p v-else-if="!fiscalization.vat_configured" class="mt-3 text-sm text-warning-800">{{ $t('reservationShow.vatNotConfigured') }}</p>
                         <p v-else-if="!fiscalization.vat_matches_provider" class="mt-3 text-sm text-error-700">{{ $t('reservationShow.vatProviderMismatch') }}</p>
