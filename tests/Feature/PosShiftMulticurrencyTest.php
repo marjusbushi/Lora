@@ -120,8 +120,10 @@ class PosShiftMulticurrencyTest extends TestCase
             ->where('sourceable_type', PosShiftCurrency::class)->count());
     }
 
-    public function test_missing_euros_post_a_converted_shortage_to_the_euro_pos_account(): void
+    public function test_missing_euros_stay_on_the_shift_report_and_never_touch_the_accounts(): void
     {
+        // Renato (2026-08-21): differences are REPORT-only — the shift line
+        // carries the shortage for the manager; the ledger stays untouched.
         $admin = $this->admin();
         $this->lekBaseWithRates();
         $shift = $this->openShiftWithEuroFloat($admin);
@@ -135,17 +137,13 @@ class PosShiftMulticurrencyTest extends TestCase
         $line = $shift->refresh()->currencies()->sole();
         $this->assertSame(-5.0, (float) $line->over_short);
 
-        $adjustment = FinancePayment::query()
-            ->where('sourceable_type', PosShiftCurrency::class)
-            ->where('sourceable_id', $line->id)
-            ->sole();
-        $this->assertSame('out', $adjustment->direction);
-        $this->assertSame('EUR', $adjustment->currency);
-        $this->assertSame(5.0, (float) $adjustment->amount);
-        // Frozen base equivalent at close-time rate: 5 EUR ≈ 468.60 ALL.
-        $this->assertSame(468.60, (float) $adjustment->amount_base);
-        $this->assertSame('EUR', $adjustment->account->currency);
-        $this->assertSame('cash', $adjustment->account->type);
+        $this->assertSame(
+            0,
+            FinancePayment::query()
+                ->where('sourceable_type', PosShiftCurrency::class)
+                ->where('sourceable_id', $line->id)
+                ->count(),
+        );
     }
 
     public function test_close_refuses_until_every_currency_with_activity_is_counted(): void
