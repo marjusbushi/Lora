@@ -191,6 +191,82 @@ class ReservationNoShowTest extends TestCase
                         && str_contains($action['href'], 'attention=no_show'))));
     }
 
+    public function test_marking_with_a_collected_fee_records_the_payment(): void
+    {
+        $reservation = $this->reservation($this->room('801'));
+
+        $this->actingAs($this->admin)
+            ->post(route('reservations.no-show', $reservation), ['fee_amount' => 60, 'fee_method' => 'card'])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $fresh = $reservation->fresh();
+        $this->assertSame('cancelled', $fresh->status);
+        $this->assertNotNull($fresh->no_show_at);
+
+        $payment = $fresh->payments()->first();
+        $this->assertNotNull($payment);
+        $this->assertSame(60.0, (float) $payment->amount);
+        $this->assertSame('card', $payment->method);
+        $this->assertSame(1, AuditLog::where('action', 'reservation.no_show_fee')->count());
+    }
+
+    public function test_fee_recorded_later_is_capped_at_the_outstanding_balance(): void
+    {
+        $reservation = $this->reservation($this->room('802'));
+        $this->actingAs($this->admin)->post(route('reservations.no-show', $reservation));
+
+        // Over the outstanding balance (total 100) → refused, nothing written.
+        $this->actingAs($this->admin)
+            ->post(route('reservations.no-show.fee', $reservation), ['amount' => 150, 'method' => 'card'])
+            ->assertSessionHasErrors(['no_show_fee']);
+        $this->assertSame(0, $reservation->payments()->count());
+
+        // The real fee lands and closes the folio.
+        $this->actingAs($this->admin)
+            ->post(route('reservations.no-show.fee', $reservation), ['amount' => 100])
+            ->assertRedirect()->assertSessionHas('success');
+        $this->assertSame(100.0, (float) $reservation->payments()->sum('amount'));
+
+        // Folio now settled — a second fee is refused.
+        $this->actingAs($this->admin)
+            ->post(route('reservations.no-show.fee', $reservation), ['amount' => 10])
+            ->assertSessionHasErrors(['no_show_fee']);
+
+        // A reservation without the stamp takes no fee at all.
+        $plain = $this->reservation($this->room('803'), '2026-08-18', '2026-08-22', 'cancelled');
+        $this->actingAs($this->admin)
+            ->post(route('reservations.no-show.fee', $plain), ['amount' => 10])
+            ->assertSessionHasErrors(['no_show_fee']);
+    }
+
+    public function test_cancellations_report_summarizes_no_show_fees(): void
+    {
+        // Paid in full at marking time.
+        $paid = $this->reservation($this->room('811'));
+        $this->actingAs($this->admin)->post(route('reservations.no-show', $paid), ['fee_amount' => 100, 'fee_method' => 'card']);
+
+        // Partial: fee recorded later, less than the folio.
+        $partial = $this->reservation($this->room('812'), '2026-08-17', '2026-08-19');
+        $this->actingAs($this->admin)->post(route('reservations.no-show', $partial));
+        $this->actingAs($this->admin)->post(route('reservations.no-show.fee', $partial), ['amount' => 40]);
+
+        // Untouched: marked, nothing collected.
+        $bare = $this->reservation($this->room('813'), '2026-08-16', '2026-08-18');
+        $this->actingAs($this->admin)->post(route('reservations.no-show', $bare));
+
+        $this->actingAs($this->admin)
+            ->get(route('reports.cancellations', ['from' => '2026-08-01', 'to' => '2026-08-31']))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('noShowFees.summary.total_count', 3)
+                ->where('noShowFees.summary.paid_count', 1)
+                ->where('noShowFees.summary.outstanding_count', 2)
+                ->where('noShowFees.summary.collected_value', fn ($v) => abs((float) $v - 140.0) < 0.01)
+                ->where('noShowFees.summary.outstanding_value', fn ($v) => abs((float) $v - 160.0) < 0.01)
+                ->where('noShowFees.rows', fn ($rows) => count($rows) === 3));
+    }
+
     public function test_show_payload_links_the_booking_extranet(): void
     {
         $booking = $this->reservation($this->room('901'));
