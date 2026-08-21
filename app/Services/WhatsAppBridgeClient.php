@@ -45,6 +45,15 @@ class WhatsAppBridgeClient
     }
 
     /**
+     * Foto tipologjie te mysafiri (task #396): vetëm URL https të faqes sonë
+     * publike — ura e validon dhe Baileys e shkarkon vetë.
+     */
+    public function sendImage(int $tenantId, string $jid, string $url, string $caption = ''): array
+    {
+        return $this->request('post', "/sessions/{$tenantId}/send-image", ['jid' => $jid, 'url' => $url, 'caption' => $caption]);
+    }
+
+    /**
      * Treguesi "po shkruan..." te mysafiri (task #368) — best-effort: thirrësi
      * duhet ta kapë dështimin dhe të vazhdojë (urë e vjetër pa endpoint-in,
      * daemon offline — treguesi është zbukurim, jo kusht për dërgimin).

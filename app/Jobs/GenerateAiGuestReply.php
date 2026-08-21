@@ -194,7 +194,7 @@ class GenerateAiGuestReply implements ShouldQueue
         }
 
         if ($trusted) {
-            $this->sendAutoReply($channex, $whatsapp, $thread, $reply, $rateKey);
+            $this->sendAutoReply($channex, $whatsapp, $thread, $reply, $rateKey, $result['photos'] ?? []);
 
             return;
         }
@@ -242,6 +242,16 @@ class GenerateAiGuestReply implements ShouldQueue
         // përndryshe modeli s'duhet as ta dijë që ekziston.
         $booking = app(\App\Services\AiConversationBooking::class);
         $bookingAvailable = $booking->availableFor($thread);
+        // Fotot e tipologjive (task #396): vetëm në WhatsApp — OTA s'ka media.
+        $photosAvailable = $thread->channel === 'whatsapp' && $thread->whatsapp_jid;
+        $photosBlock = $photosAvailable ? <<<'PHOTOS'
+FOTOT E DHOMAVE: kur mysafiri kërkon foto të një tipologjie, thirr mjetin
+send_room_photos me emrin e tipologjisë SAKTËSISHT siç e ktheu
+check_availability — fotot reale dërgohen VETË para përgjigjes tënde; ti
+vetëm shoqëroji me një fjali të shkurtër. Nëse mjeti kthen error (pa foto),
+thuaja sinqerisht dhe përshkruaje dhomën nga të dhënat.
+
+PHOTOS : '';
         $bookingFlowBlock = $bookingAvailable ? <<<'BOOKING'
 REZERVIMI NGA BISEDA (vetëm me mjetin create_booking_hold):
 d) Kur mysafiri ZGJEDH njërën nga ofertat e check_availability → konfirmo me
@@ -282,7 +292,7 @@ c) Me të dhënat e plota → jep përgjigjen ose ofertën nga mjetet.
 Përgjigja jote është gjithmonë NJË hap i kësaj rrjedhe, e shkurtër dhe
 proporcionale me mesazhin e mysafirit.
 
-{$bookingFlowBlock}RREGULLA TË PATHYESHME:
+{$photosBlock}{$bookingFlowBlock}RREGULLA TË PATHYESHME:
 1. DISPONIBILITET & ÇMIME: kur mysafiri jep datat e qëndrimit (check-in dhe
    check-out), thirr mjetin check_availability dhe përgjigju VETËM me numrat
    që kthen mjeti — totalin e qëndrimit dhe çmimin për natë, me monedhën e
@@ -346,6 +356,17 @@ PROMPT;
                 'description' => 'Kthen rezervimin e lidhur me këtë bisedë (datat, dhomën, netët, totalin, të paguarën, bilancin). Përdore kur mysafiri pyet për rezervimin e tij.',
                 'input_schema' => ['type' => 'object', 'properties' => new \stdClass],
             ],
+            ...($photosAvailable ? [[
+                'name' => 'send_room_photos',
+                'description' => 'Dërgon në bisedë deri në 3 foto reale të tipologjisë nga galeria e hotelit. Thirre kur mysafiri kërkon foto të një dhome.',
+                'input_schema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'room_type' => ['type' => 'string', 'description' => 'Emri i tipologjisë SAKTËSISHT siç e ktheu check_availability.'],
+                    ],
+                    'required' => ['room_type'],
+                ],
+            ]] : []),
             ...($bookingAvailable ? [[
                 'name' => 'create_booking_hold',
                 'description' => 'Krijon rezervimin PENDING me dhomë të mbajtur dhe kthen linkun e pagesës. Thirre VETËM pasi mysafiri zgjodhi ofertën dhe konfirmoi datat, personat, tipologjinë dhe emrin e plotë.',
@@ -391,6 +412,11 @@ PROMPT;
         // i beson vetëm atyre, jo faktit që mjeti "u thirr" (gjetje Codex, PR #462).
         $quotes = [];
 
+        // Fotot NUK dërgohen në raundin e mjetit (task #396): mblidhen këtu dhe
+        // dalin nga sendAutoReply VETËM pasi përgjigja kalon çdo portë — një
+        // përgjigje që bie në draft s'lëshon asnjë foto.
+        $pendingPhotos = [];
+
         $executors = [
             'check_availability' => function (array $args) use ($thread, &$quotes): array {
                 try {
@@ -412,6 +438,35 @@ PROMPT;
 
                     return ['error' => 'Sistemi i disponibilitetit nuk u përgjigj — mos jep çmime.'];
                 }
+            },
+            // Fotot e tipologjisë (task #396): executor-i vetëm i MBLEDH —
+            // dërgimi ndodh pas portave, kurrë gjatë raundit të mjetit.
+            'send_room_photos' => function (array $args) use ($thread, &$quotes, &$pendingPhotos): array {
+                if ($thread->channel !== 'whatsapp' || ! $thread->whatsapp_jid) {
+                    return ['error' => 'Fotot dërgohen vetëm në bisedat WhatsApp.'];
+                }
+
+                $type = \App\Models\RoomType::query()
+                    ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim((string) ($args['room_type'] ?? '')))])
+                    ->with('images')
+                    ->first();
+                if (! $type) {
+                    return ['error' => 'Tipologjia nuk u gjet — përdor emrin saktësisht siç e ktheu check_availability.'];
+                }
+
+                $urls = $type->images->take(3)
+                    ->map(fn ($image) => url('/storage/'.ltrim((string) $image->path, '/')))
+                    ->values()
+                    ->all();
+                if ($urls === []) {
+                    return ['error' => 'Kjo tipologji s\'ka foto të ngarkuara — përshkruaje me fjalë dhe ofro recepsionin për foto.'];
+                }
+
+                $pendingPhotos = ['room_type' => $type->name, 'urls' => $urls];
+                $result = ['status' => 'photos_ready', 'room_type' => $type->name, 'photo_count' => count($urls)];
+                $quotes[] = $result;
+
+                return $result;
             },
             // Hapi 3 (task #365): executor-i RI-verifikon çdo gardë vetë
             // (çelësi, kanali, POK, datat, tipologjia) — deklarimi i mjetit
@@ -449,7 +504,7 @@ PROMPT;
         // Deadline 75s: përgjigja me çmime mban 2-3 thirrje HTTP radhazi; 45s
         // mbushej nga një raund i ngadaltë "thinking" (job timeout 90s — ka marzh).
         return $gemini->converse($system, "BISEDA:\n{$conversation}", $tools, $executors, 'guest_reply', 1024, 75)
-            + ['quotes' => $quotes];
+            + ['quotes' => $quotes, 'photos' => $pendingPhotos];
     }
 
     /**
@@ -621,7 +676,7 @@ PROMPT;
             ->exists();
     }
 
-    private function sendAutoReply(ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, MessageThread $thread, string $reply, string $rateKey): void
+    private function sendAutoReply(ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, MessageThread $thread, string $reply, string $rateKey, array $photos = []): void
     {
         // Si njeri (task #378): pritja copëtohet në copa 8-sekondëshe — para çdo
         // cope ri-dërgohet "po shkruan..." (treguesi i WhatsApp skadon ~10s; pa
@@ -668,6 +723,37 @@ PROMPT;
         if ($thread->channel === 'whatsapp') {
             if (! $thread->whatsapp_jid) {
                 return;
+            }
+
+            // Fotot e tipologjisë (task #396) dalin PARA tekstit — vetëm këtu,
+            // pasi çdo portë (freski/supersede/grounding/claim) është kaluar.
+            // Best-effort per foto: një dështim imazhi s'e ndal tekstin.
+            $photosSent = 0;
+            foreach (($photos['urls'] ?? []) as $index => $photoUrl) {
+                try {
+                    $sentPhoto = $whatsapp->sendImage(
+                        $thread->tenant_id,
+                        $thread->whatsapp_jid,
+                        $photoUrl,
+                        $index === 0 ? (string) ($photos['room_type'] ?? '') : '',
+                    );
+                    $thread->messages()->create([
+                        'whatsapp_message_id' => (string) ($sentPhoto['id'] ?? '') ?: null,
+                        'sender' => Message::SENDER_HOST,
+                        'sent_by_ai' => true,
+                        'body' => '📷 Foto: '.(string) ($photos['room_type'] ?? ''),
+                        'sent_at' => now(),
+                    ]);
+                    $photosSent++;
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+            if ($photosSent > 0) {
+                AuditLog::record('message.ai_photos_sent', $thread, [
+                    'room_type' => (string) ($photos['room_type'] ?? ''),
+                    'count' => $photosSent,
+                ], 'ai');
             }
 
             try {
