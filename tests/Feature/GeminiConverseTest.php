@@ -333,6 +333,28 @@ class GeminiConverseTest extends TestCase
         app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: përshëndetje', self::TOOLS, [], 'guest_reply');
     }
 
+    /** Codex #550 P2: kur primari e hëngri buxhetin e bisedës, rezerva KAPËRCEHET — s'i shtohet mysafirit pritje mbi afat. */
+    public function test_fallback_is_skipped_when_the_conversation_deadline_is_spent(): void
+    {
+        config()->set('services.gemini.fallback_model', 'gemini-test-lite');
+
+        Http::fake(function () {
+            sleep(2); // primari "përtypet" — ha thuajse gjithë buxhetin 4s të bisedës
+
+            return Http::response('overloaded', 503);
+        });
+
+        try {
+            app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: përshëndetje', self::TOOLS, [], 'guest_reply', timeoutSeconds: 4);
+            $this->fail('Duhej të hidhte 503-shin origjinal.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('gabim (503)', $e->getMessage());
+        }
+
+        // Vetëm NJË kërkesë — rezerva s'u provua se afati i mbetur ishte nën 3s.
+        $this->assertCount(1, Http::recorded());
+    }
+
     /** Task #403: pa rezervë të konfiguruar → sjellja e vjetër — një kërkesë, gabimi bublon. */
     public function test_no_fallback_configured_bubbles_the_503_after_one_request(): void
     {
