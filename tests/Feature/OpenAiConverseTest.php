@@ -254,6 +254,29 @@ class OpenAiConverseTest extends TestCase
         $this->assertSame(22, $rounds[1]['output']);
     }
 
+    /** Codex #569 P1: 200 i FATURUAR pa tool_calls (finish_reason=length) regjistrohet PARA se validimi të hedhë. */
+    public function test_usage_sink_fires_even_when_a_billable_200_has_no_valid_call(): void
+    {
+        Http::fakeSequence('api.openai.com/*')->push([
+            'choices' => [['message' => ['role' => 'assistant', 'content' => null], 'finish_reason' => 'length']],
+            'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 2048, 'completion_tokens_details' => ['reasoning_tokens' => 2048]],
+        ]);
+
+        $rounds = [];
+        try {
+            app(OpenAiClient::class)->converse('SYSTEM', 'MYSAFIRI: hej', self::TOOLS, [], 'guest_reply', onUsage: function (array $usage) use (&$rounds): void {
+                $rounds[] = $usage;
+            });
+            $this->fail('Duhej të hidhte length.');
+        } catch (\RuntimeException) {
+            // S'kishte thirrje — po tokenat U PAGUAN dhe u regjistruan.
+        }
+
+        $this->assertCount(1, $rounds);
+        $this->assertSame(2048, $rounds[0]['thinking']);
+        $this->assertSame(0, $rounds[0]['output']);
+    }
+
     public function test_timeout_carries_the_cool_retry_marker(): void
     {
         Http::fake(function () {

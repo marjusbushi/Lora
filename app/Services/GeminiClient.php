@@ -145,17 +145,10 @@ class GeminiClient implements \App\Contracts\AiChatProvider
 
             // Raundi i fundit lejon VETËM përgjigjen finale — cikli s'mbetet kurrë pa dalje.
             $allowed = $round === $maxToolRounds ? [$finalToolName] : $allNames;
-            $turn = $this->generate($activeModel, $system, $contents, $functions, $allowed, $maxTokens, $deadline);
+            $turn = $this->generate($activeModel, $system, $contents, $functions, $allowed, $maxTokens, $deadline, $onUsage);
             $activeModel = $turn['model'];
             foreach ($usage as $k => $v) {
                 $usage[$k] = $v + $turn['usage'][$k];
-            }
-            // Faturimi per-RAUND me modelin që e SHËRBEU (gjetjet Codex #568):
-            // raundi u pagua sapo u përgjigj — edhe nëse biseda dështon më
-            // vonë, dëshmia e tij mbetet; dhe raundi i rezervës çmohet me
-            // çmimin e rezervës, jo të primarit.
-            if ($onUsage !== null) {
-                $onUsage($turn['usage'] + ['provider' => 'gemini', 'model' => $turn['model']]);
             }
 
             // Finalja pranohet VETËM si thirrje e vetme e radhës (ose kur raundi
@@ -221,7 +214,7 @@ class GeminiClient implements \App\Contracts\AiChatProvider
      *                           edhe primari edhe rezerva rrinë brenda tij (gjetje Codex #550).
      * @return array{content:\stdClass,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>,model:string,usage:array{input:int,output:int,thinking:int}}
      */
-    private function generate(string $model, string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, float $deadline): array
+    private function generate(string $model, string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, float $deadline, ?callable $onUsage = null): array
     {
         // Slot-i i çastit: sa kohë i jepet thirrjes SË RADHËS — kurrë mbi tavanin
         // 30s (dorëzimi i shpejtë) dhe kurrë mbi afatin e mbetur të bisedës.
@@ -286,6 +279,19 @@ class GeminiClient implements \App\Contracts\AiChatProvider
             $this->throwHttpError($res->status(), (string) $res->body());
         }
 
+        // Faturimi per-RAUND, PARA çdo validimi (gjetje Codex #569 P1): një
+        // 200 pa thirrje të vlefshme (MAX_TOKENS, parts bosh) është FATURUAR
+        // njësoj nga provideri — dëshmia regjistrohet edhe kur më poshtë
+        // hidhet përjashtim; raundi etiketohet me modelin që e SHËRBEU.
+        $roundUsage = [
+            'input' => (int) $res->json('usageMetadata.promptTokenCount', 0),
+            'output' => (int) $res->json('usageMetadata.candidatesTokenCount', 0),
+            'thinking' => (int) $res->json('usageMetadata.thoughtsTokenCount', 0),
+        ];
+        if ($onUsage !== null) {
+            $onUsage($roundUsage + ['provider' => 'gemini', 'model' => $servedBy]);
+        }
+
         $calls = [];
         foreach ($res->json('candidates.0.content.parts', []) as $part) {
             $call = $part['functionCall'] ?? null;
@@ -309,11 +315,7 @@ class GeminiClient implements \App\Contracts\AiChatProvider
                 'content' => $content,
                 'calls' => $calls,
                 'model' => $servedBy,
-                'usage' => [
-                    'input' => (int) $res->json('usageMetadata.promptTokenCount', 0),
-                    'output' => (int) $res->json('usageMetadata.candidatesTokenCount', 0),
-                    'thinking' => (int) $res->json('usageMetadata.thoughtsTokenCount', 0),
-                ],
+                'usage' => $roundUsage,
             ];
         }
 

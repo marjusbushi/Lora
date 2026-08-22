@@ -1,4 +1,5 @@
 <script setup>
+import { reactive } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import BillingPageHeader from '@/Components/SuperAdmin/BillingPageHeader.vue';
@@ -17,11 +18,28 @@ const billingForm = useForm({
     billing_coefficient: props.coefficient,
 });
 
-const pricingForm = useForm({
-    pricing_overrides: Object.fromEntries(
-        Object.entries(props.pricing || {}).map(([model, p]) => [model, { input: p.input, output: p.output }]),
-    ),
-});
+// Rreshtat e çmimores: mbivendosja dërgohet VETËM kur është realisht e
+// tillë (Codex #569 P1) — default-et e paprekur mbeten te config dhe
+// përditësimet e ardhshme të çmimeve s'maskohen; çelësi i mbivendosjes i
+// hequr = kthim te default-i.
+const pricingRows = reactive(Object.fromEntries(
+    Object.entries(props.pricing || {}).map(([model, p]) => [model, {
+        input: p.input,
+        output: p.output,
+        override: p.is_override,
+        default: p.default,
+    }]),
+));
+
+const pricingForm = useForm({ pricing_overrides: {} });
+
+function toggleOverride(model) {
+    const row = pricingRows[model];
+    if (!row.override && row.default) {
+        row.input = row.default.input;
+        row.output = row.default.output;
+    }
+}
 
 function changeMonth(event) {
     router.get('/super-admin/ai/usage', { month: event.target.value }, { preserveScroll: true });
@@ -32,6 +50,11 @@ function saveCoefficient() {
 }
 
 function savePricing() {
+    pricingForm.pricing_overrides = Object.fromEntries(
+        Object.entries(pricingRows)
+            .filter(([, row]) => row.override)
+            .map(([model, row]) => [model, { input: row.input, output: row.output }]),
+    );
     pricingForm.put('/super-admin/ai', { preserveScroll: true });
 }
 
@@ -144,18 +167,28 @@ function num(value) {
                             <thead>
                                 <tr class="sa-table-head">
                                     <th class="px-3 py-2 font-bold">{{ $t('superAdmin.aiUsage.model') }}</th>
+                                    <th class="px-3 py-2 font-bold"></th>
                                     <th class="px-3 py-2 font-bold">{{ $t('superAdmin.aiUsage.inputPrice') }}</th>
                                     <th class="px-3 py-2 font-bold">{{ $t('superAdmin.aiUsage.outputPrice') }}</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-neutral-100">
-                                <tr v-for="(p, model) in pricingForm.pricing_overrides" :key="model">
-                                    <td class="px-3 py-2 font-mono text-xs text-neutral-700">{{ model }}</td>
-                                    <td class="px-3 py-2">
-                                        <input v-model.number="p.input" type="number" step="0.01" min="0" class="w-28 rounded-lg border-neutral-300 text-xs">
+                                <tr v-for="(p, model) in pricingRows" :key="model">
+                                    <td class="px-3 py-2 font-mono text-xs text-neutral-700">
+                                        {{ model }}
+                                        <span v-if="!p.default && !p.override" class="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800">{{ $t('superAdmin.aiUsage.noPriceWarning') }}</span>
                                     </td>
                                     <td class="px-3 py-2">
-                                        <input v-model.number="p.output" type="number" step="0.01" min="0" class="w-28 rounded-lg border-neutral-300 text-xs">
+                                        <label class="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-600">
+                                            <input v-model="p.override" type="checkbox" class="h-3.5 w-3.5 rounded border-neutral-300 text-violet-700" @change="toggleOverride(model)">
+                                            {{ $t('superAdmin.aiUsage.overrideLabel') }}
+                                        </label>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <input v-model.number="p.input" type="number" step="0.01" min="0" :disabled="!p.override" class="w-28 rounded-lg border-neutral-300 text-xs disabled:bg-neutral-100 disabled:text-neutral-400">
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <input v-model.number="p.output" type="number" step="0.01" min="0" :disabled="!p.override" class="w-28 rounded-lg border-neutral-300 text-xs disabled:bg-neutral-100 disabled:text-neutral-400">
                                     </td>
                                 </tr>
                             </tbody>

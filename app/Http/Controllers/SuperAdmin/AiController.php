@@ -210,11 +210,32 @@ class AiController extends Controller
             ];
         })->sortByDesc('cost_usd')->values();
 
-        // Çmimorja efektive për editorin: default-et e config + mbivendosjet.
+        // Çmimorja për editorin (gjetje Codex #569 P1): përveç default-eve të
+        // config dhe mbivendosjeve, hyjnë edhe modelet AKTIVE të konfiguruara
+        // dhe ÇDO model i VËZHGUAR në matje — një model i panjohur që po
+        // regjistrohet me kosto 0 duhet të marrë çmim nga super-admini, jo
+        // të mbetet falas përgjithmonë.
         $overrides = PlatformSetting::get('ai.pricing_overrides');
         $overrides = is_array($overrides) ? $overrides : [];
-        $models = collect(config('services.ai.pricing', []))->keys()->merge(array_keys($overrides))->unique();
-        $pricing = $models->mapWithKeys(fn (string $model) => [$model => $recorder->priceFor($model)]);
+        $defaults = config('services.ai.pricing', []);
+        $models = collect($defaults)->keys()
+            ->merge(array_keys($overrides))
+            ->merge([
+                (string) config('services.gemini.model'),
+                (string) config('services.gemini.fallback_model'),
+                (string) config('services.openai.model'),
+            ])
+            ->merge(\App\Models\AiUsageEvent::query()->withoutGlobalScope('tenant')->select('model')->distinct()->pluck('model'))
+            ->filter()
+            ->unique()
+            ->values();
+        // is_override + default i veçuar (gjetje Codex #569 P1): UI dërgon si
+        // mbivendosje VETËM rreshtat realisht të mbivendosur — default-et e
+        // paprekur mbeten te config dhe përditësimet e ardhshme s'maskohen.
+        $pricing = $models->mapWithKeys(fn (string $model) => [$model => $recorder->priceFor($model) + [
+            'is_override' => array_key_exists($model, $overrides),
+            'default' => $defaults[$model] ?? null,
+        ]]);
 
         return Inertia::render('SuperAdmin/AiUsage', [
             'month' => $month,
