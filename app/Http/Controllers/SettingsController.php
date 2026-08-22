@@ -249,13 +249,12 @@ class SettingsController extends Controller
     // --- Hotel Info ---
     public function updateHotel(Request $request): RedirectResponse
     {
+        // Kontakti (adresë/telefon/email/WhatsApp) NUK editohet më këtu —
+        // jeton te Web Studio (task #415, gjetje Codex PR #564): dy editorë
+        // mbi të njëjtët çelësa lejonin një formë të vjetruar të mbishkruante
+        // në heshtje editimet e tjetrës.
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'address' => ['nullable', 'string', 'max:500'],
-            'phone' => ['nullable', 'string', 'max:30'],
-            // Butoni WhatsApp në webin publik (bosh = butoni s'shfaqet).
-            'whatsapp_number' => ['nullable', 'string', 'max:30', 'regex:/^[+\d][\d\s\-()]*$/'],
-            'email' => ['nullable', 'email', 'max:255'],
             'timezone' => ['required', 'string', 'max:50'],
             'currency' => ['required', 'string', Rule::in(config('lora.tenant_currencies'))],
             'pricing_currency' => ['nullable', 'string', Rule::in(config('lora.tenant_currencies'))],
@@ -286,16 +285,9 @@ class SettingsController extends Controller
             // Tekstet e hero-s NUK janë më këtu (task #411): jetojnë në Web
             // Studio. Po të mbeteshin në foreach, çdo ruajtje e këtij tab-i pa
             // ato fusha do i fshinte (input null → Setting::set null).
-            foreach ([
-                'name', 'address', 'phone', 'email', 'timezone', 'check_in_time', 'check_out_time',
-            ] as $key) {
+            foreach (['name', 'timezone', 'check_in_time', 'check_out_time'] as $key) {
                 Setting::set("hotel.{$key}", $request->input($key));
             }
-
-            // Numri WhatsApp normalizohet në ruajtje: '00…' → '+…' (wa.me e
-            // refuzon prefiksin 00 — task #340); fronti ka edhe rrjetën e vet.
-            $whatsapp = trim((string) $request->input('whatsapp_number'));
-            Setting::set('hotel.whatsapp_number', $whatsapp === '' ? null : preg_replace('/^00/', '+', $whatsapp));
 
             Setting::set('hotel.currency', $currency);
             Setting::set('pricing.currency', $pricingCurrency);
