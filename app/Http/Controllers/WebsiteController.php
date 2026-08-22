@@ -109,7 +109,7 @@ class WebsiteController extends Controller
         ]);
 
         $query = Room::select('id', 'room_number', 'room_type_id', 'floor')
-            ->with('roomType:id,name,description,base_price,max_occupancy,amenities,breakfast_included', 'roomType.images')
+            ->with('roomType:id,name,description,base_price,max_occupancy,max_children,amenities,breakfast_included', 'roomType.images')
             ->where('status', '!=', 'maintenance');
 
         if ($request->filled('room_type_id')) {
@@ -157,6 +157,7 @@ class WebsiteController extends Controller
                     'direct_discount_pct' => $quote['discount_pct'],
                     'direct_discount_amount' => $quote['discount_amount'],
                     'max_occupancy' => $type->max_occupancy,
+                    'max_children' => (int) $type->max_children,
                     'amenities' => $type->amenities,
                     'description' => $type->description,
                     'breakfast_included' => (bool) $type->breakfast_included,
@@ -257,6 +258,15 @@ class WebsiteController extends Controller
         if (((int) $request->adults + (int) $request->children) > $capacity) {
             throw ValidationException::withMessages([
                 'selections' => "Dhomat e zgjedhura nxënë maksimumi {$capacity} persona — shto një dhomë ose zgjidh një tipologji më të madhe.",
+            ]);
+        }
+        // Fëmijët zënë vend si të rriturit (vendim i pronarit; foshnjat në
+        // krevatin e prindërve s'numërohen fare) — por çdo tipologji ka edhe
+        // kufirin e VET të fëmijëve (max_children), i cili imponohet këtu.
+        $childrenCap = $selections->sum(fn ($s) => $s['quantity'] * (int) $types[$s['room_type_id']]->max_children);
+        if ((int) $request->children > $childrenCap) {
+            throw ValidationException::withMessages([
+                'selections' => "Dhomat e zgjedhura pranojnë deri në {$childrenCap} fëmijë — shto një dhomë ose zgjidh një tipologji tjetër.",
             ]);
         }
         if ((int) $request->adults < $totalRooms) {

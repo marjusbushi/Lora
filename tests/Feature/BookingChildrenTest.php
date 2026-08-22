@@ -12,9 +12,14 @@ class BookingChildrenTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function room(int $maxOcc = 4): Room
+    private function room(int $maxOcc = 4, ?int $maxChildren = null): Room
     {
-        $type = RoomType::create(['name' => 'Fam', 'base_price' => 100, 'max_occupancy' => $maxOcc, 'amenities' => []]);
+        $type = RoomType::create([
+            'name' => 'Fam', 'base_price' => 100, 'max_occupancy' => $maxOcc,
+            // Pasqyron backfill-in e migrimit (kapaciteti - 1) kur s'jepet.
+            'max_children' => $maxChildren ?? max(0, $maxOcc - 1),
+            'amenities' => [],
+        ]);
 
         return Room::create(['room_type_id' => $type->id, 'room_number' => '101', 'floor' => 1, 'status' => 'available']);
     }
@@ -52,5 +57,27 @@ class BookingChildrenTest extends TestCase
             ->assertSessionHasErrors('selections');
 
         $this->assertSame(0, Reservation::count());
+    }
+
+    /** Task #428: kufiri i fëmijëve PER tipologji imponohet server-side, jo vetëm totali. */
+    public function test_children_above_the_room_children_cap_are_rejected(): void
+    {
+        $room = $this->room(4, 1); // 4 vende gjithsej, por vetëm 1 mund të jetë fëmijë
+
+        $this->post(route('website.book.submit'), $this->payload($room, 2, 2)) // 4 veta OK, por 2 fëmijë > 1
+            ->assertSessionHasErrors('selections');
+
+        $this->assertSame(0, Reservation::count());
+    }
+
+    /** Task #428: karroca ka nevojë për max_children — payload-i i disponibilitetit e mbart. */
+    public function test_availability_payload_carries_max_children(): void
+    {
+        $this->room(4, 2);
+
+        $this->post(route('website.book.check'), [
+            'check_in' => today()->addDays(3)->toDateString(),
+            'check_out' => today()->addDays(5)->toDateString(),
+        ])->assertOk()->assertJsonPath('room_types.0.max_children', 2);
     }
 }
