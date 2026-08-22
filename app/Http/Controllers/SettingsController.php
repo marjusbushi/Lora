@@ -255,7 +255,9 @@ class SettingsController extends Controller
         // në heshtje editimet e tjetrës.
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'timezone' => ['required', 'string', 'max:50'],
+            // IANA i vlefshëm me ligj (gjetje Codex #581): një identifikues i
+            // pavlefshëm i ruajtur rrëzonte çdo job përgjigjeje AI në now($tz).
+            'timezone' => ['required', 'string', 'max:50', 'timezone:all'],
             'currency' => ['required', 'string', Rule::in(config('lora.tenant_currencies'))],
             'pricing_currency' => ['nullable', 'string', Rule::in(config('lora.tenant_currencies'))],
             'check_in_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
