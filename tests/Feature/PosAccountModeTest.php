@@ -183,8 +183,10 @@ class PosAccountModeTest extends TestCase
         $this->assertSame(2, FinancePayment::query()->where('account_id', $barDrawer->id)->count());
     }
 
-    public function test_shift_difference_posts_to_the_bar_drawer(): void
+    public function test_shift_difference_never_posts_even_with_a_split_bar_drawer(): void
     {
+        // Renato (2026-08-21): differences are report-only — the drawer MODE
+        // is irrelevant; a close with a count but no sales posts nothing.
         $admin = $this->admin();
         Setting::set('finance.pos_account_mode', 'split_cash', 'text');
         $shift = $this->openShift($admin);
@@ -197,9 +199,7 @@ class PosAccountModeTest extends TestCase
 
         app(FinanceLedger::class)->recordShiftClose($shift->fresh());
 
-        $ledger = FinancePayment::query()->where('sourceable_type', PosShift::class)->sole();
-        $this->assertSame('Arka Bar/Restorant', $ledger->account->name);
-        $this->assertSame('pos', $ledger->account->scope);
+        $this->assertSame(0, FinancePayment::query()->where('sourceable_type', PosShift::class)->count());
     }
 
     public function test_switching_mode_never_moves_history(): void
