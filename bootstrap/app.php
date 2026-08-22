@@ -132,10 +132,10 @@ return Application::configure(basePath: dirname(__DIR__))
             requiredModule: TenantBillingService::SMART_PRICING,
         ))
             ->name('tenants:pricing:autopilot')->dailyAt('03:45')->withoutOverlapping()->onOneServer();
-        // Shëndeti i çelësit Gemini per-hotel (task #382): thirrje metadata
-        // pothuaj-falas — paneli paralajmëron PARA se Lora të heshtë live.
-        $schedule->call(fn () => app(TenantCommandRunner::class)->run('gemini:check-key'))
-            ->name('tenants:gemini:check-key')->dailyAt('06:30');
+        // Shëndeti i çelësit QENDROR Gemini (task #382; global nga #407):
+        // NJË thirrje metadata pothuaj-falas për gjithë platformën — panelet
+        // paralajmërojnë PARA se Lora të heshtë live.
+        $schedule->command('gemini:check-key')->name('gemini:check-key')->dailyAt('06:30');
         // Monday-morning pricing narrative for the owner (skips if Gemini unset).
         $schedule->call(fn () => app(TenantCommandRunner::class)->run(
             'pricing:weekly-report',

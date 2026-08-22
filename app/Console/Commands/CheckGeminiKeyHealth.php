@@ -2,40 +2,35 @@
 
 namespace App\Console\Commands;
 
-use App\Console\Concerns\ResolvesTenantContext;
-use App\Models\Setting;
+use App\Models\PlatformSetting;
 use App\Services\GeminiClient;
 use Illuminate\Console\Command;
 
 /**
- * Kontrolli ditor i shëndetit të çelësit Gemini PER-HOTEL (task #382, miratuar
- * nga Marjus): çelësi i një hoteli mund të skadojë a revokohet dhe sot kjo
- * zbulohej vetëm kur Lora heshtte me mysafirë realë. Një thirrje metadata
- * pothuaj-falas (0 tokena) e verifikon; rezultati ruhet per-tenant dhe paneli
- * /pms/lora-ai i tregon hotelit paralajmërimin PARA se t'i ndodhë live.
+ * Kontrolli ditor i shëndetit të çelësit qendror Gemini (task #382; GLOBAL
+ * nga task #407 — vendimi i Marjusit: NJË çelës platforme për të gjithë
+ * hotelet, si çelësi i kursit të këmbimit). Çelësi mund të skadojë a
+ * revokohet dhe kjo zbulohej vetëm kur Lora heshtte me mysafirë realë. Një
+ * thirrje metadata pothuaj-falas (0 tokena) e verifikon; rezultati ruhet në
+ * PlatformSetting dhe panelet (/pms/lora-ai + super-admin) e tregojnë PARA
+ * se t'i ndodhë live.
  *
- * Ekzekutohet nga scheduler-i përmes TenantCommandRunner (kontekst per tenant);
- * manualisht kërkon --tenant= (kurrë fallback te tenant-i i parë).
+ * Ekzekutohet nga scheduler-i NJËHERË globalisht — çelësi s'është më
+ * per-tenant, ndaj s'ka nevojë për kontekst tenant-i.
  */
 class CheckGeminiKeyHealth extends Command
 {
-    use ResolvesTenantContext;
+    protected $signature = 'gemini:check-key';
 
-    protected $signature = 'gemini:check-key {--tenant= : ID e hotelit — i detyrueshëm për ekzekutim manual}';
-
-    protected $description = 'Verifikon çelësin Gemini të hotelit me një thirrje metadata dhe ruan gjendjen për panelin.';
+    protected $description = 'Verifikon çelësin qendror Gemini të platformës me një thirrje metadata dhe ruan gjendjen për panelet.';
 
     public function handle(GeminiClient $gemini): int
     {
-        if (! $this->ensureTenantContext()) {
-            return self::FAILURE;
-        }
-
         if (! $gemini->configured()) {
             // Pa çelës s'ka as thirrje, as paralajmërim — gjendja e vjetër fshihet
             // që një çelës i hequr të mos mbajë alarm të vjetruar.
-            Setting::set('ai.gemini_key_health', '', 'text');
-            $this->info('Pa çelës Gemini të konfiguruar — asnjë kontroll.');
+            PlatformSetting::set('ai.gemini_key_health', '', 'text');
+            $this->info('Pa çelës qendror Gemini të konfiguruar — asnjë kontroll.');
 
             return self::SUCCESS;
         }
@@ -50,9 +45,9 @@ class CheckGeminiKeyHealth extends Command
             return self::SUCCESS;
         }
 
-        // Admini e ndërroi/hoqi çelësin NDËRSA kërkesa ishte në fluturim
+        // Super-admini e ndërroi/hoqi çelësin NDËRSA kërkesa ishte në fluturim
         // (gjetje Codex, PR #512): rezultati i çelësit të vjetër s'guxon të
-        // mbishkruajë pastrimin që bëri updateAi() — hidhet poshtë.
+        // mbishkruajë pastrimin që bëri ruajtja e çelësit — hidhet poshtë.
         if ($gemini->key() !== $checkedKey) {
             $this->info('Çelësi ndryshoi gjatë kontrollit — rezultati u hodh poshtë.');
 
@@ -61,16 +56,16 @@ class CheckGeminiKeyHealth extends Command
 
         // key_fp e bën garën të parrezikshme NGA ANA E LEXUESIT (gjetje Codex,
         // PR #514): edhe nëse ky shkrim ulet një çast PAS një ndërrimi çelësi,
-        // paneli e shfaq alarmin VETËM kur gjurma përputhet me çelësin aktual —
-        // një rezultat i vjetruar s'ka më fuqi, pavarësisht kur shkruhet.
-        Setting::set('ai.gemini_key_health', [
+        // panelet e shfaqin alarmin VETËM kur gjurma përputhet me çelësin
+        // aktual — një rezultat i vjetruar s'ka më fuqi, pavarësisht kur shkruhet.
+        PlatformSetting::set('ai.gemini_key_health', [
             'ok' => $health['ok'],
             'checked_at' => now()->toIso8601String(),
             'error' => $health['error'],
             'key_fp' => hash('sha256', (string) $checkedKey),
         ], 'json');
 
-        $this->info($health['ok'] ? 'Çelësi Gemini punon.' : 'Çelësi Gemini DËSHTOI: '.$health['error']);
+        $this->info($health['ok'] ? 'Çelësi qendror Gemini punon.' : 'Çelësi qendror Gemini DËSHTOI: '.$health['error']);
 
         return self::SUCCESS;
     }

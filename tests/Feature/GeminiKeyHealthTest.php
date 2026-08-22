@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\PlatformSetting;
 use App\Models\Setting;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\GeminiClient;
 use App\Services\TenantRoleService;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -12,9 +14,10 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * Kontrolli ditor i shëndetit të çelësit Gemini per-hotel (task #382):
- * thirrje metadata pothuaj-falas → gjendja per-tenant → paralajmërim në panel
- * PARA se Lora të heshtë me mysafirë realë.
+ * Kontrolli ditor i shëndetit të çelësit QENDROR Gemini (task #382; GLOBAL
+ * nga task #407): NJË çelës platforme (PlatformSetting, si çelësi i kursit
+ * të këmbimit) shërben çdo hotel — një thirrje metadata pothuaj-falas e
+ * verifikon dhe panelet paralajmërojnë PARA se Lora të heshtë me mysafirë.
  */
 class GeminiKeyHealthTest extends TestCase
 {
@@ -29,7 +32,7 @@ class GeminiKeyHealthTest extends TestCase
         $this->tenant = Tenant::query()->sole();
         app(TenantContext::class)->set($this->tenant);
 
-        // Vetëm Setting-u per-tenant vendos — jo çelësi i env-it të dev-it.
+        // Vetëm PlatformSetting vendos — jo çelësi i env-it të dev-it.
         config()->set('services.gemini.key', null);
         config()->set('services.gemini.model', 'gemini-test-model');
         config()->set('services.gemini.base_url', 'https://generativelanguage.googleapis.com/v1beta');
@@ -54,74 +57,82 @@ class GeminiKeyHealthTest extends TestCase
         });
     }
 
-    public function test_command_records_health_per_tenant_ok_and_invalid(): void
+    /** Task #407: çelësi zgjidhet VETËM globalisht — Setting-u per-tenant i mbetur në DB shpërfillet. */
+    public function test_key_resolution_is_platform_only_and_ignores_tenant_settings(): void
+    {
+        // Mbetje e epokës per-tenant në DB — s'duhet të ketë më fuqi.
+        Setting::set('ai.gemini_key', 'stale-tenant-key', 'text');
+
+        $this->assertNull(app(GeminiClient::class)->key());
+        $this->assertFalse(app(GeminiClient::class)->configured());
+
+        // Env-i si rrugë rezervë…
+        config()->set('services.gemini.key', 'env-key');
+        $this->assertSame('env-key', app(GeminiClient::class)->key());
+
+        // …dhe PlatformSetting fiton mbi env-in.
+        PlatformSetting::set('ai.gemini_key', 'platform-key', 'text');
+        $this->assertSame('platform-key', app(GeminiClient::class)->key());
+    }
+
+    public function test_command_records_platform_health_ok_and_invalid(): void
     {
         $this->fakeGoogleByKey();
 
-        // Tenant-i A me çelës të mirë…
-        Setting::set('ai.gemini_key', 'good-key', 'string');
+        PlatformSetting::set('ai.gemini_key', 'good-key', 'text');
+        $this->artisan('gemini:check-key')->assertSuccessful();
 
-        // …tenant-i B me çelës të pavlefshëm.
-        $other = Tenant::factory()->create();
-        app(TenantContext::class)->set($other);
-        Setting::set('ai.gemini_key', 'bad-key', 'string');
+        $health = PlatformSetting::get('ai.gemini_key_health');
+        $this->assertTrue($health['ok']);
+        $this->assertSame(hash('sha256', 'good-key'), $health['key_fp']);
 
-        app(TenantContext::class)->set($this->tenant);
-        $this->artisan('gemini:check-key', ['--tenant' => $this->tenant->id])->assertSuccessful();
+        PlatformSetting::set('ai.gemini_key', 'bad-key', 'text');
+        $this->artisan('gemini:check-key')->assertSuccessful();
 
-        app(TenantContext::class)->set($other);
-        $this->artisan('gemini:check-key', ['--tenant' => $other->id])->assertSuccessful();
-
-        // Gjendjet janë PER-TENANT, të ndara dhe të sakta.
-        app(TenantContext::class)->set($this->tenant);
-        $healthA = Setting::get('ai.gemini_key_health');
-        $this->assertTrue($healthA['ok']);
-
-        app(TenantContext::class)->set($other);
-        $healthB = Setting::get('ai.gemini_key_health');
-        $this->assertFalse($healthB['ok']);
-        $this->assertStringContainsString('400', $healthB['error']);
+        $health = PlatformSetting::get('ai.gemini_key_health');
+        $this->assertFalse($health['ok']);
+        $this->assertStringContainsString('400', $health['error']);
     }
 
     public function test_no_key_means_no_call_and_no_warning(): void
     {
         Http::fake();
         // Alarm i vjetruar nga një çelës i hequr — duhet të pastrohet.
-        Setting::set('ai.gemini_key_health', ['ok' => false, 'error' => 'i vjetër'], 'json');
+        PlatformSetting::set('ai.gemini_key_health', ['ok' => false, 'error' => 'i vjetër'], 'json');
 
-        $this->artisan('gemini:check-key', ['--tenant' => $this->tenant->id])->assertSuccessful();
+        $this->artisan('gemini:check-key')->assertSuccessful();
 
         Http::assertNothingSent();
-        $this->assertSame('', Setting::get('ai.gemini_key_health'));
+        $this->assertSame('', PlatformSetting::get('ai.gemini_key_health'));
     }
 
     public function test_transient_429_keeps_the_previous_state(): void
     {
         $this->fakeGoogleByKey();
-        Setting::set('ai.gemini_key', 'unknown-key-gets-429', 'string');
-        Setting::set('ai.gemini_key_health', ['ok' => true, 'checked_at' => '2026-08-20T06:30:00+02:00', 'error' => null], 'json');
+        PlatformSetting::set('ai.gemini_key', 'unknown-key-gets-429', 'text');
+        PlatformSetting::set('ai.gemini_key_health', ['ok' => true, 'checked_at' => '2026-08-20T06:30:00+02:00', 'error' => null], 'json');
 
-        $this->artisan('gemini:check-key', ['--tenant' => $this->tenant->id])->assertSuccessful();
+        $this->artisan('gemini:check-key')->assertSuccessful();
 
         // 429 kalimtare NUK e shënon çelësin të prishur.
-        $this->assertTrue(Setting::get('ai.gemini_key_health')['ok']);
+        $this->assertTrue(PlatformSetting::get('ai.gemini_key_health')['ok']);
     }
 
     public function test_a_key_changed_mid_check_discards_the_stale_result(): void
     {
-        // Kërkesa HTTP "në fluturim" — pikërisht atëherë admini ndërron çelësin:
-        // rezultati i çelësit të VJETËR duhet hedhur poshtë (Codex #512).
+        // Kërkesa HTTP "në fluturim" — pikërisht atëherë super-admini ndërron
+        // çelësin: rezultati i çelësit të VJETËR duhet hedhur poshtë (Codex #512).
         Http::fake(function () {
-            Setting::set('ai.gemini_key', 'brand-new-key', 'string');
+            PlatformSetting::set('ai.gemini_key', 'brand-new-key', 'text');
 
             return Http::response(['error' => ['code' => 400, 'message' => 'API key not valid']], 400);
         });
-        Setting::set('ai.gemini_key', 'old-broken-key', 'string');
+        PlatformSetting::set('ai.gemini_key', 'old-broken-key', 'text');
 
-        $this->artisan('gemini:check-key', ['--tenant' => $this->tenant->id])->assertSuccessful();
+        $this->artisan('gemini:check-key')->assertSuccessful();
 
         // Asnjë gjendje s'u shkrua nga rezultati i vjetruar.
-        $this->assertNull(Setting::get('ai.gemini_key_health'));
+        $this->assertNull(PlatformSetting::get('ai.gemini_key_health'));
     }
 
     public function test_a_late_written_result_for_an_old_key_never_reaches_the_panel(): void
@@ -132,32 +143,14 @@ class GeminiKeyHealthTest extends TestCase
 
         // Rezultat i vjetruar që "fitoi" garën e shkrimit pas ndërrimit të
         // çelësit — gjurma s'përputhet me çelësin aktual → paneli s'e sheh.
-        Setting::set('ai.gemini_key', 'brand-new-key', 'string');
-        Setting::set('ai.gemini_key_health', ['ok' => false, 'checked_at' => now()->toIso8601String(), 'error' => 'i vjetruar', 'key_fp' => hash('sha256', 'old-broken-key')], 'json');
+        PlatformSetting::set('ai.gemini_key', 'brand-new-key', 'text');
+        PlatformSetting::set('ai.gemini_key_health', ['ok' => false, 'checked_at' => now()->toIso8601String(), 'error' => 'i vjetruar', 'key_fp' => hash('sha256', 'old-broken-key')], 'json');
 
         $this->actingAs($admin)
             ->withSession(['tenant_id' => $this->tenant->id])
             ->get(route('lora-ai.index'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page->where('geminiKeyHealth', null));
-    }
-
-    public function test_saving_a_new_key_clears_the_stale_broken_alarm(): void
-    {
-        app(TenantRoleService::class)->provision($this->tenant);
-        $admin = User::factory()->create(['current_tenant_id' => $this->tenant->id]);
-        $admin->assignRole('admin');
-
-        // Çelësi i vjetër u shënua i prishur nga kontrolli ditor…
-        Setting::set('ai.gemini_key_health', ['ok' => false, 'checked_at' => now()->toIso8601String(), 'error' => 'i prishur'], 'json');
-
-        // …admini vendos çelës të RI: alarmi i të vjetrit s'vlen më (Codex #511).
-        $this->actingAs($admin)
-            ->withSession(['tenant_id' => $this->tenant->id])
-            ->put(route('settings.ai'), ['gemini_key' => 'brand-new-key'])
-            ->assertRedirect();
-
-        $this->assertSame('', Setting::get('ai.gemini_key_health'));
     }
 
     public function test_panel_warns_only_when_the_stored_health_is_broken(): void
@@ -166,23 +159,41 @@ class GeminiKeyHealthTest extends TestCase
         $admin = User::factory()->create(['current_tenant_id' => $this->tenant->id]);
         $admin->assignRole('admin');
 
-        Setting::set('ai.gemini_key', 'broken-key', 'string');
-        Setting::set('ai.gemini_key_health', ['ok' => false, 'checked_at' => now()->toIso8601String(), 'error' => 'Çelësi u refuzua nga Google (400).', 'key_fp' => hash('sha256', 'broken-key')], 'json');
+        PlatformSetting::set('ai.gemini_key', 'broken-key', 'text');
+        PlatformSetting::set('ai.gemini_key_health', ['ok' => false, 'checked_at' => now()->toIso8601String(), 'error' => 'Çelësi qendror AI u refuzua nga Google (400).', 'key_fp' => hash('sha256', 'broken-key')], 'json');
 
         $this->actingAs($admin)
             ->withSession(['tenant_id' => $this->tenant->id])
             ->get(route('lora-ai.index'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('geminiKeyHealth.error', 'Çelësi u refuzua nga Google (400).'));
+                ->where('geminiKeyHealth.error', 'Çelësi qendror AI u refuzua nga Google (400).'));
 
         // Çelës në rregull → asnjë paralajmërim.
-        Setting::set('ai.gemini_key_health', ['ok' => true, 'checked_at' => now()->toIso8601String(), 'error' => null, 'key_fp' => hash('sha256', 'broken-key')], 'json');
+        PlatformSetting::set('ai.gemini_key_health', ['ok' => true, 'checked_at' => now()->toIso8601String(), 'error' => null, 'key_fp' => hash('sha256', 'broken-key')], 'json');
 
         $this->actingAs($admin)
             ->withSession(['tenant_id' => $this->tenant->id])
             ->get(route('lora-ai.index'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page->where('geminiKeyHealth', null));
+    }
+
+    /** Task #407: updateAi i tenantit SHPËRFILL çdo çelës të dërguar — ruan vetëm kontekstin e hotelit. */
+    public function test_tenant_update_ai_ignores_any_submitted_key(): void
+    {
+        app(TenantRoleService::class)->provision($this->tenant);
+        $admin = User::factory()->create(['current_tenant_id' => $this->tenant->id]);
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin)
+            ->withSession(['tenant_id' => $this->tenant->id])
+            ->put(route('settings.ai'), ['gemini_key' => 'sneaky-key', 'hotel_context' => 'Hotel buzë detit me 12 dhoma.'])
+            ->assertRedirect();
+
+        // Çelësi s'u shkrua ASKUND; konteksti u ruajt normalisht.
+        $this->assertNull(Setting::get('ai.gemini_key'));
+        $this->assertNull(PlatformSetting::get('ai.gemini_key'));
+        $this->assertSame('Hotel buzë detit me 12 dhoma.', Setting::get('ai.hotel_context'));
     }
 }
