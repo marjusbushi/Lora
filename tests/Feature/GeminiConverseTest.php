@@ -355,6 +355,32 @@ class GeminiConverseTest extends TestCase
         $this->assertCount(1, Http::recorded());
     }
 
+    /** Task #408 (dera e përbashkët): tokenat e të gjitha raundeve mblidhen — i duhen matjes #409. */
+    public function test_usage_is_summed_across_rounds_with_provider_identity(): void
+    {
+        Http::fakeSequence('generativelanguage.googleapis.com/*')
+            ->push($this->functionCallResponse([[
+                'functionCall' => ['name' => 'check_availability', 'args' => ['check_in' => '2026-08-28', 'check_out' => '2026-08-30']],
+            ]]) + ['usageMetadata' => ['promptTokenCount' => 100, 'candidatesTokenCount' => 20, 'thoughtsTokenCount' => 5]])
+            ->push($this->finalReplyResponse() + ['usageMetadata' => ['promptTokenCount' => 150, 'candidatesTokenCount' => 30, 'thoughtsTokenCount' => 8]]);
+
+        $result = app(GeminiClient::class)->converse(
+            'SYSTEM',
+            'MYSAFIRI: 28-30 gusht',
+            self::TOOLS,
+            ['check_availability' => fn (array $args): array => ['stay_total' => 190]],
+            'guest_reply',
+        );
+
+        $this->assertSame([
+            'input' => 250,
+            'output' => 50,
+            'thinking' => 13,
+            'provider' => 'gemini',
+            'model' => 'gemini-test-model',
+        ], $result['usage']);
+    }
+
     /** Task #403: pa rezervë të konfiguruar → sjellja e vjetër — një kërkesë, gabimi bublon. */
     public function test_no_fallback_configured_bubbles_the_503_after_one_request(): void
     {
