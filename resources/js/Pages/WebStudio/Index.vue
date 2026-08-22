@@ -1,14 +1,10 @@
 <script setup>
-import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import AppLayout from '@/Layouts/AppLayout.vue';
-import PageHeader from '@/Components/UI/PageHeader.vue';
-import SettingsSidebar from '@/Components/SettingsSidebar.vue';
-import { settingsGroups, visibleSettingsTabs } from '@/Pages/Settings/settingsNavigation';
 import {
-    BedDouble, BookOpen, Bot, BriefcaseBusiness, Check, ExternalLink, Facebook, Globe, Hotel, House,
-    Instagram, Mail, MapPin, MessageCircle, Palette, Phone, Search, ShieldCheck, X,
+    ArrowLeft, BedDouble, BookOpen, Check, ExternalLink, Facebook, Globe, House,
+    Instagram, Mail, MapPin, MessageCircle, Palette, Phone,
 } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -22,43 +18,7 @@ const props = defineProps({
 });
 
 const page = usePage();
-const { locale, t } = useI18n();
-const modules = computed(() => page.props.modules || {});
-const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
-const groupIcons = { Hotel, BriefcaseBusiness, Bot, ShieldCheck };
-const settingsSearch = ref('');
-const navigationTabs = computed(() => visibleSettingsTabs(modules.value).map((tab) => ({ ...tab, label: t(tab.labelKey) })));
-const navigationGroups = computed(() => settingsGroups.map((group) => ({
-    ...group,
-    label: t(group.labelKey),
-    tabs: navigationTabs.value.filter((tab) => tab.group === group.id),
-})));
-const settingsSearchResults = computed(() => {
-    const query = settingsSearch.value.trim().toLocaleLowerCase(locale.value);
-    if (!query) return [];
-
-    return navigationTabs.value.filter((tab) => tab.label.toLocaleLowerCase(locale.value).includes(query)).slice(0, 6);
-});
-const breadcrumbs = computed(() => [
-    { label: t('admin.sidebar.dashboard'), href: '/dashboard' },
-    { label: t('settingsTabs.menu.settings'), href: '/pms/settings' },
-    { label: 'Web Studio' },
-]);
-
-function navigateSettingsTab(tab) {
-    settingsSearch.value = '';
-    router.visit(tab.href || route('settings.index', { tab: tab.id }));
-}
-
-function selectSettingsGroup(groupId) {
-    const firstTab = navigationGroups.value.find((group) => group.id === groupId)?.tabs[0];
-    if (firstTab) navigateSettingsTab(firstTab);
-}
-
-function selectSettingsPage(tabId) {
-    const tab = navigationTabs.value.find((item) => item.id === tabId);
-    if (tab) navigateSettingsTab(tab);
-}
+const { t } = useI18n();
 
 // ── Sajti publik: domain-i dhe linku "Hap faqen" ────────────────────────────
 const publicOrigin = computed(() => {
@@ -198,83 +158,38 @@ const lf = (base) => `${base}_${editLang.value}`;
 
 <template>
     <Head title="Web Studio" />
-    <AppLayout>
-        <div class="pms-settings-shell mx-auto w-full max-w-[1480px]">
-            <header class="settings-page-heading flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <PageHeader title="Web Studio" :breadcrumbs="breadcrumbs" />
-                    <p class="mt-1 text-body-sm text-neutral-500">{{ $t('webStudio.subtitle') }}</p>
-                </div>
-
-                <div v-if="isAdmin" class="settings-search relative w-full md:w-[340px]">
-                    <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                    <input v-model="settingsSearch" type="search" class="w-full border bg-white py-2 pl-9 pr-9" :placeholder="$t('settingsTabs.index.searchPlaceholder')">
-                    <button v-if="settingsSearch" type="button" class="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700" @click="settingsSearch = ''">
-                        <X class="h-4 w-4" />
-                    </button>
-                    <div v-if="settingsSearch" class="settings-search-results absolute right-0 top-[calc(100%+8px)] z-30 w-full overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl">
-                        <button v-for="tab in settingsSearchResults" :key="tab.id" type="button" class="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-body-sm text-neutral-700 hover:bg-accent-50 hover:text-accent-800" @click="navigateSettingsTab(tab)">
-                            <span>{{ tab.label }}</span>
-                            <span class="text-tiny text-neutral-400">{{ navigationGroups.find((group) => group.id === tab.group)?.label }}</span>
-                        </button>
-                        <p v-if="!settingsSearchResults.length" class="px-3 py-3 text-body-sm text-neutral-500">{{ $t('settingsTabs.index.noResults') }}</p>
+    <div class="min-h-screen bg-neutral-50">
+        <!-- Shiriti i studios — i vetmi chrome: dil, identiteti, gjuha, hap faqen -->
+        <header class="sticky top-0 z-30 border-b border-neutral-200 bg-white/95 shadow-sm backdrop-blur">
+            <div class="mx-auto flex max-w-[1480px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:px-6">
+                <Link :href="route('settings.index')" class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800">
+                    <ArrowLeft class="h-4 w-4" /> {{ $t('webStudio.backToSettings') }}
+                </Link>
+                <span class="hidden h-5 w-px bg-neutral-200 sm:block" />
+                <div class="flex min-w-0 items-center gap-2.5">
+                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent-50 text-accent-700"><Globe class="h-5 w-5" :stroke-width="1.8" /></span>
+                    <div class="min-w-0 leading-tight">
+                        <b class="block truncate text-sm font-extrabold tracking-tight text-neutral-900">{{ hotelName || 'Web Studio' }}</b>
+                        <span class="flex items-center gap-2 text-xs text-neutral-500">
+                            <span class="truncate">{{ publicDomain }}</span>
+                            <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Live</span>
+                        </span>
                     </div>
                 </div>
-            </header>
-
-            <nav v-if="isAdmin" class="settings-category-tabs mt-5 hidden grid-cols-4 gap-2 rounded-xl border border-neutral-200 bg-white p-2 shadow-card lg:grid" :aria-label="$t('settingsTabs.index.categoriesAria')">
-                <button v-for="group in navigationGroups" :key="group.id" type="button" class="settings-category-tab flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-body-sm font-semibold transition" :class="group.id === 'hotel' ? 'bg-accent-700 text-white shadow-sm' : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'" :aria-pressed="group.id === 'hotel'" @click="selectSettingsGroup(group.id)">
-                    <component :is="groupIcons[group.icon]" class="h-4 w-4" />
-                    <span>{{ group.label }}</span>
-                    <span class="rounded-full px-1.5 py-0.5 text-tiny" :class="group.id === 'hotel' ? 'bg-white/15 text-white' : 'bg-neutral-100 text-neutral-500'">{{ group.tabs.length }}</span>
-                </button>
-            </nav>
-
-            <div v-if="isAdmin" class="settings-mobile-nav mt-4 grid gap-2 sm:grid-cols-2 lg:hidden">
-                <label>
-                    <span class="sr-only">{{ locale === 'sq' ? 'Kategoria' : 'Category' }}</span>
-                    <select class="w-full" value="hotel" @change="selectSettingsGroup($event.target.value)">
-                        <option v-for="group in navigationGroups" :key="group.id" :value="group.id">{{ group.label }}</option>
-                    </select>
-                </label>
-                <label>
-                    <span class="sr-only">{{ locale === 'sq' ? 'Faqja' : 'Page' }}</span>
-                    <select class="w-full" value="web-studio" @change="selectSettingsPage($event.target.value)">
-                        <option v-for="tab in navigationTabs.filter((item) => item.group === 'hotel')" :key="tab.id" :value="tab.id">{{ tab.label }}</option>
-                    </select>
-                </label>
+                <div class="ml-auto flex items-center gap-3">
+                    <div class="flex rounded-lg bg-neutral-100 p-0.5">
+                        <button type="button" class="rounded-md px-3.5 py-1.5 text-xs font-bold transition" :class="editLang === 'sq' ? 'bg-white text-accent-800 shadow-sm' : 'text-neutral-500'" @click="editLang = 'sq'">Shqip</button>
+                        <button type="button" class="rounded-md px-3.5 py-1.5 text-xs font-bold transition" :class="editLang === 'en' ? 'bg-white text-accent-800 shadow-sm' : 'text-neutral-500'" @click="editLang = 'en'">English</button>
+                    </div>
+                    <a :href="publicOrigin" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3.5 py-1.5 text-sm font-semibold text-neutral-700 transition hover:border-accent-500 hover:text-accent-700">
+                        {{ $t('webStudio.openSite') }} <ExternalLink class="h-4 w-4" />
+                    </a>
+                </div>
             </div>
+        </header>
 
-            <div class="settings-layout mt-4 flex flex-col gap-4 lg:flex-row lg:items-start">
-                <SettingsSidebar v-if="isAdmin" active-item="web-studio" active-group-only />
-
-                <div class="settings-content min-w-0 flex-1 space-y-4">
-
-                    <!-- KOKA: domain + gjuha + hap faqen -->
-                    <section data-ui="card" class="relative overflow-hidden border border-neutral-200 bg-white">
-                        <div class="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-accent-700 via-accent-500 to-amber-500" />
-                        <div data-ui="card-body" data-padding="true" class="flex flex-wrap items-center gap-4 bg-white">
-                            <div class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-accent-50 text-accent-700"><Globe class="h-6 w-6" :stroke-width="1.8" /></div>
-                            <div class="min-w-[200px] flex-1">
-                                <h2 class="text-lg font-extrabold tracking-tight text-neutral-900">{{ hotelName || 'Web Studio' }}</h2>
-                                <p class="flex items-center gap-2 text-body-sm text-neutral-500">
-                                    {{ publicDomain }}
-                                    <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-tiny font-bold text-emerald-700"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Live</span>
-                                </p>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <div class="flex rounded-lg bg-neutral-100 p-0.5">
-                                    <button type="button" class="rounded-md px-3.5 py-1.5 text-xs font-bold transition" :class="editLang === 'sq' ? 'bg-white text-accent-800 shadow-sm' : 'text-neutral-500'" @click="editLang = 'sq'">Shqip</button>
-                                    <button type="button" class="rounded-md px-3.5 py-1.5 text-xs font-bold transition" :class="editLang === 'en' ? 'bg-white text-accent-800 shadow-sm' : 'text-neutral-500'" @click="editLang = 'en'">English</button>
-                                </div>
-                                <a data-ui="button" :href="publicOrigin" target="_blank" rel="noopener" class="inline-flex items-center gap-2 border border-neutral-300 bg-white px-4 text-neutral-700 hover:bg-neutral-50">
-                                    {{ $t('webStudio.openSite') }} <ExternalLink class="h-4 w-4" />
-                                </a>
-                            </div>
-                        </div>
-                    </section>
-
-                    <div class="grid items-start gap-4 xl:grid-cols-[220px_minmax(0,1fr)_380px]">
+        <main class="pms-settings-shell mx-auto w-full max-w-[1480px] px-4 pb-10 pt-5 sm:px-6">
+                    <div class="grid items-start gap-4 xl:grid-cols-[230px_minmax(0,1fr)_400px]">
 
                         <!-- RAIL: faqet e sajtit -->
                         <nav data-ui="card" class="border border-neutral-200 bg-white p-2.5">
@@ -593,8 +508,6 @@ const lf = (base) => `${base}_${editLang.value}`;
                             </div>
                         </aside>
                     </div>
-                </div>
-            </div>
-        </div>
-    </AppLayout>
+        </main>
+    </div>
 </template>
