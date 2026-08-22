@@ -248,6 +248,157 @@ class GeminiConverseTest extends TestCase
         $this->assertArrayNotHasKey('id', $response);
     }
 
+    /** Task #403: 503 nga primari → i njëjti payload MENJËHERË te rezerva, dhe biseda i NGJIT rezervës deri në fund. */
+    public function test_overload_503_falls_back_to_the_reserve_model_and_sticks_to_it(): void
+    {
+        config()->set('services.gemini.fallback_model', 'gemini-test-lite');
+
+        Http::fakeSequence('generativelanguage.googleapis.com/*')
+            ->pushStatus(503)
+            ->push($this->functionCallResponse([[
+                'functionCall' => ['name' => 'check_availability', 'args' => ['check_in' => '2026-08-28', 'check_out' => '2026-08-30']],
+            ]]))
+            ->push($this->finalReplyResponse());
+
+        $result = app(GeminiClient::class)->converse(
+            'SYSTEM',
+            'MYSAFIRI: 28-30 gusht',
+            self::TOOLS,
+            ['check_availability' => fn (array $args): array => ['stay_total' => 190]],
+            'guest_reply',
+        );
+
+        $this->assertSame('Totali 190 EUR.', $result['args']['reply']);
+        $urls = collect(Http::recorded())->map(fn ($pair) => $pair[0]->url())->all();
+        $this->assertStringContainsString('gemini-test-model', $urls[0]);
+        $this->assertStringContainsString('gemini-test-lite', $urls[1]);
+        // Raundi 2 shkon DREJT te rezerva — pa e provuar primarin e sëmurë
+        // (dhe pa ia dërguar thoughtSignature-t e rezervës modelit tjetër).
+        $this->assertStringContainsString('gemini-test-lite', $urls[2]);
+        $this->assertCount(3, $urls);
+    }
+
+    /** Task #403: edhe rezerva 5xx → bublon gabimi ORIGJINAL (radha riprovon si zakonisht). */
+    public function test_fallback_failure_bubbles_the_original_503(): void
+    {
+        config()->set('services.gemini.fallback_model', 'gemini-test-lite');
+
+        Http::fakeSequence('generativelanguage.googleapis.com/*')
+            ->pushStatus(503)
+            ->pushStatus(500);
+
+        try {
+            app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: përshëndetje', self::TOOLS, [], 'guest_reply');
+            $this->fail('Duhej të hidhte gabimin origjinal 503.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('gabim (503)', $e->getMessage());
+        }
+
+        $this->assertCount(2, Http::recorded());
+    }
+
+    /** Task #403 (dorëzimi i shpejtë): ngecja e primarit (timeout) trajtohet si 5xx — rezerva provohet menjëherë. */
+    public function test_timeout_on_the_primary_tries_the_reserve_model(): void
+    {
+        config()->set('services.gemini.fallback_model', 'gemini-test-lite');
+
+        $calls = 0;
+        Http::fake(function ($request) use (&$calls) {
+            $calls++;
+            if ($calls === 1) {
+                throw new \Illuminate\Http\Client\ConnectionException('cURL error 28: Operation timed out');
+            }
+
+            return Http::response($this->finalReplyResponse());
+        });
+
+        $result = app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: përshëndetje', self::TOOLS, [], 'guest_reply');
+
+        $this->assertSame('Totali 190 EUR.', $result['args']['reply']);
+        $this->assertSame(2, $calls);
+    }
+
+    /** Task #403: ngecin të dy → gabim "(timeout)" — shënjuesi që failed() planifikon riprovën e ftohtë. */
+    public function test_timeout_everywhere_reports_a_retryable_timeout_error(): void
+    {
+        config()->set('services.gemini.fallback_model', 'gemini-test-lite');
+
+        Http::fake(function () {
+            throw new \Illuminate\Http\Client\ConnectionException('cURL error 28: Operation timed out');
+        });
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('(timeout)');
+
+        app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: përshëndetje', self::TOOLS, [], 'guest_reply');
+    }
+
+    /** Codex #550 P2: kur primari e hëngri buxhetin e bisedës, rezerva KAPËRCEHET — s'i shtohet mysafirit pritje mbi afat. */
+    public function test_fallback_is_skipped_when_the_conversation_deadline_is_spent(): void
+    {
+        config()->set('services.gemini.fallback_model', 'gemini-test-lite');
+
+        Http::fake(function () {
+            sleep(2); // primari "përtypet" — ha thuajse gjithë buxhetin 4s të bisedës
+
+            return Http::response('overloaded', 503);
+        });
+
+        try {
+            app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: përshëndetje', self::TOOLS, [], 'guest_reply', timeoutSeconds: 4);
+            $this->fail('Duhej të hidhte 503-shin origjinal.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('gabim (503)', $e->getMessage());
+        }
+
+        // Vetëm NJË kërkesë — rezerva s'u provua se afati i mbetur ishte nën 3s.
+        $this->assertCount(1, Http::recorded());
+    }
+
+    /** Task #403: pa rezervë të konfiguruar → sjellja e vjetër — një kërkesë, gabimi bublon. */
+    public function test_no_fallback_configured_bubbles_the_503_after_one_request(): void
+    {
+        config()->set('services.gemini.fallback_model', '');
+
+        Http::fakeSequence('generativelanguage.googleapis.com/*')->pushStatus(503);
+
+        try {
+            app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: përshëndetje', self::TOOLS, [], 'guest_reply');
+            $this->fail('Duhej të hidhte 503-shin.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('gabim (503)', $e->getMessage());
+        }
+
+        $this->assertCount(1, Http::recorded());
+    }
+
+    /** Task #403: 503 në MES të bisedës (pas një raundi mjetesh) → rezerva provohet po aty dhe e mbyll. */
+    public function test_mid_conversation_503_recovers_on_the_reserve_model(): void
+    {
+        config()->set('services.gemini.fallback_model', 'gemini-test-lite');
+
+        Http::fakeSequence('generativelanguage.googleapis.com/*')
+            ->push($this->functionCallResponse([[
+                'functionCall' => ['name' => 'check_availability', 'args' => ['check_in' => '2026-08-28', 'check_out' => '2026-08-30']],
+            ]]))
+            ->pushStatus(503)
+            ->push($this->finalReplyResponse());
+
+        $result = app(GeminiClient::class)->converse(
+            'SYSTEM',
+            'MYSAFIRI: 28-30 gusht',
+            self::TOOLS,
+            ['check_availability' => fn (array $args): array => ['stay_total' => 190]],
+            'guest_reply',
+        );
+
+        $this->assertSame('Totali 190 EUR.', $result['args']['reply']);
+        $urls = collect(Http::recorded())->map(fn ($pair) => $pair[0]->url())->all();
+        $this->assertStringContainsString('gemini-test-model', $urls[0]);
+        $this->assertStringContainsString('gemini-test-model', $urls[1]);
+        $this->assertStringContainsString('gemini-test-lite', $urls[2]);
+    }
+
     /**
      * Kundër API-së së VËRTETË të Gemini-t — kategoria që mock-u s'e mbulon dot
      * (mësimi i #379). Ekzekutohet VETËM me qëllim, që të mos digjet çelësi i
@@ -267,7 +418,7 @@ class GeminiConverseTest extends TestCase
 
         Http::allowStrayRequests();
         config()->set('services.gemini.key', $key);
-        config()->set('services.gemini.model', 'gemini-flash-latest');
+        config()->set('services.gemini.model', 'gemini-3.7-flash');
 
         $result = app(GeminiClient::class)->converse(
             'Je Lora, recepsionistja e hotelit. Kur mysafiri jep datat, thirr check_availability dhe përgjigju vetëm me numrat e mjetit. Mbylle me guest_reply.',
@@ -311,7 +462,7 @@ class GeminiConverseTest extends TestCase
 
         Http::allowStrayRequests();
         config()->set('services.gemini.key', $key);
-        config()->set('services.gemini.model', 'gemini-flash-latest');
+        config()->set('services.gemini.model', 'gemini-3.7-flash');
 
         $result = app(GeminiClient::class)->converse(
             'Je Lora, recepsionistja e hotelit. Kur mysafiri pyet për rezervimin e tij (datat, pagesën, bilancin), thirr get_thread_reservation dhe përgjigju vetëm me të dhënat e mjetit. Mbylle me guest_reply.',
@@ -336,5 +487,49 @@ class GeminiConverseTest extends TestCase
 
         $this->assertContains('get_thread_reservation', $result['toolsUsed']);
         $this->assertStringContainsString('50', $result['args']['reply']);
+    }
+
+    /**
+     * Kontrata e telit mbi modelin REZERVË të fiksuar (task #403): rezerva flet
+     * vetëm në dritaret e mbingarkesës — nëse Google e pensionon id-në e saj
+     * ose ia ndryshon kontratën, do ta zbulonim pikërisht në momentin më të
+     * keq. Kanari javor e mban të provuar edhe atë.
+     */
+    #[Group('real-api')]
+    public function test_real_api_reserve_model_accepts_the_wire_contract(): void
+    {
+        $key = (string) env('GEMINI_API_KEY', env('GOOGLE_API_KEY'));
+        if ($key === '' || ! env('GEMINI_REAL_API')) {
+            $this->markTestSkipped('Kërkon GEMINI_API_KEY dhe GEMINI_REAL_API=1 (thirrje e paguar kundër API-së reale).');
+        }
+
+        Http::allowStrayRequests();
+        config()->set('services.gemini.key', $key);
+        config()->set('services.gemini.model', (string) config('services.gemini.fallback_model'));
+
+        $result = app(GeminiClient::class)->converse(
+            'Je Lora, recepsionistja e hotelit. Kur mysafiri jep datat, thirr check_availability dhe përgjigju vetëm me numrat e mjetit. Mbylle me guest_reply.',
+            "BISEDA:\nMYSAFIRI: Per 28 gusht 2026 a ke per dy persona, checkout 30 gusht?",
+            self::TOOLS,
+            [
+                'check_availability' => fn (array $args): array => [
+                    'currency' => 'EUR',
+                    'nights' => 2,
+                    'room_types' => [[
+                        'name' => 'Dhomë Dyshe Standard',
+                        'rooms_available' => 3,
+                        'stay_total' => 190.0,
+                        'price_per_night' => 95.0,
+                    ]],
+                ],
+                'get_thread_reservation' => fn (array $args): array => ['error' => 'Asnjë rezervim i lidhur.'],
+            ],
+            'guest_reply',
+            1024,
+            75,
+        );
+
+        $this->assertContains('check_availability', $result['toolsUsed']);
+        $this->assertStringContainsString('190', $result['args']['reply']);
     }
 }
