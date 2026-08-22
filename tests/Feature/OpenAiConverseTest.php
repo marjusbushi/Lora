@@ -117,9 +117,38 @@ class OpenAiConverseTest extends TestCase
         $this->assertSame('tool', $second['messages'][3]['role']);
         $this->assertSame('call_777', $second['messages'][3]['tool_call_id']);
         $this->assertSame($quote, json_decode($second['messages'][3]['content'], true));
-        // Raundi i lirë DETYRON një mjet (cilindo); reasoning low.
+        // Raundi i lirë DETYRON një mjet (cilindo); reasoning 'none' — i
+        // detyruar nga API-ja reale (mjete + effort ≠ none → 400).
         $this->assertSame('required', $second['tool_choice']);
-        $this->assertSame('low', $second['reasoning_effort']);
+        $this->assertSame('none', $second['reasoning_effort']);
+    }
+
+    /** Codex #572 P1: edhe një env i vjetër 'low' NUK dërgohet kurrë për Lunën me mjete — 'none' i detyruar. */
+    public function test_reasoning_effort_is_forced_to_none_for_luna_with_tools_even_when_config_says_low(): void
+    {
+        config()->set('services.openai.model', 'gpt-5.6-luna-2026-07-09');
+        config()->set('services.openai.reasoning_effort', 'low');
+
+        Http::fakeSequence('api.openai.com/*')->push($this->finalReplyResponse());
+
+        app(OpenAiClient::class)->converse('SYSTEM', 'MYSAFIRI: hej', self::TOOLS, [], 'guest_reply');
+
+        $sent = json_decode((string) collect(Http::recorded())->last()[0]->body(), true);
+        $this->assertSame('none', $sent['reasoning_effort']);
+    }
+
+    /** Codex #573 P2: modelet JO-Luna mbajnë vlerën e konfiguruar — dikush s'e pranon dot 'none'. */
+    public function test_non_luna_models_keep_the_configured_reasoning_effort(): void
+    {
+        config()->set('services.openai.model', 'o9-mini');
+        config()->set('services.openai.reasoning_effort', 'low');
+
+        Http::fakeSequence('api.openai.com/*')->push($this->finalReplyResponse());
+
+        app(OpenAiClient::class)->converse('SYSTEM', 'MYSAFIRI: hej', self::TOOLS, [], 'guest_reply');
+
+        $sent = json_decode((string) collect(Http::recorded())->last()[0]->body(), true);
+        $this->assertSame('low', $sent['reasoning_effort']);
     }
 
     public function test_premature_final_in_a_mixed_turn_is_rejected_and_tools_still_run(): void
