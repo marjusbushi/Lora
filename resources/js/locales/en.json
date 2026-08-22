@@ -4662,7 +4662,21 @@
       "catalogNote": "The prices below are catalog prices, always in euro.",
       "invoicedIn": "Invoices are issued in {currency}, at the rate frozen when they are issued.",
       "fxOverride": "Fixed contract rate",
-      "fxOverrideHint": "Leave empty for the platform's daily rate. Amounts are rounded to 10 units."
+      "fxOverrideHint": "Leave empty for the platform's daily rate. Amounts are rounded to 10 units.",
+      "railIntegrations": "Integrations & domains",
+      "issuesAttention": "Attention needed: {count}",
+      "allGood": "All good",
+      "checksSummary": "{ok} of {total} checks passing",
+      "hotelActiveCheck": "Hotel active",
+      "hotelActiveNote": "Platform status — the hotel runs normally",
+      "hotelSuspendedNote": "The hotel is suspended — logins are blocked",
+      "membersActiveShort": "{count} active",
+      "clientSince": "Client since",
+      "domainsPending": "{count} pending",
+      "integrationsSubtitle": "Connection status — each row opens its editor.",
+      "contractYears": "{years} yr",
+      "integrationsAllActive": "All active",
+      "noModulesEnabled": "No modules enabled yet."
     },
     "billing": {
       "unitMonth": "month",
