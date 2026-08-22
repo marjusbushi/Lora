@@ -72,9 +72,9 @@ class AiConversationBookingTest extends TestCase
         ]);
     }
 
-    private function roomOfType(string $name = 'Dhomë Dyshe', float $base = 95, string $number = '101'): Room
+    private function roomOfType(string $name = 'Dhomë Dyshe', float $base = 95, string $number = '101', int $maxOcc = 3, int $maxChildren = 1): Room
     {
-        $type = RoomType::query()->firstOrCreate(['name' => $name], ['base_price' => $base, 'max_occupancy' => 3, 'amenities' => []]);
+        $type = RoomType::query()->firstOrCreate(['name' => $name], ['base_price' => $base, 'max_occupancy' => $maxOcc, 'max_children' => $maxChildren, 'amenities' => []]);
 
         return Room::create(['room_type_id' => $type->id, 'room_number' => $number, 'floor' => 1, 'status' => 'available']);
     }
@@ -344,6 +344,71 @@ class AiConversationBookingTest extends TestCase
         $this->assertSame(0, Guest::query()->count());
     }
 
+    /** Task #429: fëmijët ruhen te rezervimi dhe payload-i i mjetit i mbart. */
+    public function test_hold_with_children_stores_them_and_the_payload_carries_them(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType('Familjare', 100, '105', 4, 2);
+        $thread = $this->whatsappThread();
+
+        $hold = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['room_type' => 'Familjare', 'children' => 2]));
+
+        $this->assertSame('hold_created', $hold['status'] ?? null, json_encode($hold));
+        $this->assertSame(2, $hold['children']);
+        $reservation = Reservation::query()->sole();
+        $this->assertSame(2, (int) $reservation->adults);
+        $this->assertSame(2, (int) $reservation->children);
+    }
+
+    /** Task #429: fëmijët mbi kufirin e tipologjisë → error i qartë, asnjë rezervim. */
+    public function test_hold_refuses_when_children_exceed_the_typology_child_limit(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType(); // occ 3, max_children 1
+        $thread = $this->whatsappThread();
+
+        $result = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['adults' => 1, 'children' => 2]));
+
+        $this->assertStringContainsString('fëmijë', $result['error'] ?? '');
+        $this->assertSame(0, Reservation::query()->count());
+    }
+
+    /** Task #429: fëmija zë vend si i rrituri — totali mbi kapacitetin refuzohet. */
+    public function test_hold_refuses_when_total_persons_exceed_the_capacity(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType(); // occ 3
+        $thread = $this->whatsappThread();
+
+        $result = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['adults' => 2, 'children' => 2]));
+
+        $this->assertStringContainsString('persona gjithsej', $result['error'] ?? '');
+        $this->assertSame(0, Reservation::query()->count());
+    }
+
+    /** Task #429: disponibiliteti kualifikon tipologjitë me kapacitetin real + kufirin e fëmijëve. */
+    public function test_availability_filters_typologies_by_children(): void
+    {
+        $this->roomOfType(); // Dhomë Dyshe: occ 3, max_children 1
+        $this->roomOfType('Familjare', 100, '105', 4, 2);
+
+        $quote = app(\App\Services\GuestStayQuote::class)->forGuest(
+            'whatsapp',
+            now()->addDays(7)->toDateString(),
+            now()->addDays(9)->toDateString(),
+            1,
+            2, // 1 rritur + 2 fëmijë: Dyshja (3 vende) i nxë, po pranon vetëm 1 fëmijë
+        );
+
+        $names = array_column($quote['room_types'], 'name');
+        $this->assertSame(['Familjare'], $names);
+        $this->assertSame(2, $quote['children']);
+        $this->assertSame(2, $quote['room_types'][0]['max_children']);
+    }
+
     /** Codex #584 P2: mbiemri një-shkronjësh ("O", "李") është i vlefshëm — si te rezervimi manual. */
     public function test_one_letter_surname_is_accepted(): void
     {
@@ -450,6 +515,51 @@ class AiConversationBookingTest extends TestCase
 
         $this->assertStringContainsString('emrin E mbiemrin', $seenSystem);
         $this->assertStringContainsString('guest_last_name', $seenSystem);
+        // Task #429: rrjedha pyet për të rritur DHE fëmijë; foshnja s'numërohet.
+        $this->assertStringContainsString('të rriturve DHE', $seenSystem);
+        $this->assertStringContainsString('FOSHNJA', $seenSystem);
+    }
+
+    /** Task #429: mbajtja e ripërdorur me fëmijë të NDRYSHUAR = kërkesë e re — e vjetra lirohet. */
+    public function test_changed_children_release_the_old_hold(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType('Familjare', 100, '105', 4, 2);
+        $this->roomOfType('Familjare', 100, '106', 4, 2);
+        $thread = $this->whatsappThread();
+
+        $first = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['room_type' => 'Familjare', 'children' => 0]));
+        $this->assertSame('hold_created', $first['status'] ?? null);
+
+        $second = app(AiConversationBooking::class)->hold($thread->fresh(), $this->holdArgs(['room_type' => 'Familjare', 'children' => 2]));
+
+        $this->assertSame('hold_created', $second['status'] ?? null, json_encode($second));
+        $this->assertSame(2, $second['children']);
+        $this->assertSame(1, Reservation::query()->where('status', 'pending')->count());
+        $this->assertSame(1, Reservation::query()->where('status', 'cancelled')->count());
+    }
+
+    /** Task #429: konfirmimi pas pagesës tregon ndarjen e personave kur ka fëmijë. */
+    public function test_confirmation_summary_breaks_down_adults_and_children(): void
+    {
+        $this->fakePok(200.0);
+        $this->enableBooking();
+        $this->roomOfType('Familjare', 100, '105', 4, 2);
+        $thread = $this->whatsappThread();
+
+        $hold = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['room_type' => 'Familjare', 'children' => 2]));
+        $this->assertSame('hold_created', $hold['status'] ?? null);
+        $reservation = Reservation::query()->sole();
+
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('send')->once()
+                ->withArgs(fn ($tenantId, $jid, $text) => str_contains($text, '4 persona (2 të rritur + 2 fëmijë)'))
+                ->andReturn(['id' => 'wa-conf-chd']);
+        });
+
+        $this->assertTrue(app(PokPayments::class)->settle($reservation));
+        $this->assertSame('confirmed', $reservation->fresh()->status);
     }
 
     public function test_full_job_flow_sends_the_payment_link_and_passes_the_number_gate(): void

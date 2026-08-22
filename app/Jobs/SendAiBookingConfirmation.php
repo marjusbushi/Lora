@@ -105,10 +105,16 @@ class SendAiBookingConfirmation implements ShouldQueue
         $total = number_format((float) $reservation->total_amount, 2, '.', '');
         $currency = strtoupper((string) ($reservation->currency ?: \App\Services\PricingCurrency::code()));
 
+        $adults = (int) $reservation->adults;
+        $children = (int) $reservation->children;
+        $persons = $children > 0
+            ? ($adults + $children).' persona ('.$adults.' të rritur + '.$children.' fëmijë)'
+            : $adults.' persona';
+
         return "✅ Pagesa u konfirmua — rezervimi juaj është i sigurt!\n"
             ."Referenca: {$ref}\n"
             .($guest !== '' ? "Mysafiri / Guest: {$guest}\n" : '')
-            ."{$type} · {$in} → {$out} · {$reservation->adults} persona\n"
+            ."{$type} · {$in} → {$out} · {$persons}\n"
             ."Totali i paguar: {$total} {$currency}\n\n"
             ."✅ Payment confirmed — your booking is secured!\n"
             ."Reference: {$ref}\n"

@@ -97,6 +97,7 @@ class AiConversationBooking
         }
 
         $adults = max(1, min(10, (int) ($args['adults'] ?? 0)));
+        $children = max(0, min(10, (int) ($args['children'] ?? 0)));
         $firstName = trim((string) ($args['guest_first_name'] ?? '')) ?: trim((string) $thread->guest_name);
         $lastName = trim((string) ($args['guest_last_name'] ?? ''));
         // Pariteti me rezervimin manual (GuestStoreRequest: last_name required
@@ -110,8 +111,14 @@ class AiConversationBooking
         if (! $type) {
             return ['error' => 'Tipologjia e kërkuar nuk u gjet — ofroji mysafirit vetëm tipologjitë që ktheu kontrolli i disponibilitetit.'];
         }
-        if ($adults > (int) $type->max_occupancy) {
-            return ['error' => "Kjo tipologji lejon maksimumi {$type->max_occupancy} persona — ofroji një tipologji më të madhe."];
+        // Fëmija zë vend si i rrituri (vendim i pronarit; foshnja në krevatin
+        // e prindërve s'numërohet) — kapaciteti dhe kufiri i fëmijëve i
+        // tipologjisë RI-verifikohen këtu, kurrë vetëm nga deklarimi i mjetit.
+        if ($adults + $children > (int) $type->max_occupancy) {
+            return ['error' => "Kjo tipologji nxë maksimumi {$type->max_occupancy} persona gjithsej — ofroji një tipologji më të madhe, ose recepsionin/faqen web për dy dhoma."];
+        }
+        if ($children > (int) $type->max_children) {
+            return ['error' => "Kjo tipologji pranon deri në {$type->max_children} fëmijë — ofroji një tipologji tjetër."];
         }
 
         // IDEMPOTENCË ndër riprovat e job-it (gjetje Codex, PR #504): raundi
@@ -129,6 +136,7 @@ class AiConversationBooking
             $same = $existing->check_in_date?->toDateString() === $checkIn->toDateString()
                 && $existing->check_out_date?->toDateString() === $checkOut->toDateString()
                 && (int) $existing->adults === $adults
+                && (int) $existing->children === $children
                 && (int) $existing->room?->room_type_id === (int) $type->id;
 
             if ($same) {
@@ -165,7 +173,7 @@ class AiConversationBooking
         $creator = User::systemForCurrentTenant();
 
         try {
-            $reservation = DB::transaction(function () use ($thread, $type, $checkIn, $checkOut, $adults, $firstName, $lastName, $creator) {
+            $reservation = DB::transaction(function () use ($thread, $type, $checkIn, $checkOut, $adults, $children, $firstName, $lastName, $creator) {
                 // Dhomat e tipologjisë provohen NJË NGA NJË: bllokohet rreshti,
                 // ri-verifikohet disponibiliteti BRENDA transaksionit — dy
                 // kërkesa konkurrente s'e marrin dot kurrë të njëjtën dhomë
@@ -197,6 +205,7 @@ class AiConversationBooking
                         'direct_discount_pct' => $quote['discount_pct'],
                         'direct_discount_amount' => $quote['discount_amount'],
                         'adults' => $adults,
+                        'children' => $children,
                         'notes' => "Krijuar nga Lora në bisedën WhatsApp (thread #{$thread->id}).",
                         'channel' => 'direct',
                         'created_via' => Reservation::CREATED_VIA_AI,
@@ -260,6 +269,7 @@ class AiConversationBooking
             'status' => 'hold_created',
             'guest_first_name' => (string) $reservation->guest?->first_name,
             'guest_last_name' => (string) $reservation->guest?->last_name,
+            'children' => (int) $reservation->children,
             'room_type' => $typeName,
             'check_in' => $reservation->check_in_date?->toDateString(),
             'check_out' => $reservation->check_out_date?->toDateString(),

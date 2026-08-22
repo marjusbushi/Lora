@@ -285,10 +285,11 @@ PHOTOS : '';
         $bookingFlowBlock = $bookingAvailable ? <<<'BOOKING'
 REZERVIMI NGA BISEDA (vetëm me mjetin create_booking_hold):
 d) Kur mysafiri ZGJEDH njërën nga ofertat e check_availability → mblidh të
-   dhënat e plota: datat, personat, tipologjinë dhe emrin E mbiemrin e
-   mysafirit — pa mbiemër rezervimi s'krijohet dot (njësoj si në recepsion),
-   ndaj pyete nëse të mungon njëri. Pastaj thirr create_booking_hold me të
-   dyja fushat guest_first_name + guest_last_name.
+   dhënat e plota: datat, personat (të rritur DHE fëmijë — foshnja në krevat
+   me prindërit s'numërohet), tipologjinë dhe emrin E mbiemrin e mysafirit —
+   pa mbiemër rezervimi s'krijohet dot (njësoj si në recepsion), ndaj pyete
+   nëse të mungon njëri. Pastaj thirr create_booking_hold me guest_first_name
+   + guest_last_name dhe me children kur ka fëmijë.
 e) Me përgjigjen e mjetit → dërgo NJË mesazh me përmbledhjen (emri i plotë i
    mysafirit, tipologjia, datat, netët, totali me monedhën — shifrat VETËM
    nga mjeti) + linkun e
@@ -327,7 +328,11 @@ proporcionale me mesazhin e mysafirit.
 
 {$photosBlock}{$bookingFlowBlock}RREGULLA TË PATHYESHME:
 1. DISPONIBILITET & ÇMIME: kur mysafiri jep datat e qëndrimit (check-in dhe
-   check-out), thirr mjetin check_availability dhe përgjigju VETËM me numrat
+   check-out), thirr mjetin check_availability me numrin e të rriturve DHE të
+   fëmijëve — kur mysafiri përmend familje a fëmijë, pyete sa fëmijë janë.
+   FOSHNJA që flen në krevat me prindërit NUK zë vend — mos e numëro te
+   fëmijët, vetëm përmende në përgjigje që recepsioni ta dijë. Përgjigju
+   VETËM me numrat
    që kthen mjeti — totalin e qëndrimit dhe çmimin për natë, me monedhën e
    dhënë. KURRË mos llogarit, mos rrumbullakos, mos shto e mos hiq zbritje
    vetë. Shkruaji shifrat SAKTËSISHT siç i kthen mjeti (p.sh. 300 ose 300.5),
@@ -379,7 +384,8 @@ PROMPT;
                     'properties' => [
                         'check_in' => ['type' => 'string', 'description' => 'Data e mbërritjes, YYYY-MM-DD.'],
                         'check_out' => ['type' => 'string', 'description' => 'Data e largimit, YYYY-MM-DD.'],
-                        'adults' => ['type' => 'integer', 'description' => 'Numri i personave (default 2).'],
+                        'adults' => ['type' => 'integer', 'description' => 'Numri i të rriturve (default 2).'],
+                        'children' => ['type' => 'integer', 'description' => 'Numri i fëmijëve që zënë vend (default 0). Foshnja që flen në krevat me prindërit NUK numërohet.'],
                     ],
                     'required' => ['check_in', 'check_out'],
                 ],
@@ -415,7 +421,8 @@ PROMPT;
                     'properties' => [
                         'check_in' => ['type' => 'string', 'description' => 'Data e mbërritjes, YYYY-MM-DD.'],
                         'check_out' => ['type' => 'string', 'description' => 'Data e largimit, YYYY-MM-DD.'],
-                        'adults' => ['type' => 'integer', 'description' => 'Numri i personave.'],
+                        'adults' => ['type' => 'integer', 'description' => 'Numri i të rriturve.'],
+                        'children' => ['type' => 'integer', 'description' => 'Numri i fëmijëve që zënë vend (0 nëse s\'ka; foshnja në krevat me prindërit s\'numërohet).'],
                         'room_type' => ['type' => 'string', 'description' => 'Emri i tipologjisë SAKTËSISHT siç e ktheu check_availability.'],
                         'guest_first_name' => ['type' => 'string', 'description' => 'Emri i mysafirit.'],
                         'guest_last_name' => ['type' => 'string', 'description' => 'Mbiemri i mysafirit.'],
@@ -471,6 +478,7 @@ PROMPT;
                         (string) ($args['check_in'] ?? ''),
                         (string) ($args['check_out'] ?? ''),
                         (int) ($args['adults'] ?? 2),
+                        (int) ($args['children'] ?? 0),
                     );
                     $quotes[] = $quote;
 
