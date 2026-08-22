@@ -7870,6 +7870,7 @@
     "noAvailability": "pa disponueshmëri",
     "aboutStats": "Shifrat",
     "statValue": "Vlera",
-    "statLabel": "Etiketa"
+    "statLabel": "Etiketa",
+    "backToSettings": "Cilësimet"
   }
 }

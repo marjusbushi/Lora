@@ -7870,6 +7870,7 @@
     "noAvailability": "no availability",
     "aboutStats": "The numbers",
     "statValue": "Value",
-    "statLabel": "Label"
+    "statLabel": "Label",
+    "backToSettings": "Settings"
   }
 }
