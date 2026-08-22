@@ -12,20 +12,24 @@ const activeStep = computed(() => props.onboarding.steps.find((step) => step.key
 const activeStepIndex = computed(() => props.onboarding.steps.findIndex((step) => step.key === activeStepKey.value));
 const busyTask = ref(null);
 const openingTask = ref(null);
-const savingField = ref(null);
+const savingStep = ref(false);
 const showSettings = ref(false);
 const showUpload = ref(false);
 const fileInput = ref(null);
 
 const masterForm = useForm({ assigned_to: props.onboarding.assignee?.id || null, due_date: props.onboarding.due_date || '', notes: props.onboarding.notes || '' });
-const notesForm = useForm({ notes: activeStep.value.notes || '' });
 const uploadForm = useForm({ step_key: activeStepKey.value, document: null });
 
 // Detajet e hapit (statusi/përgjegjësi/afati) ruhen VETË sapo ndryshohen — një
 // kontroll = një veprim, pa buton "Ruaj" të dytë që dyfishon atë të shënimeve.
+// Çdo ruajtje dërgon GJITHË gjendjen e hapit, jo vetëm fushën e ndryshuar:
+// updateStep bën read-modify-write mbi JSON-in e hapave dhe një vizitë Inertia
+// e ndërprerë nga pasardhësja mund të humbte fushën e saj (gjetje Codex P2,
+// PR #571) — me payload të plotë, kërkesa e fundit mbart gjithmonë çdo gjë.
 const stepStatus = ref(null);
 const stepAssignee = ref(null);
 const stepDue = ref('');
+const stepNotes = ref('');
 let syncing = false;
 
 function syncStepFields() {
@@ -33,7 +37,7 @@ function syncStepFields() {
     stepStatus.value = activeStep.value.status === 'waiting_client' ? 'waiting_client' : 'in_progress';
     stepAssignee.value = activeStep.value.assigned_to || null;
     stepDue.value = activeStep.value.due_date || '';
-    notesForm.notes = activeStep.value.notes || '';
+    stepNotes.value = activeStep.value.notes || '';
     uploadForm.step_key = activeStepKey.value;
     // Flamuri hiqet pas ciklit që watcher-ët e mëposhtëm të mos e marrin
     // sinkronizimin e ndërrimit të hapit për ndryshim të userit.
@@ -42,17 +46,22 @@ function syncStepFields() {
 syncStepFields();
 watch(activeStepKey, syncStepFields);
 
-function saveStepField(field, value) {
+function saveStep() {
     if (syncing) return;
-    savingField.value = field;
-    router.patch(`/super-admin/onboarding/${props.tenant.id}/steps/${activeStepKey.value}`, { [field]: value }, {
+    savingStep.value = true;
+    router.patch(`/super-admin/onboarding/${props.tenant.id}/steps/${activeStepKey.value}`, {
+        status: stepStatus.value,
+        assigned_to: stepAssignee.value,
+        due_date: stepDue.value || null,
+        notes: stepNotes.value,
+    }, {
         preserveScroll: true,
-        onFinish: () => { savingField.value = null; },
+        onFinish: () => { savingStep.value = false; },
     });
 }
-watch(stepStatus, (value) => saveStepField('status', value));
-watch(stepAssignee, (value) => saveStepField('assigned_to', value));
-watch(stepDue, (value) => saveStepField('due_date', value || null));
+watch(stepStatus, saveStep);
+watch(stepAssignee, saveStep);
+watch(stepDue, saveStep);
 
 const statusLabel = (value) => ({
     not_started: translate('superAdmin.onboarding.statusNotStarted'),
@@ -116,7 +125,6 @@ function openTask(task) {
         .finally(() => { openingTask.value = null; });
 }
 function saveMaster() { masterForm.patch(`/super-admin/onboarding/${props.tenant.id}`, { preserveScroll: true, onSuccess: () => { showSettings.value = false; } }); }
-function saveNotes() { notesForm.patch(`/super-admin/onboarding/${props.tenant.id}/steps/${activeStepKey.value}`, { preserveScroll: true }); }
 function upload() {
     if (!fileInput.value?.files?.[0]) return;
     uploadForm.document = fileInput.value.files[0];
@@ -187,7 +195,7 @@ function activate() { if (window.confirm(translate('superAdmin.onboarding.confir
                             <label class="flex items-center gap-1.5 text-[10.5px] font-semibold text-neutral-500">{{ $t('superAdmin.onboarding.dueDate') }}
                                 <DatePicker v-model="stepDue" class="w-36" />
                             </label>
-                            <LoaderCircle v-if="savingField" class="h-3.5 w-3.5 animate-spin text-emerald-700" />
+                            <LoaderCircle v-if="savingStep" class="h-3.5 w-3.5 animate-spin text-emerald-700" />
                         </div>
                     </div>
 
@@ -223,12 +231,12 @@ function activate() { if (window.confirm(translate('superAdmin.onboarding.confir
                         <p v-else class="py-5 text-center text-[10px] text-neutral-400">{{ $t('superAdmin.onboarding.noStepDocuments') }}</p>
                     </div>
 
-                    <form class="border-t border-neutral-200 p-4 sm:p-5" @submit.prevent="saveNotes">
+                    <form class="border-t border-neutral-200 p-4 sm:p-5" @submit.prevent="saveStep">
                         <div class="flex items-center justify-between">
                             <h3 class="text-[10px] font-bold uppercase tracking-[.08em] text-neutral-400">{{ $t('superAdmin.onboarding.stepNotes') }} · {{ $t('superAdmin.onboarding.loraStaffOnly') }}</h3>
-                            <button class="sa-button sa-button-secondary !min-h-8 !px-2.5" :disabled="notesForm.processing"><Save class="h-3.5 w-3.5" />{{ $t('superAdmin.onboarding.save') }}</button>
+                            <button class="sa-button sa-button-secondary !min-h-8 !px-2.5" :disabled="savingStep"><Save class="h-3.5 w-3.5" />{{ $t('superAdmin.onboarding.save') }}</button>
                         </div>
-                        <textarea v-model="notesForm.notes" class="mt-2.5 w-full rounded-[10px] border-neutral-200 bg-neutral-50/60 text-[11.5px]" rows="2" :placeholder="$t('superAdmin.onboarding.stepNotesPlaceholder')" />
+                        <textarea v-model="stepNotes" class="mt-2.5 w-full rounded-[10px] border-neutral-200 bg-neutral-50/60 text-[11.5px]" rows="2" :placeholder="$t('superAdmin.onboarding.stepNotesPlaceholder')" />
                     </form>
                 </section>
             </div>
