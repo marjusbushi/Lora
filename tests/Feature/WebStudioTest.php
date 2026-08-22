@@ -99,6 +99,27 @@ class WebStudioTest extends TestCase
         $this->assertSame('Sarande - Albania', Setting::get('hotel.hero_eyebrow_sq'));
     }
 
+    public function test_saving_hotel_data_no_longer_touches_contact_fields(): void
+    {
+        // Gjetje Codex PR #564: dy editorë mbi të njëjtët çelësa — një formë
+        // Hoteli e vjetruar mbishkruante në heshtje kontaktin e Web Studio-s.
+        Setting::set('hotel.address', 'Rruga e Plazhit, Sarandë');
+        Setting::set('hotel.phone', '+355 69 111 2222');
+        Setting::set('hotel.whatsapp_number', '+355691112222');
+
+        $this->actingAs($this->admin())->put(route('settings.hotel'), [
+            'name' => 'Villa Mucho',
+            'timezone' => 'Europe/Tirane',
+            'currency' => $this->tenant->currency ?: 'EUR',
+            'check_in_time' => '14:00',
+            'check_out_time' => '11:00',
+        ])->assertRedirect();
+
+        $this->assertSame('Rruga e Plazhit, Sarandë', Setting::get('hotel.address'));
+        $this->assertSame('+355 69 111 2222', Setting::get('hotel.phone'));
+        $this->assertSame('+355691112222', Setting::get('hotel.whatsapp_number'));
+    }
+
     public function test_update_contact_normalizes_whatsapp_and_saves_socials(): void
     {
         $this->actingAs($this->admin())->put(route('web-studio.contact'), [
@@ -114,6 +135,25 @@ class WebStudioTest extends TestCase
         $this->assertSame('+355691112222', Setting::get('hotel.whatsapp_number'));
         $this->assertSame('Rruga e Plazhit, Sarandë', Setting::get('hotel.address'));
         $this->assertSame('https://instagram.com/villa.mucho', Setting::get('hotel.instagram'));
+    }
+
+    public function test_public_url_uses_only_active_non_admin_domains_with_local_scheme(): void
+    {
+        // Codex PR #564/#565: kurrë nga host-i aktual; kurrë domain jo-aktiv;
+        // localhost/*.test marrin http (mjedisi i dokumentuar i dev-it).
+        // Domain-i bazë i testeve mbetet (rrugëzimi /pms/* kërkon host të
+        // regjistruar) — por bëhet jo-aktiv, që filtri ta anashkalojë.
+        $this->tenant->domains()->update(['status' => 'pending_dns', 'is_primary' => false]);
+
+        $this->tenant->domains()->create(['domain' => 'admin.villamucho.test', 'is_primary' => true])
+            ->forceFill(['status' => 'active'])->save();
+        $pending = $this->tenant->domains()->create(['domain' => 'faqja-e-re.com']);
+        $pending->forceFill(['status' => 'pending_dns'])->save();
+        $this->tenant->domains()->create(['domain' => 'villamucho.test'])
+            ->forceFill(['status' => 'active'])->save();
+
+        $this->actingAs($this->admin())->get(route('web-studio.index'))
+            ->assertInertia(fn ($page) => $page->where('publicUrl', 'http://villamucho.test'));
     }
 
     public function test_web_studio_routes_require_admin_role(): void

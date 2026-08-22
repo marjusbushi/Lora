@@ -9,6 +9,7 @@ import {
 } from 'lucide-vue-next';
 
 const props = defineProps({
+    publicUrl: { type: String, default: null },
     home: { type: Object, required: true },
     brand: { type: Object, required: true },
     contact: { type: Object, required: true },
@@ -22,7 +23,10 @@ const page = usePage();
 const { t } = useI18n();
 
 // ── Sajti publik: domain-i dhe linku "Hap faqen" ────────────────────────────
+// I SERVERIT (domain-et e regjistruara të tenant-it — Codex PR #564); heqja e
+// 'admin.' nga host-i mbetet vetëm fallback për mjediset dev pa domain.
 const publicOrigin = computed(() => {
+    if (props.publicUrl) return props.publicUrl;
     const host = window.location.hostname.replace(/^admin\./, '');
     const port = window.location.port ? `:${window.location.port}` : '';
 

@@ -1,6 +1,6 @@
 <script setup>
 import { translate } from '@/i18n';
-import { useForm } from '@inertiajs/vue3';
+import { Link, useForm } from '@inertiajs/vue3';
 import Card from '@/Components/UI/Card.vue';
 import Button from '@/Components/UI/Button.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
@@ -11,10 +11,6 @@ const props = defineProps({ settings: Object, toasts: Object });
 
 const form = useForm({
     name: props.settings.name || '',
-    address: props.settings.address || '',
-    phone: props.settings.phone || '',
-    whatsapp_number: props.settings.whatsapp_number || '',
-    email: props.settings.email || '',
     timezone: props.settings.timezone || 'Europe/Tirane',
     currency: props.settings.currency || 'EUR',
     pricing_currency: props.settings.pricing_currency || props.settings.currency || 'EUR',
@@ -61,16 +57,6 @@ function submit() {
                 <FormGroup :label="$t('admin.generated.k_b921fd1fc57c')" :error="form.errors.name" required>
                     <TextInput v-model="form.name" :placeholder="$t('admin.generated.k_e10513eac211')" :error="form.errors.name" />
                 </FormGroup>
-                <FormGroup :label="$t('admin.generated.k_4a1e97745177')" :error="form.errors.email">
-                    <TextInput type="email" v-model="form.email" :placeholder="$t('admin.generated.k_bdce9dc634aa')" :error="form.errors.email" />
-                </FormGroup>
-                <FormGroup :label="$t('admin.generated.k_e9f7f48f4515')" :error="form.errors.phone">
-                    <TextInput v-model="form.phone" placeholder="+355 4 234 5678" :error="form.errors.phone" />
-                </FormGroup>
-                <FormGroup :label="$t('settingsTabs.hotel.whatsappNumberLabel')" :error="form.errors.whatsapp_number">
-                    <TextInput v-model="form.whatsapp_number" placeholder="+355 69 123 4567" :error="form.errors.whatsapp_number" />
-                    <p class="mt-1 text-tiny text-neutral-400">{{ $t('settingsTabs.hotel.whatsappNumberHint') }}</p>
-                </FormGroup>
                 <FormGroup :label="$t('currencySettings.baseCurrencyLabel')" :error="form.errors.currency" required>
                     <Select v-model="form.currency" :options="currencyOptions" :error="form.errors.currency" :disabled="settings.base_currency_locked" />
                     <p v-if="settings.base_currency_locked" class="mt-1 text-tiny text-neutral-400">{{ $t('currencySettings.baseCurrencyLocked') }}</p>
@@ -81,9 +67,12 @@ function submit() {
                 </FormGroup>
             </div>
 
-            <FormGroup :label="$t('admin.generated.k_90438e4e9c45')" :error="form.errors.address">
-                <TextInput v-model="form.address" :placeholder="$t('admin.generated.k_5ad72e9b0edd')" :error="form.errors.address" />
-            </FormGroup>
+            <!-- Kontakti/rrjetet/web-i menaxhohen VETËM te Web Studio (task #415) —
+                 dy editorë mbi të njëjtët çelësa lejonin mbishkrim të heshtur. -->
+            <p class="rounded-lg bg-neutral-50 px-3 py-2.5 text-sm text-neutral-500">
+                {{ $t('webStudio.hotelTabContactHint') }}
+                <Link href="/pms/web-studio" class="font-semibold text-accent-700 hover:text-accent-800">Web Studio →</Link>
+            </p>
 
             <div class="max-w-sm">
                 <FormGroup :label="$t('admin.generated.k_98e81c9f9021')" :error="form.errors.timezone" required>
