@@ -5406,7 +5406,12 @@
       "tenantColumn": "Hotel",
       "overrideColumn": "Override",
       "effectiveColumn": "Effective",
-      "followDefault": "— follow default —"
+      "followDefault": "— follow default —",
+      "modelChip": "Model",
+      "fallbackChip": "Fallback",
+      "keyChip": "Key",
+      "notConfiguredChip": "Not configured",
+      "routingSave": "Save routing"
     },
     "aiUsage": {
       "pageTitle": "AI Usage — Lora Control Panel",
