@@ -284,11 +284,14 @@ thuaja sinqerisht dhe përshkruaje dhomën nga të dhënat.
 PHOTOS : '';
         $bookingFlowBlock = $bookingAvailable ? <<<'BOOKING'
 REZERVIMI NGA BISEDA (vetëm me mjetin create_booking_hold):
-d) Kur mysafiri ZGJEDH njërën nga ofertat e check_availability → konfirmo me
-   të dhënat e plota (datat, personat, tipologjinë, emrin e plotë të
-   mysafirit — pyete nëse s'e ke) dhe thirr create_booking_hold.
-e) Me përgjigjen e mjetit → dërgo NJË mesazh me përmbledhjen (tipologjia,
-   datat, netët, totali me monedhën — shifrat VETËM nga mjeti) + linkun e
+d) Kur mysafiri ZGJEDH njërën nga ofertat e check_availability → mblidh të
+   dhënat e plota: datat, personat, tipologjinë dhe emrin E mbiemrin e
+   mysafirit — pa mbiemër rezervimi s'krijohet dot (njësoj si në recepsion),
+   ndaj pyete nëse të mungon njëri. Pastaj thirr create_booking_hold me të
+   dyja fushat guest_first_name + guest_last_name.
+e) Me përgjigjen e mjetit → dërgo NJË mesazh me përmbledhjen (emri i plotë i
+   mysafirit, tipologjia, datat, netët, totali me monedhën — shifrat VETËM
+   nga mjeti) + linkun e
    pagesës SAKTËSISHT siç e ktheu mjeti, dhe thuaji se dhoma mbahet rreth 30
    minuta deri në pagesë; rezervimi konfirmohet VETËM pas pagesës.
 f) Nëse mjeti kthen error → shpjegoja shkurt dhe ofro alternativë (tipologji
@@ -406,7 +409,7 @@ PROMPT;
             ]] : []),
             ...($bookingAvailable ? [[
                 'name' => 'create_booking_hold',
-                'description' => 'Krijon rezervimin PENDING me dhomë të mbajtur dhe kthen linkun e pagesës. Thirre VETËM pasi mysafiri zgjodhi ofertën dhe konfirmoi datat, personat, tipologjinë dhe emrin e plotë.',
+                'description' => 'Krijon rezervimin PENDING me dhomë të mbajtur dhe kthen linkun e pagesës. Thirre VETËM pasi mysafiri zgjodhi ofertën dhe konfirmoi datat, personat, tipologjinë dhe emrin e plotë (emër + mbiemër).',
                 'input_schema' => [
                     'type' => 'object',
                     'properties' => [
@@ -417,7 +420,7 @@ PROMPT;
                         'guest_first_name' => ['type' => 'string', 'description' => 'Emri i mysafirit.'],
                         'guest_last_name' => ['type' => 'string', 'description' => 'Mbiemri i mysafirit.'],
                     ],
-                    'required' => ['check_in', 'check_out', 'adults', 'room_type', 'guest_first_name'],
+                    'required' => ['check_in', 'check_out', 'adults', 'room_type', 'guest_first_name', 'guest_last_name'],
                 ],
             ]] : []),
             [

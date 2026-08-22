@@ -96,6 +96,7 @@ class SendAiBookingConfirmation implements ShouldQueue
     private function summary(Reservation $reservation): string
     {
         $ref = strtoupper(substr((string) $reservation->confirmation_token, 0, 8));
+        $guest = trim(($reservation->guest?->first_name ?? '').' '.($reservation->guest?->last_name ?? ''));
         $type = $reservation->room?->roomType?->name ?: 'Dhomë';
         $in = $reservation->check_in_date?->toDateString();
         $out = $reservation->check_out_date?->toDateString();
@@ -104,6 +105,7 @@ class SendAiBookingConfirmation implements ShouldQueue
 
         return "✅ Pagesa u konfirmua — rezervimi juaj është i sigurt!\n"
             ."Referenca: {$ref}\n"
+            .($guest !== '' ? "Mysafiri / Guest: {$guest}\n" : '')
             ."{$type} · {$in} → {$out} · {$reservation->adults} persona\n"
             ."Totali i paguar: {$total} {$currency}\n\n"
             ."✅ Payment confirmed — your booking is secured!\n"
