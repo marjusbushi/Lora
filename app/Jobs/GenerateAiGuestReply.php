@@ -252,7 +252,11 @@ class GenerateAiGuestReply implements ShouldQueue
             ->map(fn (Message $message) => ($message->sender === Message::SENDER_GUEST ? 'MYSAFIRI' : 'HOTELI').': '.$message->body)
             ->implode("\n");
 
-        $today = now()->toDateString();
+        // "Sot" në orën e HOTELIT, jo të serverit (gjetje Codex #579): rreth
+        // mesnatës një hotel në zonë tjetër orare do merrte "sot/nesër" të
+        // gabuara — i njëjti patern si ReservationController::$hotelToday.
+        $tenantTz = app(TenantContext::class)->tenant()?->timezone ?: config('app.timezone');
+        $today = now($tenantTz)->toDateString();
         // Identiteti + karakteri (task #369): të konfigurueshëm per-tenant nga
         // /pms/lora-ai, me defaults të para-shkruara — hoteli i përditëson vetë.
         $assistantName = trim((string) Setting::get('ai_mcp.assistant_name')) ?: self::DEFAULT_ASSISTANT_NAME;
