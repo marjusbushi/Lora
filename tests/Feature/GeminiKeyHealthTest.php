@@ -75,6 +75,14 @@ class GeminiKeyHealthTest extends TestCase
         $this->assertSame('platform-key', app(GeminiClient::class)->key());
     }
 
+    /** Codex #560: edhe MODELI zgjidhet vetëm globalisht — kontrolli global verifikon saktësisht atë që përdoret. */
+    public function test_model_resolution_is_platform_only_and_ignores_tenant_settings(): void
+    {
+        Setting::set('ai.gemini_model', 'tenant-old-model', 'text');
+
+        $this->assertSame('gemini-test-model', app(GeminiClient::class)->model());
+    }
+
     public function test_command_records_platform_health_ok_and_invalid(): void
     {
         $this->fakeGoogleByKey();
