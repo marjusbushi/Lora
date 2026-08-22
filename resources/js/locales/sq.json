@@ -6515,7 +6515,11 @@
     "emptyDescription": "Rezervimet e kontrolluara përputhen mes kanalit dhe PMS-së.",
     "paginationRange": "{from}–{to} nga {total}",
     "previous": "Para",
-    "next": "Pas"
+    "next": "Pas",
+    "extendedOnDesk": "Zgjatur në recepsion",
+    "extendedOnDeskConfirm": "Mysafiri i #{ref} e zgjati/ndryshoi qëndrimin në recepsion? Diferencat e këtij rezervimi mbyllen dhe asgjë nuk i dërgohet kanalit.",
+    "extendedOnDeskFailed": "Mbyllja e diferencës dështoi.",
+    "resolvedExtendedOnDesk": "Zgjatur në recepsion"
   },
   "reservationDrawer": {
     "statusPending": "Në pritje",
