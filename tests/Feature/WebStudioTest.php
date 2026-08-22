@@ -137,6 +137,23 @@ class WebStudioTest extends TestCase
         $this->assertSame('https://instagram.com/villa.mucho', Setting::get('hotel.instagram'));
     }
 
+    public function test_public_url_uses_only_active_non_admin_domains_with_local_scheme(): void
+    {
+        // Codex PR #564/#565: kurrë nga host-i aktual; kurrë domain jo-aktiv;
+        // localhost/*.test marrin http (mjedisi i dokumentuar i dev-it).
+        $this->tenant->domains()->delete(); // hiq domain-in bazë të testeve
+
+        $this->tenant->domains()->create(['domain' => 'admin.villamucho.test', 'is_primary' => true])
+            ->forceFill(['status' => 'active'])->save();
+        $pending = $this->tenant->domains()->create(['domain' => 'faqja-e-re.com']);
+        $pending->forceFill(['status' => 'pending_dns'])->save();
+        $this->tenant->domains()->create(['domain' => 'villamucho.test'])
+            ->forceFill(['status' => 'active'])->save();
+
+        $this->actingAs($this->admin())->get(route('web-studio.index'))
+            ->assertInertia(fn ($page) => $page->where('publicUrl', 'http://villamucho.test'));
+    }
+
     public function test_web_studio_routes_require_admin_role(): void
     {
         $viewer = User::factory()->create(['current_tenant_id' => $this->tenant->id]);

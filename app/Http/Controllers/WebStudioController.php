@@ -29,9 +29,17 @@ class WebStudioController extends Controller
         // Domain-i publik vjen nga DOMAIN-ET E REGJISTRUARA të tenant-it — jo
         // duke i hequr 'admin.' host-it aktual (aliaset mund t'i përkasin një
         // tenant-i tjetër ose të mos ekzistojnë fare — gjetje Codex PR #564).
+        // VETËM ato 'active': një domain në pending_dns/provisioning/failed
+        // s'shërben ende faqe (gjetje Codex PR #565). Pa asnjë aktiv → null
+        // dhe fronti bie te fallback-u i host-it (mjediset dev pa domain).
         $tenant = app(\App\Tenancy\TenantContext::class)->tenant();
-        $domains = $tenant?->domains()->orderByDesc('is_primary')->orderBy('id')->pluck('domain') ?? collect();
+        $domains = $tenant?->domains()->where('status', 'active')
+            ->orderByDesc('is_primary')->orderBy('id')->pluck('domain') ?? collect();
         $publicDomain = $domains->first(fn ($domain) => ! str_starts_with($domain, 'admin.')) ?? $domains->first();
+        // Skema si te dashboardUrl i super-adminit: hostet lokale marrin http.
+        $localDomain = in_array($publicDomain, ['localhost', '127.0.0.1'], true)
+            || str_ends_with((string) $publicDomain, '.test')
+            || str_ends_with((string) $publicDomain, '.localhost');
 
         // Karta e dhomave tregon çmimin që sheh VËRTET vizitori — e njëjta
         // rrugë si Home publike (from_price sipas disponueshmërisë + zbritjes
@@ -61,7 +69,7 @@ class WebStudioController extends Controller
         ];
 
         return Inertia::render('WebStudio/Index', [
-            'publicUrl' => $publicDomain ? 'https://'.$publicDomain : null,
+            'publicUrl' => $publicDomain ? ($localDomain ? 'http://' : 'https://').$publicDomain : null,
             'home' => $home,
             'brand' => ['logo' => $hotel['logo'] ?? null],
             'contact' => $contact,
