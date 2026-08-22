@@ -821,6 +821,7 @@ class SettingsController extends Controller
                 }
             }],
             'max_occupancy' => ['required', 'integer', 'min:1', 'max:20'],
+            'max_children' => ['sometimes', 'integer', 'min:0', 'lte:max_occupancy'],
             'amenities' => ['nullable', 'array'],
             'amenities.*' => ['string', 'max:100'],
             'breakfast_included' => ['boolean'],
@@ -849,6 +850,7 @@ class SettingsController extends Controller
                 }
             }],
             'max_occupancy' => ['required', 'integer', 'min:1', 'max:20'],
+            'max_children' => ['sometimes', 'integer', 'min:0', 'lte:max_occupancy'],
             'amenities' => ['nullable', 'array'],
             'amenities.*' => ['string', 'max:100'],
             'breakfast_included' => ['boolean'],

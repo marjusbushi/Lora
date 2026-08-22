@@ -16,6 +16,7 @@ class RoomType extends TenantModel
         'min_price',
         'max_price',
         'max_occupancy',
+        'max_children',
         'amenities',
         'breakfast_included',
     ];

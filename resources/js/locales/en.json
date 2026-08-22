@@ -3726,6 +3726,10 @@
           "text": "Thank you! We look forward to welcoming you to Villa Mucho."
         }
       }
+    },
+    "roomTypes": {
+      "maxChildren": "Max children",
+      "maxChildrenHint": "How many of the room’s spots can be taken by children (0 up to capacity)."
     }
   },
   "reservationShow": {
