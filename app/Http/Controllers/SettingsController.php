@@ -263,13 +263,6 @@ class SettingsController extends Controller
             'check_in_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
             'check_out_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
             'logo' => ['nullable', 'image', 'mimes:jpeg,png,webp', 'max:3072'],
-            // Hero text shown at the top of the public Home page, editable per language (Albanian + English).
-            'hero_eyebrow_sq' => ['nullable', 'string', 'max:120'],
-            'hero_eyebrow_en' => ['nullable', 'string', 'max:120'],
-            'hero_title_sq' => ['nullable', 'string', 'max:200'],
-            'hero_title_en' => ['nullable', 'string', 'max:200'],
-            'hero_subtitle_sq' => ['nullable', 'string', 'max:400'],
-            'hero_subtitle_en' => ['nullable', 'string', 'max:400'],
         ]);
 
         /** @var Tenant $tenant */
@@ -291,11 +284,11 @@ class SettingsController extends Controller
         }
 
         DB::transaction(function () use ($request, $tenant, $currency, $pricingCurrency) {
+            // Tekstet e hero-s NUK janë më këtu (task #411): jetojnë në Web
+            // Studio. Po të mbeteshin në foreach, çdo ruajtje e këtij tab-i pa
+            // ato fusha do i fshinte (input null → Setting::set null).
             foreach ([
                 'name', 'address', 'phone', 'email', 'timezone', 'check_in_time', 'check_out_time',
-                'hero_eyebrow_sq', 'hero_eyebrow_en',
-                'hero_title_sq', 'hero_title_en',
-                'hero_subtitle_sq', 'hero_subtitle_en',
             ] as $key) {
                 Setting::set("hotel.{$key}", $request->input($key));
             }

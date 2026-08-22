@@ -50,6 +50,7 @@ use App\Http\Controllers\TenantUserInvitationController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebsiteBeachController;
 use App\Http\Controllers\WebsiteController;
+use App\Http\Controllers\WebStudioController;
 use App\Http\Middleware\AuthenticateSignedTenantInvitation;
 use App\Models\Setting;
 use App\Tenancy\TenantContext;
@@ -642,6 +643,13 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/settings/notifications', [SettingsController::class, 'updateNotifications'])->name('settings.notifications');
         Route::post('/settings/website', [SettingsController::class, 'updateWebsite'])->name('settings.website');
         Route::post('/settings/about', [SettingsController::class, 'updateAbout'])->name('settings.about');
+
+        // Web Studio (task #411) — paneli i vetëm i webit publik; Rreth Nesh
+        // ripërdor POST settings.about më sipër.
+        Route::get('/web-studio', [WebStudioController::class, 'index'])->name('web-studio.index');
+        Route::post('/web-studio/home', [WebStudioController::class, 'updateHome'])->name('web-studio.home');
+        Route::post('/web-studio/brand', [WebStudioController::class, 'updateBrand'])->name('web-studio.brand');
+        Route::put('/web-studio/contact', [WebStudioController::class, 'updateContact'])->name('web-studio.contact');
         Route::put('/settings/financial', [SettingsController::class, 'updateFinancial'])->name('settings.financial');
         Route::put('/settings/pos', [SettingsController::class, 'updatePos'])->middleware('module:pos')->name('settings.pos');
         Route::post('/settings/pos/salespeople', [SettingsController::class, 'storePosSalesperson'])->middleware('module:pos')->name('settings.pos.salespeople.store');
