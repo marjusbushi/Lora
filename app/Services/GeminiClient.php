@@ -112,7 +112,7 @@ class GeminiClient implements \App\Contracts\AiChatProvider
      * @param  array<string,callable(array):array>  $executors  tool name → server-side runner
      * @return array{args:array<string,mixed>,toolsUsed:array<int,string>,usage:array{input:int,output:int,thinking:int,provider:string,model:string}}
      */
-    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3): array
+    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3, ?callable $onUsage = null): array
     {
         $functions = collect($tools)->map(fn (array $tool) => [
             'name' => $tool['name'],
@@ -149,6 +149,13 @@ class GeminiClient implements \App\Contracts\AiChatProvider
             $activeModel = $turn['model'];
             foreach ($usage as $k => $v) {
                 $usage[$k] = $v + $turn['usage'][$k];
+            }
+            // Faturimi per-RAUND me modelin që e SHËRBEU (gjetjet Codex #568):
+            // raundi u pagua sapo u përgjigj — edhe nëse biseda dështon më
+            // vonë, dëshmia e tij mbetet; dhe raundi i rezervës çmohet me
+            // çmimin e rezervës, jo të primarit.
+            if ($onUsage !== null) {
+                $onUsage($turn['usage'] + ['provider' => 'gemini', 'model' => $turn['model']]);
             }
 
             // Finalja pranohet VETËM si thirrje e vetme e radhës (ose kur raundi

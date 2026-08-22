@@ -68,13 +68,23 @@ class AiUsageTest extends TestCase
 
     private function fakeGeminiWithUsage(): void
     {
+        // Sink-u per-RAUND (Codex #568): shoferi real e thërret pas çdo raundi
+        // të suksesshëm — mock-u e imiton me një raund të vetëm.
         $this->mock(GeminiClient::class, function ($mock) {
             $mock->shouldReceive('configured')->andReturn(true);
-            $mock->shouldReceive('converse')->andReturn([
-                'args' => ['confident' => true, 'reply' => 'Breakfast is 7-10.', 'kind' => 'informative'],
-                'toolsUsed' => [],
-                'usage' => ['input' => 10_000, 'output' => 500, 'thinking' => 100, 'provider' => 'gemini', 'model' => 'gemini-3.7-flash'],
-            ]);
+            $mock->shouldReceive('converse')->andReturnUsing(function (...$args) {
+                $onUsage = $args[8] ?? null;
+                $usage = ['input' => 10_000, 'output' => 500, 'thinking' => 100, 'provider' => 'gemini', 'model' => 'gemini-3.7-flash'];
+                if (is_callable($onUsage)) {
+                    $onUsage($usage);
+                }
+
+                return [
+                    'args' => ['confident' => true, 'reply' => 'Breakfast is 7-10.', 'kind' => 'informative'],
+                    'toolsUsed' => [],
+                    'usage' => $usage,
+                ];
+            });
         });
     }
 
