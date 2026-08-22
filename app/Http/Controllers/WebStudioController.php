@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\RoomType;
 use App\Models\Setting;
+use App\Services\DirectBookingPricing;
+use App\Services\PublicRoomPricing;
 use App\Support\TenantStorage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,10 +21,18 @@ use Inertia\Response;
  */
 class WebStudioController extends Controller
 {
-    public function index(): Response
+    public function index(PublicRoomPricing $publicPricing, DirectBookingPricing $directPricing): Response
     {
         $hotel = Setting::getGroup('hotel');
         $about = Setting::getGroup('about');
+
+        // Karta e dhomave tregon çmimin që sheh VËRTET vizitori — e njëjta
+        // rrugë si Home publike (from_price sipas disponueshmërisë + zbritjes
+        // direkte), jo base_price i brendshëm (gjetje Codex, PR #562).
+        $roomTypes = RoomType::with(['images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
+            ->orderBy('base_price')
+            ->get(['id', 'name', 'description', 'base_price', 'max_occupancy']);
+        $fromPrices = $publicPricing->fromPrices($roomTypes);
 
         $home = [
             'hero_eyebrow_sq' => $hotel['hero_eyebrow_sq'] ?? null,
@@ -51,17 +61,15 @@ class WebStudioController extends Controller
             'hotelName' => $hotel['name'] ?? '',
             // Karta read-only të dhomave siç dalin në sajt — editimi mbetet te
             // Tipet e dhomave (asnjë dublikim editori).
-            'roomTypes' => RoomType::with(['images' => fn ($q) => $q->orderBy('sort_order')->limit(1)])
-                ->orderBy('base_price')
-                ->get(['id', 'name', 'description', 'base_price', 'max_occupancy'])
-                ->map(fn (RoomType $type) => [
-                    'id' => $type->id,
-                    'name' => $type->name,
-                    'description' => $type->description,
-                    'base_price' => (float) $type->base_price,
-                    'max_occupancy' => $type->max_occupancy,
-                    'image' => $type->images->first()?->path,
-                ]),
+            'roomTypes' => $roomTypes->map(fn (RoomType $type) => [
+                'id' => $type->id,
+                'name' => $type->name,
+                'description' => $type->description,
+                // null = pa disponueshmëri të shitshme → karta s'tregon çmim (si publikja).
+                'from_price' => $directPricing->fromPrice($fromPrices[$type->id] ?? null)['direct'],
+                'max_occupancy' => $type->max_occupancy,
+                'image' => $type->images->first()?->path,
+            ]),
             // Pikat e statusit në rail — çfarë i mungon çdo faqeje.
             'completeness' => [
                 'home' => filled($home['hero_image']) && filled($home['hero_title_sq']),

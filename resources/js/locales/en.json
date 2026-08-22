@@ -7836,6 +7836,11 @@
     "pvRoomsTitle": "Our rooms",
     "pvAboutDefault": "About Us",
     "pvEmptyParagraph": "Your text will appear here as you type.",
-    "pvNoSocial": "Add your socials to show them here."
+    "pvNoSocial": "Add your socials to show them here.",
+    "fromPrice": "from",
+    "noAvailability": "no availability",
+    "aboutStats": "The numbers",
+    "statValue": "Value",
+    "statLabel": "Label"
   }
 }

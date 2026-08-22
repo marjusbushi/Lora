@@ -7836,6 +7836,11 @@
     "pvRoomsTitle": "Dhomat tona",
     "pvAboutDefault": "Rreth Nesh",
     "pvEmptyParagraph": "Teksti do shfaqet këtu sapo ta shkruash.",
-    "pvNoSocial": "Shto rrjetet që të dalin këtu."
+    "pvNoSocial": "Shto rrjetet që të dalin këtu.",
+    "fromPrice": "nga",
+    "noAvailability": "pa disponueshmëri",
+    "aboutStats": "Shifrat",
+    "statValue": "Vlera",
+    "statLabel": "Etiketa"
   }
 }

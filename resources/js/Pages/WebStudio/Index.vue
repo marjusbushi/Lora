@@ -110,6 +110,18 @@ const aboutForm = useForm({
     staff_p2_sq: props.about.staff_p2_sq || '',
     staff_p2_en: props.about.staff_p2_en || '',
     staff_image: null,
+    // Shifrat e faqes About — DUHET të udhëtojnë me formën: endpoint-i i
+    // shkruan të gjithë çelësat e vet dhe një fushë e munguar do i fshinte
+    // vlerat e personalizuara (gjetje Codex P1, PR #562).
+    stat1_value: props.about.stat1_value || '',
+    stat1_label_sq: props.about.stat1_label_sq || '',
+    stat1_label_en: props.about.stat1_label_en || '',
+    stat2_value: props.about.stat2_value || '',
+    stat2_label_sq: props.about.stat2_label_sq || '',
+    stat2_label_en: props.about.stat2_label_en || '',
+    stat3_value: props.about.stat3_value || '',
+    stat3_label_sq: props.about.stat3_label_sq || '',
+    stat3_label_en: props.about.stat3_label_en || '',
 });
 
 const activeSection = ref('home');
@@ -133,18 +145,21 @@ function save() {
 }
 
 // ── Parapamje imazhesh: file i sapo-zgjedhur > i ruajturi > fallback ────────
+// Çelësi i parapamjes mban EDHE seksionin ('home.hero_image', 'about.hero_image')
+// — dy forma me të njëjtin emër fushe s'e mbishkruajnë njëra-tjetrën
+// (gjetje Codex P2, PR #562).
 const previews = ref({});
 
-function pickImage(form, field, event) {
+function pickImage(form, field, event, previewKey) {
     const file = event.target.files?.[0];
     if (!file) return;
     form[field] = file;
-    if (previews.value[field]) URL.revokeObjectURL(previews.value[field]);
-    previews.value[field] = URL.createObjectURL(file);
+    if (previews.value[previewKey]) URL.revokeObjectURL(previews.value[previewKey]);
+    previews.value[previewKey] = URL.createObjectURL(file);
 }
 
-function imageUrl(field, storedPath) {
-    if (previews.value[field]) return previews.value[field];
+function imageUrl(previewKey, storedPath) {
+    if (previews.value[previewKey]) return previews.value[previewKey];
 
     return storedPath ? `/storage/${storedPath}` : null;
 }
@@ -165,8 +180,8 @@ function heroPreviewText(field) {
     return homeForm[`hero_${field}_${lc}`] || homeForm[`hero_${field}_sq`] || HERO_DEFAULTS[field][lc] || HERO_DEFAULTS[field].sq;
 }
 
-const heroImageUrl = computed(() => imageUrl('hero_image', props.home.hero_image));
-const logoUrl = computed(() => imageUrl('logo', props.brand.logo));
+const heroImageUrl = computed(() => imageUrl('home.hero_image', props.home.hero_image));
+const logoUrl = computed(() => imageUrl('brand.logo', props.brand.logo));
 const priceSymbol = computed(() => page.props.settings?.pricing_currency_symbol || '€');
 
 const sections = computed(() => [
@@ -292,7 +307,7 @@ const lf = (base) => `${base}_${editLang.value}`;
                                         <div>
                                             <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-semibold text-neutral-700 hover:border-accent-500 hover:text-accent-700">
                                                 {{ $t('webStudio.changePhoto') }}
-                                                <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="pickImage(homeForm, 'hero_image', $event)">
+                                                <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="pickImage(homeForm, 'hero_image', $event, 'home.hero_image')">
                                             </label>
                                             <p class="mt-2 text-xs text-neutral-400">{{ $t('webStudio.heroPhotoHint') }}</p>
                                             <p v-if="homeForm.errors.hero_image" class="mt-1 text-xs font-semibold text-red-600">{{ homeForm.errors.hero_image }}</p>
@@ -339,7 +354,7 @@ const lf = (base) => `${base}_${editLang.value}`;
                                         </div>
                                         <div class="flex items-center justify-between gap-2 px-3 py-2.5">
                                             <b class="min-w-0 flex-1 truncate text-sm font-semibold text-neutral-900">{{ type.name }}</b>
-                                            <span class="shrink-0 rounded-md bg-accent-50 px-2 py-0.5 text-xs font-bold text-accent-800">{{ priceSymbol }}{{ type.base_price }}</span>
+                                            <span v-if="type.from_price !== null" class="shrink-0 rounded-md bg-accent-50 px-2 py-0.5 text-xs font-bold text-accent-800">{{ $t('webStudio.fromPrice') }} {{ priceSymbol }}{{ type.from_price }}</span><span v-else class="shrink-0 text-tiny text-neutral-400">{{ $t('webStudio.noAvailability') }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -360,7 +375,7 @@ const lf = (base) => `${base}_${editLang.value}`;
                                         </label>
                                         <label class="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-600 hover:border-accent-500 hover:text-accent-700">
                                             {{ $t('webStudio.changePhoto') }}
-                                            <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="pickImage(aboutForm, 'hero_image', $event)">
+                                            <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="pickImage(aboutForm, 'hero_image', $event, 'about.hero_image')">
                                         </label>
                                         <span v-if="aboutForm.hero_image || about.hero_image" class="ml-2 align-middle text-tiny text-emerald-600"><Check class="inline h-3.5 w-3.5" /> {{ $t('webStudio.photoSet') }}</span>
                                     </div>
@@ -382,7 +397,7 @@ const lf = (base) => `${base}_${editLang.value}`;
                                             </label>
                                             <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-600 hover:border-accent-500 hover:text-accent-700">
                                                 {{ $t('webStudio.changePhoto') }}
-                                                <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="pickImage(aboutForm, 'story_image', $event)">
+                                                <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="pickImage(aboutForm, 'story_image', $event, 'about.story_image')">
                                             </label>
                                             <span v-if="aboutForm.story_image || about.story_image" class="ml-2 align-middle text-tiny text-emerald-600"><Check class="inline h-3.5 w-3.5" /> {{ $t('webStudio.photoSet') }}</span>
                                         </div>
@@ -405,10 +420,27 @@ const lf = (base) => `${base}_${editLang.value}`;
                                             </label>
                                             <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-600 hover:border-accent-500 hover:text-accent-700">
                                                 {{ $t('webStudio.changePhoto') }}
-                                                <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="pickImage(aboutForm, 'staff_image', $event)">
+                                                <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="pickImage(aboutForm, 'staff_image', $event, 'about.staff_image')">
                                             </label>
                                             <span v-if="aboutForm.staff_image || about.staff_image" class="ml-2 align-middle text-tiny text-emerald-600"><Check class="inline h-3.5 w-3.5" /> {{ $t('webStudio.photoSet') }}</span>
                                         </div>
+                                    </div>
+
+                                    <div class="border-t border-neutral-100 pt-4">
+                                        <p class="mb-2 text-tiny font-bold uppercase tracking-wide text-neutral-400">4 · {{ $t('webStudio.aboutStats') }}</p>
+                                        <div class="grid gap-3 sm:grid-cols-3">
+                                            <div v-for="n in 3" :key="n" class="rounded-xl border border-neutral-200 p-3">
+                                                <label class="block">
+                                                    <span class="text-xs font-bold text-neutral-500">{{ $t('webStudio.statValue') }}</span>
+                                                    <input v-model="aboutForm[`stat${n}_value`]" type="text" maxlength="30" placeholder="15+" class="mt-1 w-full rounded-lg border-neutral-300 text-sm focus:border-accent-500 focus:ring-accent-500">
+                                                </label>
+                                                <label class="mt-2 block">
+                                                    <span class="text-xs font-bold text-neutral-500">{{ $t('webStudio.statLabel') }}</span>
+                                                    <input v-model="aboutForm[lf(`stat${n}_label`)]" type="text" maxlength="200" class="mt-1 w-full rounded-lg border-neutral-300 text-sm focus:border-accent-500 focus:ring-accent-500">
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <p class="mt-2 text-xs text-neutral-400">{{ $t('webStudio.emptyMeansDefault') }}</p>
                                     </div>
                                 </div>
                             </section>
@@ -464,7 +496,7 @@ const lf = (base) => `${base}_${editLang.value}`;
                                     <div>
                                         <label class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-semibold text-neutral-700 hover:border-accent-500 hover:text-accent-700">
                                             {{ $t('webStudio.changeLogo') }}
-                                            <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="pickImage(brandForm, 'logo', $event)">
+                                            <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="pickImage(brandForm, 'logo', $event, 'brand.logo')">
                                         </label>
                                         <p class="mt-2 text-xs text-neutral-400">{{ $t('webStudio.logoHint') }}</p>
                                         <p v-if="brandForm.errors.logo" class="mt-1 text-xs font-semibold text-red-600">{{ brandForm.errors.logo }}</p>
@@ -521,7 +553,7 @@ const lf = (base) => `${base}_${editLang.value}`;
                                         </div>
                                         <div class="flex items-center justify-between px-2.5 py-1.5">
                                             <span class="truncate text-[11px] font-semibold text-[#1d3229]">{{ type.name }}</span>
-                                            <span class="text-[10px] font-bold text-[#1d3229]">{{ priceSymbol }}{{ type.base_price }}</span>
+                                            <span v-if="type.from_price !== null" class="text-[10px] font-bold text-[#1d3229]">{{ priceSymbol }}{{ type.from_price }}</span>
                                         </div>
                                     </div>
                                 </div>
