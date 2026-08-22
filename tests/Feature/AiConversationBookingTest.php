@@ -260,6 +260,7 @@ class AiConversationBookingTest extends TestCase
             $mock->shouldReceive('send')->once()
                 ->withArgs(fn ($tenantId, $jid, $text) => $jid === '355691234567@s.whatsapp.net'
                     && str_contains($text, 'Pagesa u konfirmua')
+                    && str_contains($text, 'Andi Hoxha')
                     && str_contains($text, 'Payment confirmed'))
                 ->andReturn(['id' => 'wa-conf-1']);
         });
@@ -321,6 +322,134 @@ class AiConversationBookingTest extends TestCase
         $this->assertSame($existing->id, $reservation->guest_id);
         $this->assertSame('Origjinal', $existing->fresh()->first_name);
         $this->assertSame('Emri', $existing->fresh()->last_name);
+    }
+
+    /** Task #422: pa mbiemër s'krijohet rezervim — pariteti me rezervimin manual (vendim i Marjusit). */
+    public function test_hold_refuses_without_the_guest_surname(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+
+        $result = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['guest_last_name' => '']));
+
+        $this->assertStringContainsString('mbiemrin', $result['error'] ?? '');
+
+        // Pa asnjë SHKRONJË (vetëm shenja) refuzohet njësoj — ContainsLetters(1).
+        $dashes = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['guest_last_name' => '--']));
+        $this->assertStringContainsString('mbiemrin', $dashes['error'] ?? '');
+
+        $this->assertSame(0, Reservation::query()->count());
+        $this->assertSame(0, Guest::query()->count());
+    }
+
+    /** Codex #584 P2: mbiemri një-shkronjësh ("O", "李") është i vlefshëm — si te rezervimi manual. */
+    public function test_one_letter_surname_is_accepted(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+
+        $hold = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['guest_last_name' => 'O']));
+
+        $this->assertSame('hold_created', $hold['status'] ?? null, json_encode($hold));
+        $this->assertSame('O', Guest::query()->sole()->last_name);
+    }
+
+    /** Codex #584 P2: mbajtja e ripërdorur kthen emrin e RUAJTUR — jo atë të argumenteve të reja. */
+    public function test_reused_hold_payload_carries_the_persisted_guest_name(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+
+        $first = app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+        $this->assertSame('hold_created', $first['status'] ?? null);
+
+        // Të njëjtat data/tipologji/persona, por "emër i korrigjuar" — mbajtja
+        // ripërdoret dhe payload-i flet për mysafirin e ruajtur, që përmbledhja
+        // e modelit dhe konfirmimi pas pagesës të mos ndahen kurrë.
+        $second = app(AiConversationBooking::class)->hold(
+            $thread->fresh(),
+            $this->holdArgs(['guest_first_name' => 'Beni', 'guest_last_name' => 'Kola'])
+        );
+
+        $this->assertSame('hold_created', $second['status'] ?? null, json_encode($second));
+        $this->assertSame('Andi', $second['guest_first_name']);
+        $this->assertSame('Hoxha', $second['guest_last_name']);
+        $this->assertSame(1, Reservation::query()->count());
+    }
+
+    /** Task #422: emri i plotë ruhet te mysafiri i ri dhe kthehet në payload për përmbledhjen e modelit. */
+    public function test_full_guest_name_is_stored_and_returned_in_the_payload(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+
+        $hold = app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+
+        $this->assertSame('hold_created', $hold['status'] ?? null, json_encode($hold));
+        $this->assertSame('Andi', $hold['guest_first_name']);
+        $this->assertSame('Hoxha', $hold['guest_last_name']);
+        $guest = Guest::query()->sole();
+        $this->assertSame('Andi', $guest->first_name);
+        $this->assertSame('Hoxha', $guest->last_name);
+    }
+
+    /** Task #422: mysafirit ekzistues me mbiemër BOSH i plotësohet mbiemri — por vetëm kur emri përputhet. */
+    public function test_matched_guest_with_blank_surname_gets_it_filled_when_the_first_name_matches(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $existing = Guest::create(['first_name' => 'Andi', 'last_name' => '', 'phone' => '+355 69 123 4567']);
+        $thread = $this->whatsappThread();
+
+        app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+
+        $reservation = Reservation::query()->sole();
+        $this->assertSame($existing->id, $reservation->guest_id);
+        $this->assertSame('Andi', $existing->fresh()->first_name);
+        $this->assertSame('Hoxha', $existing->fresh()->last_name);
+    }
+
+    /** Task #422: prompt-i i rezervimit kërkon emrin E mbiemrin para se të thirret mjeti. */
+    public function test_booking_prompt_requires_the_full_guest_name(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        Setting::set('ai_mcp.whatsapp_auto_reply_enabled', true, 'boolean');
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+        $message = $thread->messages()->create([
+            'sender' => Message::SENDER_GUEST,
+            'body' => 'Dua të rezervoj një dhomë.',
+            'sent_at' => now(),
+        ]);
+
+        $seenSystem = null;
+        $this->mock(GeminiClient::class, function ($mock) use (&$seenSystem) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system) use (&$seenSystem) {
+                $seenSystem = $system;
+
+                return ['args' => ['confident' => false, 'reply' => 'Për cilat data?', 'kind' => 'clarifying'], 'toolsUsed' => []];
+            });
+        });
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('typing')->andReturn([]);
+            $mock->shouldReceive('send')->andReturn(['id' => 'wa-prompt-1']);
+        });
+
+        app()->call([new GenerateAiGuestReply($thread->id, $message->id), 'handle']);
+
+        $this->assertStringContainsString('emrin E mbiemrin', $seenSystem);
+        $this->assertStringContainsString('guest_last_name', $seenSystem);
     }
 
     public function test_full_job_flow_sends_the_payment_link_and_passes_the_number_gate(): void
@@ -405,7 +534,7 @@ class AiConversationBookingTest extends TestCase
                 $hold = $executors['create_booking_hold']([
                     'check_in' => now()->addDays(7)->toDateString(),
                     'check_out' => now()->addDays(9)->toDateString(),
-                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi',
+                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi', 'guest_last_name' => 'Hoxha',
                 ]);
                 if (isset($hold['error'])) {
                     throw new \RuntimeException('hold error: '.$hold['error']);
@@ -444,7 +573,7 @@ class AiConversationBookingTest extends TestCase
                 $hold = $executors['create_booking_hold']([
                     'check_in' => now()->addDays(7)->toDateString(),
                     'check_out' => now()->addDays(9)->toDateString(),
-                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi',
+                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi', 'guest_last_name' => 'Hoxha',
                 ]);
 
                 // Link i falsifikuar PA ASNJË shifër — portës së numrave i
@@ -567,7 +696,7 @@ class AiConversationBookingTest extends TestCase
                 $hold = $executors['create_booking_hold']([
                     'check_in' => now()->addDays(7)->toDateString(),
                     'check_out' => now()->addDays(9)->toDateString(),
-                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi',
+                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi', 'guest_last_name' => 'Hoxha',
                 ]);
 
                 // Link LAKURIQ pa https:// — WhatsApp e bën klikueshëm njësoj
@@ -652,7 +781,7 @@ class AiConversationBookingTest extends TestCase
                 $hold = $executors['create_booking_hold']([
                     'check_in' => now()->addDays(7)->toDateString(),
                     'check_out' => now()->addDays(9)->toDateString(),
-                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi',
+                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi', 'guest_last_name' => 'Hoxha',
                 ]);
 
                 // I njëjti sulm si testi i Gemini-t: link lakuriq i huaj në
@@ -758,7 +887,7 @@ class AiConversationBookingTest extends TestCase
         $tools = [
             [
                 'name' => 'create_booking_hold',
-                'description' => 'Krijon rezervimin PENDING me dhomë të mbajtur dhe kthen linkun e pagesës. Thirre VETËM pasi mysafiri zgjodhi ofertën dhe konfirmoi datat, personat, tipologjinë dhe emrin e plotë.',
+                'description' => 'Krijon rezervimin PENDING me dhomë të mbajtur dhe kthen linkun e pagesës. Thirre VETËM pasi mysafiri zgjodhi ofertën dhe konfirmoi datat, personat, tipologjinë dhe emrin e plotë (emër + mbiemër).',
                 'input_schema' => [
                     'type' => 'object',
                     'properties' => [
@@ -766,7 +895,7 @@ class AiConversationBookingTest extends TestCase
                         'adults' => ['type' => 'integer'], 'room_type' => ['type' => 'string'],
                         'guest_first_name' => ['type' => 'string'], 'guest_last_name' => ['type' => 'string'],
                     ],
-                    'required' => ['check_in', 'check_out', 'adults', 'room_type', 'guest_first_name'],
+                    'required' => ['check_in', 'check_out', 'adults', 'room_type', 'guest_first_name', 'guest_last_name'],
                 ],
             ],
             [
