@@ -170,16 +170,19 @@ class ChannexClient
 
     /**
      * Create a room type. $occupancy = max guests (mapped to occ_adults +
-     * default_occupancy). Returns the Channex room_type id, or null on failure.
+     * default_occupancy); $maxChildren = occ_children (maksimumi PER kategori,
+     * jo shtesë mbi kapacitetin — totali mbetet default_occupancy dhe rate
+     * plan-et tona per_room mbajnë një opsion të vetëm occupancy).
+     * Returns the Channex room_type id, or null on failure.
      */
-    public function createRoomType(string $title, int $countOfRooms, int $occupancy, ?string $propertyId = null): ?string
+    public function createRoomType(string $title, int $countOfRooms, int $occupancy, int $maxChildren = 0, ?string $propertyId = null): ?string
     {
         $payload = ['room_type' => [
             'property_id' => $propertyId ?: $this->propertyId,
             'title' => $title,
             'count_of_rooms' => $countOfRooms,
             'occ_adults' => $occupancy,
-            'occ_children' => 0,
+            'occ_children' => max(0, $maxChildren),
             'occ_infants' => 0,
             'default_occupancy' => $occupancy,
         ]];
