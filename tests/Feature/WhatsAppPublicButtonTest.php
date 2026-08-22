@@ -17,14 +17,13 @@ class WhatsAppPublicButtonTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function hotelPayload(array $override = []): array
+    // Numri WhatsApp u zhvendos te Web Studio → Kontakt (task #415):
+    // updateHotel s'i pranon më fushat e kontaktit.
+    private function contactPayload(array $override = []): array
     {
         return array_merge([
-            'name' => 'Villa Mucho',
-            'timezone' => 'Europe/Tirane',
-            'currency' => 'EUR',
-            'check_in_time' => '14:00',
-            'check_out_time' => '11:00',
+            'address' => null, 'phone' => null, 'email' => null,
+            'instagram' => null, 'facebook' => null, 'maps_url' => null,
         ], $override);
     }
 
@@ -34,7 +33,7 @@ class WhatsAppPublicButtonTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
-        $this->actingAs($admin)->put(route('settings.hotel'), $this->hotelPayload([
+        $this->actingAs($admin)->put(route('web-studio.contact'), $this->contactPayload([
             'whatsapp_number' => '+355 69 123 4567',
         ]))->assertRedirect()->assertSessionHasNoErrors();
 
@@ -42,7 +41,7 @@ class WhatsAppPublicButtonTest extends TestCase
 
         // Pastrimi: bosh = butoni fiket në web (Setting e ruan null-in si '' —
         // front-i e trajton '' si të pavendosur, njësoj si telefonin).
-        $this->actingAs($admin)->put(route('settings.hotel'), $this->hotelPayload([
+        $this->actingAs($admin)->put(route('web-studio.contact'), $this->contactPayload([
             'whatsapp_number' => null,
         ]))->assertRedirect()->assertSessionHasNoErrors();
 
@@ -57,7 +56,7 @@ class WhatsAppPublicButtonTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
-        $this->actingAs($admin)->put(route('settings.hotel'), $this->hotelPayload([
+        $this->actingAs($admin)->put(route('web-studio.contact'), $this->contactPayload([
             'whatsapp_number' => '+355 69 123 4567',
         ]))->assertRedirect();
 
@@ -74,7 +73,7 @@ class WhatsAppPublicButtonTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
-        $this->actingAs($admin)->put(route('settings.hotel'), $this->hotelPayload([
+        $this->actingAs($admin)->put(route('web-studio.contact'), $this->contactPayload([
             'whatsapp_number' => '00355 69 203 0020',
         ]))->assertRedirect()->assertSessionHasNoErrors();
 
@@ -87,7 +86,7 @@ class WhatsAppPublicButtonTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
-        $this->actingAs($admin)->put(route('settings.hotel'), $this->hotelPayload([
+        $this->actingAs($admin)->put(route('web-studio.contact'), $this->contactPayload([
             'whatsapp_number' => 'jo numer <script>',
         ]))->assertSessionHasErrors('whatsapp_number');
     }
