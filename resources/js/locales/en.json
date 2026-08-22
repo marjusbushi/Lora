@@ -4920,7 +4920,10 @@
       "deadlinePassed": "The deadline has passed",
       "indexListSubtitle": "The progress and ownership of each onboarding.",
       "searchHotel": "Search hotel...",
-      "progress": "Progress"
+      "progress": "Progress",
+      "openHotelPanel": "Open panel",
+      "activationHint": "Unlocks once every step is closed",
+      "stepDocuments": "Step documents"
     },
     "currencies": {
       "pageTitle": "Currencies — Lora Control Panel",
