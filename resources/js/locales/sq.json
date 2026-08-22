@@ -215,7 +215,9 @@
       "noneSelected": "Zgjidh të paktën një dhomë për të vazhduar.",
       "capacity": "Dhomat e zgjedhura nxënë deri në {cap} persona — për {guests} mysafirë shto një dhomë tjetër.",
       "adultsPerRoom": "Duhet të paktën një i rritur për çdo dhomë — ke zgjedhur {rooms} dhoma.",
-      "perRoom": "për dhomë"
+      "perRoom": "për dhomë",
+      "childrenCap": "Dhomat e zgjedhura pranojnë deri në {cap} fëmijë — shto një dhomë ose zgjidh një tipologji tjetër.",
+      "infantsNote": "Foshnjat që flenë me prindërit nuk zënë vend — mos i numëroni te fëmijët."
     }
   },
   "contact": {
