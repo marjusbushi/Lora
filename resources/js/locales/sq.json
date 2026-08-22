@@ -4941,7 +4941,10 @@
       "deadlinePassed": "Afati ka kaluar",
       "indexListSubtitle": "Progresi dhe pronësia e çdo onboarding-u.",
       "searchHotel": "Kërko hotel...",
-      "progress": "Progresi"
+      "progress": "Progresi",
+      "openHotelPanel": "Hap panelin",
+      "activationHint": "Aktivizohet kur çdo hap të jetë mbyllur",
+      "stepDocuments": "Dokumentet e hapit"
     },
     "currencies": {
       "pageTitle": "Monedhat — Lora Control Panel",
