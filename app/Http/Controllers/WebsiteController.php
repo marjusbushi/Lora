@@ -262,8 +262,14 @@ class WebsiteController extends Controller
         }
         // Fëmijët zënë vend si të rriturit (vendim i pronarit; foshnjat në
         // krevatin e prindërve s'numërohen fare) — por çdo tipologji ka edhe
-        // kufirin e VET të fëmijëve (max_children), i cili imponohet këtu.
-        $childrenCap = $selections->sum(fn ($s) => $s['quantity'] * (int) $types[$s['room_type_id']]->max_children);
+        // kufirin e VET të fëmijëve (max_children). Fizibiliteti per DHOMË:
+        // një vend i mbahet të rriturit të detyruar (rregulli 1-adult/dhomë),
+        // ndaj kufiri real = min(max_children, max_occupancy - 1) — shuma e
+        // thjeshtë e max_children do maskonte dhomën që s'i pranon (Codex P1).
+        $childrenCap = $selections->sum(fn ($s) => $s['quantity'] * min(
+            (int) $types[$s['room_type_id']]->max_children,
+            max(0, (int) $types[$s['room_type_id']]->max_occupancy - 1),
+        ));
         if ((int) $request->children > $childrenCap) {
             throw ValidationException::withMessages([
                 'selections' => "Dhomat e zgjedhura pranojnë deri në {$childrenCap} fëmijë — shto një dhomë ose zgjidh një tipologji tjetër.",
@@ -347,7 +353,10 @@ class WebsiteController extends Controller
 
                 $groupId = $assigned->count() > 1 ? (string) \Illuminate\Support\Str::uuid() : null;
                 $occupancy = $this->distributeGuests(
-                    $assigned->map(fn ($room) => (int) $types[$room->room_type_id]->max_occupancy),
+                    $assigned->map(fn ($room) => [
+                        'cap' => (int) $types[$room->room_type_id]->max_occupancy,
+                        'childcap' => (int) $types[$room->room_type_id]->max_children,
+                    ]),
                     (int) $request->adults,
                     (int) $request->children
                 );
@@ -433,12 +442,15 @@ class WebsiteController extends Controller
      * upstream: adults >= rooms), then round-robin the rest without exceeding any room's
      * max occupancy (validated upstream: total guests <= total capacity).
      *
-     * @param  \Illuminate\Support\Collection<int,int>  $capacities
+     * @param  \Illuminate\Support\Collection<int,array{cap:int,childcap:int}>  $rooms
      * @return array<int, array{adults:int, children:int}>
      */
-    private function distributeGuests($capacities, int $adults, int $children): array
+    private function distributeGuests($rooms, int $adults, int $children): array
     {
-        $rooms = $capacities->map(fn ($cap) => ['cap' => (int) $cap, 'adults' => 0, 'children' => 0])->values()->all();
+        $rooms = $rooms->map(fn ($room) => [
+            'cap' => (int) $room['cap'], 'childcap' => (int) $room['childcap'],
+            'adults' => 0, 'children' => 0,
+        ])->values()->all();
         $count = count($rooms);
 
         for ($i = 0; $i < $count && $adults > 0; $i++) {
@@ -446,12 +458,18 @@ class WebsiteController extends Controller
             $adults--;
         }
 
-        foreach (['adults' => $adults, 'children' => $children] as $key => $remaining) {
+        // Fëmijët PARA të rriturve të mbetur (burimi i kufizuar zë vendet e
+        // veta të lejuara i pari), dhe VETËM në dhoma brenda childcap-it të
+        // tyre — shpërndarja s'e fut dot kurrë fëmijën në dhomë që s'i pranon
+        // (Codex P1, PR #595). Fizibiliteti u verifikua te submitBooking.
+        foreach (['children' => $children, 'adults' => $adults] as $key => $remaining) {
             $i = 0;
             $guard = 0;
-            while ($remaining > 0 && $guard < 500) {
+            while ($remaining > 0 && $guard < 2000) {
                 $slot = $i % $count;
-                if ($rooms[$slot]['adults'] + $rooms[$slot]['children'] < $rooms[$slot]['cap']) {
+                $fits = $rooms[$slot]['adults'] + $rooms[$slot]['children'] < $rooms[$slot]['cap']
+                    && ($key !== 'children' || $rooms[$slot]['children'] < $rooms[$slot]['childcap']);
+                if ($fits) {
                     $rooms[$slot][$key]++;
                     $remaining--;
                 }

@@ -80,8 +80,12 @@ const cartLines = computed(() => availableTypes.value
     .filter((line) => line.qty > 0));
 const cartRooms = computed(() => cartLines.value.reduce((sum, line) => sum + line.qty, 0));
 const cartCapacity = computed(() => cartLines.value.reduce((sum, line) => sum + line.qty * (line.max_occupancy || 0), 0));
-// Payload i vjetër pa max_children (cache) bie te kapaciteti — serveri imponon gjithsesi.
-const cartChildrenCap = computed(() => cartLines.value.reduce((sum, line) => sum + line.qty * Number(line.max_children ?? line.max_occupancy ?? 0), 0));
+// Pasqyra e saktë e serverit: kufiri real per dhomë = min(max_children, kapaciteti - 1)
+// (vendi i të rriturit të detyruar). Payload i vjetër pa max_children bie te kapaciteti.
+const cartChildrenCap = computed(() => cartLines.value.reduce((sum, line) => {
+    const cap = Number(line.max_occupancy || 0);
+    return sum + line.qty * Math.min(Number(line.max_children ?? cap), Math.max(cap - 1, 0));
+}, 0));
 // E vërteta del te karroca ATY PËR ATY, jo në hapin e fundit (raporti i pronarit:
 // 2 rritur + 10 fëmijë dukeshin sikur hynin në një dhomë treshe deri në submit).
 const liveCartWarning = computed(() => {

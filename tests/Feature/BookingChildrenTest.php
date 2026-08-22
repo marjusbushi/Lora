@@ -70,6 +70,30 @@ class BookingChildrenTest extends TestCase
         $this->assertSame(0, Reservation::count());
     }
 
+    /** Codex #595 P1: me tipologji të përziera, fëmija s'futet KURRË në dhomën që s'i pranon. */
+    public function test_mixed_typologies_never_place_a_child_in_a_zero_child_room(): void
+    {
+        $noKids = RoomType::create(['name' => 'Romantike', 'base_price' => 120, 'max_occupancy' => 2, 'max_children' => 0, 'amenities' => []]);
+        Room::create(['room_type_id' => $noKids->id, 'room_number' => '201', 'floor' => 2, 'status' => 'available']);
+        $family = RoomType::create(['name' => 'Familjare', 'base_price' => 100, 'max_occupancy' => 3, 'max_children' => 2, 'amenities' => []]);
+        Room::create(['room_type_id' => $family->id, 'room_number' => '202', 'floor' => 2, 'status' => 'available']);
+
+        $this->post(route('website.book.submit'), [
+            'selections' => [
+                ['room_type_id' => $noKids->id, 'quantity' => 1],
+                ['room_type_id' => $family->id, 'quantity' => 1],
+            ],
+            'check_in' => today()->addDays(3)->toDateString(),
+            'check_out' => today()->addDays(5)->toDateString(),
+            'first_name' => 'Ana', 'last_name' => 'B', 'email' => 'a@b.local', 'phone' => '+355 69 000',
+            'adults' => 2, 'children' => 2, 'website' => '',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $byRoomType = Reservation::query()->with('room')->get()->keyBy(fn ($r) => $r->room->room_type_id);
+        $this->assertSame(0, (int) $byRoomType[$noKids->id]->children);
+        $this->assertSame(2, (int) $byRoomType[$family->id]->children);
+    }
+
     /** Task #428: karroca ka nevojë për max_children — payload-i i disponibilitetit e mbart. */
     public function test_availability_payload_carries_max_children(): void
     {
