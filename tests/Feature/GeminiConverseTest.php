@@ -333,6 +333,54 @@ class GeminiConverseTest extends TestCase
         app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: përshëndetje', self::TOOLS, [], 'guest_reply');
     }
 
+    /** Codex #550 P2: kur primari e hëngri buxhetin e bisedës, rezerva KAPËRCEHET — s'i shtohet mysafirit pritje mbi afat. */
+    public function test_fallback_is_skipped_when_the_conversation_deadline_is_spent(): void
+    {
+        config()->set('services.gemini.fallback_model', 'gemini-test-lite');
+
+        Http::fake(function () {
+            sleep(2); // primari "përtypet" — ha thuajse gjithë buxhetin 4s të bisedës
+
+            return Http::response('overloaded', 503);
+        });
+
+        try {
+            app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: përshëndetje', self::TOOLS, [], 'guest_reply', timeoutSeconds: 4);
+            $this->fail('Duhej të hidhte 503-shin origjinal.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('gabim (503)', $e->getMessage());
+        }
+
+        // Vetëm NJË kërkesë — rezerva s'u provua se afati i mbetur ishte nën 3s.
+        $this->assertCount(1, Http::recorded());
+    }
+
+    /** Task #408 (dera e përbashkët): tokenat e të gjitha raundeve mblidhen — i duhen matjes #409. */
+    public function test_usage_is_summed_across_rounds_with_provider_identity(): void
+    {
+        Http::fakeSequence('generativelanguage.googleapis.com/*')
+            ->push($this->functionCallResponse([[
+                'functionCall' => ['name' => 'check_availability', 'args' => ['check_in' => '2026-08-28', 'check_out' => '2026-08-30']],
+            ]]) + ['usageMetadata' => ['promptTokenCount' => 100, 'candidatesTokenCount' => 20, 'thoughtsTokenCount' => 5]])
+            ->push($this->finalReplyResponse() + ['usageMetadata' => ['promptTokenCount' => 150, 'candidatesTokenCount' => 30, 'thoughtsTokenCount' => 8]]);
+
+        $result = app(GeminiClient::class)->converse(
+            'SYSTEM',
+            'MYSAFIRI: 28-30 gusht',
+            self::TOOLS,
+            ['check_availability' => fn (array $args): array => ['stay_total' => 190]],
+            'guest_reply',
+        );
+
+        $this->assertSame([
+            'input' => 250,
+            'output' => 50,
+            'thinking' => 13,
+            'provider' => 'gemini',
+            'model' => 'gemini-test-model',
+        ], $result['usage']);
+    }
+
     /** Task #403: pa rezervë të konfiguruar → sjellja e vjetër — një kërkesë, gabimi bublon. */
     public function test_no_fallback_configured_bubbles_the_503_after_one_request(): void
     {
@@ -358,16 +406,20 @@ class GeminiConverseTest extends TestCase
         Http::fakeSequence('generativelanguage.googleapis.com/*')
             ->push($this->functionCallResponse([[
                 'functionCall' => ['name' => 'check_availability', 'args' => ['check_in' => '2026-08-28', 'check_out' => '2026-08-30']],
-            ]]))
+            ]]) + ['usageMetadata' => ['promptTokenCount' => 100, 'candidatesTokenCount' => 20, 'thoughtsTokenCount' => 5]])
             ->pushStatus(503)
-            ->push($this->finalReplyResponse());
+            ->push($this->finalReplyResponse() + ['usageMetadata' => ['promptTokenCount' => 150, 'candidatesTokenCount' => 30, 'thoughtsTokenCount' => 8]]);
 
+        $rounds = [];
         $result = app(GeminiClient::class)->converse(
             'SYSTEM',
             'MYSAFIRI: 28-30 gusht',
             self::TOOLS,
             ['check_availability' => fn (array $args): array => ['stay_total' => 190]],
             'guest_reply',
+            onUsage: function (array $usage) use (&$rounds): void {
+                $rounds[] = $usage;
+            },
         );
 
         $this->assertSame('Totali 190 EUR.', $result['args']['reply']);
@@ -375,6 +427,65 @@ class GeminiConverseTest extends TestCase
         $this->assertStringContainsString('gemini-test-model', $urls[0]);
         $this->assertStringContainsString('gemini-test-model', $urls[1]);
         $this->assertStringContainsString('gemini-test-lite', $urls[2]);
+
+        // Sink-u per-raund etiketon secilin raund me modelin që e SHËRBEU —
+        // raundi i shpëtuar nga rezerva çmohet me çmimin e REZERVËS (Codex #568).
+        $this->assertSame(['gemini-test-model', 'gemini-test-lite'], array_column($rounds, 'model'));
+        $this->assertSame([100, 150], array_column($rounds, 'input'));
+    }
+
+    /** Codex #568 P1: raundi i PAGUAR i një bisede që dështon më vonë mbetet në dëshminë e faturimit. */
+    public function test_usage_sink_keeps_paid_rounds_when_a_later_round_fails(): void
+    {
+        config()->set('services.gemini.fallback_model', '');
+
+        Http::fakeSequence('generativelanguage.googleapis.com/*')
+            ->push($this->functionCallResponse([[
+                'functionCall' => ['name' => 'check_availability', 'args' => ['check_in' => '2026-08-28', 'check_out' => '2026-08-30']],
+            ]]) + ['usageMetadata' => ['promptTokenCount' => 100, 'candidatesTokenCount' => 20, 'thoughtsTokenCount' => 5]])
+            ->pushStatus(500);
+
+        $rounds = [];
+        try {
+            app(GeminiClient::class)->converse(
+                'SYSTEM',
+                'MYSAFIRI: 28-30 gusht',
+                self::TOOLS,
+                ['check_availability' => fn (array $args): array => ['stay_total' => 190]],
+                'guest_reply',
+                onUsage: function (array $usage) use (&$rounds): void {
+                    $rounds[] = $usage;
+                },
+            );
+            $this->fail('Duhej të hidhte 500-shin.');
+        } catch (\RuntimeException) {
+            // Biseda dështoi — po raundi i parë U PAGUA dhe dëshmia e tij mbetet.
+        }
+
+        $this->assertCount(1, $rounds);
+        $this->assertSame(100, $rounds[0]['input']);
+    }
+
+    /** Codex #569 P1: një 200 i FATURUAR pa thirrje të vlefshme (MAX_TOKENS) regjistrohet PARA se validimi të hedhë. */
+    public function test_usage_sink_fires_even_when_a_billable_200_has_no_valid_call(): void
+    {
+        Http::fakeSequence('generativelanguage.googleapis.com/*')->push([
+            'candidates' => [['content' => ['role' => 'model', 'parts' => []], 'finishReason' => 'MAX_TOKENS']],
+            'usageMetadata' => ['promptTokenCount' => 100, 'candidatesTokenCount' => 512, 'thoughtsTokenCount' => 512],
+        ]);
+
+        $rounds = [];
+        try {
+            app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: hej', self::TOOLS, [], 'guest_reply', onUsage: function (array $usage) use (&$rounds): void {
+                $rounds[] = $usage;
+            });
+            $this->fail('Duhej të hidhte MAX_TOKENS.');
+        } catch (\RuntimeException) {
+            // Përgjigja s'kishte thirrje — po tokenat U PAGUAN dhe u regjistruan.
+        }
+
+        $this->assertCount(1, $rounds);
+        $this->assertSame(512, $rounds[0]['thinking']);
     }
 
     /**

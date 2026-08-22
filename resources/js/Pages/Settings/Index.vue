@@ -9,7 +9,6 @@ import { usePage } from '@inertiajs/vue3';
 import { Bot, BriefcaseBusiness, Hotel, Search, ShieldCheck, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import AboutTab from './Tabs/AboutTab.vue';
 import AiTab from './Tabs/AiTab.vue';
 import AmenitiesTab from './Tabs/AmenitiesTab.vue';
 import BeachTab from './Tabs/BeachTab.vue';
@@ -29,7 +28,6 @@ import FaqTab from './Tabs/FaqTab.vue';
 import WhatsAppTab from './Tabs/WhatsAppTab.vue';
 import RoomTypesTab from './Tabs/RoomTypesTab.vue';
 import SecurityTab from './Tabs/SecurityTab.vue';
-import WebsiteTab from './Tabs/WebsiteTab.vue';
 import { settingsGroups, visibleSettingsTabs } from './settingsNavigation';
 
 const props = defineProps({
@@ -168,8 +166,6 @@ function selectMobileTab(tabId) {
 
                 <main class="settings-content min-w-0 flex-1">
                     <HotelTab v-if="activeTab === 'hotel'" :settings="settings.hotel || {}" :toasts="toasts" />
-                    <WebsiteTab v-else-if="activeTab === 'website'" :settings="settings.hotel || {}" :toasts="toasts" />
-                    <AboutTab v-else-if="activeTab === 'about'" :settings="settings.about || {}" :toasts="toasts" />
                     <BookingPoliciesTab v-else-if="activeTab === 'booking-policies'" :settings="settings.hotel || {}" :toasts="toasts" />
                     <RoomTypesTab v-else-if="activeTab === 'room-types'" :room-types="roomTypes" :amenities="amenities" :toasts="toasts" />
                     <AmenitiesTab v-else-if="activeTab === 'amenities'" :amenities="amenities" :toasts="toasts" />

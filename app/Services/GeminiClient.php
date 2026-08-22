@@ -2,17 +2,21 @@
 
 namespace App\Services;
 
-use App\Models\Setting;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
  * Google Gemini client for the AI Pricing Assistant. Uses function calling (forced) so the
  * reply is a validated JSON object. Same structured() interface as AnthropicClient, so the
- * two providers are interchangeable. Key comes from the Settings UI (Setting 'ai.gemini_key')
- * or env (GEMINI_API_KEY / GOOGLE_API_KEY).
+ * two providers are interchangeable.
+ *
+ * KEY IS PLATFORM-CENTRAL (task #407, Marjus 2026-08-21): ONE key serves every
+ * hotel — PlatformSetting 'ai.gemini_key' (set in the super-admin panel, same
+ * pattern as the exchange-rate key) with env GEMINI_API_KEY / GOOGLE_API_KEY
+ * as fallback. Tenant Settings are deliberately IGNORED — hotels no longer
+ * configure any AI key.
  */
-class GeminiClient
+class GeminiClient implements \App\Contracts\AiChatProvider
 {
     /** Cap on the flash models' "thinking" tokens so the forced function call is never starved (verified accepted by gemini-flash-latest and the pinned gemini-3.7-flash via the real-API tests). */
     private const THINKING_BUDGET = 512;
@@ -27,7 +31,7 @@ class GeminiClient
 
     public function key(): ?string
     {
-        return Setting::get('ai.gemini_key') ?: config('services.gemini.key');
+        return \App\Models\PlatformSetting::get('ai.gemini_key') ?: config('services.gemini.key');
     }
 
     public function configured(): bool
@@ -37,7 +41,11 @@ class GeminiClient
 
     public function model(): string
     {
-        return (string) (Setting::get('ai.gemini_model') ?: config('services.gemini.model'));
+        // Edhe MODELI është qendror si çelësi (gjetje Codex #560): komanda
+        // globale e shëndetit s'ka kontekst tenant-i, ndaj një mbivendosje
+        // per-tenant do t'i shpëtonte kontrollit — asnjë UI s'e shkruante
+        // gjithsesi. Vendimi i modelit merret vetëm në config (task #403).
+        return (string) config('services.gemini.model');
     }
 
     private function base(): string
@@ -102,9 +110,9 @@ class GeminiClient
      *
      * @param  array<int,array{name:string,description?:string,input_schema?:array}>  $tools
      * @param  array<string,callable(array):array>  $executors  tool name → server-side runner
-     * @return array{args:array<string,mixed>,toolsUsed:array<int,string>}
+     * @return array{args:array<string,mixed>,toolsUsed:array<int,string>,usage:array{input:int,output:int,thinking:int,provider:string,model:string}}
      */
-    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3): array
+    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3, ?callable $onUsage = null): array
     {
         $functions = collect($tools)->map(fn (array $tool) => [
             'name' => $tool['name'],
@@ -115,6 +123,9 @@ class GeminiClient
 
         $contents = [['role' => 'user', 'parts' => [['text' => $userMessage]]]];
         $toolsUsed = [];
+        // Tokenat e GJITHË bisedës (të gjitha raundet) — i duhen matjes
+        // per-tenant të task #409; provideri raporton, matja faturon.
+        $usage = ['input' => 0, 'output' => 0, 'thinking' => 0];
 
         // Modeli AKTIV i kësaj bisede: nis me primarin; nëse një raund shpëtohet
         // nga rezerva, biseda NGJIT te rezerva deri në fund — ping-pong-u mes
@@ -134,8 +145,11 @@ class GeminiClient
 
             // Raundi i fundit lejon VETËM përgjigjen finale — cikli s'mbetet kurrë pa dalje.
             $allowed = $round === $maxToolRounds ? [$finalToolName] : $allNames;
-            $turn = $this->generate($activeModel, $system, $contents, $functions, $allowed, $maxTokens, min($remaining, self::CALL_TIMEOUT_CAP));
+            $turn = $this->generate($activeModel, $system, $contents, $functions, $allowed, $maxTokens, $deadline, $onUsage);
             $activeModel = $turn['model'];
+            foreach ($usage as $k => $v) {
+                $usage[$k] = $v + $turn['usage'][$k];
+            }
 
             // Finalja pranohet VETËM si thirrje e vetme e radhës (ose kur raundi
             // lejon vetëm finalen). Në një radhë të përzier — guest_reply paralel
@@ -145,7 +159,11 @@ class GeminiClient
             if (count($turn['calls']) === 1 || $allowed === [$finalToolName]) {
                 foreach ($turn['calls'] as $call) {
                     if ($call['name'] === $finalToolName) {
-                        return ['args' => $call['args'], 'toolsUsed' => $toolsUsed];
+                        return [
+                            'args' => $call['args'],
+                            'toolsUsed' => $toolsUsed,
+                            'usage' => $usage + ['provider' => 'gemini', 'model' => $activeModel],
+                        ];
                     }
                 }
             }
@@ -192,10 +210,15 @@ class GeminiClient
      * rejects reconstructed history with 400) plus the extracted calls in order,
      * plus the model that actually served the round (converse sticks to it).
      *
-     * @return array{content:\stdClass,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>,model:string}
+     * @param  float  $deadline  microtime(true) kur mbaron buxheti i GJITHË bisedës —
+     *                           edhe primari edhe rezerva rrinë brenda tij (gjetje Codex #550).
+     * @return array{content:\stdClass,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>,model:string,usage:array{input:int,output:int,thinking:int}}
      */
-    private function generate(string $model, string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, int $timeoutSeconds): array
+    private function generate(string $model, string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, float $deadline, ?callable $onUsage = null): array
     {
+        // Slot-i i çastit: sa kohë i jepet thirrjes SË RADHËS — kurrë mbi tavanin
+        // 30s (dorëzimi i shpejtë) dhe kurrë mbi afatin e mbetur të bisedës.
+        $slot = fn (): int => max(3, (int) floor(min(self::CALL_TIMEOUT_CAP, $deadline - microtime(true))));
         $payload = [
             'system_instruction' => ['parts' => [['text' => $system]]],
             'contents' => $contents,
@@ -217,7 +240,7 @@ class GeminiClient
         // për mysafirin janë e njëjta heshtje (task #403).
         $servedBy = $model;
         try {
-            $res = $this->post($model, $payload, $timeoutSeconds);
+            $res = $this->post($model, $payload, $slot());
         } catch (\Illuminate\Http\Client\ConnectionException) {
             $res = null;
         }
@@ -229,9 +252,14 @@ class GeminiClient
         // përgjigje në sekonda; rezerva dështon → gabimi ORIGJINAL bublon
         // (radha riprovon si zakonisht).
         $fallback = trim((string) config('services.gemini.fallback_model'));
-        if (($res === null || $res->serverError()) && $fallback !== '' && $fallback !== $model) {
+        if (($res === null || $res->serverError()) && $fallback !== '' && $fallback !== $model
+            // Rezerva provohet VETËM brenda afatit të mbetur të bisedës (gjetje
+            // Codex #550): kur primari e hëngri buxhetin duke u varur, s'i
+            // shtojmë mysafirit edhe një pritje — bublon dështimi origjinal
+            // dhe shkalla e riprovës së job-it rikthehet me buxhet të freskët.
+            && $deadline - microtime(true) >= 3) {
             try {
-                $fallbackRes = $this->post($fallback, $payload, $timeoutSeconds);
+                $fallbackRes = $this->post($fallback, $payload, $slot());
                 if ($fallbackRes->successful()) {
                     $res = $fallbackRes;
                     $servedBy = $fallback;
@@ -249,6 +277,19 @@ class GeminiClient
 
         if (!$res->successful()) {
             $this->throwHttpError($res->status(), (string) $res->body());
+        }
+
+        // Faturimi per-RAUND, PARA çdo validimi (gjetje Codex #569 P1): një
+        // 200 pa thirrje të vlefshme (MAX_TOKENS, parts bosh) është FATURUAR
+        // njësoj nga provideri — dëshmia regjistrohet edhe kur më poshtë
+        // hidhet përjashtim; raundi etiketohet me modelin që e SHËRBEU.
+        $roundUsage = [
+            'input' => (int) $res->json('usageMetadata.promptTokenCount', 0),
+            'output' => (int) $res->json('usageMetadata.candidatesTokenCount', 0),
+            'thinking' => (int) $res->json('usageMetadata.thoughtsTokenCount', 0),
+        ];
+        if ($onUsage !== null) {
+            $onUsage($roundUsage + ['provider' => 'gemini', 'model' => $servedBy]);
         }
 
         $calls = [];
@@ -270,7 +311,12 @@ class GeminiClient
             // objekt JSON, ndryshe raundi i jehonës kthen 400 (gjetje Codex).
             $content = json_decode((string) $res->body())->candidates[0]->content;
 
-            return ['content' => $content, 'calls' => $calls, 'model' => $servedBy];
+            return [
+                'content' => $content,
+                'calls' => $calls,
+                'model' => $servedBy,
+                'usage' => $roundUsage,
+            ];
         }
 
         // No function call came back. The usual cause is the thinking budget eating the
@@ -304,7 +350,7 @@ class GeminiClient
         }
 
         return match (true) {
-            in_array($res->status(), [400, 401, 403], true) => ['ok' => false, 'error' => 'Çelësi u refuzua nga Google ('.$res->status().') — kontrolloni çelësin te Cilësimet → Asistenti AI.'],
+            in_array($res->status(), [400, 401, 403], true) => ['ok' => false, 'error' => 'Çelësi qendror AI u refuzua nga Google ('.$res->status().') — rifreskojeni te Super-admin → Truri AI.'],
             $res->status() === 404 => ['ok' => false, 'error' => 'Modeli i AI nuk u gjet (404) — njoftoni mbështetjen.'],
             default => ['ok' => null, 'error' => null],
         };
@@ -328,8 +374,8 @@ class GeminiClient
         // cannot leak it. Map to a clear Albanian message.
         throw new RuntimeException(match (true) {
             $status === 429 => 'Shumë kërkesa te Google (limiti u kalua). Prit pak minuta dhe provo sërish.',
-            $status === 400 && str_contains($body, 'API key not valid') => 'Çelësi Gemini nuk është i vlefshëm. Kontrollo çelësin te Settings → Asistenti AI.',
-            $status === 403 => 'Çelësi Gemini u refuzua (403). Kontrollo çelësin te Settings → Asistenti AI.',
+            $status === 400 && str_contains($body, 'API key not valid') => 'Çelësi qendror Gemini i platformës nuk është i vlefshëm — njofto mbështetjen e Lora PMS.',
+            $status === 403 => 'Çelësi qendror Gemini u refuzua (403) — njofto mbështetjen e Lora PMS.',
             $status === 404 => 'Modeli i AI nuk u gjet (404) — mund të jetë tërhequr. Njofto zhvilluesin.',
             default => "Google ktheu një gabim ($status). Provo sërish.",
         });
@@ -370,6 +416,18 @@ class GeminiClient
         if (!$res->successful()) {
             $this->throwHttpError($res->status(), (string) $res->body());
         }
+
+        // Matja per-tenant (task #409): edhe thirrjet e strukturuara (Asistenti
+        // i Çmimeve, votat e dyta të klasifikimit) kushtojnë tokena — një
+        // rresht ai_usage_events secila. FAIL-SAFE brenda recorder-it; pa
+        // kontekst tenant-i (kanari, komanda globale) s'shkruhet asgjë.
+        app(AiUsageRecorder::class)->record([
+            'input' => (int) $res->json('usageMetadata.promptTokenCount', 0),
+            'output' => (int) $res->json('usageMetadata.candidatesTokenCount', 0),
+            'thinking' => (int) $res->json('usageMetadata.thoughtsTokenCount', 0),
+            'provider' => 'gemini',
+            'model' => $this->model(),
+        ], 'structured');
 
         foreach ($res->json('candidates.0.content.parts', []) as $part) {
             $call = $part['functionCall'] ?? null;

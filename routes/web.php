@@ -34,6 +34,7 @@ use App\Http\Controllers\SavedReportController;
 use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SmartPricingController;
+use App\Http\Controllers\SuperAdmin\AiController as SuperAdminAiController;
 use App\Http\Controllers\SuperAdmin\BillingInvoiceController as SuperAdminBillingInvoiceController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentAttemptController as SuperAdminBillingPaymentAttemptController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentController as SuperAdminBillingPaymentController;
@@ -50,6 +51,7 @@ use App\Http\Controllers\TenantUserInvitationController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WebsiteBeachController;
 use App\Http\Controllers\WebsiteController;
+use App\Http\Controllers\WebStudioController;
 use App\Http\Middleware\AuthenticateSignedTenantInvitation;
 use App\Models\Setting;
 use App\Tenancy\TenantContext;
@@ -237,6 +239,10 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
         Route::post('/billing/payments', [SuperAdminBillingPaymentController::class, 'store'])->name('billing.payments.store');
         Route::get('/billing/payment-attempts', [SuperAdminBillingPaymentAttemptController::class, 'index'])->name('billing.payment-attempts.index');
         Route::get('/billing/payment-attempts/{paymentAttempt}', [SuperAdminBillingPaymentAttemptController::class, 'show'])->name('billing.payment-attempts.show');
+        Route::get('/ai', [SuperAdminAiController::class, 'index'])->name('ai.index');
+        Route::put('/ai', [SuperAdminAiController::class, 'update'])->name('ai.update');
+        Route::post('/ai/check', [SuperAdminAiController::class, 'check'])->middleware('throttle:10,1')->name('ai.check');
+        Route::get('/ai/usage', [SuperAdminAiController::class, 'usage'])->name('ai.usage');
         Route::get('/currencies', [SuperAdminCurrencyController::class, 'index'])->name('currencies.index');
         Route::put('/currencies', [SuperAdminCurrencyController::class, 'update'])->name('currencies.update');
         Route::post('/currencies/refresh', [SuperAdminCurrencyController::class, 'refresh'])->middleware('throttle:10,1')->name('currencies.refresh');
@@ -642,6 +648,13 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::put('/settings/notifications', [SettingsController::class, 'updateNotifications'])->name('settings.notifications');
         Route::post('/settings/website', [SettingsController::class, 'updateWebsite'])->name('settings.website');
         Route::post('/settings/about', [SettingsController::class, 'updateAbout'])->name('settings.about');
+
+        // Web Studio (task #411) — paneli i vetëm i webit publik; Rreth Nesh
+        // ripërdor POST settings.about më sipër.
+        Route::get('/web-studio', [WebStudioController::class, 'index'])->name('web-studio.index');
+        Route::post('/web-studio/home', [WebStudioController::class, 'updateHome'])->name('web-studio.home');
+        Route::post('/web-studio/brand', [WebStudioController::class, 'updateBrand'])->name('web-studio.brand');
+        Route::put('/web-studio/contact', [WebStudioController::class, 'updateContact'])->name('web-studio.contact');
         Route::put('/settings/financial', [SettingsController::class, 'updateFinancial'])->name('settings.financial');
         Route::put('/settings/pos', [SettingsController::class, 'updatePos'])->middleware('module:pos')->name('settings.pos');
         Route::post('/settings/pos/salespeople', [SettingsController::class, 'storePosSalesperson'])->middleware('module:pos')->name('settings.pos.salespeople.store');

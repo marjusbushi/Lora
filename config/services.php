@@ -4,6 +4,20 @@ return [
 
     'openai' => [
         'chatgpt_connect_url' => env('CHATGPT_CONNECT_URL', 'https://chatgpt.com/'),
+        // Shoferi OpenAI i derës së përbashkët AI (task #408). Çelësi është
+        // QENDROR si i Gemini-t (#407): PlatformSetting 'ai.openai_key' me
+        // env si rezervë. Modeli i FIKSUAR (kurrë alias) — piloti gpt-5.6-luna
+        // ($0.20/$1.20 per 1M, verifikuar 2026-08-21); ndërrimi = vendim yni.
+        'key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL', 'gpt-5.6-luna'),
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        // 'none' ME LIGJ nga API-ja reale (zbuluar nga provat reale, 2026-08-22):
+        // "Function tools with reasoning_effort are not supported for
+        // gpt-5.6-luna in /v1/chat/completions ... set reasoning_effort to
+        // 'none'" — çdo vlerë tjetër = 400 në çdo thirrje me mjete. Na shkon
+        // mrekullisht: llogaritë i bën motori ynë, modelit i duhet vetëm të
+        // flasë (dhe 'none' është edhe më i shpejtë e më i lirë).
+        'reasoning_effort' => env('OPENAI_REASONING_EFFORT', 'none'),
     ],
 
     /*
@@ -89,6 +103,19 @@ return [
         // Bosh = pa rezervë.
         'fallback_model' => env('GEMINI_FALLBACK_MODEL', 'gemini-3.5-flash-lite'),
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
+    ],
+
+    // Çmimorja DEFAULT e modeleve AI (task #409) — USD për 1 MILION tokena,
+    // e verifikuar 2026-08-21. Mbivendoset pa deploy nga super-admini
+    // (PlatformSetting 'ai.pricing_overrides') — çmimet e provider-ëve
+    // ndryshojnë (Google i dyfishon Flash nga 2027-01-01: 1.50/7.50).
+    // Tokenat e "mendimit" faturohen si OUTPUT nga të dy provider-ët.
+    'ai' => [
+        'pricing' => [
+            'gemini-3.7-flash' => ['input' => 0.75, 'output' => 3.75],
+            'gemini-3.5-flash-lite' => ['input' => 0.30, 'output' => 2.50],
+            'gpt-5.6-luna' => ['input' => 0.20, 'output' => 1.20],
+        ],
     ],
 
     // Ura lokale e WhatsApp (Node/Baileys, daemon në të njëjtin server).

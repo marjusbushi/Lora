@@ -6,6 +6,7 @@ import {
     Coins,
     CreditCard,
     FileText,
+    Gauge,
     LayoutDashboard,
     ListChecks,
     ListTodo,
@@ -15,6 +16,7 @@ import {
     Repeat2,
     RefreshCw,
     ShieldCheck,
+    Sparkles,
     Tags,
     TriangleAlert,
     UserRound,
@@ -25,7 +27,13 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
-defineProps({ title: { type: String, default: 'Lora Control Panel' } });
+// immersive: faqe "focus mode" (p.sh. Onboarding-u i një hoteli) — pa sidebar
+// e topbar të Control Panel, POR banner-i i kurseve të vjetruara mbetet:
+// është alarm platforme që s'duhet të humbasë në asnjë faqe.
+defineProps({
+    title: { type: String, default: 'Lora Control Panel' },
+    immersive: { type: Boolean, default: false },
+});
 
 const page = usePage();
 const mobileOpen = ref(false);
@@ -45,11 +53,13 @@ const navigation = [
     { label: t('superAdmin.compact.subscriptions'), href: '/super-admin/tenants', match: '/super-admin/tenants', icon: Repeat2, group: t('superAdmin.compact.platform') },
     { label: 'Onboarding', href: '/super-admin/onboarding', match: '/super-admin/onboarding', icon: ListTodo, group: t('superAdmin.compact.platform') },
     { label: t('superAdmin.compact.activity'), href: '/super-admin/activity', match: '/super-admin/activity', icon: ListChecks, group: t('superAdmin.compact.platform') },
+    { label: t('superAdmin.compact.ai'), href: '/super-admin/ai', match: '/super-admin/ai', icon: Sparkles, group: t('superAdmin.compact.platform') },
     { label: t('superAdmin.compact.invoices'), href: '/super-admin/billing/invoices', match: '/super-admin/billing/invoices', icon: FileText, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.payments'), href: '/super-admin/billing/payments', match: '/super-admin/billing/payments', icon: CreditCard, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.paymentAttempts'), href: '/super-admin/billing/payment-attempts', match: '/super-admin/billing/payment-attempts', icon: RefreshCw, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.providerEvents'), href: '/super-admin/billing/provider-events', match: '/super-admin/billing/provider-events', icon: Webhook, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.currencies'), href: '/super-admin/currencies', match: '/super-admin/currencies', icon: Coins, group: t('superAdmin.compact.loraFinance') },
+    { label: t('superAdmin.compact.aiUsage'), href: '/super-admin/ai/usage', match: '/super-admin/ai/usage', icon: Gauge, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.catalog'), href: '/super-admin/catalog', match: '/super-admin/catalog', icon: Tags, group: t('superAdmin.compact.loraFinance') },
 ];
 
@@ -69,9 +79,10 @@ function isActive(item) {
     <Head :title="title" />
 
     <div class="super-admin-shell min-h-screen bg-[var(--sa-canvas)] text-[var(--sa-ink)]">
-        <div v-if="mobileOpen" class="fixed inset-0 z-40 bg-neutral-950/35 lg:hidden" @click="mobileOpen = false" />
+        <div v-if="mobileOpen && !immersive" class="fixed inset-0 z-40 bg-neutral-950/35 lg:hidden" @click="mobileOpen = false" />
 
         <aside
+            v-if="!immersive"
             class="fixed inset-y-0 left-0 z-50 flex w-[228px] flex-col border-r border-[var(--sa-line)] bg-white text-[#64726c] transition-[width,transform] duration-200 lg:translate-x-0"
             :class="[
                 mobileOpen ? 'translate-x-0' : '-translate-x-full',
@@ -145,8 +156,8 @@ function isActive(item) {
             </div>
         </aside>
 
-        <div class="transition-[padding] duration-200" :class="sidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[228px]'">
-            <header class="sticky top-0 z-30 flex h-[70px] items-center justify-between border-b border-[var(--sa-line)] bg-white/95 px-4 backdrop-blur sm:px-7">
+        <div class="transition-[padding] duration-200" :class="immersive ? '' : (sidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[228px]')">
+            <header v-if="!immersive" class="sticky top-0 z-30 flex h-[70px] items-center justify-between border-b border-[var(--sa-line)] bg-white/95 px-4 backdrop-blur sm:px-7">
                 <button class="rounded-[10px] p-2 text-neutral-600 hover:bg-neutral-100 lg:hidden" :aria-label="t('superAdmin.compact.openMenu')" @click="mobileOpen = true">
                     <Menu class="h-5 w-5" />
                 </button>
@@ -197,7 +208,7 @@ function isActive(item) {
                 </div>
             </div>
 
-            <main class="px-4 py-5 sm:px-6 lg:px-7">
+            <main :class="immersive ? '' : 'px-4 py-5 sm:px-6 lg:px-7'">
                 <slot />
             </main>
         </div>

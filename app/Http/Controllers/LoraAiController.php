@@ -54,10 +54,12 @@ class LoraAiController extends Controller
                 'chatgptUrl' => config('services.openai.chatgpt_connect_url', 'https://chatgpt.com/'),
                 'hotel' => $tenant->name,
             ],
-            // Shëndeti i çelësit Gemini (task #382): kontrolli ditor e shkruan;
-            // paneli paralajmëron VETËM kur ok=false — para se Lora të heshtë.
+            // Shëndeti i çelësit QENDROR Gemini (task #382; global nga #407):
+            // kontrolli ditor e shkruan në PlatformSetting; paneli paralajmëron
+            // VETËM kur ok=false — para se Lora të heshtë. Hoteli s'ka më çelës
+            // të vetin — alarmi i thotë të njoftojë mbështetjen e Lora PMS.
             'geminiKeyHealth' => (function () {
-                $health = Setting::get('ai.gemini_key_health');
+                $health = \App\Models\PlatformSetting::get('ai.gemini_key_health');
 
                 // Alarmi vlen VETËM për çelësin AKTUAL (gjetje Codex, PR #514):
                 // gjurma e çelësit të testuar duhet të përputhet — një rezultat
