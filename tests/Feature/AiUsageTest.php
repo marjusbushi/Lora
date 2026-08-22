@@ -216,6 +216,9 @@ class AiUsageTest extends TestCase
     public function test_report_shows_per_tenant_usage(): void
     {
         AiUsageEvent::create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'feature' => 'guest_reply', 'input_tokens' => 2_000_000, 'output_tokens' => 500_000, 'cost_micro_usd' => 1_000_000]);
+        // Model i PANJOHUR i vëzhguar në matje — editori duhet ta ofrojë për
+        // çmim, jo ta lërë falas përgjithmonë (gjetje Codex #569 P1).
+        AiUsageEvent::create(['provider' => 'openai', 'model' => 'mystery-model', 'feature' => 'guest_reply', 'input_tokens' => 10, 'cost_micro_usd' => 0]);
         $admin = \App\Models\User::factory()->create(['is_super_admin' => true]);
         app(TenantContext::class)->clear();
 
@@ -224,10 +227,18 @@ class AiUsageTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->where('rows.0.tenant', $this->tenant->name)
-                ->where('rows.0.input_tokens', 2000000)
                 ->where('rows.0.cost_usd', 1)
-                ->where('rows.0.models.0.model', 'gpt-5.6-luna')
-                ->where('totals.calls', 1));
+                ->where('totals.calls', 2)
+                // Emrat e modeleve mbajnë PIKA — verifikohen me closure, jo dot-path.
+                ->where('pricing', function ($pricing) {
+                    $map = collect($pricing)->toArray();
+
+                    return array_key_exists('mystery-model', $map)
+                        && $map['mystery-model']['default'] === null
+                        && $map['mystery-model']['is_override'] === false
+                        && $map['gemini-3.7-flash']['is_override'] === false
+                        && $map['gemini-3.7-flash']['default'] !== null;
+                }));
         app(TenantContext::class)->set($this->tenant);
     }
 

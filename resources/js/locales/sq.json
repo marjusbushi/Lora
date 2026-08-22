@@ -5416,7 +5416,9 @@
       "model": "Modeli",
       "inputPrice": "Hyrja ($/1M)",
       "outputPrice": "Dalja ($/1M)",
-      "pricingHint": "Tokenat e \"mendimit\" faturohen si dalje. Ndryshimet vlejnë për matjet e REJA — rreshtat e vjetër s'preken (dëshmi faturimi)."
+      "pricingHint": "Tokenat e \"mendimit\" faturohen si dalje. Ndryshimet vlejnë për matjet e REJA — rreshtat e vjetër s'preken (dëshmi faturimi).",
+      "overrideLabel": "Mbivendos",
+      "noPriceWarning": "pa çmim — matet me 0!"
     }
   },
   "reports360": {
