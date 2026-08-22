@@ -51,7 +51,7 @@ class OpenAiClient implements AiChatProvider
      * @param  array<string,callable(array):array>  $executors
      * @return array{args:array<string,mixed>,toolsUsed:array<int,string>,usage:array{input:int,output:int,thinking:int,provider:string,model:string}}
      */
-    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3): array
+    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3, ?callable $onUsage = null): array
     {
         $declarations = collect($tools)->map(fn (array $tool) => [
             'type' => 'function',
@@ -81,6 +81,11 @@ class OpenAiClient implements AiChatProvider
             $turn = $this->complete($messages, $declarations, $forceFinal ? $finalToolName : null, $maxTokens, $deadline);
             foreach ($usage as $k => $v) {
                 $usage[$k] = $v + $turn['usage'][$k];
+            }
+            // Faturimi per-RAUND (gjetjet Codex #568) — dëshmia e raundeve të
+            // paguara mbijeton edhe kur biseda dështon më vonë.
+            if ($onUsage !== null) {
+                $onUsage($turn['usage'] + ['provider' => 'openai', 'model' => $this->model()]);
             }
 
             // Finalja pranohet VETËM si thirrje e vetme e radhës (ose e detyruar)
@@ -193,7 +198,10 @@ class OpenAiClient implements AiChatProvider
             'calls' => $calls,
             'usage' => [
                 'input' => (int) $res->json('usage.prompt_tokens', 0),
-                'output' => (int) $res->json('usage.completion_tokens', 0),
+                // completion_tokens i PËRFSHIN tokenat e arsyetimit — ndahen
+                // që të mos faturohen dy herë (gjetje Codex #568 P1): output
+                // + thinking = completion_tokens, saktësisht.
+                'output' => max(0, (int) $res->json('usage.completion_tokens', 0) - (int) $res->json('usage.completion_tokens_details.reasoning_tokens', 0)),
                 'thinking' => (int) $res->json('usage.completion_tokens_details.reasoning_tokens', 0),
             ],
         ];

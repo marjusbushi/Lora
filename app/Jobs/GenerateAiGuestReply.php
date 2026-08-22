@@ -560,7 +560,15 @@ PROMPT;
         // draft, as riprovë — pikërisht dështimet "herë pas here" të staging-ut.
         // Deadline 75s: përgjigja me çmime mban 2-3 thirrje HTTP radhazi; 45s
         // mbushej nga një raund i ngadaltë "thinking" (job timeout 90s — ka marzh).
-        return $ai->converse($system, "BISEDA:\n{$conversation}", $tools, $executorsFactory, 'guest_reply', 1024, 75)
+        // Matja per-tenant (task #409, per-RAUND — gjetjet Codex #568): çdo
+        // raund i suksesshëm faturohet nga provideri sapo përgjigjet, ndaj
+        // regjistrohet ATY PËR ATY me modelin që e shërbeu — edhe kur biseda
+        // dështon në një raund të mëvonshëm, dëshmia e të paguarës mbetet.
+        // Recorder-i është fail-safe me ligj: kurrë s'e prish përgjigjen.
+        $recorder = app(\App\Services\AiUsageRecorder::class);
+        $onUsage = fn (array $roundUsage) => $recorder->record($roundUsage, 'guest_reply', $thread->id, $this->messageId);
+
+        return $ai->converse($system, "BISEDA:\n{$conversation}", $tools, $executorsFactory, 'guest_reply', 1024, 75, onUsage: $onUsage)
             + ['quotes' => $quotes, 'photos' => $pendingPhotos];
     }
 
