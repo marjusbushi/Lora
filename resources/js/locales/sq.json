@@ -5412,7 +5412,12 @@
       "tenantColumn": "Hoteli",
       "overrideColumn": "Mbivendosja",
       "effectiveColumn": "Efektivi",
-      "followDefault": "— ndiq default-in —"
+      "followDefault": "— ndiq default-in —",
+      "modelChip": "Modeli",
+      "fallbackChip": "Rezerva",
+      "keyChip": "Çelësi",
+      "notConfiguredChip": "Pa konfiguruar",
+      "routingSave": "Ruaj rrugëzimin"
     },
     "aiUsage": {
       "pageTitle": "Përdorimi AI — Lora Control Panel",
