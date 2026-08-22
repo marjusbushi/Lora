@@ -66,7 +66,6 @@ function dateTime(value) {
                         <h2 class="text-[13.5px] font-bold">Google Gemini</h2>
                         <span class="rounded-full px-2.5 py-1 text-[9.5px] font-bold ring-1 ring-inset" :class="ai.configured ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/60' : 'bg-amber-50 text-amber-700 ring-amber-200/60'">{{ ai.configured ? $t('superAdmin.auto.copy005') : $t('superAdmin.ai.notConfiguredChip') }}</span>
                     </div>
-                    <p class="px-4 pt-1.5 text-[10.5px] text-neutral-500">{{ $t('superAdmin.ai.keySubtitle') }}</p>
 
                     <div v-if="ai.configured" class="flex flex-wrap gap-1.5 px-4 pt-2.5">
                         <span class="chrome-chip">{{ $t('superAdmin.ai.modelChip') }} <b class="font-mono !text-[9.5px]">{{ ai.model }}</b></span>
@@ -80,8 +79,8 @@ function dateTime(value) {
                     <div class="mx-4 mt-3 flex items-start gap-2.5 rounded-xl border px-3 py-2 text-[10.5px]" :class="ai.health && ai.health.ok ? 'border-emerald-200 bg-gradient-to-r from-emerald-50 to-white text-emerald-800' : ai.health ? 'border-red-200 bg-gradient-to-r from-red-50 to-white text-red-800' : 'border-neutral-200 bg-neutral-50/60 text-neutral-500'">
                         <span class="mt-[5px] h-2 w-2 shrink-0 rounded-full" :class="ai.health && ai.health.ok ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(29,157,120,.15)]' : ai.health ? 'bg-red-500 shadow-[0_0_0_3px_rgba(220,38,38,.15)]' : 'bg-neutral-300'" />
                         <span class="min-w-0 flex-1 break-words">
-                            <template v-if="ai.health && ai.health.ok"><strong>{{ $t('superAdmin.ai.healthOk') }}</strong> {{ $t('superAdmin.ai.checkedAt', { date: dateTime(ai.health.checked_at) }) }}</template>
-                            <template v-else-if="ai.health"><strong>{{ $t('superAdmin.ai.healthFail') }}</strong> {{ ai.health.error }} · {{ $t('superAdmin.ai.checkedAt', { date: dateTime(ai.health.checked_at) }) }}</template>
+                            <template v-if="ai.health && ai.health.ok"><strong>{{ $t('superAdmin.ai.healthOk') }}</strong> · {{ dateTime(ai.health.checked_at) }}</template>
+                            <template v-else-if="ai.health"><strong>{{ $t('superAdmin.ai.healthFail') }}</strong> {{ ai.health.error }} · {{ dateTime(ai.health.checked_at) }}</template>
                             <template v-else>{{ $t('superAdmin.ai.healthNone') }}</template>
                         </span>
                         <button type="button" class="inline-flex shrink-0 items-center gap-1 rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[9.5px] font-bold text-neutral-600 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-40" :disabled="!ai.configured" @click="checkNow"><RotateCw class="h-3 w-3" />{{ $t('superAdmin.ai.checkNow') }}</button>
@@ -99,7 +98,6 @@ function dateTime(value) {
                             >
                             <p v-if="form.errors.gemini_key" class="mt-1 text-xs text-red-600">{{ form.errors.gemini_key }}</p>
                             <p class="mt-1 text-[10px] text-neutral-400">
-                                {{ $t('superAdmin.ai.getKeyHint') }}
                                 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="font-bold text-emerald-700 hover:text-emerald-800">aistudio.google.com/apikey</a>
                             </p>
                         </div>
@@ -122,7 +120,6 @@ function dateTime(value) {
                         <h2 class="text-[13.5px] font-bold">OpenAI</h2>
                         <span class="rounded-full px-2.5 py-1 text-[9.5px] font-bold ring-1 ring-inset" :class="openai.configured ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/60' : 'bg-neutral-100 text-neutral-500 ring-neutral-200/70'">{{ openai.configured ? $t('superAdmin.auto.copy005') : $t('superAdmin.ai.notConfiguredChip') }}</span>
                     </div>
-                    <p class="px-4 pt-1.5 text-[10.5px] text-neutral-500">{{ $t('superAdmin.ai.openaiSubtitle') }}</p>
 
                     <div v-if="openai.configured" class="flex flex-wrap gap-1.5 px-4 pt-2.5">
                         <span class="chrome-chip">{{ $t('superAdmin.ai.modelChip') }} <b class="font-mono !text-[9.5px]">{{ openai.model }}</b></span>
@@ -143,7 +140,6 @@ function dateTime(value) {
                             >
                             <p v-if="openaiForm.errors.openai_key" class="mt-1 text-xs text-red-600">{{ openaiForm.errors.openai_key }}</p>
                             <p class="mt-1 text-[10px] text-neutral-400">
-                                {{ $t('superAdmin.ai.getKeyHint') }}
                                 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" class="font-bold text-emerald-700 hover:text-emerald-800">platform.openai.com/api-keys</a>
                             </p>
                         </div>
@@ -175,12 +171,11 @@ function dateTime(value) {
                                 <button v-for="p in providers.options" :key="p" type="button" class="rounded-full px-4 py-1.5 text-[10.5px] font-bold transition-all" :class="providerForm.provider_default === p ? 'bg-white text-emerald-800 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'" @click="providerForm.provider_default = p">{{ p }}</button>
                             </span>
                         </div>
-                        <label class="flex cursor-pointer items-center gap-2.5 text-[10.5px] font-bold text-neutral-600">
+                        <label class="flex cursor-pointer items-center gap-2.5 text-[10.5px] font-bold text-neutral-600" :title="$t('superAdmin.ai.crossFallbackHint')">
                             <button type="button" class="relative h-[21px] w-[38px] rounded-full transition-colors" :class="providerForm.cross_fallback ? 'bg-emerald-600' : 'bg-neutral-300'" @click="providerForm.cross_fallback = !providerForm.cross_fallback"><span class="absolute top-[2.5px] h-4 w-4 rounded-full bg-white shadow transition-all" :class="providerForm.cross_fallback ? 'left-[19px]' : 'left-[3px]'" /></button>
                             {{ $t('superAdmin.ai.crossFallback') }}
                         </label>
                     </div>
-                    <p class="border-b border-neutral-100 px-4 py-2 text-[10px] text-neutral-400">{{ $t('superAdmin.ai.crossFallbackHint') }}</p>
 
                     <div class="divide-y divide-neutral-100">
                         <div v-for="t in providers.tenants" :key="t.id" class="grid grid-cols-[34px_minmax(0,1fr)] items-center gap-3 px-4 py-2.5 hover:bg-neutral-50/60 sm:grid-cols-[34px_minmax(0,1fr)_auto_auto]">
