@@ -141,7 +141,9 @@ class WebStudioTest extends TestCase
     {
         // Codex PR #564/#565: kurrë nga host-i aktual; kurrë domain jo-aktiv;
         // localhost/*.test marrin http (mjedisi i dokumentuar i dev-it).
-        $this->tenant->domains()->delete(); // hiq domain-in bazë të testeve
+        // Domain-i bazë i testeve mbetet (rrugëzimi /pms/* kërkon host të
+        // regjistruar) — por bëhet jo-aktiv, që filtri ta anashkalojë.
+        $this->tenant->domains()->update(['status' => 'pending_dns', 'is_primary' => false]);
 
         $this->tenant->domains()->create(['domain' => 'admin.villamucho.test', 'is_primary' => true])
             ->forceFill(['status' => 'active'])->save();
