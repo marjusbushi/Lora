@@ -20,12 +20,6 @@ const form = useForm({
     pricing_currency: props.settings.pricing_currency || props.settings.currency || 'EUR',
     check_in_time: props.settings.check_in_time || '14:00',
     check_out_time: props.settings.check_out_time || '11:00',
-    hero_eyebrow_sq: props.settings.hero_eyebrow_sq || '',
-    hero_eyebrow_en: props.settings.hero_eyebrow_en || '',
-    hero_title_sq: props.settings.hero_title_sq || '',
-    hero_title_en: props.settings.hero_title_en || '',
-    hero_subtitle_sq: props.settings.hero_subtitle_sq || '',
-    hero_subtitle_en: props.settings.hero_subtitle_en || '',
     logo: null,
 });
 
@@ -95,40 +89,6 @@ function submit() {
                 <FormGroup :label="$t('admin.generated.k_98e81c9f9021')" :error="form.errors.timezone" required>
                     <Select v-model="form.timezone" :options="timezoneOptions" :error="form.errors.timezone" />
                 </FormGroup>
-            </div>
-
-            <hr class="border-neutral-100" />
-
-            <!-- Hero text (per language) — shown at the top of the public Home page -->
-            <div>
-                <p class="text-label text-neutral-700 mb-1">{{ $t('admin.generated.k_832485474fd4') }}</p>
-                <p class="text-tiny text-neutral-400 mb-3">{{ $t('admin.generated.k_3d931a245054') }}</p>
-                <div class="space-y-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <FormGroup :label="$t('admin.generated.k_061e2ab2dc4b')">
-                            <TextInput v-model="form.hero_eyebrow_sq" :placeholder="$t('admin.generated.k_70e34701318d')" />
-                        </FormGroup>
-                        <FormGroup :label="$t('admin.generated.k_d3fdb9154f16')">
-                            <TextInput v-model="form.hero_eyebrow_en" :placeholder="$t('admin.generated.k_f6108fc2962e')" />
-                        </FormGroup>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <FormGroup :label="$t('admin.generated.k_7d17e28c7f52')">
-                            <TextInput v-model="form.hero_title_sq" :placeholder="$t('admin.generated.k_a6f078d4077d')" />
-                        </FormGroup>
-                        <FormGroup :label="$t('admin.generated.k_2fdaf7ef3dfb')">
-                            <TextInput v-model="form.hero_title_en" :placeholder="$t('admin.generated.k_e61301fd636f')" />
-                        </FormGroup>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <FormGroup :label="$t('admin.generated.k_ada0dc508a31')">
-                            <TextInput v-model="form.hero_subtitle_sq" :placeholder="$t('admin.generated.k_e9952a8aa367')" />
-                        </FormGroup>
-                        <FormGroup :label="$t('admin.generated.k_b622bce89a98')">
-                            <TextInput v-model="form.hero_subtitle_en" :placeholder="$t('admin.generated.k_934aa0a11084')" />
-                        </FormGroup>
-                    </div>
-                </div>
             </div>
 
             <div class="settings-actions">
