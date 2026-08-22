@@ -349,6 +349,9 @@ Route::middleware(['auth', 'hotel_host'])->prefix('pms')->group(function () {
         Route::post('/reservations/reconciliation/{issue}/link', [OtaReconciliationController::class, 'link'])
             ->middleware(['module:channel_manager', 'permission:update_reservations', 'throttle:30,1'])
             ->name('reservations.reconciliation.link');
+        Route::post('/reservations/reconciliation/{issue}/resolve', [OtaReconciliationController::class, 'resolve'])
+            ->middleware(['module:channel_manager', 'permission:update_reservations', 'throttle:30,1'])
+            ->name('reservations.reconciliation.resolve');
         // Seasonal price quote for the create/edit form (server-computed; MUST stay before the {reservation} wildcard).
         Route::get('/reservations/quote', [ReservationController::class, 'quote'])->name('reservations.quote');
         Route::get('/reservations/{reservation}', [ReservationController::class, 'show'])->name('reservations.show');

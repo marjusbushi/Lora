@@ -79,6 +79,52 @@ class OtaReconciliationLinkTest extends TestCase
         ], $overrides));
     }
 
+    public function test_extended_on_desk_closes_every_mismatch_card_of_the_booking(): void
+    {
+        // Renato (2026-08-22, Saturn #6368711015): the guest extended at the
+        // desk — the amount/date difference vs Booking is legitimate; one click
+        // closes both cards and records who said so.
+        $reservation = $this->manualReservation(['channel_ref' => '6368711015', 'created_via' => Reservation::CREATED_VIA_CHANNEL_MANAGER]);
+        $amount = $this->issue($reservation, [
+            'external_ref' => '6368711015', 'issue_type' => 'amount_mismatch', 'reservation_id' => $reservation->id,
+            'expected_total' => 51.62, 'actual_total' => 103.24, 'currency' => 'EUR', 'details' => ['local_currency' => 'EUR'],
+        ]);
+        $stay = $this->issue($reservation, [
+            'external_ref' => '6368711015', 'issue_type' => 'stay_mismatch', 'reservation_id' => $reservation->id,
+            'expected_total' => 51.62, 'actual_total' => 103.24, 'currency' => 'EUR',
+            'details' => ['local_stays' => ['2026-08-20|2026-08-22'], 'remote_stays' => ['2026-08-20|2026-08-21']],
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('reservations.reconciliation.resolve', $amount), ['reason' => 'extended_on_desk'])
+            ->assertRedirect()->assertSessionHas('success');
+
+        foreach ([$amount, $stay] as $issue) {
+            $fresh = $issue->fresh();
+            $this->assertSame(OtaReconciliationIssue::STATUS_RESOLVED, $fresh->status);
+            $this->assertSame('extended_on_desk', $fresh->resolution);
+            $this->assertSame($this->admin->id, (int) $fresh->resolved_by);
+            $this->assertNotNull($fresh->resolution_fingerprint);
+        }
+        $log = AuditLog::where('action', 'reservation.reconciliation_extended_on_desk')->sole();
+        $this->assertSame($reservation->id, (int) $log->subject_id);
+    }
+
+    public function test_extended_on_desk_is_refused_for_non_mismatch_and_already_resolved_cards(): void
+    {
+        $manual = $this->manualReservation();
+        $duplicate = $this->issue($manual); // possible_manual_duplicate — not a desk explanation
+        $this->actingAs($this->admin)
+            ->post(route('reservations.reconciliation.resolve', $duplicate), ['reason' => 'extended_on_desk'])
+            ->assertSessionHasErrors(['reason']);
+        $this->assertSame(OtaReconciliationIssue::STATUS_OPEN, $duplicate->fresh()->status);
+
+        $closed = $this->issue($manual, ['external_ref' => '111', 'issue_type' => 'amount_mismatch', 'status' => OtaReconciliationIssue::STATUS_RESOLVED, 'resolved_at' => now()]);
+        $this->actingAs($this->admin)
+            ->post(route('reservations.reconciliation.resolve', $closed), ['reason' => 'extended_on_desk'])
+            ->assertSessionHasErrors(['reason']);
+    }
+
     public function test_links_the_candidate_and_resolves_the_twin_issue(): void
     {
         $manual = $this->manualReservation();
