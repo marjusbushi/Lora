@@ -77,7 +77,7 @@ class GenerateAiGuestReply implements ShouldQueue
         $this->captureTenant();
     }
 
-    public function handle(GeminiClient $gemini, ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, TenantBillingService $billing, TenantContext $context): void
+    public function handle(\App\Services\AiChat $ai, GeminiClient $gemini, ChannexClient $channex, \App\Services\WhatsAppBridgeClient $whatsapp, TenantBillingService $billing, TenantContext $context): void
     {
         $this->startedAt = microtime(true);
 
@@ -90,7 +90,10 @@ class GenerateAiGuestReply implements ShouldQueue
             return;
         }
 
-        if (! $gemini->configured()) {
+        // Dera e përbashkët (task #408): provideri i bisedës zgjidhet nga
+        // platforma per-tenant (super-admin → Truri AI); votat e dyta të
+        // klasifikimit mbeten te Gemini (structured — dështojnë fail-safe në draft).
+        if (! $ai->configured()) {
             return;
         }
 
@@ -123,7 +126,7 @@ class GenerateAiGuestReply implements ShouldQueue
 
         $faqs = HotelFaq::query()->active()->ordered()->get(['question', 'answer']);
 
-        $result = $this->askGemini($gemini, $thread, $faqs);
+        $result = $this->askGemini($ai, $thread, $faqs);
         if ($result === null) {
             return;
         }
@@ -212,7 +215,7 @@ class GenerateAiGuestReply implements ShouldQueue
     }
 
     /** @return array{args:array<string,mixed>,toolsUsed:array<int,string>,quotes:array<int,array<string,mixed>>}|null */
-    private function askGemini(GeminiClient $gemini, MessageThread $thread, $faqs): ?array
+    private function askGemini(\App\Services\AiChat $ai, MessageThread $thread, $faqs): ?array
     {
         $hotel = collect(Setting::getGroup('hotel'))
             ->filter(fn ($value, $key) => is_scalar($value)
@@ -530,7 +533,7 @@ PROMPT;
         // draft, as riprovë — pikërisht dështimet "herë pas here" të staging-ut.
         // Deadline 75s: përgjigja me çmime mban 2-3 thirrje HTTP radhazi; 45s
         // mbushej nga një raund i ngadaltë "thinking" (job timeout 90s — ka marzh).
-        return $gemini->converse($system, "BISEDA:\n{$conversation}", $tools, $executors, 'guest_reply', 1024, 75)
+        return $ai->converse($system, "BISEDA:\n{$conversation}", $tools, $executors, 'guest_reply', 1024, 75)
             + ['quotes' => $quotes, 'photos' => $pendingPhotos];
     }
 

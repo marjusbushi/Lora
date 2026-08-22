@@ -589,6 +589,48 @@ class AiConversationBookingTest extends TestCase
         $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
     }
 
+    /** Task #408 (kriteri 2): portat e sigurisë veprojnë NJËSOJ mbi shoferin OpenAI — link i huaj → draft. */
+    public function test_openai_provider_flows_through_the_same_safety_gates(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+        $message = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Po, e konfirmoj.', 'sent_at' => now()]);
+
+        // Tenanti kalon te openai nga PLATFORMA (super-admin) — jo nga hoteli.
+        \App\Models\PlatformSetting::set('ai.provider_overrides', [(string) $this->tenant->id => 'openai'], 'json');
+
+        $this->mock(\App\Services\OpenAiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->once()->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $hold = $executors['create_booking_hold']([
+                    'check_in' => now()->addDays(7)->toDateString(),
+                    'check_out' => now()->addDays(9)->toDateString(),
+                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi',
+                ]);
+
+                // I njëjti sulm si testi i Gemini-t: link lakuriq i huaj në
+                // vend të payment_link — porta duhet ta rrëzojë NJËSOJ.
+                return [
+                    'args' => ['confident' => true, 'reply' => "Paguani te evil.example/pay/confirm totalin {$hold['stay_total']} {$hold['currency']}."],
+                    'toolsUsed' => ['create_booking_hold'],
+                    'usage' => ['input' => 10, 'output' => 5, 'thinking' => 0, 'provider' => 'openai', 'model' => 'gpt-test-luna'],
+                ];
+            });
+        });
+        $this->mock(GeminiClient::class, fn ($mock) => $mock->shouldReceive('converse')->never());
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('typing')->andReturn([]);
+            $mock->shouldReceive('send')->never();
+        });
+
+        app()->call([new GenerateAiGuestReply($thread->id, $message->id), 'handle']);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
     public function test_terminal_failure_of_a_later_job_never_cancels_a_delivered_hold(): void
     {
         // Porosia POK e PAPAGUAR — po mbajtja i përket një mesazhi TË MËPARSHËM

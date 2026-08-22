@@ -4,26 +4,30 @@ namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
 use App\Models\PlatformSetting;
+use App\Models\Tenant;
+use App\Services\AiChat;
 use App\Services\GeminiClient;
+use App\Services\OpenAiClient;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Truri AI i platformës (task #407, vendimi i Marjusit): NJË çelës qendror
- * Gemini shërben çdo hotel — njësoj si çelësi i kursit të këmbimit. Hotelet
- * s'kanë më asnjë fushë çelësi; paneli i tenantit vetëm e PËRDOR trurin.
- * Çelësi ruhet në PlatformSetting 'ai.gemini_key'; env GEMINI_API_KEY mbetet
- * si rrugë rezervë (GeminiClient::key()).
+ * Truri AI i platformës (task #407 + dera e përbashkët #408, vendimet e
+ * Marjusit): çelësat qendrorë (Gemini + OpenAI), zgjedhja e providerit
+ * (default global + mbivendosje per-tenant — "ska rendesi provideri, neser
+ * mund ta ndryshoj UNE jo hoteli") dhe rezerva ndër-provider. Hotelet s'kanë
+ * asnjë fushë; paneli i tenantit vetëm e PËRDOR trurin.
  */
 class AiController extends Controller
 {
-    public function index(GeminiClient $gemini): Response
+    public function index(GeminiClient $gemini, OpenAiClient $openai, AiChat $ai): Response
     {
-        // Never ship the raw key — hint only, same rule as the currency key.
-        $storedKey = trim((string) PlatformSetting::get('ai.gemini_key', ''));
-        $fromEnv = $storedKey === '' && ! empty(config('services.gemini.key'));
+        // Never ship a raw key — hint only, same rule as the currency key.
+        $storedGemini = trim((string) PlatformSetting::get('ai.gemini_key', ''));
+        $storedOpenai = trim((string) PlatformSetting::get('ai.openai_key', ''));
 
         // Shëndeti nga kontrolli ditor — vlen VETËM për çelësin aktual (key_fp,
         // gjetje Codex PR #514): rezultati i një çelësi të ndërruar s'shfaqet.
@@ -35,18 +39,33 @@ class AiController extends Controller
             'error' => $health['error'] ?? null,
         ] : null;
 
+        $overrides = PlatformSetting::get('ai.provider_overrides');
+        $overrides = is_array($overrides) ? $overrides : [];
+
         return Inertia::render('SuperAdmin/Ai', [
             'ai' => [
                 'configured' => $gemini->configured(),
-                'key_hint' => $storedKey !== '' ? str_repeat('•', 6).substr($storedKey, -4) : null,
-                'from_env' => $fromEnv,
-                // Heqja e çelësit të ruajtur NUK e fik trurin kur serveri ka
-                // çelës në .env (rezerva e GeminiClient::key) — UI-ja duhet ta
-                // thotë të vërtetën, jo "FIK platformën" (gjetje Codex #559).
+                'key_hint' => $storedGemini !== '' ? str_repeat('•', 6).substr($storedGemini, -4) : null,
+                'from_env' => $storedGemini === '' && ! empty(config('services.gemini.key')),
                 'env_key_present' => ! empty(config('services.gemini.key')),
                 'model' => $gemini->model(),
                 'fallback_model' => (string) config('services.gemini.fallback_model'),
                 'health' => $healthOut,
+            ],
+            'openai' => [
+                'configured' => $openai->configured(),
+                'key_hint' => $storedOpenai !== '' ? str_repeat('•', 6).substr($storedOpenai, -4) : null,
+                'from_env' => $storedOpenai === '' && ! empty(config('services.openai.key')),
+                'env_key_present' => ! empty(config('services.openai.key')),
+                'model' => $openai->model(),
+            ],
+            'providers' => [
+                'default' => (string) PlatformSetting::get('ai.provider_default', 'gemini'),
+                'cross_fallback' => (bool) PlatformSetting::get('ai.cross_provider_fallback', false),
+                'overrides' => (object) $overrides,
+                'tenants' => Tenant::query()->orderBy('name')->get(['id', 'name'])
+                    ->map(fn (Tenant $t) => ['id' => $t->id, 'name' => $t->name, 'effective' => $ai->provider($t->id)]),
+                'options' => AiChat::PROVIDERS,
             ],
         ]);
     }
@@ -56,6 +75,12 @@ class AiController extends Controller
         $data = $request->validate([
             'gemini_key' => ['nullable', 'string', 'max:200'],
             'clear_key' => ['nullable', 'boolean'],
+            'openai_key' => ['nullable', 'string', 'max:200'],
+            'clear_openai_key' => ['nullable', 'boolean'],
+            'provider_default' => ['nullable', Rule::in(AiChat::PROVIDERS)],
+            'cross_fallback' => ['nullable', 'boolean'],
+            'provider_overrides' => ['nullable', 'array'],
+            'provider_overrides.*' => ['nullable', Rule::in([...AiChat::PROVIDERS, ''])],
         ]);
 
         if ($request->boolean('clear_key')) {
@@ -70,18 +95,52 @@ class AiController extends Controller
                 : 'Çelësi i ruajtur u hoq — platforma tani përdor çelësin e serverit (.env); truri AI mbetet aktiv.');
         }
 
-        $key = trim((string) ($data['gemini_key'] ?? ''));
-        if ($key === '') {
-            return back()->with('success', 'Asnjë ndryshim — fusha ishte bosh.');
+        if ($request->boolean('clear_openai_key')) {
+            PlatformSetting::set('ai.openai_key', '', 'text');
+
+            return back()->with('success', empty(config('services.openai.key'))
+                ? 'Çelësi OpenAI u hoq — provideri openai s\'është më i disponueshëm.'
+                : 'Çelësi OpenAI i ruajtur u hoq — platforma tani përdor çelësin e serverit (.env).');
         }
 
-        PlatformSetting::set('ai.gemini_key', $key, 'text');
-        // Çelës i RI = shëndeti i të vjetrit s'vlen më (gjetje Codex, PR #511):
-        // pa këtë, panelet do e quanin të prishur çelësin e ri deri në
-        // kontrollin e radhës ditor (06:30), i cili e rimbush.
-        PlatformSetting::set('ai.gemini_key_health', '', 'text');
+        $saved = [];
 
-        return back()->with('success', 'Çelësi qendror AI u ruajt — truri i Lorës është aktiv për gjithë hotelet.');
+        $geminiKey = trim((string) ($data['gemini_key'] ?? ''));
+        if ($geminiKey !== '') {
+            PlatformSetting::set('ai.gemini_key', $geminiKey, 'text');
+            // Çelës i RI = shëndeti i të vjetrit s'vlen më (Codex PR #511).
+            PlatformSetting::set('ai.gemini_key_health', '', 'text');
+            $saved[] = 'çelësi Gemini';
+        }
+
+        $openaiKey = trim((string) ($data['openai_key'] ?? ''));
+        if ($openaiKey !== '') {
+            PlatformSetting::set('ai.openai_key', $openaiKey, 'text');
+            $saved[] = 'çelësi OpenAI';
+        }
+
+        if ($request->filled('provider_default')) {
+            PlatformSetting::set('ai.provider_default', (string) $data['provider_default'], 'text');
+            $saved[] = 'provideri default';
+        }
+
+        if ($request->has('cross_fallback')) {
+            PlatformSetting::set('ai.cross_provider_fallback', $request->boolean('cross_fallback') ? '1' : '0', 'boolean');
+            $saved[] = 'rezerva ndër-provider';
+        }
+
+        if ($request->has('provider_overrides')) {
+            // Ruhen VETËM mbivendosjet e vlefshme jo-bosh — bosh = ndiq default-in.
+            $overrides = collect($data['provider_overrides'] ?? [])
+                ->filter(fn ($p) => in_array($p, AiChat::PROVIDERS, true))
+                ->all();
+            PlatformSetting::set('ai.provider_overrides', $overrides, 'json');
+            $saved[] = 'mbivendosjet per-hotel';
+        }
+
+        return back()->with('success', $saved === []
+            ? 'Asnjë ndryshim.'
+            : 'U ruajt: '.implode(', ', $saved).'.');
     }
 
     /** "Kontrollo tani" — verifikim i menjëhershëm që super-admini të mos presë 06:30-ën. */

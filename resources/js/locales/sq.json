@@ -5373,7 +5373,22 @@
       "healthNone": "Ende asnjë kontroll i regjistruar — përdor \"Kontrollo tani\".",
       "checkedAt": "Kontrolluar: {date}",
       "modelsLine": "Modeli primar: {model} · Rezerva: {fallback}",
-      "removeSavedKeyEnv": "Hiq çelësin e ruajtur (platforma kalon te çelësi i serverit — truri AI mbetet aktiv)"
+      "removeSavedKeyEnv": "Hiq çelësin e ruajtur (platforma kalon te çelësi i serverit — truri AI mbetet aktiv)",
+      "openaiTitle": "Çelësi qendror OpenAI (piloti Luna)",
+      "openaiSubtitle": "Shoferi i dytë i derës së përbashkët — për pilotin dhe rezervën ndër-provider.",
+      "openaiActiveFor": "OpenAI AKTIV — modeli {model}.",
+      "openaiNotConfigured": "Pa çelës OpenAI — provideri openai s'është i disponueshëm (Gemini punon normalisht).",
+      "openaiApiKey": "Çelësi API i OpenAI",
+      "openaiRemoveSavedKey": "Hiq çelësin OpenAI (provideri openai fiket)",
+      "providerTitle": "Provideri i bisedës per-hotel",
+      "providerSubtitle": "Cili tru i përgjigjet mysafirëve — vendim i platformës; hoteli s'sheh kurrë emra providerësh.",
+      "providerDefault": "Provideri default:",
+      "crossFallback": "Rezerva ndër-provider (5xx/ngecje → provohet provideri tjetër)",
+      "crossFallbackHint": "Kur provideri i një hoteli dështon kalimtarisht edhe pas rezervës së brendshme, kërkesa provohet një herë te provideri tjetër i konfiguruar. Google dhe OpenAI s'sëmuren kurrë bashkë.",
+      "tenantColumn": "Hoteli",
+      "overrideColumn": "Mbivendosja",
+      "effectiveColumn": "Efektivi",
+      "followDefault": "— ndiq default-in —"
     }
   },
   "reports360": {
