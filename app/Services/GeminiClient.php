@@ -134,7 +134,7 @@ class GeminiClient
 
             // Raundi i fundit lejon VETËM përgjigjen finale — cikli s'mbetet kurrë pa dalje.
             $allowed = $round === $maxToolRounds ? [$finalToolName] : $allNames;
-            $turn = $this->generate($activeModel, $system, $contents, $functions, $allowed, $maxTokens, min($remaining, self::CALL_TIMEOUT_CAP));
+            $turn = $this->generate($activeModel, $system, $contents, $functions, $allowed, $maxTokens, $deadline);
             $activeModel = $turn['model'];
 
             // Finalja pranohet VETËM si thirrje e vetme e radhës (ose kur raundi
@@ -192,10 +192,15 @@ class GeminiClient
      * rejects reconstructed history with 400) plus the extracted calls in order,
      * plus the model that actually served the round (converse sticks to it).
      *
+     * @param  float  $deadline  microtime(true) kur mbaron buxheti i GJITHË bisedës —
+     *                           edhe primari edhe rezerva rrinë brenda tij (gjetje Codex #550).
      * @return array{content:\stdClass,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>,model:string}
      */
-    private function generate(string $model, string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, int $timeoutSeconds): array
+    private function generate(string $model, string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, float $deadline): array
     {
+        // Slot-i i çastit: sa kohë i jepet thirrjes SË RADHËS — kurrë mbi tavanin
+        // 30s (dorëzimi i shpejtë) dhe kurrë mbi afatin e mbetur të bisedës.
+        $slot = fn (): int => max(3, (int) floor(min(self::CALL_TIMEOUT_CAP, $deadline - microtime(true))));
         $payload = [
             'system_instruction' => ['parts' => [['text' => $system]]],
             'contents' => $contents,
@@ -217,7 +222,7 @@ class GeminiClient
         // për mysafirin janë e njëjta heshtje (task #403).
         $servedBy = $model;
         try {
-            $res = $this->post($model, $payload, $timeoutSeconds);
+            $res = $this->post($model, $payload, $slot());
         } catch (\Illuminate\Http\Client\ConnectionException) {
             $res = null;
         }
@@ -229,9 +234,14 @@ class GeminiClient
         // përgjigje në sekonda; rezerva dështon → gabimi ORIGJINAL bublon
         // (radha riprovon si zakonisht).
         $fallback = trim((string) config('services.gemini.fallback_model'));
-        if (($res === null || $res->serverError()) && $fallback !== '' && $fallback !== $model) {
+        if (($res === null || $res->serverError()) && $fallback !== '' && $fallback !== $model
+            // Rezerva provohet VETËM brenda afatit të mbetur të bisedës (gjetje
+            // Codex #550): kur primari e hëngri buxhetin duke u varur, s'i
+            // shtojmë mysafirit edhe një pritje — bublon dështimi origjinal
+            // dhe shkalla e riprovës së job-it rikthehet me buxhet të freskët.
+            && $deadline - microtime(true) >= 3) {
             try {
-                $fallbackRes = $this->post($fallback, $payload, $timeoutSeconds);
+                $fallbackRes = $this->post($fallback, $payload, $slot());
                 if ($fallbackRes->successful()) {
                     $res = $fallbackRes;
                     $servedBy = $fallback;
