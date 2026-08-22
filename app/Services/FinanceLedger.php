@@ -411,12 +411,11 @@ class FinanceLedger
             ->where('payment_method', 'cash')
             ->whereDoesntHave('payments', fn ($query) => $query->where('direction', 'in'))
             ->sum('total_amount');
-        $hasNewTenders = $shift->payments()->where('direction', 'in')->exists();
-        $yield = $hasNewTenders || $legacyCash > 0
-            ? round($legacyCash, 2)
-            : ($shift->counted_cash !== null
-                ? round((float) $shift->counted_cash - (float) $shift->opening_float, 2)
-                : round((float) $shift->cash_sales, 2));
+        // ONLY legacy cash posts. A shift with no tenders (e.g. zero sales but a
+        // count that differs from the float) has nothing to post — counted−float
+        // there is a DIFFERENCE in disguise (Saturn shift #46, +910 on the
+        // first night of the rule) and differences never touch the accounts.
+        $yield = round($legacyCash, 2);
         if ($yield == 0.0) {
             $this->removeFor($shift);
 

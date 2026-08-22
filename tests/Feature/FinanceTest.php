@@ -103,8 +103,12 @@ class FinanceTest extends TestCase
         $this->assertSame(1, FinancePayment::where('direction', 'out')->count());
     }
 
-    public function test_closing_a_pos_shift_deposits_the_counted_yield_once(): void
+    public function test_closing_a_shift_with_no_legacy_cash_posts_nothing_to_the_accounts(): void
     {
+        // Renato (2026-08-21/22): differences are report-only. Saturn shift #46
+        // (zero sales, float 9,220, counted 10,130) still posted +910 through the
+        // old counted−float fallback — that fallback is gone. A closed shift
+        // posts ONLY legacy pre-tender cash; the over/short stays on the shift.
         $user = User::factory()->create();
         $shift = PosShift::create([
             'user_id' => $user->id, 'status' => 'open', 'opening_float' => 50,
@@ -117,12 +121,13 @@ class FinanceTest extends TestCase
             'counted_cash' => 236.50, 'cash_sales' => 190, 'over_short' => -3.5,
         ]);
 
-        $this->assertSame(186.5, $this->arka()->balance()); // 236.50 − 50 float
-        $this->assertDatabaseCount('finance_payments', 1);
+        $this->assertSame(0.0, $this->arka()->balance());
+        $this->assertDatabaseCount('finance_payments', 0);
+        $this->assertSame(-3.5, (float) $shift->fresh()->over_short); // still on the shift report
 
         $shift->touch();
         $shift->save();
-        $this->assertDatabaseCount('finance_payments', 1); // idempotent
+        $this->assertDatabaseCount('finance_payments', 0); // idempotent
     }
 
     public function test_backfill_is_idempotent(): void
