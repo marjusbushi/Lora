@@ -33,7 +33,7 @@ class GuestStayQuote
      *
      * @return array<int,array{type:RoomType,booked:int,available:int,quote:array}>
      */
-    public function rows(Carbon $from, Carbon $to, int $adults = 1): array
+    public function rows(Carbon $from, Carbon $to, int $adults = 1, int $children = 0): array
     {
         if ($to->lte($from)) {
             throw new InvalidArgumentException('Data e largimit duhet të jetë pas datës së mbërritjes.');
@@ -42,8 +42,13 @@ class GuestStayQuote
             throw new InvalidArgumentException('Qëndrimi maksimal që mund të llogaritet është '.self::MAX_NIGHTS.' net.');
         }
 
+        // Fëmija zë vend si i rrituri (vendim i pronarit; foshnja në krevatin
+        // e prindërve s'numërohet) — tipologjia kualifikohet vetëm kur i nxë
+        // TË GJITHË dhe kur fëmijët s'i kalojnë kufirin e saj max_children.
         $types = RoomType::withCount(['rooms' => fn ($q) => $q->where('status', '!=', 'maintenance')])
-            ->where('max_occupancy', '>=', $adults)->orderBy('name')->get();
+            ->where('max_occupancy', '>=', $adults + $children)
+            ->where('max_children', '>=', $children)
+            ->orderBy('name')->get();
         $booked = Reservation::query()->whereNotIn('reservations.status', ['cancelled', 'checked_out'])
             ->whereDate('reservations.check_in_date', '<', $to->toDateString())
             ->whereDate('reservations.check_out_date', '>', $from->toDateString())
@@ -65,20 +70,22 @@ class GuestStayQuote
      * allowed to say. Compact keys on purpose: this array is fed verbatim to the
      * AI as a tool result, and the rule is "quote these numbers, never compute".
      *
-     * @return array{currency:string,check_in:string,check_out:string,nights:int,adults:int,room_types:array<int,array<string,mixed>>}
+     * @return array{currency:string,check_in:string,check_out:string,nights:int,adults:int,children:int,room_types:array<int,array<string,mixed>>}
      */
-    public function forGuest(string $channel, string $checkIn, string $checkOut, int $adults = 1): array
+    public function forGuest(string $channel, string $checkIn, string $checkOut, int $adults = 1, int $children = 0): array
     {
         $from = Carbon::parse($checkIn);
         $to = Carbon::parse($checkOut);
         $direct = $channel === 'whatsapp';
+        $children = max(0, min(19, $children));
 
-        $roomTypes = collect($this->rows($from, $to, max(1, min(20, $adults))))
+        $roomTypes = collect($this->rows($from, $to, max(1, min(20, $adults)), $children))
             ->map(function (array $row) use ($direct) {
                 $priced = $this->directPricing->applyTo($row['quote']);
                 $base = [
                     'name' => $row['type']->name,
                     'max_occupancy' => (int) $row['type']->max_occupancy,
+                    'max_children' => (int) $row['type']->max_children,
                     'rooms_available' => $row['available'],
                     'breakfast_included' => (bool) $row['type']->breakfast_included,
                 ];
@@ -108,6 +115,7 @@ class GuestStayQuote
             'check_out' => $to->toDateString(),
             'nights' => $from->diffInDays($to),
             'adults' => $adults,
+            'children' => $children,
             'room_types' => $roomTypes,
         ];
     }
