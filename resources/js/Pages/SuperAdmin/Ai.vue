@@ -1,11 +1,15 @@
 <script setup>
-import { computed } from 'vue';
+import { ref } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout.vue';
 import BillingPageHeader from '@/Components/SuperAdmin/BillingPageHeader.vue';
 import { Sparkles, Bot, RotateCw, ArrowLeftRight } from 'lucide-vue-next';
 
 const props = defineProps({ ai: Object, openai: Object, providers: Object });
+
+// Shpjegimi i rezervës: i fshehur si parazgjedhje (minimalizmi), i hapshëm me
+// klik — jo vetëm hover, që ta arrijnë edhe prekja/tastiera (Codex P2 #596).
+const showFallbackHint = ref(false);
 
 const form = useForm({
     gemini_key: '',
@@ -171,11 +175,13 @@ function dateTime(value) {
                                 <button v-for="p in providers.options" :key="p" type="button" class="rounded-full px-4 py-1.5 text-[10.5px] font-bold transition-all" :class="providerForm.provider_default === p ? 'bg-white text-emerald-800 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'" @click="providerForm.provider_default = p">{{ p }}</button>
                             </span>
                         </div>
-                        <label class="flex cursor-pointer items-center gap-2.5 text-[10.5px] font-bold text-neutral-600" :title="$t('superAdmin.ai.crossFallbackHint')">
+                        <label class="flex cursor-pointer items-center gap-2.5 text-[10.5px] font-bold text-neutral-600">
                             <button type="button" class="relative h-[21px] w-[38px] rounded-full transition-colors" :class="providerForm.cross_fallback ? 'bg-emerald-600' : 'bg-neutral-300'" @click="providerForm.cross_fallback = !providerForm.cross_fallback"><span class="absolute top-[2.5px] h-4 w-4 rounded-full bg-white shadow transition-all" :class="providerForm.cross_fallback ? 'left-[19px]' : 'left-[3px]'" /></button>
                             {{ $t('superAdmin.ai.crossFallback') }}
                         </label>
+                        <button type="button" class="grid h-[18px] w-[18px] place-items-center rounded-full border border-neutral-300 text-[10px] font-bold text-neutral-500 transition-colors hover:border-emerald-300 hover:text-emerald-700" :aria-expanded="showFallbackHint" :aria-label="$t('superAdmin.ai.crossFallback')" @click="showFallbackHint = !showFallbackHint">?</button>
                     </div>
+                    <p v-if="showFallbackHint" class="border-b border-neutral-100 px-4 py-2 text-[10px] text-neutral-500">{{ $t('superAdmin.ai.crossFallbackHint') }}</p>
 
                     <div class="divide-y divide-neutral-100">
                         <div v-for="t in providers.tenants" :key="t.id" class="grid grid-cols-[34px_minmax(0,1fr)] items-center gap-3 px-4 py-2.5 hover:bg-neutral-50/60 sm:grid-cols-[34px_minmax(0,1fr)_auto_auto]">
