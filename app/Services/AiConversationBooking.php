@@ -99,9 +99,10 @@ class AiConversationBooking
         $adults = max(1, min(10, (int) ($args['adults'] ?? 0)));
         $firstName = trim((string) ($args['guest_first_name'] ?? '')) ?: trim((string) $thread->guest_name);
         $lastName = trim((string) ($args['guest_last_name'] ?? ''));
-        // Pariteti me rezervimin manual (GuestStoreRequest: last_name required)
-        // — vendim i Marjusit: të dhëna të plota mysafiri, si në recepsion.
-        if (mb_strlen($firstName) < 2 || mb_strlen($lastName) < 2) {
+        // Pariteti me rezervimin manual (GuestStoreRequest: last_name required
+        // + ContainsLetters(1) — mjafton NJË shkronjë, mbiemrat "O"/"李" janë
+        // të vlefshëm) — vendim i Marjusit: të dhëna të plota si në recepsion.
+        if (mb_strlen($firstName) < 2 || ! preg_match('/\p{L}/u', $lastName)) {
             return ['error' => 'Mungon emri i plotë i mysafirit — pyete për emrin DHE mbiemrin para rezervimit.'];
         }
 
@@ -131,7 +132,7 @@ class AiConversationBooking
                 && (int) $existing->room?->room_type_id === (int) $type->id;
 
             if ($same) {
-                return $this->holdPayload($existing, $type->name, $firstName, $lastName, $nights, $adults);
+                return $this->holdPayload($existing, $type->name, $nights, $adults);
             }
 
             // Para anulimit, pajtohu AUTORITATIVISHT me POK (gjetje Codex, PR
@@ -243,16 +244,22 @@ class AiConversationBooking
             'currency' => PricingCurrency::code(),
         ], 'ai');
 
-        return $this->holdPayload($reservation, $type->name, $firstName, $lastName, $nights, $adults);
+        return $this->holdPayload($reservation, $type->name, $nights, $adults);
     }
 
-    /** @return array<string,mixed> */
-    private function holdPayload(Reservation $reservation, string $typeName, string $firstName, string $lastName, int $nights, int $adults): array
+    /**
+     * Emri në payload lexohet nga mysafiri i RUAJTUR i rezervimit — kurrë nga
+     * argumentet e mjetit: kështu përmbledhja e modelit dhe konfirmimi pas
+     * pagesës flasin GJITHMONË për të njëjtin person (gjetje Codex, PR #584).
+     *
+     * @return array<string,mixed>
+     */
+    private function holdPayload(Reservation $reservation, string $typeName, int $nights, int $adults): array
     {
         return [
             'status' => 'hold_created',
-            'guest_first_name' => $firstName,
-            'guest_last_name' => $lastName,
+            'guest_first_name' => (string) $reservation->guest?->first_name,
+            'guest_last_name' => (string) $reservation->guest?->last_name,
             'room_type' => $typeName,
             'check_in' => $reservation->check_in_date?->toDateString(),
             'check_out' => $reservation->check_out_date?->toDateString(),

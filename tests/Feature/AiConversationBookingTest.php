@@ -335,8 +335,52 @@ class AiConversationBookingTest extends TestCase
         $result = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['guest_last_name' => '']));
 
         $this->assertStringContainsString('mbiemrin', $result['error'] ?? '');
+
+        // Pa asnjë SHKRONJË (vetëm shenja) refuzohet njësoj — ContainsLetters(1).
+        $dashes = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['guest_last_name' => '--']));
+        $this->assertStringContainsString('mbiemrin', $dashes['error'] ?? '');
+
         $this->assertSame(0, Reservation::query()->count());
         $this->assertSame(0, Guest::query()->count());
+    }
+
+    /** Codex #584 P2: mbiemri një-shkronjësh ("O", "李") është i vlefshëm — si te rezervimi manual. */
+    public function test_one_letter_surname_is_accepted(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+
+        $hold = app(AiConversationBooking::class)->hold($thread, $this->holdArgs(['guest_last_name' => 'O']));
+
+        $this->assertSame('hold_created', $hold['status'] ?? null, json_encode($hold));
+        $this->assertSame('O', Guest::query()->sole()->last_name);
+    }
+
+    /** Codex #584 P2: mbajtja e ripërdorur kthen emrin e RUAJTUR — jo atë të argumenteve të reja. */
+    public function test_reused_hold_payload_carries_the_persisted_guest_name(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+
+        $first = app(AiConversationBooking::class)->hold($thread, $this->holdArgs());
+        $this->assertSame('hold_created', $first['status'] ?? null);
+
+        // Të njëjtat data/tipologji/persona, por "emër i korrigjuar" — mbajtja
+        // ripërdoret dhe payload-i flet për mysafirin e ruajtur, që përmbledhja
+        // e modelit dhe konfirmimi pas pagesës të mos ndahen kurrë.
+        $second = app(AiConversationBooking::class)->hold(
+            $thread->fresh(),
+            $this->holdArgs(['guest_first_name' => 'Beni', 'guest_last_name' => 'Kola'])
+        );
+
+        $this->assertSame('hold_created', $second['status'] ?? null, json_encode($second));
+        $this->assertSame('Andi', $second['guest_first_name']);
+        $this->assertSame('Hoxha', $second['guest_last_name']);
+        $this->assertSame(1, Reservation::query()->count());
     }
 
     /** Task #422: emri i plotë ruhet te mysafiri i ri dhe kthehet në payload për përmbledhjen e modelit. */
