@@ -5,8 +5,9 @@ export const settingsTabs = [
     { id: 'room-types', labelKey: 'settingsTabs.navigation.tabs.roomTypes', group: 'hotel' },
     { id: 'floors', labelKey: 'settingsTabs.navigation.tabs.floors', group: 'hotel' },
     { id: 'amenities', labelKey: 'settingsTabs.navigation.tabs.amenities', group: 'hotel' },
-    { id: 'website', labelKey: 'settingsTabs.navigation.tabs.website', group: 'hotel' },
-    { id: 'about', labelKey: 'settingsTabs.navigation.tabs.about', group: 'hotel' },
+    // Web Studio (task #411) zëvendëson tab-et e vjetra 'website' + 'about' —
+    // gjithë web-i publik editohet në një faqe të vetme me parapamje live.
+    { id: 'web-studio', sidebarId: 'web-studio', labelKey: 'settingsTabs.navigation.tabs.webStudio', group: 'hotel', href: '/pms/web-studio' },
     { id: 'booking-policies', labelKey: 'settingsTabs.navigation.tabs.bookingPolicies', group: 'operations' },
     { id: 'pricing-programs', labelKey: 'settingsTabs.navigation.tabs.pricingPrograms', group: 'operations' },
     { id: 'market-rates', labelKey: 'settingsTabs.navigation.tabs.marketRates', group: 'operations' },
