@@ -40,6 +40,10 @@ class AiController extends Controller
                 'configured' => $gemini->configured(),
                 'key_hint' => $storedKey !== '' ? str_repeat('•', 6).substr($storedKey, -4) : null,
                 'from_env' => $fromEnv,
+                // Heqja e çelësit të ruajtur NUK e fik trurin kur serveri ka
+                // çelës në .env (rezerva e GeminiClient::key) — UI-ja duhet ta
+                // thotë të vërtetën, jo "FIK platformën" (gjetje Codex #559).
+                'env_key_present' => ! empty(config('services.gemini.key')),
                 'model' => $gemini->model(),
                 'fallback_model' => (string) config('services.gemini.fallback_model'),
                 'health' => $healthOut,
@@ -59,7 +63,11 @@ class AiController extends Controller
             // Pa çelës s'ka çfarë kontrollohet — alarmi i vjetër hiqet menjëherë.
             PlatformSetting::set('ai.gemini_key_health', '', 'text');
 
-            return back()->with('success', 'Çelësi qendror AI u hoq.');
+            // E vërteta e plotë (gjetje Codex #559): me çelës serveri në .env,
+            // heqja e të ruajturit s'e fik trurin — platforma kalon te ai.
+            return back()->with('success', empty(config('services.gemini.key'))
+                ? 'Çelësi qendror AI u hoq — truri AI është FIKUR për gjithë platformën.'
+                : 'Çelësi i ruajtur u hoq — platforma tani përdor çelësin e serverit (.env); truri AI mbetet aktiv.');
         }
 
         $key = trim((string) ($data['gemini_key'] ?? ''));

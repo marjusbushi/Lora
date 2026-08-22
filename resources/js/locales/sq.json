@@ -5372,7 +5372,8 @@
       "healthFail": "Çelësi DËSHTOI:",
       "healthNone": "Ende asnjë kontroll i regjistruar — përdor \"Kontrollo tani\".",
       "checkedAt": "Kontrolluar: {date}",
-      "modelsLine": "Modeli primar: {model} · Rezerva: {fallback}"
+      "modelsLine": "Modeli primar: {model} · Rezerva: {fallback}",
+      "removeSavedKeyEnv": "Hiq çelësin e ruajtur (platforma kalon te çelësi i serverit — truri AI mbetet aktiv)"
     }
   },
   "reports360": {

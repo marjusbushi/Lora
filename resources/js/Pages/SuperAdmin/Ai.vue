@@ -63,9 +63,10 @@ function dateTime(value) {
                         </p>
                     </div>
 
+                    <!-- Etiketë e ndershme: me çelës serveri në .env, heqja s'e fik trurin — kalon te ai (Codex #559). -->
                     <label v-if="ai.key_hint" class="flex items-center gap-2.5 text-xs font-semibold text-neutral-700">
                         <input v-model="form.clear_key" type="checkbox" class="h-4 w-4 rounded border-neutral-300 text-red-600 focus:ring-red-500">
-                        {{ $t('superAdmin.ai.removeSavedKey') }}
+                        {{ ai.env_key_present ? $t('superAdmin.ai.removeSavedKeyEnv') : $t('superAdmin.ai.removeSavedKey') }}
                     </label>
 
                     <div class="flex items-center gap-3">

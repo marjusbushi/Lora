@@ -5372,7 +5372,8 @@
       "healthFail": "The key FAILED:",
       "healthNone": "No check recorded yet — use \"Check now\".",
       "checkedAt": "Checked: {date}",
-      "modelsLine": "Primary model: {model} · Reserve: {fallback}"
+      "modelsLine": "Primary model: {model} · Reserve: {fallback}",
+      "removeSavedKeyEnv": "Remove the saved key (the platform falls back to the server key — the AI brain stays on)"
     }
   },
   "reports360": {

@@ -67,6 +67,28 @@ class SuperAdminAiTest extends TestCase
         $this->assertSame('', PlatformSetting::get('ai.gemini_key_health'));
     }
 
+    /** Codex #559 P2: me çelës serveri në .env, heqja e të ruajturit NUK e fik trurin — flash-i e thotë të vërtetën. */
+    public function test_clearing_with_an_env_key_present_reports_the_fallback_honestly(): void
+    {
+        config()->set('services.gemini.key', 'env-server-key');
+        $admin = User::factory()->create(['is_super_admin' => true]);
+        PlatformSetting::set('ai.gemini_key', 'central-key-123', 'text');
+
+        $this->actingAs($admin)
+            ->put('https://admin.lorapms.test/super-admin/ai', ['clear_key' => true])
+            ->assertRedirect()
+            ->assertSessionHas('success', fn (string $msg) => str_contains($msg, 'çelësin e serverit'));
+
+        // Truri mbetet AKTIV mbi çelësin e serverit — dhe faqja e deklaron.
+        $this->assertTrue(app(\App\Services\GeminiClient::class)->configured());
+        $this->actingAs($admin)
+            ->get('https://admin.lorapms.test/super-admin/ai')
+            ->assertInertia(fn ($page) => $page
+                ->where('ai.configured', true)
+                ->where('ai.env_key_present', true)
+                ->where('ai.key_hint', null));
+    }
+
     public function test_regular_tenant_admin_cannot_touch_the_central_key(): void
     {
         $tenant = Tenant::query()->sole();
