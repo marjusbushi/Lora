@@ -3726,6 +3726,10 @@
           "text": "Faleminderit shumë! Presim t'ju mirëpresim. Mirë se vini në Villa Mucho."
         }
       }
+    },
+    "roomTypes": {
+      "maxChildren": "Fëmijë maksimalë",
+      "maxChildrenHint": "Sa nga vendet e dhomës mund të zihen nga fëmijë (0 deri te kapaciteti)."
     }
   },
   "reservationShow": {

@@ -90,6 +90,7 @@ class ChannexBootstrapRooms extends Command
             $title = trim($roomType->name);
             $count = Room::where('room_type_id', $roomType->id)->count();
             $occ = max(1, (int) $roomType->max_occupancy);
+            $children = max(0, (int) $roomType->max_children);
 
             $match = $existingByTitle->get(Str::lower($title));
             $channexRoomTypeId = $match['id'] ?? null;
@@ -98,9 +99,9 @@ class ChannexBootstrapRooms extends Command
                 $this->line(sprintf('  = exists      %-30s %s', $title, $channexRoomTypeId));
                 $rtExisting++;
             } else {
-                $this->line(sprintf('  %s %-30s (rooms=%d, occ=%d)', $dry ? '+ would create' : '+ creating   ', $title, $count, $occ));
+                $this->line(sprintf('  %s %-30s (rooms=%d, occ=%d, chd=%d)', $dry ? '+ would create' : '+ creating   ', $title, $count, $occ, $children));
                 if (! $dry) {
-                    $channexRoomTypeId = $channex->createRoomType($title, $count, $occ);
+                    $channexRoomTypeId = $channex->createRoomType($title, $count, $occ, $children);
                     if (! $channexRoomTypeId) {
                         $this->error("    FAILED to create room type \"{$title}\" (see channel_sync_logs)");
 
