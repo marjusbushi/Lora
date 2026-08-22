@@ -52,6 +52,19 @@ class RoomTypeMaxChildrenTest extends TestCase
         $this->assertNull(RoomType::where('name', 'E vogël')->first());
     }
 
+    /** Codex #592 P2: ulja e kapacitetit PA fushën e re s'lë dot max_children mbi kapacitetin. */
+    public function test_capacity_drop_without_the_field_clamps_the_stored_child_limit(): void
+    {
+        $admin = $this->admin();
+        $type = RoomType::create(['name' => 'Familjare', 'base_price' => 90, 'max_occupancy' => 4, 'max_children' => 3, 'amenities' => []]);
+
+        $this->actingAs($admin)->put(route('settings.room-types.update', $type->id), [
+            'name' => 'Familjare', 'base_price' => 90, 'max_occupancy' => 2, 'amenities' => [],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame(2, (int) $type->fresh()->max_children);
+    }
+
     public function test_missing_max_children_falls_to_the_db_default(): void
     {
         $admin = $this->admin();

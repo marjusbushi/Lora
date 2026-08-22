@@ -859,6 +859,12 @@ class SettingsController extends Controller
         DB::transaction(function () use ($data, $roomType) {
             $version = PricingRulesVersion::lock();
             $lockedType = RoomType::query()->whereKey($roomType->id)->lockForUpdate()->firstOrFail();
+            // Thirrës pa fushën e re mund të ulë kapacitetin nën kufirin e
+            // ruajtur të fëmijëve — normalizohet nën kyçje, që invarianti
+            // max_children <= max_occupancy të mos thyhet kurrë (Codex #592).
+            if (! array_key_exists('max_children', $data)) {
+                $data['max_children'] = min((int) $lockedType->max_children, (int) $data['max_occupancy']);
+            }
             $lockedType->fill($data);
             $engineChanged = $lockedType->isDirty(['base_price', 'min_price', 'max_price']);
             if ($lockedType->isDirty()) {
