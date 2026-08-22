@@ -22,7 +22,7 @@ const editingType = ref(null);
 const selectedType = ref(null);
 
 const form = useForm({
-    name: '', description: '', base_price: '', min_price: '', max_price: '', max_occupancy: 2, amenities: [], breakfast_included: false,
+    name: '', description: '', base_price: '', min_price: '', max_price: '', max_occupancy: 2, max_children: 1, amenities: [], breakfast_included: false,
 });
 
 const amenityInput = ref('');
@@ -90,6 +90,7 @@ function openEdit(type) {
     form.min_price = type.min_price ?? '';
     form.max_price = type.max_price ?? '';
     form.max_occupancy = type.max_occupancy;
+    form.max_children = type.max_children ?? 1;
     form.amenities = type.amenities || [];
     form.breakfast_included = !!type.breakfast_included;
     showModal.value = true;
@@ -339,9 +340,15 @@ function setAsFeatured(type, imageId) {
                     <TextInput type="number" v-model="form.max_price" min="0" step="0.01" :error="form.errors.max_price" :placeholder="$t('admin.generated.k_dd47db774257')" />
                 </FormGroup>
             </div>
-            <FormGroup :label="$t('admin.generated.k_f15f4aed46ad')" :error="form.errors.max_occupancy" required>
-                <TextInput type="number" v-model="form.max_occupancy" min="1" max="20" :error="form.errors.max_occupancy" />
-            </FormGroup>
+            <div class="grid grid-cols-2 gap-3">
+                <FormGroup :label="$t('admin.generated.k_f15f4aed46ad')" :error="form.errors.max_occupancy" required>
+                    <TextInput type="number" v-model="form.max_occupancy" min="1" max="20" :error="form.errors.max_occupancy" />
+                </FormGroup>
+                <FormGroup :label="$t('admin.roomTypes.maxChildren')" :error="form.errors.max_children">
+                    <TextInput type="number" v-model="form.max_children" min="0" :max="form.max_occupancy" :error="form.errors.max_children" />
+                    <p class="mt-1 text-xs text-gray-500">{{ $t('admin.roomTypes.maxChildrenHint') }}</p>
+                </FormGroup>
+            </div>
             <FormGroup :label="$t('admin.generated.k_43e402bf3405')" :error="form.errors.description">
                 <Textarea v-model="form.description" :rows="2" :placeholder="$t('admin.generated.k_598a21829637')" />
             </FormGroup>
