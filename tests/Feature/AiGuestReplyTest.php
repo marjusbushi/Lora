@@ -908,6 +908,35 @@ class AiGuestReplyTest extends TestCase
         $this->assertStringContainsString('këtë fundjavë', $seenSystem);
     }
 
+    /** Codex #579 P1: "sot" ndërtohet në orën e HOTELIT — rreth mesnatës zona tjetër orare mos marrë data të gabuara. */
+    public function test_prompt_today_uses_the_tenant_timezone(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        // Hotel në Pacifik: kur në Tiranë ka nisur e nesërmja, atje s'ka ende.
+        $this->tenant->forceFill(['timezone' => 'Pacific/Honolulu'])->save();
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->travelTo(now()->setTimezone('Europe/Tirane')->setTime(1, 0));
+        $expectedToday = now('Pacific/Honolulu')->toDateString();
+        $this->assertNotSame($expectedToday, now('Europe/Tirane')->toDateString());
+
+        $seenSystem = null;
+        $this->mock(GeminiClient::class, function ($mock) use (&$seenSystem) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system) use (&$seenSystem) {
+                $seenSystem = $system;
+
+                return ['args' => ['confident' => true, 'reply' => 'Breakfast is 7-10.', 'kind' => 'informative'], 'toolsUsed' => []];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+        $this->travelBack();
+
+        $this->assertStringContainsString($expectedToday, $seenSystem);
+    }
+
     /** Task #403: dështim kalimtar 5xx → SAKTËSISHT një riprovë e ftohtë 5-min per mesazh (e dyta no-op). */
     public function test_transient_5xx_failure_schedules_exactly_one_cool_retry(): void
     {
