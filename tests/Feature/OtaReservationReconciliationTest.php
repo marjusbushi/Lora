@@ -327,6 +327,45 @@ class OtaReservationReconciliationTest extends TestCase
         $this->assertSame('704.70', $issue->actual_total);
     }
 
+    public function test_desk_resolved_difference_stays_closed_until_the_reservation_changes_again(): void
+    {
+        // Renato (2026-08-22): "extended on desk" must survive the nightly
+        // checker — the card stays closed while the PMS side is what staff
+        // saw, and reopens only if the reservation changes again.
+        $reservation = $this->reservation([
+            'created_via' => Reservation::CREATED_VIA_CHANNEL_MANAGER,
+            'channel' => 'booking.com',
+            'channel_ref' => '5352744650',
+            'total_amount' => 180,
+        ]);
+        $reconciler = app(OtaReservationReconciler::class);
+        $reconciler->reconcile([$this->booking()], 'PROP-1');
+        $issue = OtaReconciliationIssue::where('issue_type', 'amount_mismatch')->sole();
+
+        // Staff closes it with the desk explanation (what the endpoint writes).
+        $issue->forceFill([
+            'status' => OtaReconciliationIssue::STATUS_RESOLVED,
+            'resolved_at' => now(),
+            'resolution' => OtaReconciliationIssue::RESOLUTION_EXTENDED_ON_DESK,
+            'resolved_by' => $this->user->id,
+            'resolution_fingerprint' => OtaReconciliationIssue::fingerprint((float) $issue->actual_total, $issue->details),
+        ])->save();
+
+        // Nightly run, nothing changed → stays closed, explanation kept.
+        $reconciler->reconcile([$this->booking()], 'PROP-1');
+        $fresh = $issue->fresh();
+        $this->assertSame(OtaReconciliationIssue::STATUS_RESOLVED, $fresh->status);
+        $this->assertSame(OtaReconciliationIssue::RESOLUTION_EXTENDED_ON_DESK, $fresh->resolution);
+
+        // The PMS total changes again → the explanation no longer holds: reopen.
+        $reservation->update(['total_amount' => 150]);
+        $reconciler->reconcile([$this->booking()], 'PROP-1');
+        $fresh = $issue->fresh();
+        $this->assertSame(OtaReconciliationIssue::STATUS_OPEN, $fresh->status);
+        $this->assertNull($fresh->resolution);
+        $this->assertSame('150.00', $fresh->actual_total);
+    }
+
     public function test_price_difference_is_reported_and_resolves_after_correction(): void
     {
         $reservation = $this->reservation([
