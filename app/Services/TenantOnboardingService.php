@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Tenant;
 use App\Models\TenantOnboarding;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class TenantOnboardingService
@@ -62,27 +63,50 @@ class TenantOnboardingService
         ?int $userId,
     ): TenantOnboarding {
         $this->assertTaskExists($stepKey, $taskKey);
-        $steps = $onboarding->steps;
-        $steps[$stepKey]['tasks'][$taskKey] = [
-            'completed' => $completed,
-            'completed_at' => $completed ? now()->toIso8601String() : null,
-            'completed_by' => $completed ? $userId : null,
-        ];
 
-        return $this->saveSteps($onboarding, $steps);
+        return $this->mutateSteps($onboarding, function (array $steps) use ($stepKey, $taskKey, $completed, $userId) {
+            $steps[$stepKey]['tasks'][$taskKey] = [
+                'completed' => $completed,
+                'completed_at' => $completed ? now()->toIso8601String() : null,
+                'completed_by' => $completed ? $userId : null,
+            ];
+
+            return $steps;
+        });
     }
 
     public function updateStep(TenantOnboarding $onboarding, string $stepKey, array $data): TenantOnboarding
     {
         $this->assertStepExists($stepKey);
-        $steps = $onboarding->steps;
-        foreach (['status', 'notes', 'due_date', 'assigned_to'] as $field) {
-            if (array_key_exists($field, $data)) {
-                $steps[$stepKey][$field] = $data[$field];
-            }
-        }
 
-        return $this->saveSteps($onboarding, $steps);
+        return $this->mutateSteps($onboarding, function (array $steps) use ($stepKey, $data) {
+            foreach (['status', 'notes', 'due_date', 'assigned_to'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $steps[$stepKey][$field] = $data[$field];
+                }
+            }
+
+            return $steps;
+        });
+    }
+
+    /**
+     * Çdo mutacion i hapave është read-modify-write mbi GJITHË JSON-in `steps`
+     * — dy kërkesa mbivendosëse (toggle detyre + ruajtje hapi) pa këtë do të
+     * mbishkruanin njëra-tjetrën. Row-lock + rilexim i freskët BRENDA
+     * transaksionit i serializon dhe çdo shkrim niset nga gjendja e fundit
+     * e ruajtur, jo nga modeli potencialisht i vjetruar i kërkesës.
+     */
+    private function mutateSteps(TenantOnboarding $onboarding, callable $mutate): TenantOnboarding
+    {
+        return DB::transaction(function () use ($onboarding, $mutate) {
+            $fresh = TenantOnboarding::query()
+                ->whereKey($onboarding->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            return $this->saveSteps($fresh, $mutate($fresh->steps));
+        });
     }
 
     public function saveSteps(TenantOnboarding $onboarding, array $steps): TenantOnboarding
