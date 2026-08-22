@@ -144,10 +144,14 @@ class OpenAiClient implements AiChatProvider
                 ? ['type' => 'function', 'function' => ['name' => $forceToolName]]
                 : 'required',
             'max_completion_tokens' => $maxTokens,
-            // 'none' i DETYRUAR nga API-ja: Luna refuzon me 400 çdo effort
-            // tjetër kur ka mjete në chat/completions (provë reale 2026-08-22).
-            // Na shkon: llogaritë i bën motori ynë — modelit i duhet vetëm të flasë.
-            'reasoning_effort' => (string) config('services.openai.reasoning_effort', 'none'),
+            // 'none' i DETYRUAR PA KUSHTE kur ka mjete (provë reale 2026-08-22;
+            // Codex #572 P1): API-ja refuzon me 400 çdo effort tjetër me mjete
+            // në chat/completions — edhe një env i vjetër =low do t'i rikthente
+            // 400-at, ndaj konfigurimi respektohet VETËM pa mjete. Na shkon:
+            // llogaritë i bën motori ynë — modelit i duhet vetëm të flasë.
+            'reasoning_effort' => $declarations === []
+                ? (string) config('services.openai.reasoning_effort', 'none')
+                : 'none',
         ];
 
         // Ngecja trajtohet si dështim kalimtar — "(timeout)" e njeh riprova

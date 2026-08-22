@@ -123,6 +123,19 @@ class OpenAiConverseTest extends TestCase
         $this->assertSame('none', $second['reasoning_effort']);
     }
 
+    /** Codex #572 P1: edhe një env i vjetër 'low' NUK dërgohet kurrë me mjete — 'none' i pakushtëzuar. */
+    public function test_reasoning_effort_is_forced_to_none_with_tools_even_when_config_says_low(): void
+    {
+        config()->set('services.openai.reasoning_effort', 'low');
+
+        Http::fakeSequence('api.openai.com/*')->push($this->finalReplyResponse());
+
+        app(OpenAiClient::class)->converse('SYSTEM', 'MYSAFIRI: hej', self::TOOLS, [], 'guest_reply');
+
+        $sent = json_decode((string) collect(Http::recorded())->last()[0]->body(), true);
+        $this->assertSame('none', $sent['reasoning_effort']);
+    }
+
     public function test_premature_final_in_a_mixed_turn_is_rejected_and_tools_still_run(): void
     {
         Http::fakeSequence('api.openai.com/*')
