@@ -77,12 +77,10 @@ class BeachShiftTest extends TestCase
         $this->assertSame('300.00', $closed->card_sales);
         $this->assertSame('-10.00', $closed->over_short);
 
-        // Diferenca postohet në Financë (drejtim 'out' se mungon).
-        $variance = FinancePayment::where('sourceable_type', BeachShift::class)
-            ->where('sourceable_id', $shift->id)->first();
-        $this->assertNotNull($variance);
-        $this->assertSame('out', $variance->direction);
-        $this->assertSame('10.00', $variance->amount);
+        // Renato (2026-08-21): diferenca mbetet VETËM te raporti i turnit —
+        // asnjë rresht automatik në Financë; menaxheri vendos vetë.
+        $this->assertSame(0, FinancePayment::where('sourceable_type', BeachShift::class)
+            ->where('sourceable_id', $shift->id)->count());
 
         // Pas mbylljes: heqja e shënimit të pagesës refuzohet (Z-raport i ngrirë).
         $this->actingAs($this->admin)
@@ -90,26 +88,24 @@ class BeachShiftTest extends TestCase
             ->assertStatus(422);
     }
 
-    public function test_variance_goes_to_arka_plazh_in_split_mode_and_reopen_removes_row(): void
+    public function test_variance_never_reaches_the_accounts_even_in_split_mode(): void
     {
+        // Renato (2026-08-21): report-only — edhe në split mode, mbyllja me
+        // tepricë +25 nuk krijon asnjë rresht; vlera rri te turni.
         Setting::set('finance.beach_account_mode', FinanceLedger::POS_MODE_SPLIT_CASH);
 
         $this->actingAs($this->admin)->post(route('beach.shifts.open'), ['opening_float' => 0]);
         $shift = BeachShift::currentFor($this->admin->id);
         $this->actingAs($this->admin)->post(route('beach.shifts.close', $shift), ['counted_cash' => 25]);
 
-        $variance = FinancePayment::where('sourceable_type', BeachShift::class)
-            ->where('sourceable_id', $shift->id)->first();
-        $this->assertNotNull($variance);
-        $this->assertSame('in', $variance->direction); // +25 tepricë
-        $account = FinanceAccount::find($variance->account_id);
-        $this->assertSame('beach', $account->scope);
-        $this->assertStringContainsString('Plazh', $account->name);
+        $this->assertSame('25.00', $shift->fresh()->over_short);
+        $this->assertSame(0, FinancePayment::where('sourceable_type', BeachShift::class)
+            ->where('sourceable_id', $shift->id)->count());
 
-        // Rihapja (drejtpërdrejt në DB, s'ka route) → observer-i e heq rreshtin.
+        // Rihapja mbetet e pastër gjithashtu.
         $shift->fresh()->update(['status' => 'open', 'closed_at' => null, 'closed_by' => null]);
-        $this->assertNull(FinancePayment::where('sourceable_type', BeachShift::class)
-            ->where('sourceable_id', $shift->id)->first());
+        $this->assertSame(0, FinancePayment::where('sourceable_type', BeachShift::class)
+            ->where('sourceable_id', $shift->id)->count());
     }
 
     public function test_double_open_is_refused_and_permissions_enforced(): void
