@@ -131,6 +131,20 @@ class GenerateAiGuestReply implements ShouldQueue
             return;
         }
 
+        // Matja per-tenant (task #409): tokenat e kësaj përgjigjeje → kosto →
+        // koeficienti i faturimit i super-adminit. FAIL-SAFE — kurrë s'e
+        // prish përgjigjen; regjistrohet PARA portave se tokenat u shpenzuan
+        // pavarësisht nëse dërgohet a mbetet draft. Pa metadata (p.sh. mock
+        // të vjetër në teste) s'ka ç'matet — asnjë rresht bosh.
+        if (($result['usage'] ?? []) !== []) {
+            app(\App\Services\AiUsageRecorder::class)->record(
+                $result['usage'],
+                'guest_reply',
+                $thread->id,
+                $this->messageId,
+            );
+        }
+
         $confident = (bool) ($result['args']['confident'] ?? false);
         $reply = trim((string) ($result['args']['reply'] ?? ''));
         // Përgjigje e ankoruar te motori (gjetje Codex, PR #462): NUK mjafton që

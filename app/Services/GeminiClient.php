@@ -408,6 +408,18 @@ class GeminiClient implements \App\Contracts\AiChatProvider
             $this->throwHttpError($res->status(), (string) $res->body());
         }
 
+        // Matja per-tenant (task #409): edhe thirrjet e strukturuara (Asistenti
+        // i Çmimeve, votat e dyta të klasifikimit) kushtojnë tokena — një
+        // rresht ai_usage_events secila. FAIL-SAFE brenda recorder-it; pa
+        // kontekst tenant-i (kanari, komanda globale) s'shkruhet asgjë.
+        app(AiUsageRecorder::class)->record([
+            'input' => (int) $res->json('usageMetadata.promptTokenCount', 0),
+            'output' => (int) $res->json('usageMetadata.candidatesTokenCount', 0),
+            'thinking' => (int) $res->json('usageMetadata.thoughtsTokenCount', 0),
+            'provider' => 'gemini',
+            'model' => $this->model(),
+        ], 'structured');
+
         foreach ($res->json('candidates.0.content.parts', []) as $part) {
             $call = $part['functionCall'] ?? null;
             if ($call && ($call['name'] ?? null) === $toolName) {
