@@ -143,9 +143,9 @@ function activate() { if (window.confirm(translate('superAdmin.onboarding.confir
             <div class="mx-auto flex max-w-[1180px] flex-wrap items-center gap-3 px-4 pt-3 sm:px-6">
                 <Link href="/super-admin/onboarding" class="whitespace-nowrap text-xs font-bold text-neutral-500 no-underline hover:text-emerald-700">← Onboarding</Link>
                 <span class="h-6 w-px bg-neutral-200" />
-                <span class="grid h-9 w-9 place-items-center rounded-[10px] bg-emerald-100 text-[11px] font-bold text-emerald-900">{{ initials }}</span>
+                <span class="grid h-9 w-9 place-items-center rounded-[10px] bg-gradient-to-br from-emerald-100 to-emerald-200/80 text-[11px] font-bold text-emerald-900 ring-1 ring-inset ring-emerald-200/60">{{ initials }}</span>
                 <h1 class="text-[15px] font-semibold tracking-tight">{{ tenant.name }}</h1>
-                <span class="rounded-full px-2.5 py-1 text-[10px] font-bold" :class="onboarding.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ statusLabel(onboarding.status) }}</span>
+                <span class="rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ring-inset" :class="onboarding.status === 'completed' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/60' : 'bg-amber-50 text-amber-700 ring-amber-200/60'">{{ statusLabel(onboarding.status) }}</span>
                 <div class="ml-auto flex gap-2">
                     <Link :href="`/super-admin/tenants/${tenant.id}`" class="sa-button sa-button-secondary">{{ $t('superAdmin.onboarding.openHotelPanel') }} <ExternalLink class="h-3.5 w-3.5" /></Link>
                     <button class="sa-button sa-button-primary" @click="showSettings = true"><Save class="h-4 w-4" />{{ $t('superAdmin.tenantShow.manage') }}</button>
@@ -164,8 +164,8 @@ function activate() { if (window.confirm(translate('superAdmin.onboarding.confir
                 <aside class="sa-card self-start lg:sticky lg:top-[118px]">
                     <div class="sa-card-header"><div><h2 class="sa-card-title">{{ $t('superAdmin.onboarding.onboardingSteps') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.onboarding.completedInOrder') }}</p></div></div>
                     <div class="space-y-1.5 p-2">
-                        <button v-for="(step, index) in onboarding.steps" :key="step.key" class="grid min-h-[60px] w-full grid-cols-[32px_1fr_8px] items-center gap-2 rounded-[10px] border p-2 text-left transition" :class="activeStepKey === step.key ? 'border-emerald-200 bg-emerald-50' : 'border-transparent hover:bg-neutral-50'" @click="activeStepKey = step.key">
-                            <span class="grid h-8 w-8 place-items-center rounded-lg text-[10px] font-bold" :class="step.status === 'done' ? 'bg-emerald-700 text-white' : 'bg-neutral-100 text-neutral-600'"><Check v-if="step.status === 'done'" class="h-4 w-4" /><template v-else>{{ index + 1 }}</template></span>
+                        <button v-for="(step, index) in onboarding.steps" :key="step.key" class="grid min-h-[60px] w-full grid-cols-[32px_1fr_8px] items-center gap-2 rounded-xl border p-2 text-left transition-all duration-200" :class="activeStepKey === step.key ? 'border-emerald-200 bg-emerald-50 shadow-sm shadow-emerald-900/5' : 'border-transparent hover:bg-neutral-50'" @click="activeStepKey = step.key">
+                            <span class="grid h-8 w-8 place-items-center rounded-full text-[10px] font-bold transition-all duration-200" :class="step.status === 'done' ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm shadow-emerald-700/30' : activeStepKey === step.key ? 'bg-white text-emerald-700 ring-2 ring-emerald-300' : 'bg-neutral-100 text-neutral-500'"><Check v-if="step.status === 'done'" class="h-4 w-4" /><template v-else>{{ index + 1 }}</template></span>
                             <span><strong class="block text-[11px]">{{ step.title }}</strong><small class="mt-0.5 block text-[9.5px]" :class="step.status === 'waiting_client' ? 'font-bold text-amber-600' : 'text-neutral-500'">{{ stepMeta(step) }}</small></span>
                             <span class="h-1.5 w-1.5 rounded-full" :class="step.status === 'done' ? 'bg-emerald-600' : step.status === 'waiting_client' ? 'bg-amber-500' : 'bg-neutral-300'" />
                         </button>
@@ -199,16 +199,16 @@ function activate() { if (window.confirm(translate('superAdmin.onboarding.confir
                         </div>
                     </div>
 
-                    <div v-if="activeStep.status === 'waiting_client'" class="mx-4 mt-4 rounded-[10px] border border-amber-200 bg-amber-50 p-3 sm:mx-5">
+                    <div v-if="activeStep.status === 'waiting_client'" class="mx-4 mt-4 rounded-xl border border-amber-200 border-l-4 border-l-amber-400 bg-gradient-to-r from-amber-50 to-amber-50/40 p-3 sm:mx-5">
                         <strong class="text-[11px] text-amber-800">⏳ {{ $t('superAdmin.onboarding.waitingClient') }}.</strong>
                         <p class="mt-1 text-[10.5px] text-amber-700">{{ activeStep.notes || $t('superAdmin.onboarding.addClientConfirmation') }}</p>
                     </div>
 
                     <div class="divide-y divide-neutral-100">
-                        <div v-for="task in activeStep.tasks" :key="task.key" class="grid min-h-[64px] grid-cols-[34px_1fr_auto] items-center gap-3 px-4 py-2.5 hover:bg-neutral-50/60 sm:px-5">
-                            <button class="grid h-[30px] w-[30px] place-items-center rounded-lg border transition" :class="task.completed ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-neutral-300 text-transparent hover:border-emerald-400'" :disabled="busyTask === task.key" :title="task.completed ? $t('superAdmin.onboarding.reopen') : $t('superAdmin.onboarding.finish')" @click="toggleTask(task)"><LoaderCircle v-if="busyTask === task.key" class="h-4 w-4 animate-spin text-emerald-700" /><Check v-else class="h-4 w-4" /></button>
-                            <div><strong class="block text-[11.5px]" :class="task.completed && 'text-neutral-400 line-through decoration-neutral-300'">{{ task.title }}</strong><span class="mt-0.5 block text-[10px] text-neutral-500">{{ task.description }}</span></div>
-                            <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[10px] font-bold text-neutral-600 hover:border-emerald-200 hover:text-emerald-700" :disabled="openingTask === task.key" @click="openTask(task)"><LoaderCircle v-if="openingTask === task.key" class="h-3 w-3 animate-spin" /><ExternalLink v-else class="h-3 w-3" />{{ $t('superAdmin.compact.open') }}</button>
+                        <div v-for="task in activeStep.tasks" :key="task.key" class="grid min-h-[64px] grid-cols-[34px_1fr_auto] items-center gap-3 px-4 py-2.5 transition-colors sm:px-5" :class="task.completed ? 'bg-emerald-50/30' : 'hover:bg-neutral-50/60'">
+                            <button class="group grid h-[30px] w-[30px] place-items-center rounded-[10px] border-[1.5px] transition-all duration-200" :class="task.completed ? 'border-emerald-600 bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-700/25' : 'border-neutral-300 bg-white text-transparent hover:border-emerald-400 hover:bg-emerald-50 hover:shadow-sm'" :disabled="busyTask === task.key" :title="task.completed ? $t('superAdmin.onboarding.reopen') : $t('superAdmin.onboarding.finish')" @click="toggleTask(task)"><LoaderCircle v-if="busyTask === task.key" class="h-4 w-4 animate-spin text-emerald-700" /><Check v-else class="h-4 w-4 transition-transform duration-200" :class="!task.completed && 'group-hover:scale-90 group-hover:text-emerald-300'" /></button>
+                            <div><strong class="block text-[11.5px] transition-colors" :class="task.completed && 'text-neutral-400 line-through decoration-neutral-300'">{{ task.title }}</strong><span class="mt-0.5 block text-[10px] text-neutral-500">{{ task.description }}</span></div>
+                            <button type="button" class="inline-flex items-center gap-1 rounded-full border border-neutral-200 px-3 py-1.5 text-[10px] font-bold text-neutral-600 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow-sm" :disabled="openingTask === task.key" @click="openTask(task)"><LoaderCircle v-if="openingTask === task.key" class="h-3 w-3 animate-spin" /><ExternalLink v-else class="h-3 w-3" />{{ $t('superAdmin.compact.open') }}</button>
                         </div>
                     </div>
 
@@ -220,7 +220,7 @@ function activate() { if (window.confirm(translate('superAdmin.onboarding.confir
                         </div>
                         <div v-if="stepDocuments.length" class="mt-1 divide-y divide-neutral-100">
                             <div v-for="document in stepDocuments" :key="document.id" class="flex items-center gap-2.5 py-2.5">
-                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600"><FileText class="h-4 w-4" /></span>
+                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-gradient-to-br from-blue-50 to-blue-100/70 text-blue-600 ring-1 ring-inset ring-blue-100"><FileText class="h-4 w-4" /></span>
                                 <div class="min-w-0 flex-1">
                                     <a :href="document.download_url" class="block truncate text-[11px] font-semibold text-neutral-800 no-underline hover:text-emerald-700">{{ document.name }}</a>
                                     <span class="text-[9px] text-neutral-400">{{ Math.max(1, Math.round(document.size / 1024)) }} KB · {{ document.uploaded_by }}</span>
@@ -250,7 +250,7 @@ function activate() { if (window.confirm(translate('superAdmin.onboarding.confir
                         <span><b class="text-neutral-800">{{ $t('superAdmin.onboarding.tasksProgress', { completed: tasksDone, total: tasksTotal }) }}</b> · {{ $t('superAdmin.onboarding.stepsCompleted', { completed: stepsDone, total: onboarding.steps.length }) }}</span>
                         <span>{{ onboarding.progress }}%</span>
                     </div>
-                    <div class="h-[7px] overflow-hidden rounded-full bg-neutral-100"><div class="h-full rounded-full bg-gradient-to-r from-emerald-700 to-emerald-500 transition-[width]" :style="{ width: `${onboarding.progress}%` }" /></div>
+                    <div class="h-[7px] overflow-hidden rounded-full bg-neutral-100 shadow-inner"><div class="h-full rounded-full bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-500 shadow-sm shadow-emerald-600/40 transition-[width] duration-500" :style="{ width: `${onboarding.progress}%` }" /></div>
                 </div>
                 <span v-if="onboarding.progress !== 100" class="ml-auto text-[10px] text-neutral-400">{{ $t('superAdmin.onboarding.activationHint') }}</span>
                 <button class="sa-button sa-button-primary" :class="onboarding.progress === 100 && 'ml-auto'" :disabled="onboarding.progress !== 100 || onboarding.status === 'completed'" @click="activate"><Rocket class="h-4 w-4" />{{ onboarding.status === 'completed' ? $t('superAdmin.onboarding.activated') : $t('superAdmin.onboarding.activateHotel') }}</button>
@@ -268,11 +268,12 @@ function activate() { if (window.confirm(translate('superAdmin.onboarding.confir
     align-items: center;
     gap: 5px;
     border: 1px solid #e4eae7;
-    border-radius: 8px;
-    background: #f7faf8;
-    padding: 4px 9px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #fbfdfc, #f4f8f6);
+    padding: 4px 11px;
     font-size: 10.5px;
     color: #68766f;
+    box-shadow: 0 1px 1.5px rgba(23, 33, 29, 0.03);
 }
 .chrome-chip b {
     color: #17211d;
