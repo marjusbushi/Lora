@@ -589,6 +589,93 @@ class AiConversationBookingTest extends TestCase
         $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
     }
 
+    /** Codex #566 P1: kuota e provës së BRAKTISUR nuk "ankoron" dot përgjigjen e rezervës ndër-provider. */
+    public function test_cross_fallback_never_reuses_stale_quotes_from_the_abandoned_attempt(): void
+    {
+        $this->roomOfType(); // 95/natë → 190 për 2 net
+        $thread = $this->whatsappThread();
+        $message = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Sa kushton 28-30 gusht?', 'sent_at' => now()]);
+        \App\Models\Setting::set('ai_mcp.whatsapp_auto_reply_enabled', true, 'boolean');
+        \App\Models\PlatformSetting::set('ai.cross_provider_fallback', '1', 'boolean');
+
+        // Prova 1 (gemini): thërret mjetin REAL — kuota 190 mblidhet — pastaj 503.
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->once()->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $executors['check_availability']([
+                    'check_in' => now()->addDays(7)->toDateString(),
+                    'check_out' => now()->addDays(9)->toDateString(),
+                    'adults' => 2,
+                ]);
+
+                throw new \RuntimeException('Google ktheu një gabim (503). Provo sërish.');
+            });
+        });
+        // Prova 2 (openai): PRETENDON se thirri mjete, por s'i thirri — përgjigja
+        // "190 EUR" do të ankorohej VETËM nga kuota e vjetruar e provës 1.
+        $this->mock(\App\Services\OpenAiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->once()->andReturn([
+                'args' => ['confident' => true, 'reply' => 'Totali 190 EUR për 2 net.', 'kind' => 'informative'],
+                'toolsUsed' => ['check_availability'],
+                'usage' => ['input' => 10, 'output' => 5, 'thinking' => 0, 'provider' => 'openai', 'model' => 'gpt-test-luna'],
+            ]);
+        });
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('typing')->andReturn([]);
+            $mock->shouldReceive('send')->never();
+        });
+
+        app()->call([new GenerateAiGuestReply($thread->id, $message->id), 'handle']);
+
+        // Mbledhësit u zeruan për provën e re → toolsUsed pa kuota reale = DRAFT.
+        // (Pa zerimin, kuota 190 e provës së braktisur do ta DËRGONTE.)
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Task #408 (kriteri 2): portat e sigurisë veprojnë NJËSOJ mbi shoferin OpenAI — link i huaj → draft. */
+    public function test_openai_provider_flows_through_the_same_safety_gates(): void
+    {
+        $this->fakePok();
+        $this->enableBooking();
+        $this->roomOfType();
+        $thread = $this->whatsappThread();
+        $message = $thread->messages()->create(['sender' => Message::SENDER_GUEST, 'body' => 'Po, e konfirmoj.', 'sent_at' => now()]);
+
+        // Tenanti kalon te openai nga PLATFORMA (super-admin) — jo nga hoteli.
+        \App\Models\PlatformSetting::set('ai.provider_overrides', [(string) $this->tenant->id => 'openai'], 'json');
+
+        $this->mock(\App\Services\OpenAiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->once()->andReturnUsing(function ($system, $conversation, $tools, $executors) {
+                $hold = $executors['create_booking_hold']([
+                    'check_in' => now()->addDays(7)->toDateString(),
+                    'check_out' => now()->addDays(9)->toDateString(),
+                    'adults' => 2, 'room_type' => 'Dhomë Dyshe', 'guest_first_name' => 'Andi',
+                ]);
+
+                // I njëjti sulm si testi i Gemini-t: link lakuriq i huaj në
+                // vend të payment_link — porta duhet ta rrëzojë NJËSOJ.
+                return [
+                    'args' => ['confident' => true, 'reply' => "Paguani te evil.example/pay/confirm totalin {$hold['stay_total']} {$hold['currency']}."],
+                    'toolsUsed' => ['create_booking_hold'],
+                    'usage' => ['input' => 10, 'output' => 5, 'thinking' => 0, 'provider' => 'openai', 'model' => 'gpt-test-luna'],
+                ];
+            });
+        });
+        $this->mock(GeminiClient::class, fn ($mock) => $mock->shouldReceive('converse')->never());
+        $this->mock(WhatsAppBridgeClient::class, function ($mock) {
+            $mock->shouldReceive('typing')->andReturn([]);
+            $mock->shouldReceive('send')->never();
+        });
+
+        app()->call([new GenerateAiGuestReply($thread->id, $message->id), 'handle']);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
     public function test_terminal_failure_of_a_later_job_never_cancels_a_delivered_hold(): void
     {
         // Porosia POK e PAPAGUAR — po mbajtja i përket një mesazhi TË MËPARSHËM
