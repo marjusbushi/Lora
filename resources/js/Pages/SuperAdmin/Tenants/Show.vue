@@ -115,7 +115,15 @@ const readinessRing = computed(() => ({
 }));
 
 const pendingDomains = computed(() => props.tenant.domains.filter((domain) => domain.status !== 'active').length);
-const integrationsOk = computed(() => Boolean(props.tenant.primary_domain) && channexConfigured.value && pokConfigured.value && fatureConfigured.value && pendingDomains.value === 0);
+// I njëjti burim si integrationRows — rail-i raporton numrin REAL të
+// çështjeve, jo gjithmonë "1" (gjetje Codex PR #583).
+const integrationIssues = computed(() => [
+    Boolean(props.tenant.primary_domain) && pendingDomains.value === 0,
+    channexConfigured.value,
+    pokConfigured.value,
+    fatureConfigured.value,
+].filter((ok) => !ok).length);
+const integrationsOk = computed(() => integrationIssues.value === 0);
 
 // Rail-i i seksioneve — pika + meta tregojnë me një shikim ku duhet vëmendje.
 const sections = computed(() => [
@@ -140,7 +148,7 @@ const sections = computed(() => [
         label: translate('superAdmin.tenantShow.railIntegrations'),
         meta: integrationsOk.value
             ? translate('superAdmin.tenantShow.integrationsAllActive')
-            : (!fatureConfigured.value ? `fature.al ${translate('superAdmin.dynamic.missing').toLowerCase()}` : translate('superAdmin.tenantShow.issuesAttention', { count: 1 })),
+            : translate('superAdmin.tenantShow.issuesAttention', { count: integrationIssues.value }),
         warn: !integrationsOk.value,
         dot: integrationsOk.value ? 'green' : 'amber',
     },
@@ -528,10 +536,12 @@ function toggleStatus() {
                         <div><strong class="text-[13px] text-neutral-900">{{ attentionCount ? $t('superAdmin.tenantShow.configNeedsAttention') : $t('superAdmin.tenantShow.hotelReady') }}</strong><p class="mt-0.5 text-[11px] text-neutral-500">{{ $t('superAdmin.tenantShow.checksSummary', { ok: readinessChecks.filter(Boolean).length, total: readinessChecks.length }) }}</p></div>
                     </div>
                     <div class="divide-y divide-neutral-100">
-                        <div v-for="check in overviewChecks" :key="check.key" class="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 sm:px-5">
+                        <!-- Në mobile veprimet zbresin nën tekst — prindi ka overflow-hidden
+                             dhe një rresht i vetëm do t'i priste (gjetje Codex PR #583). -->
+                        <div v-for="check in overviewChecks" :key="check.key" class="grid grid-cols-[34px_minmax(0,1fr)] items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 sm:grid-cols-[34px_minmax(0,1fr)_auto] sm:px-5">
                             <span class="grid h-8 w-8 place-items-center rounded-[10px] ring-1 ring-inset" :class="check.ok ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-amber-50 text-amber-700 ring-amber-100'"><component :is="check.icon" class="h-4 w-4" /></span>
                             <div class="min-w-0"><strong class="block text-[11.5px]">{{ check.title }}</strong><span class="mt-0.5 block truncate text-[10px] text-neutral-500">{{ check.meta }}</span></div>
-                            <div class="flex items-center gap-2"><span class="text-[10px] font-bold" :class="check.ok ? 'text-emerald-700' : 'text-amber-700'">{{ check.state }}</span><button v-if="check.goto" class="rounded-full border border-neutral-200 px-3 py-1.5 text-[10px] font-bold text-neutral-600 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" @click="activeSection = check.goto">{{ check.ok ? $t('superAdmin.tenantShow.manage') : $t('superAdmin.tenantShow.configure') }} →</button></div>
+                            <div class="col-span-2 flex flex-wrap items-center gap-2 pl-[46px] sm:col-span-1 sm:pl-0"><span class="text-[10px] font-bold" :class="check.ok ? 'text-emerald-700' : 'text-amber-700'">{{ check.state }}</span><button v-if="check.goto" class="rounded-full border border-neutral-200 px-3 py-1.5 text-[10px] font-bold text-neutral-600 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" @click="activeSection = check.goto">{{ check.ok ? $t('superAdmin.tenantShow.manage') : $t('superAdmin.tenantShow.configure') }} →</button></div>
                         </div>
                     </div>
                 </section>
@@ -550,10 +560,10 @@ function toggleStatus() {
                         </div>
                     </div>
                     <div class="divide-y divide-neutral-100">
-                        <div v-for="module in enabledModules" :key="module.code" class="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:px-5">
+                        <div v-for="module in enabledModules" :key="module.code" class="grid grid-cols-[34px_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:grid-cols-[34px_minmax(0,1fr)_auto] sm:px-5">
                             <span class="grid h-8 w-8 place-items-center rounded-[10px] bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100"><Settings2 class="h-4 w-4" /></span>
                             <div class="min-w-0"><strong class="block text-[11.5px]">{{ module.name }}</strong><span class="mt-0.5 block truncate text-[10px] text-neutral-500">{{ module.description }}</span></div>
-                            <span class="text-right text-[10.5px] font-bold tabular-nums">{{ modulePriceLabel(module) }}</span>
+                            <span class="col-span-2 pl-[46px] text-left text-[10.5px] font-bold tabular-nums sm:col-span-1 sm:pl-0 sm:text-right">{{ modulePriceLabel(module) }}</span>
                         </div>
                         <p v-if="!enabledModules.length" class="px-4 py-6 text-center text-[10.5px] text-neutral-400 sm:px-5">{{ $t('superAdmin.tenantShow.noModulesEnabled') }}</p>
                     </div>
@@ -568,10 +578,10 @@ function toggleStatus() {
                 <section v-else-if="activeSection === 'integrations'" class="sa-card overflow-hidden">
                     <div class="border-b border-neutral-200 p-4 sm:p-5"><h2 class="text-base font-semibold">{{ $t('superAdmin.tenantShow.railIntegrations') }}</h2><p class="mt-0.5 text-[11px] text-neutral-500">{{ $t('superAdmin.tenantShow.integrationsSubtitle') }}</p></div>
                     <div class="divide-y divide-neutral-100">
-                        <div v-for="row in integrationRows" :key="row.key" class="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 sm:px-5">
+                        <div v-for="row in integrationRows" :key="row.key" class="grid grid-cols-[34px_minmax(0,1fr)] items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 sm:grid-cols-[34px_minmax(0,1fr)_auto] sm:px-5">
                             <span class="grid h-8 w-8 place-items-center rounded-[10px] ring-1 ring-inset" :class="row.ok ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-amber-50 text-amber-700 ring-amber-100'"><component :is="row.icon" class="h-4 w-4" /></span>
                             <div class="min-w-0"><strong class="block text-[11.5px]">{{ row.title }}</strong><span class="mt-0.5 block truncate text-[10px] text-neutral-500">{{ row.meta }}</span></div>
-                            <div class="flex items-center gap-2"><span class="text-[10px] font-bold" :class="row.ok ? 'text-emerald-700' : 'text-amber-700'">{{ row.state }}</span><button class="rounded-full border border-neutral-200 px-3 py-1.5 text-[10px] font-bold text-neutral-600 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" @click="openConfig(row.tab)">{{ row.action }} →</button></div>
+                            <div class="col-span-2 flex flex-wrap items-center gap-2 pl-[46px] sm:col-span-1 sm:pl-0"><span class="text-[10px] font-bold" :class="row.ok ? 'text-emerald-700' : 'text-amber-700'">{{ row.state }}</span><button class="rounded-full border border-neutral-200 px-3 py-1.5 text-[10px] font-bold text-neutral-600 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" @click="openConfig(row.tab)">{{ row.action }} →</button></div>
                         </div>
                     </div>
                 </section>
@@ -583,10 +593,10 @@ function toggleStatus() {
                         <Button size="sm" variant="outline" @click="openMember()"><Plus class="h-4 w-4" /> {{ $t('superAdmin.tenantShow.addMember') }}</Button>
                     </div>
                     <div class="divide-y divide-neutral-100">
-                        <div v-for="member in members" :key="member.id" class="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 sm:px-5">
+                        <div v-for="member in members" :key="member.id" class="grid grid-cols-[34px_minmax(0,1fr)] items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 sm:grid-cols-[34px_minmax(0,1fr)_auto] sm:px-5">
                             <span class="grid h-8 w-8 place-items-center rounded-full bg-blue-50 text-[10px] font-bold text-blue-700">{{ initials(member.name) }}</span>
                             <div class="min-w-0"><strong class="block text-[11.5px]">{{ member.name }}</strong><span class="mt-0.5 block truncate text-[10px] text-neutral-500">{{ member.email }}{{ member.is_owner ? $t('superAdmin.tenantShow.ownerSuffix') : '' }}</span></div>
-                            <div class="flex items-center gap-2">
+                            <div class="col-span-2 flex flex-wrap items-center gap-2 pl-[46px] sm:col-span-1 sm:pl-0">
                                 <span class="rounded-full bg-neutral-100 px-2.5 py-1 text-[9.5px] font-semibold text-neutral-600">{{ roleLabel(member.role) }}</span>
                                 <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9.5px] font-bold" :class="member.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'"><span class="h-1.5 w-1.5 rounded-full bg-current" />{{ member.is_active ? $t('superAdmin.auto.copy005') : $t('superAdmin.dynamic.inactive') }}</span>
                                 <button class="rounded-full border border-neutral-200 px-3 py-1.5 text-[10px] font-bold text-neutral-600 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" @click="openMember(member)">{{ $t('superAdmin.auto.copy089') }}</button>
