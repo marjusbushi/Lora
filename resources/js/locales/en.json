@@ -215,7 +215,9 @@
       "noneSelected": "Select at least one room to continue.",
       "capacity": "The selected rooms sleep up to {cap} guests — add another room for {guests} guests.",
       "adultsPerRoom": "Each room needs at least one adult — you selected {rooms} rooms.",
-      "perRoom": "per room"
+      "perRoom": "per room",
+      "childrenCap": "The selected rooms allow up to {cap} children — add a room or pick another room type.",
+      "infantsNote": "Infants sleeping with their parents don't take a spot — no need to count them as children."
     }
   },
   "contact": {
