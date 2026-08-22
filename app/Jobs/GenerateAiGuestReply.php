@@ -196,6 +196,20 @@ class GenerateAiGuestReply implements ShouldQueue
             }
         }
 
+        // Pyetja sqaruese KURRË s'ngec nga pak siguri (task #420, pika e parë
+        // e pilotit Luna — vendimi i Marjusit: "duhet të pyeste nëse ishte e
+        // paqartë, s'duhet të ngecë"): modeli konservator shënoi confident=false
+        // pikërisht për pyetjen që rregulli 2 e URDHËRON. Vota e dytë është
+        // verifikues i PAVARUR që teksti VETËM pyet për të dhëna — pa asnjë
+        // fakt, çmim a premtim; kur ajo certifikon, ndjesia e modelit s'e
+        // ndal dot mbledhjen e të dhënave të rezervimit. Vota refuzon → draft
+        // si gjithmonë. (Vetëm pa mjete të thirrura — një radhë me mjete ka
+        // rrugën e vet të ankërimit.)
+        if (! $trusted && ! $confident && $autoEnabled && $clarifying
+            && ($result['toolsUsed'] ?? []) === []) {
+            $trusted = $clarifyingConfirmed = $this->confirmClarifying($gemini, $reply);
+        }
+
         if ($trusted) {
             $this->sendAutoReply($channex, $whatsapp, $thread, $reply, $rateKey, $result['photos'] ?? []);
 
@@ -307,6 +321,9 @@ proporcionale me mesazhin e mysafirit.
    vetë. Shkruaji shifrat SAKTËSISHT siç i kthen mjeti (p.sh. 300 ose 300.5),
    pa ndarës mijëshesh. Trego vetëm tipologjitë me rooms_available > 0; nëse
    asnjëra s'është e lirë, thuaja qartë dhe ftoje të provojë data të tjera.
+   Datat RELATIVE — "sot", "nesër", "këtë fundjavë", "nga e premtja" —
+   konvertoji VETË nga data e sotme e dhënë më lart në data konkrete dhe
+   thirr mjetin; pyete mysafirin VETËM kur intervali vërtet s'del i qartë.
 2. Nëse mysafiri pyet për çmim a disponibilitet PA dhënë datat e plota (ose pa
    thënë sa persona janë) → MOS e thirr mjetin: pyete njëherë për datat dhe
    numrin e personave (confident=true, kind='clarifying' — pyetje sqaruese pa
