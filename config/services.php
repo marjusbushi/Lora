@@ -100,6 +100,19 @@ return [
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
     ],
 
+    // Çmimorja DEFAULT e modeleve AI (task #409) — USD për 1 MILION tokena,
+    // e verifikuar 2026-08-21. Mbivendoset pa deploy nga super-admini
+    // (PlatformSetting 'ai.pricing_overrides') — çmimet e provider-ëve
+    // ndryshojnë (Google i dyfishon Flash nga 2027-01-01: 1.50/7.50).
+    // Tokenat e "mendimit" faturohen si OUTPUT nga të dy provider-ët.
+    'ai' => [
+        'pricing' => [
+            'gemini-3.7-flash' => ['input' => 0.75, 'output' => 3.75],
+            'gemini-3.5-flash-lite' => ['input' => 0.30, 'output' => 2.50],
+            'gpt-5.6-luna' => ['input' => 0.20, 'output' => 1.20],
+        ],
+    ],
+
     // Ura lokale e WhatsApp (Node/Baileys, daemon në të njëjtin server).
     // Token bosh = integrimi i FIKUR fare (fail-closed në të dy drejtimet).
     'whatsapp_bridge' => [

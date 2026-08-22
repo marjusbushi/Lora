@@ -5155,7 +5155,8 @@
       "name": "Emri",
       "saved": "U ruajt",
       "saveChanges": "Ruaj ndryshimet",
-      "ai": "Truri AI"
+      "ai": "Truri AI",
+      "aiUsage": "Përdorimi AI"
     },
     "activity": {
       "title": "Aktiviteti i platformës",
@@ -5392,6 +5393,35 @@
       "overrideColumn": "Mbivendosja",
       "effectiveColumn": "Efektivi",
       "followDefault": "— ndiq default-in —"
+    },
+    "aiUsage": {
+      "pageTitle": "Përdorimi AI — Lora Control Panel",
+      "title": "Përdorimi & faturimi AI",
+      "subtitle": "Sa harxhon çdo hotel në AI — kosto reale dhe vlera e faturueshme me koeficientin tënd.",
+      "monthTitle": "Përdorimi sipas hotelit",
+      "monthSubtitle": "Çdo thirrje AI matet automatikisht — biseda e Lorës dhe thirrjet e strukturuara.",
+      "month": "Muaji:",
+      "coefficient": "Koeficienti i faturimit:",
+      "coefficientHint": "Vlera e faturueshme = kosto reale × koeficienti. 1.0 = kosto e pastër; 1.5 = 50% marzh. E cakton vetëm super-admini.",
+      "save": "Ruaj",
+      "totalCalls": "Thirrje gjithsej",
+      "totalCost": "Kosto reale (USD)",
+      "totalBillable": "E faturueshme (USD)",
+      "tenant": "Hoteli",
+      "calls": "Thirrje",
+      "inputTokens": "Tokena hyrje",
+      "outputTokens": "Tokena dalje",
+      "cost": "Kosto",
+      "billable": "E faturueshme",
+      "empty": "Asnjë përdorim AI për këtë muaj.",
+      "pricingTitle": "Çmimorja e modeleve",
+      "pricingSubtitle": "USD për 1 milion tokena — përditësoje kur provider-ët ndryshojnë çmimet (pa deploy).",
+      "model": "Modeli",
+      "inputPrice": "Hyrja ($/1M)",
+      "outputPrice": "Dalja ($/1M)",
+      "pricingHint": "Tokenat e \"mendimit\" faturohen si dalje. Ndryshimet vlejnë për matjet e REJA — rreshtat e vjetër s'preken (dëshmi faturimi).",
+      "overrideLabel": "Mbivendos",
+      "noPriceWarning": "pa çmim — matet me 0!"
     }
   },
   "reports360": {

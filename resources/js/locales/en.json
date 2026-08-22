@@ -5155,7 +5155,8 @@
       "name": "Name",
       "saved": "Saved",
       "saveChanges": "Save changes",
-      "ai": "AI Brain"
+      "ai": "AI Brain",
+      "aiUsage": "AI Usage"
     },
     "activity": {
       "title": "Platform activity",
@@ -5392,6 +5393,35 @@
       "overrideColumn": "Override",
       "effectiveColumn": "Effective",
       "followDefault": "— follow default —"
+    },
+    "aiUsage": {
+      "pageTitle": "AI Usage — Lora Control Panel",
+      "title": "AI usage & billing",
+      "subtitle": "What each hotel spends on AI — real cost and billable value with your coefficient.",
+      "monthTitle": "Usage by hotel",
+      "monthSubtitle": "Every AI call is metered automatically — Lora's conversation and structured calls.",
+      "month": "Month:",
+      "coefficient": "Billing coefficient:",
+      "coefficientHint": "Billable value = real cost × coefficient. 1.0 = pure cost; 1.5 = 50% margin. Set only by the super-admin.",
+      "save": "Save",
+      "totalCalls": "Total calls",
+      "totalCost": "Real cost (USD)",
+      "totalBillable": "Billable (USD)",
+      "tenant": "Hotel",
+      "calls": "Calls",
+      "inputTokens": "Input tokens",
+      "outputTokens": "Output tokens",
+      "cost": "Cost",
+      "billable": "Billable",
+      "empty": "No AI usage for this month.",
+      "pricingTitle": "Model price list",
+      "pricingSubtitle": "USD per 1 million tokens — update when providers change prices (no deploy).",
+      "model": "Model",
+      "inputPrice": "Input ($/1M)",
+      "outputPrice": "Output ($/1M)",
+      "pricingHint": "\"Thinking\" tokens bill as output. Changes apply to NEW meterings — old rows are untouched (billing evidence).",
+      "overrideLabel": "Override",
+      "noPriceWarning": "no price — metered at 0!"
     }
   },
   "reports360": {

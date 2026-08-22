@@ -112,7 +112,7 @@ class GeminiClient implements \App\Contracts\AiChatProvider
      * @param  array<string,callable(array):array>  $executors  tool name → server-side runner
      * @return array{args:array<string,mixed>,toolsUsed:array<int,string>,usage:array{input:int,output:int,thinking:int,provider:string,model:string}}
      */
-    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3): array
+    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3, ?callable $onUsage = null): array
     {
         $functions = collect($tools)->map(fn (array $tool) => [
             'name' => $tool['name'],
@@ -145,7 +145,7 @@ class GeminiClient implements \App\Contracts\AiChatProvider
 
             // Raundi i fundit lejon VETËM përgjigjen finale — cikli s'mbetet kurrë pa dalje.
             $allowed = $round === $maxToolRounds ? [$finalToolName] : $allNames;
-            $turn = $this->generate($activeModel, $system, $contents, $functions, $allowed, $maxTokens, $deadline);
+            $turn = $this->generate($activeModel, $system, $contents, $functions, $allowed, $maxTokens, $deadline, $onUsage);
             $activeModel = $turn['model'];
             foreach ($usage as $k => $v) {
                 $usage[$k] = $v + $turn['usage'][$k];
@@ -214,7 +214,7 @@ class GeminiClient implements \App\Contracts\AiChatProvider
      *                           edhe primari edhe rezerva rrinë brenda tij (gjetje Codex #550).
      * @return array{content:\stdClass,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>,model:string,usage:array{input:int,output:int,thinking:int}}
      */
-    private function generate(string $model, string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, float $deadline): array
+    private function generate(string $model, string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, float $deadline, ?callable $onUsage = null): array
     {
         // Slot-i i çastit: sa kohë i jepet thirrjes SË RADHËS — kurrë mbi tavanin
         // 30s (dorëzimi i shpejtë) dhe kurrë mbi afatin e mbetur të bisedës.
@@ -279,6 +279,19 @@ class GeminiClient implements \App\Contracts\AiChatProvider
             $this->throwHttpError($res->status(), (string) $res->body());
         }
 
+        // Faturimi per-RAUND, PARA çdo validimi (gjetje Codex #569 P1): një
+        // 200 pa thirrje të vlefshme (MAX_TOKENS, parts bosh) është FATURUAR
+        // njësoj nga provideri — dëshmia regjistrohet edhe kur më poshtë
+        // hidhet përjashtim; raundi etiketohet me modelin që e SHËRBEU.
+        $roundUsage = [
+            'input' => (int) $res->json('usageMetadata.promptTokenCount', 0),
+            'output' => (int) $res->json('usageMetadata.candidatesTokenCount', 0),
+            'thinking' => (int) $res->json('usageMetadata.thoughtsTokenCount', 0),
+        ];
+        if ($onUsage !== null) {
+            $onUsage($roundUsage + ['provider' => 'gemini', 'model' => $servedBy]);
+        }
+
         $calls = [];
         foreach ($res->json('candidates.0.content.parts', []) as $part) {
             $call = $part['functionCall'] ?? null;
@@ -302,11 +315,7 @@ class GeminiClient implements \App\Contracts\AiChatProvider
                 'content' => $content,
                 'calls' => $calls,
                 'model' => $servedBy,
-                'usage' => [
-                    'input' => (int) $res->json('usageMetadata.promptTokenCount', 0),
-                    'output' => (int) $res->json('usageMetadata.candidatesTokenCount', 0),
-                    'thinking' => (int) $res->json('usageMetadata.thoughtsTokenCount', 0),
-                ],
+                'usage' => $roundUsage,
             ];
         }
 
@@ -407,6 +416,18 @@ class GeminiClient implements \App\Contracts\AiChatProvider
         if (!$res->successful()) {
             $this->throwHttpError($res->status(), (string) $res->body());
         }
+
+        // Matja per-tenant (task #409): edhe thirrjet e strukturuara (Asistenti
+        // i Çmimeve, votat e dyta të klasifikimit) kushtojnë tokena — një
+        // rresht ai_usage_events secila. FAIL-SAFE brenda recorder-it; pa
+        // kontekst tenant-i (kanari, komanda globale) s'shkruhet asgjë.
+        app(AiUsageRecorder::class)->record([
+            'input' => (int) $res->json('usageMetadata.promptTokenCount', 0),
+            'output' => (int) $res->json('usageMetadata.candidatesTokenCount', 0),
+            'thinking' => (int) $res->json('usageMetadata.thoughtsTokenCount', 0),
+            'provider' => 'gemini',
+            'model' => $this->model(),
+        ], 'structured');
 
         foreach ($res->json('candidates.0.content.parts', []) as $part) {
             $call = $part['functionCall'] ?? null;
