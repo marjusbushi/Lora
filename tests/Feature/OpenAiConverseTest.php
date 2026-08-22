@@ -214,13 +214,44 @@ class OpenAiConverseTest extends TestCase
             'guest_reply',
         );
 
+        // completion_tokens i PËRFSHIN arsyetimin — output raportohet i NDARË
+        // (20-5=15, 30-8=22) që të mos faturohet dy herë (Codex #568 P1).
         $this->assertSame([
             'input' => 250,
-            'output' => 50,
+            'output' => 37,
             'thinking' => 13,
             'provider' => 'openai',
             'model' => 'gpt-test-luna',
         ], $result['usage']);
+    }
+
+    /** Codex #568: sink-u i faturimit thirret per-RAUND — dëshmia e plotë edhe për bisedat shumë-raundëshe. */
+    public function test_usage_sink_fires_once_per_successful_round(): void
+    {
+        Http::fakeSequence('api.openai.com/*')
+            ->push($this->toolCallsResponse([[
+                'id' => 'call_1',
+                'type' => 'function',
+                'function' => ['name' => 'check_availability', 'arguments' => json_encode(['check_in' => '2026-08-28', 'check_out' => '2026-08-30'])],
+            ]]))
+            ->push($this->finalReplyResponse());
+
+        $rounds = [];
+        app(OpenAiClient::class)->converse(
+            'SYSTEM',
+            'MYSAFIRI: 28-30 gusht',
+            self::TOOLS,
+            ['check_availability' => fn (array $args): array => ['stay_total' => 190]],
+            'guest_reply',
+            onUsage: function (array $usage) use (&$rounds): void {
+                $rounds[] = $usage;
+            },
+        );
+
+        $this->assertCount(2, $rounds);
+        $this->assertSame(15, $rounds[0]['output']);
+        $this->assertSame('gpt-test-luna', $rounds[0]['model']);
+        $this->assertSame(22, $rounds[1]['output']);
     }
 
     public function test_timeout_carries_the_cool_retry_marker(): void
