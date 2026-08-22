@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { AlertTriangle, ArrowLeft, CalendarDays, CircleCheckBig, Link2, ReceiptText } from 'lucide-vue-next';
+import { AlertTriangle, ArrowLeft, CalendarDays, CalendarPlus, CircleCheckBig, Link2, ReceiptText } from 'lucide-vue-next';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import Card from '@/Components/UI/Card.vue';
@@ -60,6 +60,21 @@ const perms = usePage().props.auth.user?.permissions || [];
 const canLink = perms.includes('update_reservations');
 const linkBusy = ref(false);
 const linkError = ref('');
+
+// "Zgjatur në recepsion": the guest extended/changed the stay at the desk —
+// the difference vs the channel is legitimate; close the booking's mismatch
+// cards and keep them closed until the reservation changes again.
+const resolveBusy = ref(false);
+const deskResolvable = (issue) => ['amount_mismatch', 'stay_mismatch'].includes(issue.type) && issue.status === 'open';
+function resolveExtendedOnDesk(issue) {
+    if (!confirm(translate('reservationsReconciliation.extendedOnDeskConfirm', { ref: issue.external_ref }))) return;
+    resolveBusy.value = true;
+    router.post(route('reservations.reconciliation.resolve', issue.id), { reason: 'extended_on_desk' }, {
+        preserveScroll: true,
+        onError: (errors) => { linkError.value = errors.reason || translate('reservationsReconciliation.extendedOnDeskFailed'); },
+        onFinish: () => { resolveBusy.value = false; },
+    });
+}
 
 function linkCandidate(issue, candidate) {
     if (!window.confirm(translate('reservationsReconciliation.confirmLink', {
@@ -177,6 +192,16 @@ function linkCandidate(issue, candidate) {
 
                     <div class="mt-4 flex flex-wrap gap-2">
                         <Link v-if="issue.reservation_id" :href="route('reservations.show', issue.reservation_id)" class="no-underline"><Button size="sm" variant="outline">{{ $t('reservationsReconciliation.openInPms') }}</Button></Link>
+                        <Button
+                            v-if="canLink && deskResolvable(issue)"
+                            size="sm"
+                            variant="outline"
+                            :disabled="resolveBusy"
+                            @click="resolveExtendedOnDesk(issue)"
+                        >
+                            <CalendarPlus class="mr-1.5 h-4 w-4" />{{ $t('reservationsReconciliation.extendedOnDesk') }}
+                        </Button>
+                        <Badge v-if="issue.resolution === 'extended_on_desk'" variant="info">{{ $t('reservationsReconciliation.resolvedExtendedOnDesk') }}</Badge>
                         <span v-else-if="!issue.candidates?.length" class="inline-flex items-center gap-1.5 text-small text-error-700"><AlertTriangle class="h-4 w-4" />{{ $t('reservationsReconciliation.noManualFound') }}</span>
                     </div>
                 </article>

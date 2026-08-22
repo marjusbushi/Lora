@@ -10,6 +10,7 @@ use App\Services\ChannexClient;
 use App\Services\OtaReservationReconciler;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -57,6 +58,7 @@ class OtaReconciliationController extends Controller
                 'currency' => $issue->currency,
                 'details' => $details,
                 'reservation_id' => $issue->reservation_id,
+                'resolution' => $issue->resolution,
                 'last_detected_at' => $issue->last_detected_at?->toIso8601String(),
                 'candidates' => collect($details['candidate_reservation_ids'] ?? [])
                     ->map(fn ($id) => $candidates->get((int) $id))
@@ -179,5 +181,52 @@ class OtaReconciliationController extends Controller
         }
 
         return back()->with('success', "Rezervimi #{$reservation->id} u lidh me {$issue->channel} #{$issue->external_ref}.");
+    }
+
+    /**
+     * Staff explanation that closes a difference: the guest extended/changed
+     * the stay AT THE DESK, so the PMS legitimately differs from the channel
+     * and nothing must be "sent to Booking". Closes every open mismatch card
+     * of the same booking and freezes the PMS fingerprint so the nightly
+     * checker keeps them closed until the reservation changes again.
+     */
+    public function resolve(Request $request, OtaReconciliationIssue $issue): RedirectResponse
+    {
+        $request->validate(['reason' => ['required', Rule::in([OtaReconciliationIssue::RESOLUTION_EXTENDED_ON_DESK])]]);
+
+        if ($issue->status !== OtaReconciliationIssue::STATUS_OPEN) {
+            throw ValidationException::withMessages(['reason' => 'Ky rast është zgjidhur tashmë.']);
+        }
+        if (! in_array($issue->issue_type, OtaReconciliationIssue::DESK_RESOLVABLE_TYPES, true)) {
+            throw ValidationException::withMessages(['reason' => 'Vetëm diferencat e shumës ose të datave mbyllen me këtë arsye.']);
+        }
+
+        $now = now();
+        $closed = OtaReconciliationIssue::query()
+            ->where('channel', $issue->channel)
+            ->where('external_ref', $issue->external_ref)
+            ->whereIn('issue_type', OtaReconciliationIssue::DESK_RESOLVABLE_TYPES)
+            ->where('status', OtaReconciliationIssue::STATUS_OPEN)
+            ->get()
+            ->each(fn (OtaReconciliationIssue $open) => $open->forceFill([
+                'status' => OtaReconciliationIssue::STATUS_RESOLVED,
+                'resolved_at' => $now,
+                'resolution' => OtaReconciliationIssue::RESOLUTION_EXTENDED_ON_DESK,
+                'resolved_by' => $request->user()->id,
+                'resolution_fingerprint' => OtaReconciliationIssue::fingerprint(
+                    $open->actual_total !== null ? (float) $open->actual_total : null,
+                    $open->details,
+                ),
+            ])->save());
+
+        if ($issue->reservation_id && ($reservation = Reservation::find($issue->reservation_id))) {
+            AuditLog::record('reservation.reconciliation_extended_on_desk', $reservation, [
+                'channel' => $issue->channel,
+                'channel_ref' => $issue->external_ref,
+                'issues_closed' => $closed->pluck('issue_type')->values()->all(),
+            ], 'staff');
+        }
+
+        return back()->with('success', 'U shënua si zgjatje në recepsion — '.$closed->count().' diferencë u mbyll.');
     }
 }
