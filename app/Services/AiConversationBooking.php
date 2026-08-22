@@ -99,8 +99,10 @@ class AiConversationBooking
         $adults = max(1, min(10, (int) ($args['adults'] ?? 0)));
         $firstName = trim((string) ($args['guest_first_name'] ?? '')) ?: trim((string) $thread->guest_name);
         $lastName = trim((string) ($args['guest_last_name'] ?? ''));
-        if (mb_strlen($firstName) < 2) {
-            return ['error' => 'Mungon emri i mysafirit — pyete si e ka emrin e plotë para rezervimit.'];
+        // Pariteti me rezervimin manual (GuestStoreRequest: last_name required)
+        // — vendim i Marjusit: të dhëna të plota mysafiri, si në recepsion.
+        if (mb_strlen($firstName) < 2 || mb_strlen($lastName) < 2) {
+            return ['error' => 'Mungon emri i plotë i mysafirit — pyete për emrin DHE mbiemrin para rezervimit.'];
         }
 
         $type = RoomType::query()->whereRaw('LOWER(name) = ?', [mb_strtolower(trim((string) ($args['room_type'] ?? '')))])->first();
@@ -129,7 +131,7 @@ class AiConversationBooking
                 && (int) $existing->room?->room_type_id === (int) $type->id;
 
             if ($same) {
-                return $this->holdPayload($existing, $type->name, $firstName, $nights, $adults);
+                return $this->holdPayload($existing, $type->name, $firstName, $lastName, $nights, $adults);
             }
 
             // Para anulimit, pajtohu AUTORITATIVISHT me POK (gjetje Codex, PR
@@ -241,15 +243,16 @@ class AiConversationBooking
             'currency' => PricingCurrency::code(),
         ], 'ai');
 
-        return $this->holdPayload($reservation, $type->name, $firstName, $nights, $adults);
+        return $this->holdPayload($reservation, $type->name, $firstName, $lastName, $nights, $adults);
     }
 
     /** @return array<string,mixed> */
-    private function holdPayload(Reservation $reservation, string $typeName, string $firstName, int $nights, int $adults): array
+    private function holdPayload(Reservation $reservation, string $typeName, string $firstName, string $lastName, int $nights, int $adults): array
     {
         return [
             'status' => 'hold_created',
             'guest_first_name' => $firstName,
+            'guest_last_name' => $lastName,
             'room_type' => $typeName,
             'check_in' => $reservation->check_in_date?->toDateString(),
             'check_out' => $reservation->check_out_date?->toDateString(),
@@ -280,7 +283,15 @@ class AiConversationBooking
                 ->filter(fn (Guest $g) => str_ends_with(preg_replace('/\D+/', '', (string) $g->phone), $suffix));
 
             if ($matches->count() === 1) {
-                return $matches->first();
+                $guest = $matches->first();
+                // VETËM mbiemri BOSH plotësohet, dhe vetëm kur emri përputhet
+                // — asnjë e dhënë ekzistuese s'mbishkruhet kurrë (anti-tamper).
+                if (trim((string) $guest->last_name) === ''
+                    && mb_strtolower(trim((string) $guest->first_name)) === mb_strtolower($firstName)) {
+                    $guest->update(['last_name' => $lastName]);
+                }
+
+                return $guest;
             }
         }
 
