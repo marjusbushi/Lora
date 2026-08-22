@@ -69,7 +69,7 @@ class AiChat
      * @param  array<string,callable(array):array>|\Closure  $executors  array statik OSE fabrikë per-provë (kthen ?array)
      * @return array{args:array<string,mixed>,toolsUsed:array<int,string>,usage:array{input:int,output:int,thinking:int,provider:string,model:string}}
      */
-    public function converse(string $system, string $userMessage, array $tools, array|\Closure $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3): array
+    public function converse(string $system, string $userMessage, array $tools, array|\Closure $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3, ?callable $onUsage = null): array
     {
         $primary = $this->provider();
         $resolve = fn (): ?array => $executors instanceof \Closure ? $executors() : $executors;
@@ -80,7 +80,10 @@ class AiChat
         }
 
         try {
-            return $this->driver($primary)->converse($system, $userMessage, $tools, $attempt, $finalToolName, $maxTokens, $timeoutSeconds, $maxToolRounds);
+            // $onUsage kalon te ÇDO provë — edhe raundet e suksesshme të një
+            // prove që dështon më vonë janë faturuar nga provideri dhe duhet
+            // të mbeten në dëshmi (gjetje Codex #568 P1).
+            return $this->driver($primary)->converse($system, $userMessage, $tools, $attempt, $finalToolName, $maxTokens, $timeoutSeconds, $maxToolRounds, $onUsage);
         } catch (RuntimeException $e) {
             $transient = (bool) preg_match('/gabim \((5\d\d)\)|\(timeout\)/u', $e->getMessage());
             $other = $primary === 'gemini' ? 'openai' : 'gemini';
@@ -100,7 +103,7 @@ class AiChat
             }
 
             try {
-                return $this->driver($other)->converse($system, $userMessage, $tools, $fresh, $finalToolName, $maxTokens, $timeoutSeconds, $maxToolRounds);
+                return $this->driver($other)->converse($system, $userMessage, $tools, $fresh, $finalToolName, $maxTokens, $timeoutSeconds, $maxToolRounds, $onUsage);
             } catch (\Throwable) {
                 // Rezerva ndër-provider dështoi edhe ajo — gabimi ORIGJINAL
                 // bublon (shkalla e riprovës së job-it vazhdon si zakonisht).

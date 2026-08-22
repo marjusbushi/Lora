@@ -81,6 +81,12 @@ class AiController extends Controller
             'cross_fallback' => ['nullable', 'boolean'],
             'provider_overrides' => ['nullable', 'array'],
             'provider_overrides.*' => ['nullable', Rule::in([...AiChat::PROVIDERS, ''])],
+            // Task #409: koeficienti i faturimit + çmimorja — numrat i vendos
+            // VETËM super-admini; kodi mban thjesht default-et.
+            'billing_coefficient' => ['nullable', 'numeric', 'min:0', 'max:1000'],
+            'pricing_overrides' => ['nullable', 'array'],
+            'pricing_overrides.*.input' => ['required_with:pricing_overrides.*', 'numeric', 'min:0', 'max:100000'],
+            'pricing_overrides.*.output' => ['required_with:pricing_overrides.*', 'numeric', 'min:0', 'max:100000'],
         ]);
 
         if ($request->boolean('clear_key')) {
@@ -138,9 +144,111 @@ class AiController extends Controller
             $saved[] = 'mbivendosjet per-hotel';
         }
 
+        if ($request->filled('billing_coefficient')) {
+            PlatformSetting::set('ai.billing_coefficient', (string) (float) $data['billing_coefficient'], 'text');
+            $saved[] = 'koeficienti i faturimit';
+        }
+
+        if ($request->has('pricing_overrides')) {
+            $pricing = collect($data['pricing_overrides'] ?? [])
+                ->map(fn ($p) => ['input' => (float) $p['input'], 'output' => (float) $p['output']])
+                ->all();
+            PlatformSetting::set('ai.pricing_overrides', $pricing, 'json');
+            $saved[] = 'çmimorja e modeleve';
+        }
+
         return back()->with('success', $saved === []
             ? 'Asnjë ndryshim.'
             : 'U ruajt: '.implode(', ', $saved).'.');
+    }
+
+    /**
+     * Raporti "Përdorimi AI" (task #409): per-tenant për muajin e zgjedhur —
+     * thirrje, tokena, kosto reale (mikro-USD → USD) dhe vlera e faturueshme
+     * (× koeficienti që cakton super-admini). Leximi ndër-tenant OPT-IN i
+     * shprehur me withoutGlobalScope: pa kontekst scope-i mbyllet në
+     * tenant_id=0 (fail-closed — forcimi i auditit multi-tenant), dhe
+     * control-plane-i duhet ta deklarojë qëllimin vetë.
+     */
+    public function usage(Request $request, \App\Services\AiUsageRecorder $recorder): Response
+    {
+        $month = (string) $request->query('month', now()->format('Y-m'));
+        if (! preg_match('/^\d{4}-\d{2}$/', $month)) {
+            $month = now()->format('Y-m');
+        }
+        $start = \Illuminate\Support\Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        $end = $start->copy()->addMonth();
+
+        $rows = \App\Models\AiUsageEvent::query()->withoutGlobalScope('tenant')
+            ->selectRaw('tenant_id, provider, model, count(*) as calls, sum(input_tokens) as input_tokens, sum(output_tokens + thinking_tokens) as output_tokens, sum(cost_micro_usd) as cost_micro_usd')
+            ->where('created_at', '>=', $start)
+            ->where('created_at', '<', $end)
+            ->groupBy('tenant_id', 'provider', 'model')
+            ->get();
+
+        $tenants = Tenant::query()->whereIn('id', $rows->pluck('tenant_id')->unique())
+            ->pluck('name', 'id');
+        $coefficient = $recorder->billingCoefficient();
+
+        $byTenant = $rows->groupBy('tenant_id')->map(function ($group, $tenantId) use ($tenants, $coefficient) {
+            $cost = (int) $group->sum('cost_micro_usd');
+
+            return [
+                'tenant_id' => (int) $tenantId,
+                'tenant' => (string) ($tenants[$tenantId] ?? ('#'.$tenantId)),
+                'calls' => (int) $group->sum('calls'),
+                'input_tokens' => (int) $group->sum('input_tokens'),
+                'output_tokens' => (int) $group->sum('output_tokens'),
+                'cost_usd' => round($cost / 1_000_000, 4),
+                'billable_usd' => round($cost * $coefficient / 1_000_000, 4),
+                'models' => $group->map(fn ($r) => [
+                    'provider' => $r->provider,
+                    'model' => $r->model,
+                    'calls' => (int) $r->calls,
+                    'cost_usd' => round(((int) $r->cost_micro_usd) / 1_000_000, 4),
+                ])->values(),
+            ];
+        })->sortByDesc('cost_usd')->values();
+
+        // Çmimorja për editorin (gjetje Codex #569 P1): përveç default-eve të
+        // config dhe mbivendosjeve, hyjnë edhe modelet AKTIVE të konfiguruara
+        // dhe ÇDO model i VËZHGUAR në matje — një model i panjohur që po
+        // regjistrohet me kosto 0 duhet të marrë çmim nga super-admini, jo
+        // të mbetet falas përgjithmonë.
+        $overrides = PlatformSetting::get('ai.pricing_overrides');
+        $overrides = is_array($overrides) ? $overrides : [];
+        $defaults = config('services.ai.pricing', []);
+        $models = collect($defaults)->keys()
+            ->merge(array_keys($overrides))
+            ->merge([
+                (string) config('services.gemini.model'),
+                (string) config('services.gemini.fallback_model'),
+                (string) config('services.openai.model'),
+            ])
+            ->merge(\App\Models\AiUsageEvent::query()->withoutGlobalScope('tenant')->select('model')->distinct()->pluck('model'))
+            ->filter()
+            ->unique()
+            ->values();
+        // is_override + default i veçuar (gjetje Codex #569 P1): UI dërgon si
+        // mbivendosje VETËM rreshtat realisht të mbivendosur — default-et e
+        // paprekur mbeten te config dhe përditësimet e ardhshme s'maskohen.
+        $pricing = $models->mapWithKeys(fn (string $model) => [$model => $recorder->priceFor($model) + [
+            'is_override' => array_key_exists($model, $overrides),
+            'default' => $defaults[$model] ?? null,
+        ]]);
+
+        return Inertia::render('SuperAdmin/AiUsage', [
+            'month' => $month,
+            'months' => collect(range(0, 5))->map(fn (int $i) => now()->subMonths($i)->format('Y-m'))->values(),
+            'coefficient' => $coefficient,
+            'rows' => $byTenant,
+            'totals' => [
+                'calls' => (int) $rows->sum('calls'),
+                'cost_usd' => round(((int) $rows->sum('cost_micro_usd')) / 1_000_000, 4),
+                'billable_usd' => round(((int) $rows->sum('cost_micro_usd')) * $coefficient / 1_000_000, 4),
+            ],
+            'pricing' => (object) $pricing->all(),
+        ]);
     }
 
     /** "Kontrollo tani" — verifikim i menjëhershëm që super-admini të mos presë 06:30-ën. */

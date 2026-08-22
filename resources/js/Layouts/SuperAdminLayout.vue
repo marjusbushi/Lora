@@ -6,6 +6,7 @@ import {
     Coins,
     CreditCard,
     FileText,
+    Gauge,
     LayoutDashboard,
     ListChecks,
     ListTodo,
@@ -52,6 +53,7 @@ const navigation = [
     { label: t('superAdmin.compact.paymentAttempts'), href: '/super-admin/billing/payment-attempts', match: '/super-admin/billing/payment-attempts', icon: RefreshCw, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.providerEvents'), href: '/super-admin/billing/provider-events', match: '/super-admin/billing/provider-events', icon: Webhook, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.currencies'), href: '/super-admin/currencies', match: '/super-admin/currencies', icon: Coins, group: t('superAdmin.compact.loraFinance') },
+    { label: t('superAdmin.compact.aiUsage'), href: '/super-admin/ai/usage', match: '/super-admin/ai/usage', icon: Gauge, group: t('superAdmin.compact.loraFinance') },
     { label: t('superAdmin.compact.catalog'), href: '/super-admin/catalog', match: '/super-admin/catalog', icon: Tags, group: t('superAdmin.compact.loraFinance') },
 ];
 
