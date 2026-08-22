@@ -77,9 +77,9 @@ function dateTime(value) {
                     <div v-else class="mx-4 mt-2.5 rounded-xl border border-amber-200 border-l-4 border-l-amber-400 bg-gradient-to-r from-amber-50 to-amber-50/40 px-3 py-2 text-[10.5px] font-semibold text-amber-800">{{ $t('superAdmin.ai.notConfigured') }}</div>
 
                     <!-- Shëndeti i KËTIJ shoferi — kontrolli dhe rezultati bashkë -->
-                    <div class="mx-4 mt-3 flex items-center gap-2.5 rounded-xl border px-3 py-2 text-[10.5px]" :class="ai.health && ai.health.ok ? 'border-emerald-200 bg-gradient-to-r from-emerald-50 to-white text-emerald-800' : ai.health ? 'border-red-200 bg-gradient-to-r from-red-50 to-white text-red-800' : 'border-neutral-200 bg-neutral-50/60 text-neutral-500'">
-                        <span class="h-2 w-2 shrink-0 rounded-full" :class="ai.health && ai.health.ok ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(29,157,120,.15)]' : ai.health ? 'bg-red-500 shadow-[0_0_0_3px_rgba(220,38,38,.15)]' : 'bg-neutral-300'" />
-                        <span class="min-w-0 flex-1 truncate">
+                    <div class="mx-4 mt-3 flex items-start gap-2.5 rounded-xl border px-3 py-2 text-[10.5px]" :class="ai.health && ai.health.ok ? 'border-emerald-200 bg-gradient-to-r from-emerald-50 to-white text-emerald-800' : ai.health ? 'border-red-200 bg-gradient-to-r from-red-50 to-white text-red-800' : 'border-neutral-200 bg-neutral-50/60 text-neutral-500'">
+                        <span class="mt-[5px] h-2 w-2 shrink-0 rounded-full" :class="ai.health && ai.health.ok ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(29,157,120,.15)]' : ai.health ? 'bg-red-500 shadow-[0_0_0_3px_rgba(220,38,38,.15)]' : 'bg-neutral-300'" />
+                        <span class="min-w-0 flex-1 break-words">
                             <template v-if="ai.health && ai.health.ok"><strong>{{ $t('superAdmin.ai.healthOk') }}</strong> {{ $t('superAdmin.ai.checkedAt', { date: dateTime(ai.health.checked_at) }) }}</template>
                             <template v-else-if="ai.health"><strong>{{ $t('superAdmin.ai.healthFail') }}</strong> {{ ai.health.error }} · {{ $t('superAdmin.ai.checkedAt', { date: dateTime(ai.health.checked_at) }) }}</template>
                             <template v-else>{{ $t('superAdmin.ai.healthNone') }}</template>
