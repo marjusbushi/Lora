@@ -5395,7 +5395,9 @@
       "model": "Model",
       "inputPrice": "Input ($/1M)",
       "outputPrice": "Output ($/1M)",
-      "pricingHint": "\"Thinking\" tokens bill as output. Changes apply to NEW meterings — old rows are untouched (billing evidence)."
+      "pricingHint": "\"Thinking\" tokens bill as output. Changes apply to NEW meterings — old rows are untouched (billing evidence).",
+      "overrideLabel": "Override",
+      "noPriceWarning": "no price — metered at 0!"
     }
   },
   "reports360": {

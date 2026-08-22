@@ -466,6 +466,28 @@ class GeminiConverseTest extends TestCase
         $this->assertSame(100, $rounds[0]['input']);
     }
 
+    /** Codex #569 P1: një 200 i FATURUAR pa thirrje të vlefshme (MAX_TOKENS) regjistrohet PARA se validimi të hedhë. */
+    public function test_usage_sink_fires_even_when_a_billable_200_has_no_valid_call(): void
+    {
+        Http::fakeSequence('generativelanguage.googleapis.com/*')->push([
+            'candidates' => [['content' => ['role' => 'model', 'parts' => []], 'finishReason' => 'MAX_TOKENS']],
+            'usageMetadata' => ['promptTokenCount' => 100, 'candidatesTokenCount' => 512, 'thoughtsTokenCount' => 512],
+        ]);
+
+        $rounds = [];
+        try {
+            app(GeminiClient::class)->converse('SYSTEM', 'MYSAFIRI: hej', self::TOOLS, [], 'guest_reply', onUsage: function (array $usage) use (&$rounds): void {
+                $rounds[] = $usage;
+            });
+            $this->fail('Duhej të hidhte MAX_TOKENS.');
+        } catch (\RuntimeException) {
+            // Përgjigja s'kishte thirrje — po tokenat U PAGUAN dhe u regjistruan.
+        }
+
+        $this->assertCount(1, $rounds);
+        $this->assertSame(512, $rounds[0]['thinking']);
+    }
+
     /**
      * Kundër API-së së VËRTETË të Gemini-t — kategoria që mock-u s'e mbulon dot
      * (mësimi i #379). Ekzekutohet VETËM me qëllim, që të mos digjet çelësi i

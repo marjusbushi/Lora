@@ -78,14 +78,9 @@ class OpenAiClient implements AiChatProvider
 
             // Raundi i fundit DETYRON finalen — cikli s'mbetet kurrë pa dalje.
             $forceFinal = $round === $maxToolRounds;
-            $turn = $this->complete($messages, $declarations, $forceFinal ? $finalToolName : null, $maxTokens, $deadline);
+            $turn = $this->complete($messages, $declarations, $forceFinal ? $finalToolName : null, $maxTokens, $deadline, $onUsage);
             foreach ($usage as $k => $v) {
                 $usage[$k] = $v + $turn['usage'][$k];
-            }
-            // Faturimi per-RAUND (gjetjet Codex #568) — dëshmia e raundeve të
-            // paguara mbijeton edhe kur biseda dështon më vonë.
-            if ($onUsage !== null) {
-                $onUsage($turn['usage'] + ['provider' => 'openai', 'model' => $this->model()]);
             }
 
             // Finalja pranohet VETËM si thirrje e vetme e radhës (ose e detyruar)
@@ -135,7 +130,7 @@ class OpenAiClient implements AiChatProvider
      *
      * @return array{message:array<string,mixed>,calls:array<int,array{id:string,name:string,args:array<string,mixed>}>,usage:array{input:int,output:int,thinking:int}}
      */
-    private function complete(array $messages, array $declarations, ?string $forceToolName, int $maxTokens, float $deadline): array
+    private function complete(array $messages, array $declarations, ?string $forceToolName, int $maxTokens, float $deadline, ?callable $onUsage = null): array
     {
         $slot = fn (): int => max(3, (int) floor(min(self::CALL_TIMEOUT_CAP, $deadline - microtime(true))));
 
@@ -169,6 +164,22 @@ class OpenAiClient implements AiChatProvider
             $this->throwHttpError($res->status(), (string) $res->body());
         }
 
+        // Faturimi per-RAUND, PARA çdo validimi (gjetje Codex #569 P1): një
+        // 200 pa tool_calls të vlefshme (finish_reason=length, args të
+        // palexueshme) është FATURUAR njësoj — dëshmia regjistrohet edhe kur
+        // më poshtë hidhet përjashtim.
+        $roundUsage = [
+            'input' => (int) $res->json('usage.prompt_tokens', 0),
+            // completion_tokens i PËRFSHIN tokenat e arsyetimit — ndahen
+            // që të mos faturohen dy herë (gjetje Codex #568 P1): output
+            // + thinking = completion_tokens, saktësisht.
+            'output' => max(0, (int) $res->json('usage.completion_tokens', 0) - (int) $res->json('usage.completion_tokens_details.reasoning_tokens', 0)),
+            'thinking' => (int) $res->json('usage.completion_tokens_details.reasoning_tokens', 0),
+        ];
+        if ($onUsage !== null) {
+            $onUsage($roundUsage + ['provider' => 'openai', 'model' => $this->model()]);
+        }
+
         $message = $res->json('choices.0.message');
         $calls = [];
         foreach ($res->json('choices.0.message.tool_calls', []) ?? [] as $toolCall) {
@@ -196,14 +207,7 @@ class OpenAiClient implements AiChatProvider
         return [
             'message' => $message,
             'calls' => $calls,
-            'usage' => [
-                'input' => (int) $res->json('usage.prompt_tokens', 0),
-                // completion_tokens i PËRFSHIN tokenat e arsyetimit — ndahen
-                // që të mos faturohen dy herë (gjetje Codex #568 P1): output
-                // + thinking = completion_tokens, saktësisht.
-                'output' => max(0, (int) $res->json('usage.completion_tokens', 0) - (int) $res->json('usage.completion_tokens_details.reasoning_tokens', 0)),
-                'thinking' => (int) $res->json('usage.completion_tokens_details.reasoning_tokens', 0),
-            ],
+            'usage' => $roundUsage,
         ];
     }
 
