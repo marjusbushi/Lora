@@ -147,6 +147,63 @@ class AiChatRouterTest extends TestCase
         app(AiChat::class)->converse(...self::ARGS);
     }
 
+    /** Codex #566 P1: fabrika e ekzekutuesve thirret PER PROVË — rezerva merr ekzekutues të FRESKËT. */
+    public function test_cross_fallback_resolves_fresh_executors_from_the_factory(): void
+    {
+        PlatformSetting::set('ai.cross_provider_fallback', '1', 'boolean');
+
+        $factoryCalls = 0;
+        $factory = function () use (&$factoryCalls): ?array {
+            $factoryCalls++;
+
+            return ['probe' => fn (): array => ['attempt' => $factoryCalls]];
+        };
+
+        $this->mock(GeminiClient::class, fn ($mock) => $mock
+            ->shouldReceive('converse')->once()->andThrow(new \RuntimeException('Google ktheu një gabim (503). Provo sërish.')));
+        $seenAttempt = null;
+        $this->mock(OpenAiClient::class, function ($mock) use (&$seenAttempt) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->once()->andReturnUsing(function ($system, $msg, $tools, $executors) use (&$seenAttempt) {
+                $seenAttempt = $executors['probe']([])['attempt'];
+
+                return $this->reply('openai');
+            });
+        });
+
+        app(AiChat::class)->converse('SYSTEM', 'MYSAFIRI: hej', [], $factory, 'guest_reply');
+
+        $this->assertSame(2, $factoryCalls);
+        $this->assertSame(2, $seenAttempt);
+    }
+
+    /** Codex #566 P1: fabrika kthen NULL (prova e braktisur la hold) → VETO — rezerva s'provohet fare. */
+    public function test_cross_fallback_is_vetoed_when_the_factory_returns_null(): void
+    {
+        PlatformSetting::set('ai.cross_provider_fallback', '1', 'boolean');
+
+        $first = true;
+        $factory = function () use (&$first): ?array {
+            if ($first) {
+                $first = false;
+
+                return [];
+            }
+
+            return null;
+        };
+
+        $this->mock(GeminiClient::class, fn ($mock) => $mock
+            ->shouldReceive('converse')->once()->andThrow(new \RuntimeException('Google ktheu një gabim (503). Provo sërish.')));
+        $this->mock(OpenAiClient::class, fn ($mock) => $mock
+            ->shouldReceive('configured')->andReturn(true)
+            ->shouldReceive('converse')->never());
+
+        $this->expectExceptionMessage('gabim (503)');
+
+        app(AiChat::class)->converse('SYSTEM', 'MYSAFIRI: hej', [], $factory, 'guest_reply');
+    }
+
     public function test_cross_fallback_failure_bubbles_the_original_error(): void
     {
         PlatformSetting::set('ai.cross_provider_fallback', '1', 'boolean');

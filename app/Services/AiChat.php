@@ -55,21 +55,32 @@ class AiChat
      * Biseda me mjete përmes providerit të tenantit; me flamurin
      * 'ai.cross_provider_fallback' ON, një dështim KALIMTAR (5xx/timeout —
      * pra edhe pas rezervës së brendshme të Gemini-t, task #403) provohet
-     * NJË herë te provideri tjetër i konfiguruar. Ekzekutuesit janë
-     * idempotentë (holdi ripërdoret, leximet s'kanë efekt) — rinisja e
-     * bisedës nga e para është e sigurt, njësoj si riprova e job-it.
-     * Dështon edhe tjetri → bublon gabimi ORIGJINAL.
+     * NJË herë te provideri tjetër i konfiguruar. Dështon edhe tjetri →
+     * bublon gabimi ORIGJINAL.
+     *
+     * EKZEKUTUESIT ME GJENDJE (gjetje Codex #566 P1): rezerva RINIS bisedën
+     * nga e para, ndaj $executors pranohet edhe si FABRIKË (Closure): thirret
+     * PER PROVË — thirrësi zeron mbledhësit e vet aty, dhe kthen NULL si
+     * VETO kur prova e braktisur la efekte anësore të pakthyeshme (hold i
+     * krijuar): atëherë rezerva hiqet dorë dhe gabimi origjinal bublon —
+     * shkalla e riprovës së job-it e merr me ekzekutues idempotentë.
      *
      * @param  array<int,array{name:string,description?:string,input_schema?:array}>  $tools
-     * @param  array<string,callable(array):array>  $executors
+     * @param  array<string,callable(array):array>|\Closure  $executors  array statik OSE fabrikë per-provë (kthen ?array)
      * @return array{args:array<string,mixed>,toolsUsed:array<int,string>,usage:array{input:int,output:int,thinking:int,provider:string,model:string}}
      */
-    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3): array
+    public function converse(string $system, string $userMessage, array $tools, array|\Closure $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3): array
     {
         $primary = $this->provider();
+        $resolve = fn (): ?array => $executors instanceof \Closure ? $executors() : $executors;
+
+        $attempt = $resolve();
+        if ($attempt === null) {
+            throw new RuntimeException('Fabrika e ekzekutuesve nuk dha ekzekutues për provën e parë.');
+        }
 
         try {
-            return $this->driver($primary)->converse($system, $userMessage, $tools, $executors, $finalToolName, $maxTokens, $timeoutSeconds, $maxToolRounds);
+            return $this->driver($primary)->converse($system, $userMessage, $tools, $attempt, $finalToolName, $maxTokens, $timeoutSeconds, $maxToolRounds);
         } catch (RuntimeException $e) {
             $transient = (bool) preg_match('/gabim \((5\d\d)\)|\(timeout\)/u', $e->getMessage());
             $other = $primary === 'gemini' ? 'openai' : 'gemini';
@@ -80,8 +91,16 @@ class AiChat
                 throw $e;
             }
 
+            $fresh = $resolve();
+            if ($fresh === null) {
+                // VETO nga fabrika: prova e braktisur la gjurmë të pakthyeshme
+                // (hold POK) — më mirë riprova idempotente e job-it sesa një
+                // përgjigje rezerve mbi gjendje gjysmake.
+                throw $e;
+            }
+
             try {
-                return $this->driver($other)->converse($system, $userMessage, $tools, $executors, $finalToolName, $maxTokens, $timeoutSeconds, $maxToolRounds);
+                return $this->driver($other)->converse($system, $userMessage, $tools, $fresh, $finalToolName, $maxTokens, $timeoutSeconds, $maxToolRounds);
             } catch (\Throwable) {
                 // Rezerva ndër-provider dështoi edhe ajo — gabimi ORIGJINAL
                 // bublon (shkalla e riprovës së job-it vazhdon si zakonisht).

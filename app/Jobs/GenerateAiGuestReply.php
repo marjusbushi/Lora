@@ -428,6 +428,12 @@ PROMPT;
         // përgjigje që bie në draft s'lëshon asnjë foto.
         $pendingPhotos = [];
 
+        // A preku prova aktuale mjetin e rezervimit (gjetje Codex #566 P1):
+        // një provë e braktisur me hold të krijuar NUK i dorëzohet rezervës
+        // ndër-provider — e merr shkalla e riprovës së job-it, ekzekutuesit e
+        // së cilës janë idempotentë (holdi ripërdoret, linku dorëzohet).
+        $holdTouched = false;
+
         $executors = [
             'check_availability' => function (array $args) use ($thread, &$quotes): array {
                 try {
@@ -502,7 +508,11 @@ PROMPT;
             // (çelësi, kanali, POK, datat, tipologjia) — deklarimi i mjetit
             // s'është kurrë burim besimi, dhe me çelës OFF asnjë rrugë kodi
             // s'krijon dot rezervim nga biseda.
-            'create_booking_hold' => function (array $args) use ($booking, $thread, &$quotes): array {
+            'create_booking_hold' => function (array $args) use ($booking, $thread, &$quotes, &$holdTouched): array {
+                // Shënohet PARA thirrjes — edhe një hold gjysmak (p.sh. POK i
+                // krijuar por përgjigja e ndërprerë) e ndalon rezervën
+                // ndër-provider (Codex #566 P1).
+                $holdTouched = true;
                 $result = $booking->hold($thread, $args);
                 if (! isset($result['error'])) {
                     $quotes[] = $result;
@@ -527,13 +537,30 @@ PROMPT;
             },
         ];
 
+        // FABRIKA e ekzekutuesve per-PROVË (gjetje Codex #566 P1): rezerva
+        // ndër-provider rinis bisedën nga e para — mbledhësit ($quotes,
+        // $pendingPhotos) ZEROHEN që rezultatet e provës së braktisur të mos
+        // rrjedhin në përgjigjen e provës së re (kuota e vjetër do "ankoronte"
+        // shifra që rezerva s'i verifikoi; fotot e vjetra do dilnin pa u
+        // kërkuar). Nëse prova e braktisur PREKU rezervimin → null = VETO:
+        // rezerva ndër-provider hiqet dorë dhe e merr riprova e job-it.
+        $executorsFactory = function () use (&$quotes, &$pendingPhotos, &$holdTouched, $executors): ?array {
+            if ($holdTouched) {
+                return null;
+            }
+            $quotes = [];
+            $pendingPhotos = [];
+
+            return $executors;
+        };
+
         // PA catch (task #367): një dështim i Gemini-t (429, timeout, deadline)
         // duhet ta RRËZOJË job-in — vetëm kështu radha e riprovon (tries/backoff).
         // Catch-i i vjetër e kthente në "sukses" të heshtur: as përgjigje, as
         // draft, as riprovë — pikërisht dështimet "herë pas here" të staging-ut.
         // Deadline 75s: përgjigja me çmime mban 2-3 thirrje HTTP radhazi; 45s
         // mbushej nga një raund i ngadaltë "thinking" (job timeout 90s — ka marzh).
-        return $ai->converse($system, "BISEDA:\n{$conversation}", $tools, $executors, 'guest_reply', 1024, 75)
+        return $ai->converse($system, "BISEDA:\n{$conversation}", $tools, $executorsFactory, 'guest_reply', 1024, 75)
             + ['quotes' => $quotes, 'photos' => $pendingPhotos];
     }
 
