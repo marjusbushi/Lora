@@ -9,8 +9,13 @@ use RuntimeException;
 /**
  * Google Gemini client for the AI Pricing Assistant. Uses function calling (forced) so the
  * reply is a validated JSON object. Same structured() interface as AnthropicClient, so the
- * two providers are interchangeable. Key comes from the Settings UI (Setting 'ai.gemini_key')
- * or env (GEMINI_API_KEY / GOOGLE_API_KEY).
+ * two providers are interchangeable.
+ *
+ * KEY IS PLATFORM-CENTRAL (task #407, Marjus 2026-08-21): ONE key serves every
+ * hotel — PlatformSetting 'ai.gemini_key' (set in the super-admin panel, same
+ * pattern as the exchange-rate key) with env GEMINI_API_KEY / GOOGLE_API_KEY
+ * as fallback. Tenant Settings are deliberately IGNORED — hotels no longer
+ * configure any AI key.
  */
 class GeminiClient
 {
@@ -27,7 +32,7 @@ class GeminiClient
 
     public function key(): ?string
     {
-        return Setting::get('ai.gemini_key') ?: config('services.gemini.key');
+        return \App\Models\PlatformSetting::get('ai.gemini_key') ?: config('services.gemini.key');
     }
 
     public function configured(): bool
@@ -314,7 +319,7 @@ class GeminiClient
         }
 
         return match (true) {
-            in_array($res->status(), [400, 401, 403], true) => ['ok' => false, 'error' => 'Çelësi u refuzua nga Google ('.$res->status().') — kontrolloni çelësin te Cilësimet → Asistenti AI.'],
+            in_array($res->status(), [400, 401, 403], true) => ['ok' => false, 'error' => 'Çelësi qendror AI u refuzua nga Google ('.$res->status().') — rifreskojeni te Super-admin → Truri AI.'],
             $res->status() === 404 => ['ok' => false, 'error' => 'Modeli i AI nuk u gjet (404) — njoftoni mbështetjen.'],
             default => ['ok' => null, 'error' => null],
         };
@@ -338,8 +343,8 @@ class GeminiClient
         // cannot leak it. Map to a clear Albanian message.
         throw new RuntimeException(match (true) {
             $status === 429 => 'Shumë kërkesa te Google (limiti u kalua). Prit pak minuta dhe provo sërish.',
-            $status === 400 && str_contains($body, 'API key not valid') => 'Çelësi Gemini nuk është i vlefshëm. Kontrollo çelësin te Settings → Asistenti AI.',
-            $status === 403 => 'Çelësi Gemini u refuzua (403). Kontrollo çelësin te Settings → Asistenti AI.',
+            $status === 400 && str_contains($body, 'API key not valid') => 'Çelësi qendror Gemini i platformës nuk është i vlefshëm — njofto mbështetjen e Lora PMS.',
+            $status === 403 => 'Çelësi qendror Gemini u refuzua (403) — njofto mbështetjen e Lora PMS.',
             $status === 404 => 'Modeli i AI nuk u gjet (404) — mund të jetë tërhequr. Njofto zhvilluesin.',
             default => "Google ktheu një gabim ($status). Provo sërish.",
         });

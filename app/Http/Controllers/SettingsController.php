@@ -73,13 +73,12 @@ class SettingsController extends Controller
             'pricing_currency' => PricingCurrency::code(),
         ]);
 
-        // Never ship the raw AI key to the browser — expose only a masked hint + a configured flag.
-        $aiKey = $settings['ai']['gemini_key'] ?? null;
+        // Çelësi AI është QENDROR i platformës (task #407) — hoteli s'ka më
+        // çelës të vetin, vetëm sheh nëse truri AI është aktiv. Asnjë çelës
+        // s'i dërgohet kurrë browser-it.
         $settings['ai'] = [
-            'gemini_configured' => ! empty($aiKey) || ! empty(config('services.gemini.key')),
-            'gemini_key_hint' => $aiKey ? str_repeat('•', 6).substr((string) $aiKey, -4) : null,
+            'gemini_configured' => app(\App\Services\GeminiClient::class)->configured(),
             'ai_hotel_context' => Setting::get('ai.hotel_context', ''),
-            'gemini_from_env' => empty($aiKey) && ! empty(config('services.gemini.key')),
         ];
 
         // Currencies: rates come from the PLATFORM (one shared daily fetch,
@@ -713,39 +712,23 @@ class SettingsController extends Controller
         return back()->with('success', 'Cilësimet e plazhit u ruajtën.');
     }
 
-    // --- AI (Gemini key for the Pricing Assistant) ---
+    // --- AI (konteksti i hotelit; çelësi është QENDROR i platformës — task #407) ---
     public function updateAi(Request $request): RedirectResponse
     {
+        // gemini_key / clear pranoheshin deri te #407 — tani SHPËRFILLEN me
+        // qëllim: çelësi jeton vetëm te super-admin (PlatformSetting), dhe një
+        // formë e vjetër e hapur në browser s'duhet të shkruajë dot asgjë.
         $data = $request->validate([
-            'gemini_key' => ['nullable', 'string', 'max:200'],
             'hotel_context' => ['nullable', 'string', 'max:1000'],
-            'clear' => ['nullable', 'boolean'],
         ]);
 
         if ($request->has('hotel_context')) {
             Setting::set('ai.hotel_context', trim((string) ($data['hotel_context'] ?? '')), 'text');
+
+            return back()->with('success', 'Konteksti i hotelit u ruajt.');
         }
 
-        if ($request->boolean('clear')) {
-            Setting::set('ai.gemini_key', '', 'text');
-            // Pa çelës s'ka çfarë kontrollohet — alarmi i vjetër hiqet menjëherë.
-            Setting::set('ai.gemini_key_health', '', 'text');
-
-            return back()->with('success', 'Çelësi AI u hoq.');
-        }
-
-        $key = trim((string) ($data['gemini_key'] ?? ''));
-        if ($key === '') {
-            return back()->with('success', 'Asnjë ndryshim — fusha ishte bosh.');
-        }
-
-        Setting::set('ai.gemini_key', $key, 'text');
-        // Çelës i RI = shëndeti i të vjetrit s'vlen më (gjetje Codex, PR #511):
-        // pa këtë, paneli do e quante të prishur çelësin e ri deri në kontrollin
-        // e radhës ditor. Kontrolli i 06:30 (ose një dështim real) e rimbush.
-        Setting::set('ai.gemini_key_health', '', 'text');
-
-        return back()->with('success', 'Çelësi AI u ruajt. Asistenti i çmimeve tani është aktiv.');
+        return back()->with('success', 'Asnjë ndryshim.');
     }
 
     // --- Currencies (per-hotel mode; the rates themselves are platform-wide) ---
