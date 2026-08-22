@@ -3695,7 +3695,10 @@
       "hotelContextOptional": "Hotel context (optional)",
       "hotelContextPlaceholder": "E.g. Beach hotel in Ksamil; guests are mainly Albanian, Italian, Greek, and Kosovar; peak season is July–August…",
       "saveContext": "Save context",
-      "hotelContextHint": "This description is given to AI with the data. More specific context about guest markets, seasonality, and local demand produces more accurate pricing explanations."
+      "hotelContextHint": "This description is given to AI with the data. More specific context about guest markets, seasonality, and local demand produces more accurate pricing explanations.",
+      "platformKeyActive": "The AI brain is active — included with Lora PMS.",
+      "platformKeyMissing": "The AI brain is not active on the platform — contact Lora PMS support.",
+      "platformKeyExplainer": "AI power (Lora the receptionist and the Pricing Assistant) is provided by the platform with one central key — you don't need any key or setup."
     },
     "messages": {
       "searchGuest": "Search guest…",
@@ -5148,7 +5151,8 @@
       "profileDataDescription": "Update your name and email address.",
       "name": "Name",
       "saved": "Saved",
-      "saveChanges": "Save changes"
+      "saveChanges": "Save changes",
+      "ai": "AI Brain"
     },
     "activity": {
       "title": "Platform activity",
@@ -5345,6 +5349,31 @@
       "copy149": "No hotel operational data",
       "copy150": "Log out",
       "copy151": "Open menu"
+    },
+    "ai": {
+      "pageTitle": "AI Brain — Lora Control Panel",
+      "title": "Platform AI brain",
+      "subtitle": "One central Gemini key serves every hotel — hotels configure nothing.",
+      "keyTitle": "Central Gemini key",
+      "keySubtitle": "Stored only at platform level; no hotel ever sees or touches it.",
+      "activeFor": "AI brain is ACTIVE — model {model} for all hotels.",
+      "fromEnv": "(from server configuration)",
+      "notConfigured": "No key — Lora and the Pricing Assistant are OFF for every hotel.",
+      "apiKey": "Google Gemini API key",
+      "apiKeySavedPlaceholder": "Saved ({hint}) — type a new one to replace it",
+      "apiKeyPlaceholder": "Paste the API key here",
+      "getKeyHint": "Create the key at",
+      "removeSavedKey": "Remove the saved key (turns the AI brain OFF platform-wide)",
+      "save": "Save",
+      "checkNow": "Check now",
+      "healthTitle": "Key health",
+      "healthSubtitle": "Automatic daily check (06:30) plus the manual check above.",
+      "healthOk": "The key works.",
+      "healthFail": "The key FAILED:",
+      "healthNone": "No check recorded yet — use \"Check now\".",
+      "checkedAt": "Checked: {date}",
+      "modelsLine": "Primary model: {model} · Reserve: {fallback}",
+      "removeSavedKeyEnv": "Remove the saved key (the platform falls back to the server key — the AI brain stays on)"
     }
   },
   "reports360": {

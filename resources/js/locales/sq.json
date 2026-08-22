@@ -3695,7 +3695,10 @@
       "hotelContextOptional": "Konteksti i hotelit (opsional)",
       "hotelContextPlaceholder": "P.sh. Hotel plazhi në Ksamil; mysafirët kryesisht shqiptarë, italianë, grekë e kosovarë; piku korrik–gusht…",
       "saveContext": "Ruaj kontekstin",
-      "hotelContextHint": "Ky përshkrim i jepet AI-së bashkë me të dhënat. Sa më konkret për tregun e mysafirëve, sezonalitetin dhe kërkesën lokale, aq më të sakta janë arsyetimet e çmimeve."
+      "hotelContextHint": "Ky përshkrim i jepet AI-së bashkë me të dhënat. Sa më konkret për tregun e mysafirëve, sezonalitetin dhe kërkesën lokale, aq më të sakta janë arsyetimet e çmimeve.",
+      "platformKeyActive": "Truri AI është aktiv — përfshihet në Lora PMS.",
+      "platformKeyMissing": "Truri AI s'është aktiv në platformë — njofto mbështetjen e Lora PMS.",
+      "platformKeyExplainer": "Fuqia AI (Lora recepsionistja dhe Asistenti i Çmimeve) ofrohet nga platforma me një çelës qendror — nuk ju duhet asnjë çelës apo konfigurim."
     },
     "messages": {
       "searchGuest": "Kërko mysafir…",
@@ -5148,7 +5151,8 @@
       "profileDataDescription": "Përditëso emrin dhe adresën e emailit.",
       "name": "Emri",
       "saved": "U ruajt",
-      "saveChanges": "Ruaj ndryshimet"
+      "saveChanges": "Ruaj ndryshimet",
+      "ai": "Truri AI"
     },
     "activity": {
       "title": "Aktiviteti i platformës",
@@ -5345,6 +5349,31 @@
       "copy149": "Pa të dhëna operative të hotelit",
       "copy150": "Dil",
       "copy151": "Hap menunë"
+    },
+    "ai": {
+      "pageTitle": "Truri AI — Lora Control Panel",
+      "title": "Truri AI i platformës",
+      "subtitle": "Një çelës qendror Gemini shërben çdo hotel — hotelet s'konfigurojnë asgjë.",
+      "keyTitle": "Çelësi qendror Gemini",
+      "keySubtitle": "Ruhet vetëm në platformë; asnjë hotel s'e sheh dhe s'e prek.",
+      "activeFor": "Truri AI është AKTIV — modeli {model} për të gjithë hotelet.",
+      "fromEnv": "(nga konfigurimi i serverit)",
+      "notConfigured": "Pa çelës — Lora dhe Asistenti i Çmimeve janë të FIKUR për të gjithë hotelet.",
+      "apiKey": "Çelësi API i Google Gemini",
+      "apiKeySavedPlaceholder": "I ruajtur ({hint}) — shkruaj një të ri për ta zëvendësuar",
+      "apiKeyPlaceholder": "Ngjit çelësin API këtu",
+      "getKeyHint": "Çelësi krijohet te",
+      "removeSavedKey": "Hiq çelësin e ruajtur (FIK trurin AI për gjithë platformën)",
+      "save": "Ruaj",
+      "checkNow": "Kontrollo tani",
+      "healthTitle": "Shëndeti i çelësit",
+      "healthSubtitle": "Kontrolli automatik ditor (06:30) + kontrolli me dorë më sipër.",
+      "healthOk": "Çelësi punon.",
+      "healthFail": "Çelësi DËSHTOI:",
+      "healthNone": "Ende asnjë kontroll i regjistruar — përdor \"Kontrollo tani\".",
+      "checkedAt": "Kontrolluar: {date}",
+      "modelsLine": "Modeli primar: {model} · Rezerva: {fallback}",
+      "removeSavedKeyEnv": "Hiq çelësin e ruajtur (platforma kalon te çelësi i serverit — truri AI mbetet aktiv)"
     }
   },
   "reports360": {

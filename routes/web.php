@@ -34,6 +34,7 @@ use App\Http\Controllers\SavedReportController;
 use App\Http\Controllers\SeasonCopyController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SmartPricingController;
+use App\Http\Controllers\SuperAdmin\AiController as SuperAdminAiController;
 use App\Http\Controllers\SuperAdmin\BillingInvoiceController as SuperAdminBillingInvoiceController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentAttemptController as SuperAdminBillingPaymentAttemptController;
 use App\Http\Controllers\SuperAdmin\BillingPaymentController as SuperAdminBillingPaymentController;
@@ -238,6 +239,9 @@ Route::middleware(['auth', 'verified', 'super_admin', 'control_panel_host'])
         Route::post('/billing/payments', [SuperAdminBillingPaymentController::class, 'store'])->name('billing.payments.store');
         Route::get('/billing/payment-attempts', [SuperAdminBillingPaymentAttemptController::class, 'index'])->name('billing.payment-attempts.index');
         Route::get('/billing/payment-attempts/{paymentAttempt}', [SuperAdminBillingPaymentAttemptController::class, 'show'])->name('billing.payment-attempts.show');
+        Route::get('/ai', [SuperAdminAiController::class, 'index'])->name('ai.index');
+        Route::put('/ai', [SuperAdminAiController::class, 'update'])->name('ai.update');
+        Route::post('/ai/check', [SuperAdminAiController::class, 'check'])->middleware('throttle:10,1')->name('ai.check');
         Route::get('/currencies', [SuperAdminCurrencyController::class, 'index'])->name('currencies.index');
         Route::put('/currencies', [SuperAdminCurrencyController::class, 'update'])->name('currencies.update');
         Route::post('/currencies/refresh', [SuperAdminCurrencyController::class, 'refresh'])->middleware('throttle:10,1')->name('currencies.refresh');
