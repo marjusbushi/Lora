@@ -80,6 +80,22 @@ const cartLines = computed(() => availableTypes.value
     .filter((line) => line.qty > 0));
 const cartRooms = computed(() => cartLines.value.reduce((sum, line) => sum + line.qty, 0));
 const cartCapacity = computed(() => cartLines.value.reduce((sum, line) => sum + line.qty * (line.max_occupancy || 0), 0));
+// Pasqyra e saktë e serverit: kufiri real per dhomë = min(max_children, kapaciteti - 1)
+// (vendi i të rriturit të detyruar). Payload i vjetër pa max_children bie te kapaciteti.
+const cartChildrenCap = computed(() => cartLines.value.reduce((sum, line) => {
+    const cap = Number(line.max_occupancy || 0);
+    return sum + line.qty * Math.min(Number(line.max_children ?? cap), Math.max(cap - 1, 0));
+}, 0));
+// E vërteta del te karroca ATY PËR ATY, jo në hapin e fundit (raporti i pronarit:
+// 2 rritur + 10 fëmijë dukeshin sikur hynin në një dhomë treshe deri në submit).
+const liveCartWarning = computed(() => {
+    if (!cartRooms.value) return '';
+    const guests = Number(searchForm.value.adults) + Number(searchForm.value.children);
+    if (guests > cartCapacity.value) return t('book.cart.capacity', { cap: cartCapacity.value, guests });
+    if (Number(searchForm.value.children) > cartChildrenCap.value) return t('book.cart.childrenCap', { cap: cartChildrenCap.value });
+    if (Number(searchForm.value.adults) < cartRooms.value) return t('book.cart.adultsPerRoom', { rooms: cartRooms.value });
+    return '';
+});
 const cartTotals = computed(() => ({
     smart: cartLines.value.reduce((sum, line) => sum + line.qty * Number(line.smart_total_price || 0), 0),
     discount: cartLines.value.reduce((sum, line) => sum + line.qty * Number(line.direct_discount_amount || 0), 0),
@@ -150,6 +166,8 @@ function continueToDetails() {
         cartError.value = t('book.cart.noneSelected');
     } else if (guests > cartCapacity.value) {
         cartError.value = t('book.cart.capacity', { cap: cartCapacity.value, guests });
+    } else if (Number(searchForm.value.children) > cartChildrenCap.value) {
+        cartError.value = t('book.cart.childrenCap', { cap: cartChildrenCap.value });
     } else if (Number(searchForm.value.adults) < cartRooms.value) {
         cartError.value = t('book.cart.adultsPerRoom', { rooms: cartRooms.value });
     } else {
@@ -370,7 +388,9 @@ watch(step, (current) => nextTick(() => {
                                  (owner report: an inner-scrolling wrapper hid the CTA entirely). -->
                             <BookingSummary class="lg:max-h-[calc(100vh-16rem)] lg:overflow-y-auto" :lines="cartLines" :totals="cartTotals" :rooms-count="cartRooms" :search="searchForm" :nights="nights" :date-label="dateLabel" :money="money" />
                             <div v-if="cartError" ref="cartErrorBox" role="alert" tabindex="-1" class="rounded-xl border border-error-200 bg-error-50 p-4 text-body-sm text-error-700 focus:outline-none">{{ cartError }}</div>
-                            <button type="button" class="btn-reserve flex w-full items-center justify-center gap-2 py-4" @click="continueToDetails">{{ $t('book.cart.continue') }} <ArrowRight class="h-4 w-4" /></button>
+                            <div v-else-if="liveCartWarning" role="status" class="rounded-xl border border-error-200 bg-error-50 p-4 text-body-sm text-error-700">{{ liveCartWarning }}</div>
+                            <p v-if="Number(searchForm.children) > 0" class="px-1 text-tiny text-ink/50">{{ $t('book.cart.infantsNote') }}</p>
+                            <button type="button" :disabled="!!liveCartWarning" class="btn-reserve flex w-full items-center justify-center gap-2 py-4 disabled:cursor-not-allowed disabled:opacity-50" @click="continueToDetails">{{ $t('book.cart.continue') }} <ArrowRight class="h-4 w-4" /></button>
                         </div>
                     </div>
                 </template>
