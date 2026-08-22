@@ -11,8 +11,13 @@ return [
         'key' => env('OPENAI_API_KEY'),
         'model' => env('OPENAI_MODEL', 'gpt-5.6-luna'),
         'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
-        // low: llogaritë i bën motori ynë — modelit i duhet vetëm të flasë.
-        'reasoning_effort' => env('OPENAI_REASONING_EFFORT', 'low'),
+        // 'none' ME LIGJ nga API-ja reale (zbuluar nga provat reale, 2026-08-22):
+        // "Function tools with reasoning_effort are not supported for
+        // gpt-5.6-luna in /v1/chat/completions ... set reasoning_effort to
+        // 'none'" — çdo vlerë tjetër = 400 në çdo thirrje me mjete. Na shkon
+        // mrekullisht: llogaritë i bën motori ynë, modelit i duhet vetëm të
+        // flasë (dhe 'none' është edhe më i shpejtë e më i lirë).
+        'reasoning_effort' => env('OPENAI_REASONING_EFFORT', 'none'),
     ],
 
     /*
