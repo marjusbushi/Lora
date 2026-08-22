@@ -23,7 +23,29 @@ class OtaReconciliationIssue extends TenantModel
         'first_detected_at',
         'last_detected_at',
         'resolved_at',
+        'resolution',
+        'resolved_by',
+        'resolution_fingerprint',
     ];
+
+    /** Staff said: the guest extended/changed at the desk — not a channel error. */
+    public const RESOLUTION_EXTENDED_ON_DESK = 'extended_on_desk';
+
+    /** Issue families a desk explanation may close. */
+    public const DESK_RESOLVABLE_TYPES = ['amount_mismatch', 'stay_mismatch'];
+
+    /**
+     * What the PMS side looked like when staff closed the card. The nightly
+     * checker compares against the CURRENT PMS side: same fingerprint → stays
+     * closed; different → the reservation changed again, reopen.
+     */
+    public static function fingerprint(?float $actualTotal, ?array $details): string
+    {
+        return sha1(json_encode([
+            round((float) $actualTotal, 2),
+            $details['local_stays'] ?? null,
+        ]));
+    }
 
     protected function casts(): array
     {
