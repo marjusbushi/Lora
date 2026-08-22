@@ -34,7 +34,7 @@ class SendAiBookingConfirmation implements ShouldQueue
 
     public function handle(WhatsAppBridgeClient $whatsapp): void
     {
-        $reservation = Reservation::query()->with('room.roomType')->find($this->reservationId);
+        $reservation = Reservation::query()->with(['room.roomType', 'guest'])->find($this->reservationId);
         if (! $reservation || $reservation->status !== 'confirmed') {
             return;
         }
@@ -54,9 +54,11 @@ class SendAiBookingConfirmation implements ShouldQueue
             return;
         }
 
-        $summary = $this->summary($reservation);
-
         try {
+            // Edhe përmbledhja brenda try-t: një lexim kalimtar që dështon
+            // (kursi i monedhës etj.) pas marrjes së kyçjes do ta linte
+            // mysafirin e PAGUAR pa konfirmim përgjithmonë (Codex #585).
+            $summary = $this->summary($reservation);
             $sent = $whatsapp->send($thread->tenant_id, $thread->whatsapp_jid, $summary);
         } catch (\Throwable $e) {
             // Ura offline — liro kyçjen që riprova e radhës të dërgojë vërtet.
@@ -96,6 +98,7 @@ class SendAiBookingConfirmation implements ShouldQueue
     private function summary(Reservation $reservation): string
     {
         $ref = strtoupper(substr((string) $reservation->confirmation_token, 0, 8));
+        $guest = trim(($reservation->guest?->first_name ?? '').' '.($reservation->guest?->last_name ?? ''));
         $type = $reservation->room?->roomType?->name ?: 'Dhomë';
         $in = $reservation->check_in_date?->toDateString();
         $out = $reservation->check_out_date?->toDateString();
@@ -104,6 +107,7 @@ class SendAiBookingConfirmation implements ShouldQueue
 
         return "✅ Pagesa u konfirmua — rezervimi juaj është i sigurt!\n"
             ."Referenca: {$ref}\n"
+            .($guest !== '' ? "Mysafiri / Guest: {$guest}\n" : '')
             ."{$type} · {$in} → {$out} · {$reservation->adults} persona\n"
             ."Totali i paguar: {$total} {$currency}\n\n"
             ."✅ Payment confirmed — your booking is secured!\n"

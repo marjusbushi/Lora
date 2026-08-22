@@ -196,6 +196,20 @@ class GenerateAiGuestReply implements ShouldQueue
             }
         }
 
+        // Pyetja sqaruese KURRË s'ngec nga pak siguri (task #420, pika e parë
+        // e pilotit Luna — vendimi i Marjusit: "duhet të pyeste nëse ishte e
+        // paqartë, s'duhet të ngecë"): modeli konservator shënoi confident=false
+        // pikërisht për pyetjen që rregulli 2 e URDHËRON. Vota e dytë është
+        // verifikues i PAVARUR që teksti VETËM pyet për të dhëna — pa asnjë
+        // fakt, çmim a premtim; kur ajo certifikon, ndjesia e modelit s'e
+        // ndal dot mbledhjen e të dhënave të rezervimit. Vota refuzon → draft
+        // si gjithmonë. (Vetëm pa mjete të thirrura — një radhë me mjete ka
+        // rrugën e vet të ankërimit.)
+        if (! $trusted && ! $confident && $autoEnabled && $clarifying
+            && ($result['toolsUsed'] ?? []) === []) {
+            $trusted = $clarifyingConfirmed = $this->confirmClarifying($gemini, $reply);
+        }
+
         if ($trusted) {
             $this->sendAutoReply($channex, $whatsapp, $thread, $reply, $rateKey, $result['photos'] ?? []);
 
@@ -238,7 +252,16 @@ class GenerateAiGuestReply implements ShouldQueue
             ->map(fn (Message $message) => ($message->sender === Message::SENDER_GUEST ? 'MYSAFIRI' : 'HOTELI').': '.$message->body)
             ->implode("\n");
 
-        $today = now()->toDateString();
+        // "Sot" në orën e HOTELIT, jo të serverit (gjetje Codex #579): rreth
+        // mesnatës një hotel në zonë tjetër orare do merrte "sot/nesër" të
+        // gabuara — i njëjti patern si ReservationController::$hotelToday.
+        // RRJETA (gjetje Codex #581): një identifikues i pavlefshëm i ruajtur
+        // më parë s'guxon ta rrëzojë job-in — bie te ora e aplikacionit.
+        $tenantTz = app(TenantContext::class)->tenant()?->timezone ?: config('app.timezone');
+        if (! in_array($tenantTz, \DateTimeZone::listIdentifiers(\DateTimeZone::ALL_WITH_BC), true)) {
+            $tenantTz = config('app.timezone');
+        }
+        $today = now($tenantTz)->toDateString();
         // Identiteti + karakteri (task #369): të konfigurueshëm per-tenant nga
         // /pms/lora-ai, me defaults të para-shkruara — hoteli i përditëson vetë.
         $assistantName = trim((string) Setting::get('ai_mcp.assistant_name')) ?: self::DEFAULT_ASSISTANT_NAME;
@@ -261,11 +284,14 @@ thuaja sinqerisht dhe përshkruaje dhomën nga të dhënat.
 PHOTOS : '';
         $bookingFlowBlock = $bookingAvailable ? <<<'BOOKING'
 REZERVIMI NGA BISEDA (vetëm me mjetin create_booking_hold):
-d) Kur mysafiri ZGJEDH njërën nga ofertat e check_availability → konfirmo me
-   të dhënat e plota (datat, personat, tipologjinë, emrin e plotë të
-   mysafirit — pyete nëse s'e ke) dhe thirr create_booking_hold.
-e) Me përgjigjen e mjetit → dërgo NJË mesazh me përmbledhjen (tipologjia,
-   datat, netët, totali me monedhën — shifrat VETËM nga mjeti) + linkun e
+d) Kur mysafiri ZGJEDH njërën nga ofertat e check_availability → mblidh të
+   dhënat e plota: datat, personat, tipologjinë dhe emrin E mbiemrin e
+   mysafirit — pa mbiemër rezervimi s'krijohet dot (njësoj si në recepsion),
+   ndaj pyete nëse të mungon njëri. Pastaj thirr create_booking_hold me të
+   dyja fushat guest_first_name + guest_last_name.
+e) Me përgjigjen e mjetit → dërgo NJË mesazh me përmbledhjen (emri i plotë i
+   mysafirit, tipologjia, datat, netët, totali me monedhën — shifrat VETËM
+   nga mjeti) + linkun e
    pagesës SAKTËSISHT siç e ktheu mjeti, dhe thuaji se dhoma mbahet rreth 30
    minuta deri në pagesë; rezervimi konfirmohet VETËM pas pagesës.
 f) Nëse mjeti kthen error → shpjegoja shkurt dhe ofro alternativë (tipologji
@@ -307,6 +333,9 @@ proporcionale me mesazhin e mysafirit.
    vetë. Shkruaji shifrat SAKTËSISHT siç i kthen mjeti (p.sh. 300 ose 300.5),
    pa ndarës mijëshesh. Trego vetëm tipologjitë me rooms_available > 0; nëse
    asnjëra s'është e lirë, thuaja qartë dhe ftoje të provojë data të tjera.
+   Datat RELATIVE — "sot", "nesër", "këtë fundjavë", "nga e premtja" —
+   konvertoji VETË nga data e sotme e dhënë më lart në data konkrete dhe
+   thirr mjetin; pyete mysafirin VETËM kur intervali vërtet s'del i qartë.
 2. Nëse mysafiri pyet për çmim a disponibilitet PA dhënë datat e plota (ose pa
    thënë sa persona janë) → MOS e thirr mjetin: pyete njëherë për datat dhe
    numrin e personave (confident=true, kind='clarifying' — pyetje sqaruese pa
@@ -380,7 +409,7 @@ PROMPT;
             ]] : []),
             ...($bookingAvailable ? [[
                 'name' => 'create_booking_hold',
-                'description' => 'Krijon rezervimin PENDING me dhomë të mbajtur dhe kthen linkun e pagesës. Thirre VETËM pasi mysafiri zgjodhi ofertën dhe konfirmoi datat, personat, tipologjinë dhe emrin e plotë.',
+                'description' => 'Krijon rezervimin PENDING me dhomë të mbajtur dhe kthen linkun e pagesës. Thirre VETËM pasi mysafiri zgjodhi ofertën dhe konfirmoi datat, personat, tipologjinë dhe emrin e plotë (emër + mbiemër).',
                 'input_schema' => [
                     'type' => 'object',
                     'properties' => [
@@ -391,7 +420,7 @@ PROMPT;
                         'guest_first_name' => ['type' => 'string', 'description' => 'Emri i mysafirit.'],
                         'guest_last_name' => ['type' => 'string', 'description' => 'Mbiemri i mysafirit.'],
                     ],
-                    'required' => ['check_in', 'check_out', 'adults', 'room_type', 'guest_first_name'],
+                    'required' => ['check_in', 'check_out', 'adults', 'room_type', 'guest_first_name', 'guest_last_name'],
                 ],
             ]] : []),
             [

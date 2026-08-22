@@ -4662,7 +4662,21 @@
       "catalogNote": "Çmimet më poshtë janë të katalogut, gjithmonë në euro.",
       "invoicedIn": "Faturat lëshohen në {currency}, me kursin e çastit të lëshimit.",
       "fxOverride": "Kurs fiks kontrate",
-      "fxOverrideHint": "Lëre bosh për kursin ditor të platformës. Shumat rrumbullakosen në 10 njësi."
+      "fxOverrideHint": "Lëre bosh për kursin ditor të platformës. Shumat rrumbullakosen në 10 njësi.",
+      "railIntegrations": "Integrimet & domain-et",
+      "issuesAttention": "{count} çështje për vëmendje",
+      "allGood": "Gjithçka në rregull",
+      "checksSummary": "{ok} nga {total} kontrolle në rregull",
+      "hotelActiveCheck": "Hoteli aktiv",
+      "hotelActiveNote": "Statusi i platformës — hoteli punon normalisht",
+      "hotelSuspendedNote": "Hoteli është i pezulluar — hyrjet janë të bllokuara",
+      "membersActiveShort": "{count} aktivë",
+      "clientSince": "Klient që nga",
+      "domainsPending": "{count} në pritje",
+      "integrationsSubtitle": "Statusi i lidhjeve — çdo rresht hap editorin përkatës.",
+      "contractYears": "{years} vjet",
+      "integrationsAllActive": "Të gjitha aktive",
+      "noModulesEnabled": "Asnjë modul i aktivizuar ende."
     },
     "billing": {
       "unitMonth": "muaj",

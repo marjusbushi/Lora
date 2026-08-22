@@ -837,6 +837,130 @@ class AiGuestReplyTest extends TestCase
         $this->assertSame(0, \App\Models\AuditLog::query()->where('action', 'message.ai_reply_failed')->count());
     }
 
+    /** Task #420 (pika 1 e pilotit Luna): pyetja sqaruese e certifikuar nga vota DËRGOHET edhe me confident=false. */
+    public function test_unconfident_clarifying_with_confirming_vote_still_sends(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            // Modeli konservator: pyetje e pastër sqaruese, po confident=false.
+            $mock->shouldReceive('converse')->andReturn([
+                'args' => ['confident' => false, 'reply' => 'Për cilat data dhe sa persona dëshironi të kontrolloj disponueshmërinë?', 'kind' => 'clarifying'],
+                'toolsUsed' => [],
+            ]);
+            // Vota e pavarur certifikon: "vetëm pyetje për të dhëna, zero fakte".
+            $mock->shouldReceive('structured')->once()->andReturn(['clarifying' => true]);
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        $this->assertDatabaseHas('messages', [
+            'message_thread_id' => $thread->id,
+            'sent_by_ai' => true,
+            'body' => 'Për cilat data dhe sa persona dëshironi të kontrolloj disponueshmërinë?',
+        ]);
+        $this->assertNull($thread->refresh()->ai_suggestion);
+    }
+
+    /** Task #420: vota REFUZON → draft si gjithmonë — siguria e ulët + votë e rrëzuar s'dërgon kurrë. */
+    public function test_unconfident_clarifying_with_rejecting_vote_stays_draft(): void
+    {
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->mock(GeminiClient::class, function ($mock) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturn([
+                'args' => ['confident' => false, 'reply' => 'Kemi pishinë të mrekullueshme! Po datat cilat janë?', 'kind' => 'clarifying'],
+                'toolsUsed' => [],
+            ]);
+            $mock->shouldReceive('structured')->once()->andReturn(['clarifying' => false]);
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->never());
+
+        $this->runJob($thread, $message);
+
+        $this->assertNotNull($thread->refresh()->ai_suggestion);
+        $this->assertDatabaseMissing('messages', ['message_thread_id' => $thread->id, 'sent_by_ai' => true]);
+    }
+
+    /** Task #420: rregulli i datave relative jeton në prompt — modeli i konverton vetë, s'pyet kot. */
+    public function test_system_prompt_teaches_relative_date_conversion(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $seenSystem = null;
+        $this->mock(GeminiClient::class, function ($mock) use (&$seenSystem) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system) use (&$seenSystem) {
+                $seenSystem = $system;
+
+                return ['args' => ['confident' => true, 'reply' => 'Breakfast is 7-10.', 'kind' => 'informative'], 'toolsUsed' => []];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        $this->assertStringContainsString('konvertoji VETË', $seenSystem);
+        $this->assertStringContainsString('këtë fundjavë', $seenSystem);
+    }
+
+    /** Codex #579 P1: "sot" ndërtohet në orën e HOTELIT — rreth mesnatës zona tjetër orare mos marrë data të gabuara. */
+    public function test_prompt_today_uses_the_tenant_timezone(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        // Hotel në Pacifik: kur në Tiranë ka nisur e nesërmja, atje s'ka ende.
+        $this->tenant->forceFill(['timezone' => 'Pacific/Honolulu'])->save();
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $this->travelTo(now()->setTimezone('Europe/Tirane')->setTime(1, 0));
+        $expectedToday = now('Pacific/Honolulu')->toDateString();
+        $this->assertNotSame($expectedToday, now('Europe/Tirane')->toDateString());
+
+        $seenSystem = null;
+        $this->mock(GeminiClient::class, function ($mock) use (&$seenSystem) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system) use (&$seenSystem) {
+                $seenSystem = $system;
+
+                return ['args' => ['confident' => true, 'reply' => 'Breakfast is 7-10.', 'kind' => 'informative'], 'toolsUsed' => []];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+        $this->travelBack();
+
+        $this->assertStringContainsString($expectedToday, $seenSystem);
+    }
+
+    /** Codex #581 P2: timezone e pavlefshme e ruajtur s'e rrëzon job-in — bie te ora e aplikacionit. */
+    public function test_invalid_tenant_timezone_falls_back_to_the_app_timezone(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        $this->tenant->forceFill(['timezone' => 'Mars/Olympus_Mons'])->save();
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $seenSystem = null;
+        $this->mock(GeminiClient::class, function ($mock) use (&$seenSystem) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system) use (&$seenSystem) {
+                $seenSystem = $system;
+
+                return ['args' => ['confident' => true, 'reply' => 'Breakfast is 7-10.', 'kind' => 'informative'], 'toolsUsed' => []];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        // Job-i mbijetoi dhe "sot" u ndërtua me orën e aplikacionit.
+        $this->assertStringContainsString(now(config('app.timezone'))->toDateString(), $seenSystem);
+    }
+
     /** Task #403: dështim kalimtar 5xx → SAKTËSISHT një riprovë e ftohtë 5-min per mesazh (e dyta no-op). */
     public function test_transient_5xx_failure_schedules_exactly_one_cool_retry(): void
     {

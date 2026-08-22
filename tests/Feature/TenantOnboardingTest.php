@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\Tenant;
 use App\Models\TenantDomain;
 use App\Models\TenantIntegration;
+use App\Models\TenantOnboarding;
 use App\Models\User;
 use App\Services\ChannexConfiguration;
 use App\Services\TenantBillingService;
@@ -110,6 +111,28 @@ class TenantOnboardingTest extends TestCase
 
         $this->assertArrayHasKey('payments', $synced->steps['integrations']['tasks']);
         $this->assertFalse($synced->steps['integrations']['tasks']['payments']['completed']);
+    }
+
+    public function test_overlapping_step_and_task_writes_do_not_clobber_each_other(): void
+    {
+        // Codex P2 (PR #576): updateStep dhe updateTask bëjnë read-modify-write
+        // mbi GJITHË JSON-in e hapave — një instancë e vjetruar modeli (siç e
+        // mban një kërkesë paralele) e nisur PARA shkrimit tjetër duhet të mos
+        // e fshijë atë. mutateSteps rilexon të freskët nën lock, prandaj të
+        // dy ndryshimet mbijetojnë.
+        $tenant = Tenant::query()->sole();
+        $service = app(TenantOnboardingService::class);
+        $onboarding = $service->findOrCreate($tenant);
+
+        // "Kërkesa B" e ngarkon modelin përpara se "kërkesa A" të shkruajë.
+        $stale = TenantOnboarding::query()->findOrFail($onboarding->id);
+
+        $service->updateStep($onboarding, 'rooms', ['notes' => 'Shënim nga kërkesa A']);
+        $service->updateTask($stale, 'rooms', 'rooms', true, $this->superAdmin->id);
+
+        $fresh = $onboarding->fresh();
+        $this->assertSame('Shënim nga kërkesa A', $fresh->steps['rooms']['notes']);
+        $this->assertTrue($fresh->steps['rooms']['tasks']['rooms']['completed']);
     }
 
     public function test_tenant_creation_rejects_a_currency_outside_the_supported_list(): void
