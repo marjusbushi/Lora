@@ -2,6 +2,7 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import AppLayout from '@/Layouts/AppLayout.vue';
 import {
     ArrowLeft, BedDouble, BookOpen, Check, ExternalLink, Facebook, Globe, House,
     Instagram, Mail, MapPin, MessageCircle, Palette, Phone,
@@ -158,9 +159,13 @@ const lf = (base) => `${base}_${editLang.value}`;
 
 <template>
     <Head title="Web Studio" />
-    <div class="min-h-screen bg-neutral-50">
+    <!-- immersive: fsheh sidebar-in + topbar-in e adminit, POR mban poller-in e
+         mesazheve të AppLayout (zilja/titulli kur shkruan mysafiri) — gjetje
+         Codex P1, PR #563: focus mode s'duhet të të bëjë të humbasësh mesazhet. -->
+    <AppLayout immersive>
+    <div class="flex h-full min-h-0 flex-col bg-neutral-50">
         <!-- Shiriti i studios — i vetmi chrome: dil, identiteti, gjuha, hap faqen -->
-        <header class="sticky top-0 z-30 border-b border-neutral-200 bg-white/95 shadow-sm backdrop-blur">
+        <header class="z-30 shrink-0 border-b border-neutral-200 bg-white/95 shadow-sm backdrop-blur">
             <div class="mx-auto flex max-w-[1480px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:px-6">
                 <Link :href="route('settings.index')" class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800">
                     <ArrowLeft class="h-4 w-4" /> {{ $t('webStudio.backToSettings') }}
@@ -188,6 +193,7 @@ const lf = (base) => `${base}_${editLang.value}`;
             </div>
         </header>
 
+        <div class="min-h-0 flex-1 overflow-y-auto">
         <main class="pms-settings-shell mx-auto w-full max-w-[1480px] px-4 pb-10 pt-5 sm:px-6">
                     <div class="grid items-start gap-4 xl:grid-cols-[230px_minmax(0,1fr)_400px]">
 
@@ -509,5 +515,7 @@ const lf = (base) => `${base}_${editLang.value}`;
                         </aside>
                     </div>
         </main>
+        </div>
     </div>
+    </AppLayout>
 </template>
