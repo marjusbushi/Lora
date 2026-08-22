@@ -34,7 +34,7 @@ class SendAiBookingConfirmation implements ShouldQueue
 
     public function handle(WhatsAppBridgeClient $whatsapp): void
     {
-        $reservation = Reservation::query()->with('room.roomType')->find($this->reservationId);
+        $reservation = Reservation::query()->with(['room.roomType', 'guest'])->find($this->reservationId);
         if (! $reservation || $reservation->status !== 'confirmed') {
             return;
         }
@@ -54,9 +54,11 @@ class SendAiBookingConfirmation implements ShouldQueue
             return;
         }
 
-        $summary = $this->summary($reservation);
-
         try {
+            // Edhe përmbledhja brenda try-t: një lexim kalimtar që dështon
+            // (kursi i monedhës etj.) pas marrjes së kyçjes do ta linte
+            // mysafirin e PAGUAR pa konfirmim përgjithmonë (Codex #585).
+            $summary = $this->summary($reservation);
             $sent = $whatsapp->send($thread->tenant_id, $thread->whatsapp_jid, $summary);
         } catch (\Throwable $e) {
             // Ura offline — liro kyçjen që riprova e radhës të dërgojë vërtet.
