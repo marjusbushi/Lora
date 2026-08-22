@@ -373,6 +373,22 @@ class OtaReservationReconciler
                 $issue->first_detected_at = $now;
             }
 
+            // Staff closed this card with a reason (e.g. "extended on desk"):
+            // keep it closed as long as the PMS side is exactly what they saw.
+            // If the reservation changed again, the explanation no longer
+            // holds — clear it and reopen like any other difference.
+            if ($issue->exists && $issue->resolution !== null) {
+                $current = OtaReconciliationIssue::fingerprint($data['actual_total'], $data['details']);
+                if (hash_equals((string) $issue->resolution_fingerprint, $current)) {
+                    $issue->forceFill(['last_detected_at' => $now])->save();
+
+                    continue;
+                }
+                $issue->resolution = null;
+                $issue->resolved_by = null;
+                $issue->resolution_fingerprint = null;
+            }
+
             $issue->fill([
                 'reservation_id' => $data['reservation_id'],
                 'channex_booking_id' => $channexBookingId !== '' ? $channexBookingId : null,
