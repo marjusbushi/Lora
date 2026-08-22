@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Setting;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -42,7 +41,11 @@ class GeminiClient
 
     public function model(): string
     {
-        return (string) (Setting::get('ai.gemini_model') ?: config('services.gemini.model'));
+        // Edhe MODELI është qendror si çelësi (gjetje Codex #560): komanda
+        // globale e shëndetit s'ka kontekst tenant-i, ndaj një mbivendosje
+        // per-tenant do t'i shpëtonte kontrollit — asnjë UI s'e shkruante
+        // gjithsesi. Vendimi i modelit merret vetëm në config (task #403).
+        return (string) config('services.gemini.model');
     }
 
     private function base(): string
