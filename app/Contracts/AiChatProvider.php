@@ -27,9 +27,17 @@ interface AiChatProvider
      * raundet janë përgjegjësi e shoferit; portat e sigurisë veprojnë SIPËR,
      * mbi rezultatin — njësoj për çdo provider.
      *
+     * $onUsage (gjetjet Codex #568): SINK-u i faturimit per-RAUND — thirret
+     * pas ÇDO përgjigjeje të suksesshme të providerit me tokenat e atij
+     * raundi, të etiketuara me modelin që e SHËRBEU vërtet. Kështu dëshmia
+     * e faturimit mbetet e plotë edhe kur biseda dështon në një raund të
+     * mëvonshëm (provideri i ka faturuar raundet e suksesshme), dhe raundet
+     * e shërbyera nga rezerva çmohen me çmimin e VET, jo të primarit.
+     *
      * @param  array<int,array{name:string,description?:string,input_schema?:array}>  $tools
      * @param  array<string,callable(array):array>  $executors  emri i mjetit → ekzekutuesi server-side
+     * @param  null|callable(array{input:int,output:int,thinking:int,provider:string,model:string}):void  $onUsage
      * @return array{args:array<string,mixed>,toolsUsed:array<int,string>,usage:array{input:int,output:int,thinking:int,provider:string,model:string}}
      */
-    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3): array;
+    public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3, ?callable $onUsage = null): array;
 }

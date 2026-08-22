@@ -214,13 +214,67 @@ class OpenAiConverseTest extends TestCase
             'guest_reply',
         );
 
+        // completion_tokens i PËRFSHIN arsyetimin — output raportohet i NDARË
+        // (20-5=15, 30-8=22) që të mos faturohet dy herë (Codex #568 P1).
         $this->assertSame([
             'input' => 250,
-            'output' => 50,
+            'output' => 37,
             'thinking' => 13,
             'provider' => 'openai',
             'model' => 'gpt-test-luna',
         ], $result['usage']);
+    }
+
+    /** Codex #568: sink-u i faturimit thirret per-RAUND — dëshmia e plotë edhe për bisedat shumë-raundëshe. */
+    public function test_usage_sink_fires_once_per_successful_round(): void
+    {
+        Http::fakeSequence('api.openai.com/*')
+            ->push($this->toolCallsResponse([[
+                'id' => 'call_1',
+                'type' => 'function',
+                'function' => ['name' => 'check_availability', 'arguments' => json_encode(['check_in' => '2026-08-28', 'check_out' => '2026-08-30'])],
+            ]]))
+            ->push($this->finalReplyResponse());
+
+        $rounds = [];
+        app(OpenAiClient::class)->converse(
+            'SYSTEM',
+            'MYSAFIRI: 28-30 gusht',
+            self::TOOLS,
+            ['check_availability' => fn (array $args): array => ['stay_total' => 190]],
+            'guest_reply',
+            onUsage: function (array $usage) use (&$rounds): void {
+                $rounds[] = $usage;
+            },
+        );
+
+        $this->assertCount(2, $rounds);
+        $this->assertSame(15, $rounds[0]['output']);
+        $this->assertSame('gpt-test-luna', $rounds[0]['model']);
+        $this->assertSame(22, $rounds[1]['output']);
+    }
+
+    /** Codex #569 P1: 200 i FATURUAR pa tool_calls (finish_reason=length) regjistrohet PARA se validimi të hedhë. */
+    public function test_usage_sink_fires_even_when_a_billable_200_has_no_valid_call(): void
+    {
+        Http::fakeSequence('api.openai.com/*')->push([
+            'choices' => [['message' => ['role' => 'assistant', 'content' => null], 'finish_reason' => 'length']],
+            'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 2048, 'completion_tokens_details' => ['reasoning_tokens' => 2048]],
+        ]);
+
+        $rounds = [];
+        try {
+            app(OpenAiClient::class)->converse('SYSTEM', 'MYSAFIRI: hej', self::TOOLS, [], 'guest_reply', onUsage: function (array $usage) use (&$rounds): void {
+                $rounds[] = $usage;
+            });
+            $this->fail('Duhej të hidhte length.');
+        } catch (\RuntimeException) {
+            // S'kishte thirrje — po tokenat U PAGUAN dhe u regjistruan.
+        }
+
+        $this->assertCount(1, $rounds);
+        $this->assertSame(2048, $rounds[0]['thinking']);
+        $this->assertSame(0, $rounds[0]['output']);
     }
 
     public function test_timeout_carries_the_cool_retry_marker(): void
