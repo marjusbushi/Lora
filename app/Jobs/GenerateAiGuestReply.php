@@ -255,7 +255,12 @@ class GenerateAiGuestReply implements ShouldQueue
         // "Sot" në orën e HOTELIT, jo të serverit (gjetje Codex #579): rreth
         // mesnatës një hotel në zonë tjetër orare do merrte "sot/nesër" të
         // gabuara — i njëjti patern si ReservationController::$hotelToday.
+        // RRJETA (gjetje Codex #581): një identifikues i pavlefshëm i ruajtur
+        // më parë s'guxon ta rrëzojë job-in — bie te ora e aplikacionit.
         $tenantTz = app(TenantContext::class)->tenant()?->timezone ?: config('app.timezone');
+        if (! in_array($tenantTz, \DateTimeZone::listIdentifiers(\DateTimeZone::ALL_WITH_BC), true)) {
+            $tenantTz = config('app.timezone');
+        }
         $today = now($tenantTz)->toDateString();
         // Identiteti + karakteri (task #369): të konfigurueshëm per-tenant nga
         // /pms/lora-ai, me defaults të para-shkruara — hoteli i përditëson vetë.

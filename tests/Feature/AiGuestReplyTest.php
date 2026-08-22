@@ -937,6 +937,30 @@ class AiGuestReplyTest extends TestCase
         $this->assertStringContainsString($expectedToday, $seenSystem);
     }
 
+    /** Codex #581 P2: timezone e pavlefshme e ruajtur s'e rrëzon job-in — bie te ora e aplikacionit. */
+    public function test_invalid_tenant_timezone_falls_back_to_the_app_timezone(): void
+    {
+        HotelFaq::create(['question' => 'Breakfast?', 'answer' => '7-10.']);
+        $this->tenant->forceFill(['timezone' => 'Mars/Olympus_Mons'])->save();
+        [$thread, $message] = $this->makeThreadWithGuestMessage();
+
+        $seenSystem = null;
+        $this->mock(GeminiClient::class, function ($mock) use (&$seenSystem) {
+            $mock->shouldReceive('configured')->andReturn(true);
+            $mock->shouldReceive('converse')->andReturnUsing(function ($system) use (&$seenSystem) {
+                $seenSystem = $system;
+
+                return ['args' => ['confident' => true, 'reply' => 'Breakfast is 7-10.', 'kind' => 'informative'], 'toolsUsed' => []];
+            });
+        });
+        $this->mock(ChannexClient::class, fn ($mock) => $mock->shouldReceive('sendThreadMessage')->once());
+
+        $this->runJob($thread, $message);
+
+        // Job-i mbijetoi dhe "sot" u ndërtua me orën e aplikacionit.
+        $this->assertStringContainsString(now(config('app.timezone'))->toDateString(), $seenSystem);
+    }
+
     /** Task #403: dështim kalimtar 5xx → SAKTËSISHT një riprovë e ftohtë 5-min per mesazh (e dyta no-op). */
     public function test_transient_5xx_failure_schedules_exactly_one_cool_retry(): void
     {
