@@ -1,15 +1,16 @@
 <script setup>
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PageHeader from '@/Components/UI/PageHeader.vue';
 import SettingsSidebar from '@/Components/SettingsSidebar.vue';
 import { settingsGroups, visibleSettingsTabs } from '@/Pages/Settings/settingsNavigation';
+import { getIntlLocale } from '@/i18n';
 import {
-    Bot, BriefcaseBusiness, CalendarDays, Check, Copy, ExternalLink, Hotel, MessageSquareText,
-    PackageSearch, Search, ShieldCheck, Sparkles, SprayCan, UtensilsCrossed,
-    WalletCards, Wrench, X,
+    AlertTriangle, Banknote, Bot, BriefcaseBusiness, CalendarDays, Check, Clock, Copy, ExternalLink,
+    Hotel, MessageSquareText, PackageSearch, Search, ShieldCheck, Sparkles, SprayCan,
+    UtensilsCrossed, WalletCards, Wrench, X,
 } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -19,6 +20,7 @@ const props = defineProps({
     aiModules: { type: Object, required: true },
     pricingPolicy: { type: Object, required: true },
     recentActions: { type: Array, default: () => [] },
+    stats: { type: Object, default: () => ({ replies: 0, bookings: 0, bookingRevenue: 0 }) },
 });
 
 const copied = ref(false);
@@ -49,14 +51,115 @@ const breadcrumbs = computed(() => isAdmin.value
     ? [{ label: t('admin.sidebar.dashboard'), href: '/dashboard' }, { label: t('settingsTabs.menu.settings'), href: '/pms/settings' }, { label: 'Lora AI' }]
     : [{ label: t('admin.sidebar.dashboard'), href: '/dashboard' }, { label: 'Lora AI' }]);
 
-const quickPrompts = computed(() => [
-    t('loraAi.promptDailySummary'),
-    t('loraAi.promptFindReservation'),
-    t('loraAi.promptCheckins'),
-    t('loraAi.promptComparePricing'),
-    t('loraAi.promptOpenIssues'),
-    t('loraAi.promptFindFinance'),
+// Kartela e Lorës: emri efektiv ndjek LIVE fushën e identitetit.
+const assistantName = computed(() => form.assistant_name?.trim() || 'Lora');
+const onDuty = computed(() => form.messages_enabled && form.guest_reply_enabled);
+const revenueLabel = computed(() => {
+    // Shuma vjen nga total_amount_base — monedha BAZË e hotelit, jo ajo e shitjes.
+    const currency = page.props.settings?.currency || 'EUR';
+    try {
+        return new Intl.NumberFormat(getIntlLocale(), { style: 'currency', currency, maximumFractionDigits: 0 }).format(Number(props.stats.bookingRevenue || 0));
+    } catch {
+        return `${props.stats.bookingRevenue}`;
+    }
+});
+
+// Fikja e një shkalle FIK realisht vlerat e varura — jo vetëm i çaktivizon në UI:
+// job-et e backend-it lexojnë çelësin e vet direkt (gjetje Codex, PR #542).
+watch(() => form.messages_enabled, (on) => {
+    if (!on) form.guest_reply_enabled = false;
+});
+watch(() => form.guest_reply_enabled, (on) => {
+    if (!on) {
+        form.guest_auto_reply_enabled = false;
+        form.whatsapp_auto_reply_enabled = false;
+    }
+});
+watch(() => form.whatsapp_auto_reply_enabled, (on) => {
+    if (!on) form.whatsapp_booking_enabled = false;
+});
+watch(() => form.pricing_enabled, (on) => {
+    if (!on) {
+        form.price_apply_enabled = false;
+        form.ai_price_recommendations_enabled = false;
+    }
+});
+
+// Shkalla e autonomisë — rendi tregon edhe varësinë: çdo shkallë kërkon ato para saj.
+const ladder = computed(() => [
+    {
+        n: 1, field: 'messages_enabled', titleKey: 'loraAi.ladderReads',
+        disabled: !props.aiModules.channel_manager,
+    },
+    {
+        n: 2, field: 'guest_reply_enabled', titleKey: 'loraAi.ladderDrafts',
+        disabled: !form.messages_enabled,
+    },
+    {
+        n: 3, field: 'guest_auto_reply_enabled', titleKey: 'loraAi.ladderAuto', badge: 'Lora AI',
+        detailsKey: 'loraAi.actionGuestAutoReplyDesc', summaryKey: 'loraAi.howDecides',
+        disabled: !form.messages_enabled || !form.guest_reply_enabled,
+    },
+    {
+        n: 4, field: 'whatsapp_auto_reply_enabled', titleKey: 'loraAi.ladderWhatsApp', hot: true,
+        detailsKey: 'loraAi.actionWhatsAppAutoReplyDesc', summaryKey: 'loraAi.safetyTerms',
+        disabled: !form.messages_enabled || !form.guest_reply_enabled,
+    },
+    {
+        n: 5, field: 'whatsapp_booking_enabled', titleKey: 'loraAi.ladderBooking', hot: true, badgeKey: 'loraAi.badgePok',
+        detailsKey: 'loraAi.actionWhatsAppBookingDesc', summaryKey: 'loraAi.safetyTerms',
+        disabled: !form.messages_enabled || !form.guest_reply_enabled || !form.whatsapp_auto_reply_enabled,
+    },
 ]);
+
+// Të dhënat që sheh Lora — pllakat. Ngjyrat ndjekin kodin ekzistues të moduleve.
+const dataTiles = computed(() => [
+    { field: 'reservations_enabled', labelKey: 'loraAi.moduleReservationsShort', icon: CalendarDays, chip: 'bg-blue-50 text-blue-600', disabled: false },
+    { field: 'messages_enabled', labelKey: 'loraAi.moduleMessagesShort', icon: MessageSquareText, chip: 'bg-violet-50 text-violet-600', disabled: !props.aiModules.channel_manager },
+    { field: 'pricing_enabled', labelKey: 'loraAi.modulePricingShort', icon: Sparkles, chip: 'bg-amber-50 text-amber-600', disabled: !props.aiModules.smart_pricing },
+    { field: 'finance_enabled', labelKey: 'loraAi.moduleFinance', icon: WalletCards, chip: 'bg-emerald-50 text-emerald-700', disabled: !props.aiModules.finance || !form.universal_search_enabled },
+    { field: 'housekeeping_enabled', label: 'Housekeeping', icon: SprayCan, chip: 'bg-cyan-50 text-cyan-700', disabled: !props.aiModules.housekeeping || !form.universal_search_enabled },
+    { field: 'maintenance_enabled', labelKey: 'loraAi.moduleMaintenance', icon: Wrench, chip: 'bg-orange-50 text-orange-700', disabled: !form.universal_search_enabled },
+    { field: 'pos_enabled', labelKey: 'loraAi.modulePosShort', icon: UtensilsCrossed, chip: 'bg-rose-50 text-rose-700', disabled: !props.aiModules.pos || !form.universal_search_enabled },
+    { field: 'inventory_enabled', labelKey: 'loraAi.moduleInventory', icon: PackageSearch, chip: 'bg-indigo-50 text-indigo-700', disabled: !props.aiModules.finance || !form.universal_search_enabled },
+]);
+
+const quickPrompts = computed(() => [
+    { shortKey: 'loraAi.promptShortDaily', fullKey: 'loraAi.promptDailySummary' },
+    { shortKey: 'loraAi.promptShortFind', fullKey: 'loraAi.promptFindReservation' },
+    { shortKey: 'loraAi.promptShortCheckins', fullKey: 'loraAi.promptCheckins' },
+    { shortKey: 'loraAi.promptShortPricing', fullKey: 'loraAi.promptComparePricing' },
+    { shortKey: 'loraAi.promptShortIssues', fullKey: 'loraAi.promptOpenIssues' },
+    { shortKey: 'loraAi.promptShortFinance', fullKey: 'loraAi.promptFindFinance' },
+]);
+
+// Aktiviteti në gjuhë njeriu — kurrë çelësa teknikë; fallback i lexueshëm.
+const ACTION_META = {
+    'message.ai_reply': { labelKey: 'loraAi.actAiReply', tone: 'ok', icon: Check },
+    'message.ai_reply_failed': { labelKey: 'loraAi.actAiReplyFailed', tone: 'bad', icon: AlertTriangle },
+    'message.ai_booking_hold': { labelKey: 'loraAi.actBookingHold', tone: 'gold', icon: Clock },
+    'message.ai_booking_confirmed': { labelKey: 'loraAi.actBookingConfirmed', tone: 'gold', icon: Banknote },
+    'message.ai_booking_hold_released': { labelKey: 'loraAi.actHoldReleased', tone: 'neutral', icon: Clock },
+    'ai.guest_reply.sent': { labelKey: 'loraAi.actionGuestReplySent', tone: 'ok', icon: Check },
+    'ai.pricing_range.applied': { labelKey: 'loraAi.actionPricingApplied', tone: 'ok', icon: Sparkles },
+};
+const TONE_CLASSES = {
+    ok: 'bg-accent-50 text-accent-700',
+    bad: 'bg-red-50 text-red-600',
+    gold: 'bg-amber-50 text-amber-600',
+    neutral: 'bg-neutral-100 text-neutral-500',
+};
+
+function actionMeta(action) {
+    return ACTION_META[action] || { label: String(action).replace(/[._]/g, ' '), tone: 'neutral', icon: Check };
+}
+
+function actionTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return date.toLocaleString(getIntlLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
 
 function save() {
     form.put(route('lora-ai.update'), { preserveScroll: true });
@@ -94,11 +197,6 @@ function selectSettingsPage(tabId) {
     const tab = navigationTabs.value.find((item) => item.id === tabId);
     if (tab) navigateSettingsTab(tab);
 }
-
-const actions = {
-    'ai.guest_reply.sent': t('loraAi.actionGuestReplySent'),
-    'ai.pricing_range.applied': t('loraAi.actionPricingApplied'),
-};
 </script>
 
 <template>
@@ -161,185 +259,221 @@ const actions = {
                 <SettingsSidebar v-if="isAdmin" active-item="lora-ai" active-group-only />
 
                 <div class="settings-content min-w-0 flex-1 space-y-4">
-            <section data-ui="card" class="overflow-hidden border border-neutral-200 bg-white">
-                <div data-ui="card-body" data-padding="true" class="grid gap-4 bg-white text-neutral-900 lg:grid-cols-[1fr_auto] lg:items-center">
-                    <div class="flex items-start gap-3">
-                        <div class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-accent-50 text-accent-700"><Bot class="h-5 w-5" /></div>
-                        <div>
-                            <div class="mb-1 flex items-center gap-2">
-                                <h2 data-ui="card-title">{{ $t('loraAi.chatgptFor', { hotel: connection.hotel }) }}</h2>
-                                <span class="rounded-full px-2.5 py-1 text-tiny font-semibold" :class="connection.connected ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-600'">
-                                    {{ connection.connected ? $t('loraAi.connected') : $t('loraAi.notConnected') }}
-                                </span>
+
+                    <!-- KARTELA E LORËS — kush është dhe sa vlen -->
+                    <section data-ui="card" class="relative overflow-hidden border border-neutral-200 bg-white">
+                        <div class="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-accent-700 via-accent-500 to-amber-500" />
+                        <div data-ui="card-body" data-padding="true" class="flex flex-wrap items-center gap-5 bg-white">
+                            <div class="relative grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-accent-50 text-accent-700">
+                                <Bot class="h-8 w-8" :stroke-width="1.8" />
+                                <span class="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white" :class="onDuty ? 'bg-emerald-500' : 'bg-neutral-300'" />
                             </div>
-                            <p data-ui="card-copy" class="max-w-2xl text-neutral-500">{{ $t('loraAi.description') }}</p>
-                        </div>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                        <button data-ui="button" type="button" class="inline-flex items-center gap-2 border border-neutral-300 bg-white px-4 text-neutral-700 hover:bg-neutral-50" @click="copyEndpoint">
-                            <Check v-if="copied" class="h-4 w-4" /><Copy v-else class="h-4 w-4" />{{ copied ? $t('loraAi.copied') : $t('loraAi.copyMcpUrl') }}
-                        </button>
-                        <a data-ui="button" :href="connection.chatgptUrl" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-accent-700 px-4 text-white hover:bg-accent-800">
-                            {{ $t('loraAi.openChatgpt') }} <ExternalLink class="h-4 w-4" />
-                        </a>
-                    </div>
-                </div>
-                <div class="settings-status-strip grid gap-3 border-t border-neutral-200 bg-neutral-50 md:grid-cols-3">
-                    <div class="flex items-center gap-2 text-neutral-700"><ShieldCheck class="h-4 w-4 text-primary-600" /> {{ $t('loraAi.oauthIsolation') }}</div>
-                    <div class="flex items-center gap-2 text-neutral-700"><Check class="h-4 w-4 text-primary-600" /> {{ $t('loraAi.permissionsInherited') }}</div>
-                    <div class="flex items-center gap-2 text-neutral-700"><Check class="h-4 w-4 text-primary-600" /> {{ $t('loraAi.approvalsRequired') }}</div>
-                </div>
-            </section>
-
-            <section class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-                <div data-ui="card" class="settings-card-pad border border-neutral-200 bg-white">
-                    <div class="flex items-start justify-between gap-4">
-                        <div>
-                            <div class="flex items-center gap-2 text-neutral-900"><Search class="h-4 w-4 text-primary-700" /><h2 data-ui="card-title">{{ $t('loraAi.quickPromptsTitle') }}</h2></div>
-                            <p data-ui="card-copy" class="mt-1 text-neutral-500">{{ $t('loraAi.quickPromptsSubtitle') }}</p>
-                        </div>
-                        <span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{{ $t('loraAi.readOnly') }}</span>
-                    </div>
-                    <div class="mt-4 grid gap-2 md:grid-cols-2">
-                        <button v-for="prompt in quickPrompts" :key="prompt" data-ui="inner-panel" type="button" class="flex items-center justify-between gap-3 border border-neutral-200 text-left text-neutral-700 transition hover:border-primary-300 hover:bg-primary-50/40" @click="copyPrompt(prompt)">
-                            <span>{{ prompt }}</span><Check v-if="promptCopied === prompt" class="h-4 w-4 shrink-0 text-emerald-600" /><Copy v-else class="h-4 w-4 shrink-0 text-neutral-400" />
-                        </button>
-                    </div>
-                </div>
-
-                <div data-ui="card" class="settings-card-pad border border-neutral-200 bg-white">
-                    <div class="flex items-center gap-2 text-neutral-900"><Sparkles class="h-4 w-4 text-amber-600" /><h2 data-ui="card-title">{{ $t('loraAi.hybridPricingTitle') }}</h2></div>
-                    <p data-ui="card-copy" class="mt-1 text-neutral-500">{{ $t('loraAi.hybridPricingSubtitle') }}</p>
-                    <div class="mt-4 space-y-2">
-                        <div data-ui="compact-row" class="flex items-center justify-between bg-neutral-50"><span class="text-neutral-500">{{ $t('loraAi.livePrice') }}</span><b class="text-neutral-800">{{ $t('loraAi.sellingNow') }}</b></div>
-                        <div data-ui="compact-row" class="flex items-center justify-between bg-blue-50"><span class="text-blue-700">{{ $t('loraAi.loraEngine') }}</span><b class="text-blue-900">{{ $t('loraAi.deterministic') }}</b></div>
-                        <div data-ui="compact-row" class="flex items-center justify-between bg-violet-50"><span class="text-violet-700">ChatGPT</span><b class="text-violet-900">{{ $t('loraAi.alternativeReason') }}</b></div>
-                        <div data-ui="compact-row" class="flex items-center justify-between bg-amber-50"><span class="text-amber-700">{{ $t('loraAi.market') }}</span><b class="text-amber-900">{{ $t('loraAi.whenDataExists') }}</b></div>
-                    </div>
-                    <p class="mt-3 text-xs leading-5 text-neutral-500">{{ $t('loraAi.deviationNote', { pct: pricingPolicy.maxDeviationPct }) }}</p>
-                </div>
-            </section>
-
-            <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-                <form class="space-y-4" @submit.prevent="save">
-                    <section data-ui="card" class="border border-neutral-200 bg-white">
-                        <div data-ui="card-header" class="border-b border-neutral-200">
-                            <div class="flex items-center justify-between gap-4">
-                                <div><h2>{{ $t('loraAi.dataSearchTitle') }}</h2><p>{{ $t('loraAi.dataSearchSubtitle') }}</p></div>
-                                <label class="flex shrink-0 items-center gap-2 text-sm font-semibold text-neutral-700"><span>{{ $t('loraAi.universalSearch') }}</span><input v-model="form.universal_search_enabled" type="checkbox" class="h-5 w-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500" /></label>
+                            <div class="min-w-[220px] flex-1">
+                                <h2 class="text-xl font-extrabold tracking-tight text-neutral-900">{{ assistantName }}</h2>
+                                <p class="text-body-sm text-neutral-500">{{ $t('loraAi.heroRole') }} · {{ connection.hotel }}</p>
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-tiny font-semibold" :class="onDuty ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-600'">
+                                        <span class="h-1.5 w-1.5 rounded-full" :class="onDuty ? 'animate-pulse bg-emerald-500' : 'bg-neutral-400'" />
+                                        {{ onDuty ? $t('loraAi.onDuty') : $t('loraAi.offDuty') }}
+                                    </span>
+                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-tiny font-semibold" :class="connection.connected ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">
+                                        ChatGPT: {{ connection.connected ? $t('loraAi.connected') : $t('loraAi.notConnected') }}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="divide-y divide-neutral-100">
-                            <label class="settings-module-row flex cursor-pointer items-center justify-between gap-4">
-                                <span class="flex items-start gap-3"><span class="grid h-9 w-9 place-items-center rounded-lg bg-blue-50 text-blue-600"><CalendarDays class="h-4 w-4" /></span><span><b class="block text-sm text-neutral-900">{{ $t('loraAi.moduleReservations') }}</b><small class="mt-0.5 block text-neutral-500">{{ $t('loraAi.moduleReservationsDesc') }}</small></span></span>
-                                <input v-model="form.reservations_enabled" type="checkbox" class="h-5 w-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500" />
-                            </label>
-                            <label class="settings-module-row flex cursor-pointer items-center justify-between gap-4" :class="!aiModules.channel_manager && 'opacity-50'">
-                                <span class="flex items-start gap-3"><span class="grid h-9 w-9 place-items-center rounded-lg bg-violet-50 text-violet-600"><MessageSquareText class="h-4 w-4" /></span><span><b class="block text-sm text-neutral-900">{{ $t('loraAi.moduleMessages') }}</b><small class="mt-0.5 block text-neutral-500">{{ $t('loraAi.moduleMessagesDesc') }}</small></span></span>
-                                <input v-model="form.messages_enabled" type="checkbox" :disabled="!aiModules.channel_manager" class="h-5 w-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500" />
-                            </label>
-                            <label class="settings-module-row flex cursor-pointer items-center justify-between gap-4" :class="!aiModules.smart_pricing && 'opacity-50'">
-                                <span class="flex items-start gap-3"><span class="grid h-9 w-9 place-items-center rounded-lg bg-amber-50 text-amber-600"><Sparkles class="h-4 w-4" /></span><span><b class="block text-sm text-neutral-900">{{ $t('loraAi.modulePricing') }}</b><small class="mt-0.5 block text-neutral-500">{{ $t('loraAi.modulePricingDesc') }}</small></span></span>
-                                <input v-model="form.pricing_enabled" type="checkbox" :disabled="!aiModules.smart_pricing" class="h-5 w-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500" />
-                            </label>
-                            <label class="settings-module-row flex cursor-pointer items-center justify-between gap-4" :class="!aiModules.finance && 'opacity-50'">
-                                <span class="flex items-start gap-3"><span class="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700"><WalletCards class="h-4 w-4" /></span><span><b class="block text-sm text-neutral-900">{{ $t('loraAi.moduleFinance') }}</b><small class="mt-0.5 block text-neutral-500">{{ $t('loraAi.moduleFinanceDesc') }}</small></span></span>
-                                <input v-model="form.finance_enabled" type="checkbox" :disabled="!aiModules.finance || !form.universal_search_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500" />
-                            </label>
-                            <label class="settings-module-row flex cursor-pointer items-center justify-between gap-4" :class="!aiModules.housekeeping && 'opacity-50'">
-                                <span class="flex items-start gap-3"><span class="grid h-9 w-9 place-items-center rounded-lg bg-cyan-50 text-cyan-700"><SprayCan class="h-4 w-4" /></span><span><b class="block text-sm text-neutral-900">Housekeeping</b><small class="mt-0.5 block text-neutral-500">{{ $t('loraAi.moduleHousekeepingDesc') }}</small></span></span>
-                                <input v-model="form.housekeeping_enabled" type="checkbox" :disabled="!aiModules.housekeeping || !form.universal_search_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500" />
-                            </label>
-                            <label class="settings-module-row flex cursor-pointer items-center justify-between gap-4">
-                                <span class="flex items-start gap-3"><span class="grid h-9 w-9 place-items-center rounded-lg bg-orange-50 text-orange-700"><Wrench class="h-4 w-4" /></span><span><b class="block text-sm text-neutral-900">{{ $t('loraAi.moduleMaintenance') }}</b><small class="mt-0.5 block text-neutral-500">{{ $t('loraAi.moduleMaintenanceDesc') }}</small></span></span>
-                                <input v-model="form.maintenance_enabled" type="checkbox" :disabled="!form.universal_search_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500" />
-                            </label>
-                            <label class="settings-module-row flex cursor-pointer items-center justify-between gap-4" :class="!aiModules.pos && 'opacity-50'">
-                                <span class="flex items-start gap-3"><span class="grid h-9 w-9 place-items-center rounded-lg bg-rose-50 text-rose-700"><UtensilsCrossed class="h-4 w-4" /></span><span><b class="block text-sm text-neutral-900">{{ $t('loraAi.modulePos') }}</b><small class="mt-0.5 block text-neutral-500">{{ $t('loraAi.modulePosDesc') }}</small></span></span>
-                                <input v-model="form.pos_enabled" type="checkbox" :disabled="!aiModules.pos || !form.universal_search_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500" />
-                            </label>
-                            <label class="settings-module-row flex cursor-pointer items-center justify-between gap-4" :class="!aiModules.finance && 'opacity-50'">
-                                <span class="flex items-start gap-3"><span class="grid h-9 w-9 place-items-center rounded-lg bg-indigo-50 text-indigo-700"><PackageSearch class="h-4 w-4" /></span><span><b class="block text-sm text-neutral-900">{{ $t('loraAi.moduleInventory') }}</b><small class="mt-0.5 block text-neutral-500">{{ $t('loraAi.moduleInventoryDesc') }}</small></span></span>
-                                <input v-model="form.inventory_enabled" type="checkbox" :disabled="!aiModules.finance || !form.universal_search_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500" />
-                            </label>
+                            <div class="flex divide-x divide-neutral-200">
+                                <div class="px-5 first:pl-0">
+                                    <b class="block text-xl font-extrabold tracking-tight text-neutral-900">{{ stats.replies }}</b>
+                                    <span class="text-tiny text-neutral-500">{{ $t('loraAi.statReplies') }}</span>
+                                </div>
+                                <div class="px-5">
+                                    <b class="block text-xl font-extrabold tracking-tight text-neutral-900">{{ stats.bookings }}</b>
+                                    <span class="text-tiny text-neutral-500">{{ $t('loraAi.statBookings') }}</span>
+                                </div>
+                                <div v-if="stats.bookingRevenue !== null" class="px-5 last:pr-0">
+                                    <b class="block text-xl font-extrabold tracking-tight text-amber-600">{{ revenueLabel }}</b>
+                                    <span class="text-tiny text-neutral-500">{{ $t('loraAi.statRevenue') }}</span>
+                                </div>
+                            </div>
                         </div>
                     </section>
 
-                    <section data-ui="card" class="border border-neutral-200 bg-white">
-                        <div data-ui="card-header" class="border-b border-neutral-200">
-                            <h2>{{ $t('loraAi.protectedActionsTitle') }}</h2>
-                            <p>{{ $t('loraAi.protectedActionsSubtitle') }}</p>
-                        </div>
-                        <div data-ui="card-body" data-padding="true" class="grid gap-4 md:grid-cols-2">
-                            <div data-ui="inner-panel" class="border border-[#c9ecd9] md:col-span-2" :class="!form.messages_enabled && 'opacity-50'">
-                                <b class="text-sm text-neutral-900">{{ $t('loraAi.identityTitle') }}</b>
-                                <span class="mt-1 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.identitySubtitle') }}</span>
-                                <div class="mt-3 grid gap-3 md:grid-cols-3">
-                                    <label class="block">
-                                        <span class="text-xs font-semibold text-neutral-700">{{ $t('loraAi.identityName') }}</span>
-                                        <input v-model="form.assistant_name" type="text" maxlength="40" :disabled="!form.messages_enabled" class="mt-1 w-full rounded-lg border-neutral-300 text-sm focus:border-primary-500 focus:ring-primary-500" />
+                    <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+                        <form class="space-y-4" @submit.prevent="save">
+
+                            <!-- SHKALLA E AUTONOMISË -->
+                            <section data-ui="card" class="settings-card-pad border border-neutral-200 bg-white">
+                                <div class="flex items-center gap-2">
+                                    <h2 data-ui="card-title">{{ $t('loraAi.ladderTitle') }}</h2>
+                                    <span class="rounded-md bg-accent-50 px-2 py-0.5 text-tiny font-bold uppercase tracking-wide text-accent-800">{{ $t('loraAi.ladderTag') }}</span>
+                                </div>
+
+                                <div class="relative mt-4 space-y-2 pl-11">
+                                    <div class="absolute bottom-4 left-[15px] top-4 w-0.5 bg-accent-200" aria-hidden="true" />
+                                    <div v-for="step in ladder" :key="step.field" class="relative rounded-xl border p-3.5 pl-4 transition" :class="[step.hot ? 'border-accent-200 bg-accent-50/40' : 'border-neutral-200 bg-white', step.disabled && 'opacity-60']">
+                                        <span class="absolute -left-11 top-3.5 grid h-8 w-8 place-items-center rounded-full bg-accent-50 text-body-sm font-bold text-accent-800 ring-1 ring-accent-200" :class="!form[step.field] && 'bg-neutral-100 text-neutral-400 ring-neutral-200'">{{ step.n }}</span>
+                                        <div class="flex items-center gap-3">
+                                            <div class="min-w-0 flex-1">
+                                                <b class="text-sm font-semibold text-neutral-900">
+                                                    {{ $t(step.titleKey) }}
+                                                    <span v-if="step.badge" class="ml-1 rounded-md bg-emerald-50 px-1.5 py-0.5 align-[2px] text-tiny font-bold text-emerald-700">{{ step.badge }}</span>
+                                                    <span v-else-if="step.badgeKey" class="ml-1 rounded-md bg-amber-50 px-1.5 py-0.5 align-[2px] text-tiny font-bold text-amber-700">{{ $t(step.badgeKey) }}</span>
+                                                </b>
+                                                <details v-if="step.detailsKey" class="mt-0.5">
+                                                    <summary class="cursor-pointer text-tiny font-semibold text-accent-700 hover:text-accent-800">{{ $t(step.summaryKey) }}</summary>
+                                                    <p class="mt-1.5 rounded-lg bg-neutral-50 px-3 py-2 text-xs leading-5 text-neutral-600">{{ $t(step.detailsKey) }}</p>
+                                                </details>
+                                            </div>
+                                            <label class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
+                                                <input v-model="form[step.field]" type="checkbox" :disabled="step.disabled" class="peer sr-only">
+                                                <span class="absolute inset-0 rounded-full bg-neutral-300 transition peer-checked:bg-accent-600 peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 peer-focus-visible:ring-offset-2 peer-disabled:cursor-not-allowed" />
+                                                <span class="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <!-- ÇMIMET -->
+                            <section data-ui="card" class="settings-card-pad border border-neutral-200 bg-white">
+                                <div class="flex items-center gap-2">
+                                    <h2 data-ui="card-title">{{ $t('loraAi.pricingSectionTitle') }}</h2>
+                                    <span class="rounded-md bg-accent-50 px-2 py-0.5 text-tiny font-bold uppercase tracking-wide text-accent-800">{{ $t('loraAi.deviationTag', { pct: pricingPolicy.maxDeviationPct }) }}</span>
+                                </div>
+                                <div class="mt-4 space-y-2">
+                                    <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3" :class="!form.pricing_enabled && 'opacity-60'">
+                                        <b class="flex-1 text-sm font-semibold text-neutral-900">{{ $t('loraAi.actionApplyPrices') }}</b>
+                                        <span class="relative inline-flex h-6 w-11 shrink-0 items-center">
+                                            <input v-model="form.price_apply_enabled" type="checkbox" :disabled="!form.pricing_enabled" class="peer sr-only">
+                                            <span class="absolute inset-0 rounded-full bg-neutral-300 transition peer-checked:bg-accent-600 peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 peer-focus-visible:ring-offset-2 peer-disabled:cursor-not-allowed" />
+                                            <span class="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                                        </span>
                                     </label>
-                                    <label class="block md:col-span-2">
-                                        <span class="text-xs font-semibold text-neutral-700">{{ $t('loraAi.identityCharacter') }}</span>
-                                        <textarea v-model="form.assistant_character" rows="3" maxlength="600" :disabled="!form.messages_enabled" class="mt-1 w-full rounded-lg border-neutral-300 text-sm focus:border-primary-500 focus:ring-primary-500"></textarea>
+                                    <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3" :class="!form.pricing_enabled && 'opacity-60'">
+                                        <b class="flex-1 text-sm font-semibold text-neutral-900">{{ $t('loraAi.actionAltRecommendation') }}</b>
+                                        <span class="relative inline-flex h-6 w-11 shrink-0 items-center">
+                                            <input v-model="form.ai_price_recommendations_enabled" type="checkbox" :disabled="!form.pricing_enabled" class="peer sr-only">
+                                            <span class="absolute inset-0 rounded-full bg-neutral-300 transition peer-checked:bg-accent-600 peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 peer-focus-visible:ring-offset-2 peer-disabled:cursor-not-allowed" />
+                                            <span class="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                                        </span>
                                     </label>
                                 </div>
-                                <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.identityHint') }}</span>
-                            </div>
-                            <label data-ui="inner-panel" class="border border-neutral-200" :class="!form.messages_enabled && 'opacity-50'">
-                                <span class="flex items-center justify-between gap-3"><b class="text-sm text-neutral-900">{{ $t('loraAi.actionGuestReply') }}</b><input v-model="form.guest_reply_enabled" type="checkbox" :disabled="!form.messages_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600" /></span>
-                                <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.actionGuestReplyDesc') }}</span>
-                            </label>
-                            <label data-ui="inner-panel" class="border border-neutral-200" :class="(!form.messages_enabled || !form.guest_reply_enabled) && 'opacity-50'">
-                                <span class="flex items-center justify-between gap-3"><b class="text-sm text-neutral-900">{{ $t('loraAi.actionGuestAutoReply') }}</b><input v-model="form.guest_auto_reply_enabled" type="checkbox" :disabled="!form.messages_enabled || !form.guest_reply_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600" /></span>
-                                <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.actionGuestAutoReplyDesc') }}</span>
-                            </label>
-                            <label data-ui="inner-panel" class="border border-[#c9ecd9]" :class="(!form.messages_enabled || !form.guest_reply_enabled) && 'opacity-50'">
-                                <span class="flex items-center justify-between gap-3"><b class="text-sm text-neutral-900">{{ $t('loraAi.actionWhatsAppAutoReply') }}</b><input v-model="form.whatsapp_auto_reply_enabled" type="checkbox" :disabled="!form.messages_enabled || !form.guest_reply_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600" /></span>
-                                <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.actionWhatsAppAutoReplyDesc') }}</span>
-                            </label>
-                            <label data-ui="inner-panel" class="border border-[#c9ecd9]" :class="(!form.messages_enabled || !form.guest_reply_enabled || !form.whatsapp_auto_reply_enabled) && 'opacity-50'">
-                                <span class="flex items-center justify-between gap-3"><b class="text-sm text-neutral-900">{{ $t('loraAi.actionWhatsAppBooking') }}</b><input v-model="form.whatsapp_booking_enabled" type="checkbox" :disabled="!form.messages_enabled || !form.guest_reply_enabled || !form.whatsapp_auto_reply_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600" /></span>
-                                <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.actionWhatsAppBookingDesc') }}</span>
-                            </label>
-                            <label data-ui="inner-panel" class="border border-neutral-200" :class="!form.pricing_enabled && 'opacity-50'">
-                                <span class="flex items-center justify-between gap-3"><b class="text-sm text-neutral-900">{{ $t('loraAi.actionApplyPrices') }}</b><input v-model="form.price_apply_enabled" type="checkbox" :disabled="!form.pricing_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600" /></span>
-                                <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.actionApplyPricesDesc') }}</span>
-                            </label>
-                            <label data-ui="inner-panel" class="border border-neutral-200 md:col-span-2" :class="!form.pricing_enabled && 'opacity-50'">
-                                <span class="flex items-center justify-between gap-3"><span><b class="block text-sm text-neutral-900">{{ $t('loraAi.actionAltRecommendation') }}</b><small class="mt-1 block text-neutral-500">{{ $t('loraAi.actionAltRecommendationDesc') }}</small></span><input v-model="form.ai_price_recommendations_enabled" type="checkbox" :disabled="!form.pricing_enabled" class="h-5 w-5 rounded border-neutral-300 text-primary-600" /></span>
-                                <span class="mt-2 block text-xs leading-5 text-neutral-500">{{ $t('loraAi.actionAltRecommendationNote') }}</span>
-                            </label>
-                        </div>
-                        <div data-ui="card-footer" class="settings-sticky-footer border-t border-neutral-200">
-                            <button v-if="connection.revocable" type="button" class="text-sm font-semibold text-red-600 hover:text-red-700" @click="disconnect">{{ $t('loraAi.disconnectChatgpt') }}</button><span v-else />
-                            <button data-ui="button" type="submit" :disabled="form.processing" class="bg-primary-700 px-5 text-white hover:bg-primary-800 disabled:opacity-50">{{ form.processing ? $t('loraAi.saving') : $t('loraAi.savePermissions') }}</button>
-                        </div>
-                    </section>
-                </form>
+                            </section>
 
-                <aside class="space-y-4">
-                    <section data-ui="card" class="settings-card-pad border border-neutral-200 bg-white">
-                        <h3 data-ui="card-title">{{ $t('loraAi.howToConnect') }}</h3>
-                        <ol class="mt-4 space-y-4 text-body-sm text-neutral-600">
-                            <li class="flex gap-3"><span class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary-50 text-xs font-bold text-primary-700">1</span><span>{{ $t('loraAi.step1') }}</span></li>
-                            <li class="flex gap-3"><span class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary-50 text-xs font-bold text-primary-700">2</span><span>{{ $t('loraAi.step2') }}</span></li>
-                            <li class="flex gap-3"><span class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary-50 text-xs font-bold text-primary-700">3</span><span>{{ $t('loraAi.step3') }}</span></li>
-                        </ol>
-                        <code class="mt-4 block break-all rounded-lg bg-neutral-900 p-3 text-xs leading-5 text-neutral-100">{{ connection.endpoint }}</code>
-                    </section>
-                    <section data-ui="card" class="settings-card-pad border border-neutral-200 bg-white">
-                        <h3 data-ui="card-title">{{ $t('loraAi.recentAiActivity') }}</h3>
-                        <div v-if="recentActions.length" class="mt-3 divide-y divide-neutral-100">
-                            <div v-for="item in recentActions" :key="`${item.action}-${item.created_at}`" class="py-3 text-sm">
-                                <b class="block text-neutral-800">{{ actions[item.action] || item.action }}</b>
-                                <span class="text-xs text-neutral-500">{{ item.created_at }}</span>
+                            <!-- SI PREZANTOHET -->
+                            <section data-ui="card" class="settings-card-pad border border-neutral-200 bg-white" :class="!form.messages_enabled && 'opacity-60'">
+                                <h2 data-ui="card-title">{{ $t('loraAi.identitySectionTitle') }}</h2>
+                                <div class="mt-4 grid gap-3 md:grid-cols-[200px_1fr]">
+                                    <label class="block">
+                                        <span class="text-tiny font-bold uppercase tracking-wide text-neutral-500">{{ $t('loraAi.identityName') }}</span>
+                                        <input v-model="form.assistant_name" type="text" maxlength="40" :disabled="!form.messages_enabled" class="mt-1 w-full rounded-lg border-neutral-300 text-sm focus:border-accent-500 focus:ring-accent-500" />
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-tiny font-bold uppercase tracking-wide text-neutral-500">{{ $t('loraAi.identityCharacter') }}</span>
+                                        <textarea v-model="form.assistant_character" rows="2" maxlength="600" :disabled="!form.messages_enabled" class="mt-1 w-full rounded-lg border-neutral-300 text-sm focus:border-accent-500 focus:ring-accent-500"></textarea>
+                                    </label>
+                                </div>
+                                <p class="mt-2 text-xs leading-5 text-neutral-500">{{ $t('loraAi.identityHint') }}</p>
+                            </section>
+
+                            <!-- TË DHËNAT QË SHEH LORA -->
+                            <section data-ui="card" class="settings-card-pad border border-neutral-200 bg-white">
+                                <div class="flex flex-wrap items-center justify-between gap-3">
+                                    <h2 data-ui="card-title">{{ $t('loraAi.dataTitle') }}</h2>
+                                    <label class="flex cursor-pointer items-center gap-2.5 rounded-full bg-neutral-50 px-3.5 py-1.5 text-body-sm font-semibold text-neutral-600">
+                                        {{ $t('loraAi.universalSearch') }}
+                                        <span class="relative inline-flex h-6 w-11 shrink-0 items-center">
+                                            <input v-model="form.universal_search_enabled" type="checkbox" class="peer sr-only">
+                                            <span class="absolute inset-0 rounded-full bg-neutral-300 transition peer-checked:bg-accent-600 peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 peer-focus-visible:ring-offset-2" />
+                                            <span class="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                                        </span>
+                                    </label>
+                                </div>
+                                <div class="mt-4 grid gap-2.5 sm:grid-cols-2">
+                                    <label v-for="tile in dataTiles" :key="tile.field" class="flex cursor-pointer items-center gap-2.5 rounded-xl border border-neutral-200 px-3 py-2.5 transition hover:border-accent-300" :class="tile.disabled && 'opacity-50'">
+                                        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg" :class="tile.chip"><component :is="tile.icon" class="h-4 w-4" /></span>
+                                        <b class="min-w-0 flex-1 truncate text-sm font-semibold text-neutral-900" :title="tile.labelKey ? $t(tile.labelKey) : tile.label">{{ tile.labelKey ? $t(tile.labelKey) : tile.label }}</b>
+                                        <span class="relative inline-flex h-6 w-11 shrink-0 items-center">
+                                            <input v-model="form[tile.field]" type="checkbox" :disabled="tile.disabled" class="peer sr-only">
+                                            <span class="absolute inset-0 rounded-full bg-neutral-300 transition peer-checked:bg-accent-600 peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500 peer-focus-visible:ring-offset-2 peer-disabled:cursor-not-allowed" />
+                                            <span class="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                                        </span>
+                                    </label>
+                                </div>
+                                <p class="mt-3 text-xs text-neutral-400">{{ $t('loraAi.dataFootnote') }}</p>
+                            </section>
+
+                            <!-- SHIRITI I RUAJTJES — gjithmonë i dukshëm -->
+                            <div class="sticky bottom-4 z-20 flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
+                                <span class="flex items-center gap-2 text-body-sm" :class="form.isDirty ? 'font-semibold text-amber-700' : 'text-neutral-400'">
+                                    <span class="h-2 w-2 rounded-full" :class="form.isDirty ? 'bg-amber-500' : 'bg-neutral-300'" />
+                                    {{ form.isDirty ? $t('loraAi.unsavedChanges') : $t('loraAi.allSaved') }}
+                                </span>
+                                <div class="flex items-center gap-4">
+                                    <button v-if="connection.revocable" type="button" class="text-sm font-semibold text-neutral-400 hover:text-red-600" @click="disconnect">{{ $t('loraAi.disconnectChatgpt') }}</button>
+                                    <button data-ui="button" type="submit" :disabled="form.processing" class="bg-accent-700 px-6 text-white hover:bg-accent-800 disabled:opacity-50">{{ form.processing ? $t('loraAi.saving') : $t('loraAi.savePermissions') }}</button>
+                                </div>
                             </div>
-                        </div>
-                        <p v-else class="mt-3 text-sm text-neutral-500">{{ $t('loraAi.noAiActions') }}</p>
-                    </section>
-                </aside>
-            </div>
+                        </form>
+
+                        <aside class="space-y-4">
+                            <!-- CHATGPT PËR TY -->
+                            <section data-ui="card" class="settings-card-pad border border-neutral-200 bg-white">
+                                <div class="flex items-center justify-between gap-3">
+                                    <h2 data-ui="card-title">{{ $t('loraAi.chatgptForYou') }}</h2>
+                                    <span class="rounded-full px-2.5 py-1 text-tiny font-bold" :class="connection.connected ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">
+                                        {{ connection.connected ? $t('loraAi.connected') : $t('loraAi.notConnected') }}
+                                    </span>
+                                </div>
+                                <div class="mt-3 flex items-stretch gap-2">
+                                    <code class="min-w-0 flex-1 break-all rounded-lg bg-neutral-900 px-3 py-2 text-[11px] leading-5 text-neutral-100">{{ connection.endpoint }}</code>
+                                    <button type="button" class="rounded-lg border border-neutral-200 px-3 text-xs font-semibold text-neutral-600 hover:border-accent-500 hover:text-accent-700" @click="copyEndpoint">
+                                        {{ copied ? $t('loraAi.copied') : $t('loraAi.copyShort') }}
+                                    </button>
+                                </div>
+                                <div class="mt-3 flex items-center gap-4">
+                                    <a data-ui="button" :href="connection.chatgptUrl" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-accent-700 px-4 text-white hover:bg-accent-800">
+                                        {{ $t('loraAi.openChatgpt') }} <ExternalLink class="h-4 w-4" />
+                                    </a>
+                                    <details>
+                                        <summary class="cursor-pointer text-xs font-semibold text-accent-700 hover:text-accent-800">{{ $t('loraAi.howToConnect') }}</summary>
+                                        <ol class="mt-2 space-y-2 text-xs leading-5 text-neutral-600">
+                                            <li class="flex gap-2"><span class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-accent-50 text-tiny font-bold text-accent-800">1</span><span>{{ $t('loraAi.step1') }}</span></li>
+                                            <li class="flex gap-2"><span class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-accent-50 text-tiny font-bold text-accent-800">2</span><span>{{ $t('loraAi.step2') }}</span></li>
+                                            <li class="flex gap-2"><span class="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-accent-50 text-tiny font-bold text-accent-800">3</span><span>{{ $t('loraAi.step3') }}</span></li>
+                                        </ol>
+                                    </details>
+                                </div>
+                                <div class="mt-3 flex flex-wrap gap-1.5">
+                                    <button v-for="prompt in quickPrompts" :key="prompt.shortKey" type="button" class="inline-flex items-center gap-1.5 rounded-full bg-accent-50 px-3 py-1.5 text-xs font-medium text-accent-800 transition hover:bg-accent-100" @click="copyPrompt($t(prompt.fullKey))">
+                                        {{ $t(prompt.shortKey) }}
+                                        <Check v-if="promptCopied === $t(prompt.fullKey)" class="h-3 w-3 text-emerald-600" />
+                                        <Copy v-else class="h-3 w-3 text-accent-400" />
+                                    </button>
+                                </div>
+                                <p class="mt-3 flex items-center gap-1.5 text-xs text-neutral-400"><ShieldCheck class="h-3.5 w-3.5" /> {{ $t('loraAi.oauthIsolation') }}</p>
+                            </section>
+
+                            <!-- ÇFARË BËRI LORA -->
+                            <section data-ui="card" class="settings-card-pad border border-neutral-200 bg-white">
+                                <h2 data-ui="card-title">{{ $t('loraAi.activityTitle') }}</h2>
+                                <div v-if="recentActions.length" class="mt-2 divide-y divide-neutral-100">
+                                    <div v-for="item in recentActions" :key="`${item.action}-${item.created_at}`" class="flex items-center gap-3 py-2.5">
+                                        <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full" :class="TONE_CLASSES[actionMeta(item.action).tone]">
+                                            <component :is="actionMeta(item.action).icon" class="h-3.5 w-3.5" />
+                                        </span>
+                                        <div class="min-w-0 flex-1">
+                                            <b class="block truncate text-sm font-semibold" :class="actionMeta(item.action).tone === 'bad' ? 'text-red-700' : 'text-neutral-800'">
+                                                {{ actionMeta(item.action).labelKey ? $t(actionMeta(item.action).labelKey) : actionMeta(item.action).label }}
+                                            </b>
+                                            <span class="text-tiny text-neutral-400">{{ actionTime(item.created_at) }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p v-else class="mt-3 text-sm text-neutral-500">{{ $t('loraAi.noAiActions') }}</p>
+                            </section>
+                        </aside>
+                    </div>
                 </div>
             </div>
         </div>

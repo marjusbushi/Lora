@@ -109,6 +109,39 @@ class LoraAiController extends Controller
             'recentActions' => DB::table('audit_logs')
                 ->where('tenant_id', $tenant->id)->where('source', 'ai')
                 ->latest('id')->limit(6)->get(['action', 'created_at']),
+            // Kartela e Lorës (task #402): vlera e saj e dukshme — jo konfigurim.
+            'stats' => (function () use ($tenant, $request) {
+                $monthStart = now()->startOfMonth();
+                $monthly = DB::table('audit_logs')
+                    ->where('tenant_id', $tenant->id)->where('source', 'ai')
+                    ->where('created_at', '>=', $monthStart);
+
+                $confirmedIds = (clone $monthly)
+                    ->where('action', 'message.ai_booking_confirmed')
+                    ->where('subject_type', \App\Models\Reservation::class)
+                    ->pluck('subject_id')->filter();
+
+                // Të ardhurat janë sipërfaqe financiare — rruga mbrohet vetëm me
+                // view_settings, ndaj shuma jepet vetëm kujt sheh paratë (Codex, PR #542).
+                $seesMoney = $request->user()->can('view_financials') || $request->user()->can('view_finance');
+
+                return [
+                    'replies' => (clone $monthly)
+                        ->whereIn('action', ['message.ai_reply', 'ai.guest_reply.sent'])
+                        ->count(),
+                    'bookings' => $confirmedIds->count(),
+                    // Shuma nga snapshot-i i ngrirë në monedhën BAZË të hotelit
+                    // (total_amount_base) — properties.total mban monedhën e shitjes
+                    // të momentit dhe një ndryshim monedhe brenda muajit do t'i
+                    // përzinte shifrat (Codex, PR #548).
+                    // withTrashed: numërimi vjen nga audit-i append-only, ndaj
+                    // edhe shuma duhet ta mbajë rezervimin e fshirë më vonë —
+                    // statistika e muajit s'zbrazet nga fshirjet (Codex, PR #549).
+                    'bookingRevenue' => $seesMoney ? round((float) \App\Models\Reservation::withTrashed()
+                        ->whereIn('id', $confirmedIds)
+                        ->sum('total_amount_base'), 2) : null,
+                ];
+            })(),
         ]);
     }
 
@@ -133,6 +166,32 @@ class LoraAiController extends Controller
             'pos_enabled' => ['sometimes', 'boolean'],
             'inventory_enabled' => ['sometimes', 'boolean'],
         ]);
+
+        // Zinxhiri i varësive zbatohet edhe në SERVER — job-et (p.sh.
+        // GenerateAiGuestReply) lexojnë çelësin e vet direkt, ndaj një vlerë e
+        // varur e mbetur ndezur do t'i mbante aktive pas fikjes së nivelit nën
+        // të (gjetje Codex, PR #542). UI-ja kaskadon vetë; kjo është rrjeta.
+        if (! ($data['messages_enabled'] ?? true)) {
+            $data['guest_reply_enabled'] = false;
+        }
+        if (! ($data['guest_reply_enabled'] ?? true)) {
+            $data['guest_auto_reply_enabled'] = false;
+            $data['whatsapp_auto_reply_enabled'] = false;
+        }
+        // Prindi 'whatsapp_auto_reply_enabled' është opsional në payload — kur
+        // mungon, konsultohet vlera e RUAJTUR (jo një default optimist), që një
+        // kërkesë e pjesshme të mos ruajë booking=ON mbi një prind të fikur
+        // (Codex, PR #548).
+        $whatsAppAutoOn = array_key_exists('whatsapp_auto_reply_enabled', $data)
+            ? (bool) $data['whatsapp_auto_reply_enabled']
+            : $this->boolSetting('whatsapp_auto_reply_enabled', false);
+        if (! $whatsAppAutoOn) {
+            $data['whatsapp_booking_enabled'] = false;
+        }
+        if (! ($data['pricing_enabled'] ?? true)) {
+            $data['price_apply_enabled'] = false;
+            $data['ai_price_recommendations_enabled'] = false;
+        }
 
         // Identiteti/karakteri janë TEKST — jo çelësa on/off (task #370). Bosh →
         // ruhet '' dhe job-i bie vetë te default-i i para-shkruar.
