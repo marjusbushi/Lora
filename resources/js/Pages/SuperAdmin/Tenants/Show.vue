@@ -36,6 +36,8 @@ const props = defineProps({
 const activeDrawer = ref(null);
 const configTab = ref('domains');
 const editingMember = ref(null);
+// Dosja e hotelit ndahet në seksione (rail + panel) — jo karta të shpërndara.
+const activeSection = ref('overview');
 
 const isCurrent = computed(() => props.tenant.id === props.currentTenantId);
 const isActive = computed(() => props.tenant.status === 'active');
@@ -111,6 +113,77 @@ const attentionCount = computed(() => readinessChecks.value.filter((item) => !it
 const readinessRing = computed(() => ({
     background: `conic-gradient(${readinessScore.value === 100 ? '#17745c' : '#b56a10'} 0 ${readinessScore.value}%, #e9efec ${readinessScore.value}% 100%)`,
 }));
+
+const pendingDomains = computed(() => props.tenant.domains.filter((domain) => domain.status !== 'active').length);
+// I njëjti burim si integrationRows — rail-i raporton numrin REAL të
+// çështjeve, jo gjithmonë "1" (gjetje Codex PR #583).
+const integrationIssues = computed(() => [
+    Boolean(props.tenant.primary_domain) && pendingDomains.value === 0,
+    channexConfigured.value,
+    pokConfigured.value,
+    fatureConfigured.value,
+].filter((ok) => !ok).length);
+const integrationsOk = computed(() => integrationIssues.value === 0);
+
+// Rail-i i seksioneve — pika + meta tregojnë me një shikim ku duhet vëmendje.
+const sections = computed(() => [
+    {
+        id: 'overview',
+        label: translate('superAdmin.auto.copy120'),
+        meta: attentionCount.value
+            ? translate('superAdmin.tenantShow.issuesAttention', { count: attentionCount.value })
+            : translate('superAdmin.tenantShow.allGood'),
+        warn: attentionCount.value > 0,
+        dot: attentionCount.value ? 'amber' : 'green',
+    },
+    {
+        id: 'billing',
+        label: translate('superAdmin.tenantShow.subscriptionAndModules'),
+        meta: `${money(props.tenant.mrr_cents)}${translate('superAdmin.tenantShow.perMonthSuffix')} · ${translate('superAdmin.tenantShow.activeCountShort', { count: enabledModules.value.length })}`,
+        warn: !billingIsHealthy.value,
+        dot: billingIsHealthy.value ? 'green' : 'amber',
+    },
+    {
+        id: 'integrations',
+        label: translate('superAdmin.tenantShow.railIntegrations'),
+        meta: integrationsOk.value
+            ? translate('superAdmin.tenantShow.integrationsAllActive')
+            : translate('superAdmin.tenantShow.issuesAttention', { count: integrationIssues.value }),
+        warn: !integrationsOk.value,
+        dot: integrationsOk.value ? 'green' : 'amber',
+    },
+    {
+        id: 'members',
+        label: translate('superAdmin.auto.copy093'),
+        meta: translate('superAdmin.tenantShow.membersActiveShort', { count: activeMembers.value.length }),
+        warn: activeMembers.value.length === 0,
+        dot: activeMembers.value.length ? 'green' : 'amber',
+    },
+    {
+        id: 'activity',
+        label: translate('superAdmin.auto.copy107'),
+        meta: props.activity.length ? when(props.activity[0].created_at) : '—',
+        warn: false,
+        dot: '',
+    },
+]);
+
+// Kontrollet e gatishmërisë — rreshta me NJË veprim: kërcim te seksioni përkatës.
+const overviewChecks = computed(() => [
+    { key: 'active', icon: Building2, ok: isActive.value, title: translate('superAdmin.tenantShow.hotelActiveCheck'), meta: isActive.value ? translate('superAdmin.tenantShow.hotelActiveNote') : translate('superAdmin.tenantShow.hotelSuspendedNote'), state: isActive.value ? translate('superAdmin.auto.copy005') : translate('superAdmin.auto.copy044'), goto: null },
+    { key: 'billing', icon: CreditCard, ok: billingIsHealthy.value, title: translate('superAdmin.tenantShow.subscriptionAndModules'), meta: translate('superAdmin.tenantShow.modulesAndNextBilling', { count: enabledModules.value.length, date: date(props.tenant.billing.next_billing_at) }), state: statusLabel(props.tenant.billing.status), goto: 'billing' },
+    { key: 'domain', icon: Globe2, ok: Boolean(props.tenant.primary_domain), title: translate('superAdmin.auto.copy012'), meta: props.tenant.primary_domain || translate('superAdmin.tenantShow.notConfigured'), state: props.tenant.primary_domain ? translate('superAdmin.auto.copy005') : translate('superAdmin.dynamic.missing'), goto: 'integrations' },
+    { key: 'channex', icon: Plug, ok: channexConfigured.value, title: 'Channex Channel Manager', meta: channexConfigured.value ? translate('superAdmin.tenantShow.channexOk') : translate('superAdmin.tenantShow.channexMissing'), state: channexConfigured.value ? translate('superAdmin.auto.copy005') : translate('superAdmin.dynamic.missing'), goto: 'integrations' },
+    { key: 'pok', icon: CreditCard, ok: pokConfigured.value, title: 'POK Payments', meta: pokConfigured.value ? translate('superAdmin.tenantShow.pokOk') : translate('superAdmin.tenantShow.pokMissing'), state: pokConfigured.value ? translate('superAdmin.auto.copy005') : translate('superAdmin.dynamic.missing'), goto: 'integrations' },
+    { key: 'members', icon: UserRound, ok: activeMembers.value.length > 0, title: translate('superAdmin.auto.copy093'), meta: translate('superAdmin.tenantShow.membersSubtitle'), state: translate('superAdmin.tenantShow.membersActiveShort', { count: activeMembers.value.length }), goto: 'members' },
+]);
+
+const integrationRows = computed(() => [
+    { key: 'domains', icon: Globe2, ok: Boolean(props.tenant.primary_domain) && pendingDomains.value === 0, title: translate('superAdmin.dynamic.domains'), meta: (props.tenant.primary_domain || translate('superAdmin.tenantShow.notConfigured')) + (pendingDomains.value ? ` · ${translate('superAdmin.tenantShow.domainsPending', { count: pendingDomains.value })}` : ''), state: pendingDomains.value ? translate('superAdmin.tenantShow.domainsPending', { count: pendingDomains.value }) : (props.tenant.primary_domain ? translate('superAdmin.auto.copy005') : translate('superAdmin.dynamic.missing')), tab: 'domains', action: translate('superAdmin.tenantShow.manage') },
+    { key: 'channex', icon: Plug, ok: channexConfigured.value, title: 'Channex Channel Manager', meta: channexConfigured.value ? translate('superAdmin.tenantShow.channexOk') : translate('superAdmin.tenantShow.channexMissing'), state: channexConfigured.value ? translate('superAdmin.auto.copy005') : translate('superAdmin.dynamic.missing'), tab: 'channex', action: translate('superAdmin.tenantShow.configure') },
+    { key: 'pok', icon: CreditCard, ok: pokConfigured.value, title: 'POK Payments', meta: pokConfigured.value ? translate('superAdmin.tenantShow.pokOk') : translate('superAdmin.tenantShow.pokMissing'), state: pokConfigured.value ? translate('superAdmin.auto.copy005') : translate('superAdmin.dynamic.missing'), tab: 'pok', action: translate('superAdmin.tenantShow.configure') },
+    { key: 'fature', icon: FileCheck2, ok: fatureConfigured.value, title: 'fature.al', meta: fatureConfigured.value ? translate('superAdmin.tenantShow.envTokenSaved', { environment: props.tenant.integrations.fature_al.environment }) : translate('superAdmin.tenantShow.fiscalNotConfigured'), state: fatureConfigured.value ? props.tenant.integrations.fature_al.environment : translate('superAdmin.dynamic.missing'), tab: 'fature', action: translate('superAdmin.tenantShow.manage') },
+]);
 
 const tenantForm = useForm({
     name: '',
@@ -302,7 +375,12 @@ function openConfig(tab = 'domains') {
 }
 
 onMounted(() => {
-    if (props.initialConfigTab) openConfig(props.initialConfigTab);
+    if (props.initialConfigTab) {
+        // Deep-link nga onboarding-u: hap drawer-in te tab-i i kërkuar dhe
+        // vendos seksionin përkatës poshtë tij.
+        activeSection.value = 'integrations';
+        openConfig(props.initialConfigTab);
+    }
 });
 
 function addDomain() {
@@ -409,146 +487,133 @@ function toggleStatus() {
 <template>
     <Head :title="`${tenant.name} — Lora Control Panel`" />
 
-    <SuperAdminLayout :title="`${tenant.name} — Lora Control Panel`">
-        <main class="sa-page max-w-[1320px] space-y-4">
-            <nav class="sa-breadcrumb">
-                <Link href="/super-admin" class="no-underline hover:text-neutral-700">Control Panel</Link>
-                <span class="mx-2">/</span>
-                <Link href="/super-admin/tenants" class="no-underline hover:text-neutral-700">{{ $t('superAdmin.auto.copy087') }}</Link>
-                <span class="mx-2">/</span>
-                <span class="font-medium text-neutral-600">{{ tenant.name }}</span>
-            </nav>
-
-            <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div class="flex min-w-0 items-center gap-3">
-                    <span class="sa-icon-box-lg bg-[#e5f5ef] text-xs font-bold text-[#165d4b]">{{ initials(tenant.name) }}</span>
-                    <div class="min-w-0">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <h1 class="sa-page-title !mt-0 truncate">{{ tenant.name }}</h1>
-                            <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-bold" :class="isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'">
-                                <span class="h-1.5 w-1.5 rounded-full bg-current" />{{ isActive ? $t('superAdmin.auto.copy005') : $t('superAdmin.auto.copy044') }}
-                            </span>
-                        </div>
-                        <p class="sa-page-subtitle truncate">{{ tenant.slug }} · {{ tenant.timezone }} · {{ tenant.currency }}</p>
-                    </div>
+    <SuperAdminLayout :title="`${tenant.name} — Lora Control Panel`" immersive>
+        <!-- FOCUS MODE si Onboarding-u: dosja e një hoteli hapet më vete.
+             Çdo fakt bazë del NJË herë (chrome) dhe rail-i i seksioneve është
+             i vetmi shirit anësor — zhduken tabs e rreme dhe kartat dyfishe. -->
+        <header class="sticky top-0 z-40 border-b border-neutral-200 bg-white/95 backdrop-blur">
+            <div class="mx-auto flex max-w-[1200px] flex-wrap items-center gap-3 px-4 pt-3 sm:px-6">
+                <Link href="/super-admin/tenants" class="whitespace-nowrap text-xs font-bold text-neutral-500 no-underline hover:text-emerald-700">← {{ $t('superAdmin.auto.copy087') }}</Link>
+                <span class="h-6 w-px bg-neutral-200" />
+                <span class="grid h-9 w-9 place-items-center rounded-[10px] bg-gradient-to-br from-emerald-100 to-emerald-200/80 text-[11px] font-bold text-emerald-900 ring-1 ring-inset ring-emerald-200/60">{{ initials(tenant.name) }}</span>
+                <h1 class="text-[15px] font-semibold tracking-tight">{{ tenant.name }}</h1>
+                <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ring-inset" :class="isActive ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/60' : 'bg-red-50 text-red-700 ring-red-200/60'"><span class="h-1.5 w-1.5 rounded-full bg-current" />{{ isActive ? $t('superAdmin.auto.copy005') : $t('superAdmin.auto.copy044') }}</span>
+                <div class="ml-auto flex flex-wrap gap-2">
+                    <button class="sa-button sa-button-secondary" :class="isActive ? '!text-red-600' : '!text-emerald-700'" @click="toggleStatus">{{ isActive ? $t('superAdmin.dynamic.suspend') : $t('superAdmin.dynamic.activate') }}</button>
+                    <button class="sa-button sa-button-secondary" @click="openTenantForm"><Pencil class="h-4 w-4" />{{ $t('superAdmin.auto.copy089') }}</button>
+                    <button class="sa-button sa-button-primary" :disabled="!isActive || isCurrent" @click="openHotel">{{ isCurrent ? $t('superAdmin.dynamic.inUse') : $t('superAdmin.dynamic.openHotel') }} <ArrowRight class="h-4 w-4" /></button>
                 </div>
-                <div class="sa-actions flex flex-wrap gap-2 sm:flex-nowrap">
-                    <Button variant="outline" :class="isActive ? '!text-red-600' : '!text-emerald-700'" @click="toggleStatus">
-                        {{ isActive ? $t('superAdmin.dynamic.suspend') : $t('superAdmin.dynamic.activate') }}
-                    </Button>
-                    <Button variant="outline" @click="openTenantForm"><Pencil class="h-4 w-4" /> {{ $t('superAdmin.auto.copy089') }}</Button>
-                    <Button variant="primary" :disabled="!isActive || isCurrent" @click="openHotel">
-                        {{ isCurrent ? $t('superAdmin.dynamic.inUse') : $t('superAdmin.dynamic.openHotel') }} <ArrowRight class="h-4 w-4" />
-                    </Button>
-                </div>
-            </header>
-
-            <section class="sa-card">
-                <div class="grid sm:grid-cols-2 xl:grid-cols-[1.35fr_repeat(4,.55fr)]">
-                    <div class="flex items-center gap-3 border-b border-neutral-100 p-4 sm:col-span-2 xl:col-span-1 xl:border-b-0">
-                        <span class="relative grid h-11 w-11 shrink-0 place-items-center rounded-full" :style="readinessRing">
-                            <span class="absolute inset-[5px] rounded-full bg-white" />
-                            <strong class="relative text-[10px]">{{ readinessScore }}%</strong>
-                        </span>
-                        <div><strong class="text-sm text-neutral-900">{{ attentionCount ? $t('superAdmin.tenantShow.configNeedsAttention') : $t('superAdmin.tenantShow.hotelReady') }}</strong><p class="mt-0.5 text-[11px] text-neutral-500">{{ attentionCount ? $t('superAdmin.tenantShow.itemsRemaining', { count: attentionCount }) : $t('superAdmin.tenantShow.allChecksOk') }}</p></div>
-                    </div>
-                    <div class="border-b border-l border-neutral-100 p-4 sm:border-b-0"><span class="text-[10px] text-neutral-400">{{ $t('superAdmin.auto.copy012') }}</span><strong class="mt-1.5 block truncate text-xs text-neutral-900">{{ tenant.primary_domain || $t('superAdmin.dynamic.missing') }}</strong></div>
-                    <div class="border-b border-l border-neutral-100 p-4 sm:border-b-0"><span class="text-[10px] text-neutral-400">{{ $t('superAdmin.auto.copy003') }}</span><strong class="mt-1.5 block text-xs text-neutral-900">{{ statusLabel(tenant.billing.status) }} · {{ tenant.billing.billing_cycle === 'annual' ? $t('superAdmin.dynamic.annualLower') : $t('superAdmin.dynamic.monthlyLower') }}</strong></div>
-                    <div class="border-l border-neutral-100 p-4"><span class="text-[10px] text-neutral-400">{{ $t('superAdmin.auto.copy051') }}</span><strong class="mt-1.5 block text-xs text-neutral-900">{{ $t('superAdmin.dynamic.activeCount', { count: activeMembers.length }) }}</strong></div>
-                    <div class="border-l border-neutral-100 p-4"><span class="text-[10px] text-neutral-400">MRR</span><strong class="mt-1.5 block text-xs text-neutral-900">{{ $t('superAdmin.dynamic.amountPerMonth', { amount: money(tenant.mrr_cents) }) }}</strong></div>
-                </div>
-            </section>
-
-            <div class="flex h-11 items-end gap-1 overflow-x-auto border-b border-neutral-200">
-                <button type="button" class="h-11 shrink-0 border-b-2 border-[#1d765f] px-3 text-xs font-semibold text-[#104c3d]">{{ $t('superAdmin.auto.copy120') }}</button>
-                <a href="#members" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">{{ $t('superAdmin.auto.copy093') }}</a>
-                <button type="button" class="h-11 shrink-0 border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 hover:text-neutral-800" @click="openBilling">{{ $t('superAdmin.auto.copy003') }}</button>
-                <button type="button" class="h-11 shrink-0 border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 hover:text-neutral-800" @click="openConfig('domains')">{{ $t('superAdmin.auto.copy019') }}</button>
-                <Link :href="route('super-admin.onboarding.show', tenant.id)" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">Onboarding</Link>
-                <Link :href="route('super-admin.activity', { tenant: tenant.id, range: 30 })" class="grid h-11 shrink-0 place-items-center border-b-2 border-transparent px-3 text-xs font-semibold text-neutral-500 no-underline hover:text-neutral-800">{{ $t('superAdmin.auto.copy107') }}</Link>
             </div>
+            <div class="mx-auto flex max-w-[1200px] flex-wrap gap-1.5 px-4 pb-3 pt-2 sm:px-6">
+                <span class="chrome-chip">Domain <b :class="tenant.primary_domain ? 'text-emerald-700' : 'text-amber-700'">{{ tenant.primary_domain || $t('superAdmin.dynamic.missing') }}</b></span>
+                <span class="chrome-chip"><b>{{ tenant.currency }}</b> · {{ tenant.timezone }}</span>
+                <span class="chrome-chip">Tenant <b>#{{ tenant.id }}</b> · {{ tenant.slug }}</span>
+                <span class="chrome-chip">{{ $t('superAdmin.tenantShow.clientSince') }} <b>{{ date(tenant.created_at) }}</b></span>
+            </div>
+        </header>
 
-            <div class="grid items-start gap-3 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,.72fr)]">
-                <div class="space-y-3">
-                    <section class="sa-card">
-                        <div class="sa-card-header">
-                            <div><h2 class="sa-card-title">{{ $t('superAdmin.tenantShow.configState') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.tenantShow.configStateSubtitle') }}</p></div>
-                            <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">{{ $t('superAdmin.tenantShow.needActionCount', { count: attentionCount }) }}</span>
-                        </div>
-                        <div class="divide-y divide-neutral-100">
-                            <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="sa-icon-box bg-emerald-50 text-emerald-700"><Globe2 class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">{{ $t('superAdmin.auto.copy012') }}</strong><p class="sa-table-meta">{{ tenant.primary_domain || $t('superAdmin.tenantShow.notConfigured') }}</p></div>
-                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="tenant.primary_domain ? 'text-emerald-700' : 'text-amber-700'">{{ tenant.primary_domain ? $t('superAdmin.auto.copy063') : $t('superAdmin.dynamic.missing') }}</span><Button size="sm" variant="outline" @click="openConfig('domains')">{{ $t('superAdmin.tenantShow.manage') }}</Button></div>
-                            </div>
-                            <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="sa-icon-box bg-emerald-50 text-emerald-700"><CreditCard class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">{{ $t('superAdmin.tenantShow.subscriptionAndModules') }}</strong><p class="sa-table-meta">{{ $t('superAdmin.tenantShow.modulesAndNextBilling', { count: enabledModules.length, date: date(tenant.billing.next_billing_at) }) }}</p></div>
-                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="billingIsHealthy ? 'text-emerald-700' : 'text-amber-700'">{{ statusLabel(tenant.billing.status) }}</span><Button size="sm" variant="outline" @click="openBilling">{{ $t('superAdmin.auto.copy089') }}</Button></div>
-                            </div>
-                            <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="sa-icon-box" :class="channexConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><Plug class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">Channex Channel Manager</strong><p class="sa-table-meta">{{ channexConfigured ? $t('superAdmin.tenantShow.channexOk') : $t('superAdmin.tenantShow.channexMissing') }}</p></div>
-                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="channexConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ channexConfigured ? $t('superAdmin.auto.copy005') : $t('superAdmin.dynamic.missing') }}</span><Button size="sm" variant="outline" @click="openConfig('channex')">{{ $t('superAdmin.tenantShow.configure') }}</Button></div>
-                            </div>
-                            <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="sa-icon-box" :class="pokConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><CreditCard class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">POK Payments</strong><p class="sa-table-meta">{{ pokConfigured ? $t('superAdmin.tenantShow.pokOk') : $t('superAdmin.tenantShow.pokMissing') }}</p></div>
-                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="pokConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ pokConfigured ? $t('superAdmin.auto.copy005') : $t('superAdmin.dynamic.missing') }}</span><Button size="sm" variant="outline" @click="openConfig('pok')">{{ $t('superAdmin.tenantShow.configure') }}</Button></div>
-                            </div>
-                            <div class="grid gap-3 px-4 py-3 sm:grid-cols-[36px_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="sa-icon-box" :class="fatureConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'"><FileCheck2 class="sa-icon" /></span>
-                                <div><strong class="sa-table-primary">fature.al</strong><p class="sa-table-meta">{{ fatureConfigured ? $t('superAdmin.tenantShow.envTokenSaved', { environment: tenant.integrations.fature_al.environment }) : $t('superAdmin.tenantShow.fiscalNotConfigured') }}</p></div>
-                                <div class="flex items-center gap-2 pl-12 sm:pl-0"><span class="text-[10px] font-bold" :class="fatureConfigured ? 'text-emerald-700' : 'text-amber-700'">{{ fatureConfigured ? tenant.integrations.fature_al.environment : $t('superAdmin.dynamic.missing') }}</span><Button size="sm" variant="outline" @click="openConfig('fature')">{{ $t('superAdmin.tenantShow.manage') }}</Button></div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section id="members" class="sa-card">
-                        <div class="sa-card-header">
-                            <div><h2 class="sa-card-title">{{ $t('superAdmin.auto.copy093') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.tenantShow.membersSubtitle') }}</p></div>
-                            <Button size="sm" variant="outline" @click="openMember()"><Plus class="h-4 w-4" /> {{ $t('superAdmin.tenantShow.addMember') }}</Button>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full min-w-[620px] text-left">
-                                <thead><tr class="sa-table-head"><th class="px-4 py-2.5 font-bold">{{ $t('superAdmin.tenantShow.user') }}</th><th class="px-4 py-2.5 font-bold">{{ $t('superAdmin.tenantShow.role') }}</th><th class="px-4 py-2.5 font-bold">{{ $t('superAdmin.auto.copy059') }}</th><th class="px-4 py-2.5" /></tr></thead>
-                                <tbody class="divide-y divide-neutral-100">
-                                    <tr v-for="member in members" :key="member.id">
-                                        <td class="px-4 py-3"><div class="flex items-center gap-2.5"><span class="grid h-8 w-8 place-items-center rounded-full bg-blue-50 text-[10px] font-bold text-blue-700">{{ initials(member.name) }}</span><div><strong class="block text-xs text-neutral-900">{{ member.name }}</strong><span class="mt-0.5 block text-[10px] text-neutral-500">{{ member.email }}{{ member.is_owner ? $t('superAdmin.tenantShow.ownerSuffix') : '' }}</span></div></div></td>
-                                        <td class="px-4 py-3"><span class="rounded-lg bg-neutral-100 px-2 py-1 text-[10px] font-semibold text-neutral-600">{{ roleLabel(member.role) }}</span></td>
-                                        <td class="px-4 py-3"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-bold" :class="member.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'"><span class="h-1.5 w-1.5 rounded-full bg-current" />{{ member.is_active ? $t('superAdmin.auto.copy005') : $t('superAdmin.dynamic.inactive') }}</span></td>
-                                        <td class="px-4 py-3 text-right"><Button size="sm" variant="outline" @click="openMember(member)">{{ $t('superAdmin.auto.copy089') }}</Button></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-
-                    <section class="sa-card">
-                        <div class="sa-card-header"><div><h2 class="sa-card-title">{{ $t('superAdmin.auto.copy035') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.tenantShow.modulesSubtitle') }}</p></div><Button size="sm" variant="outline" @click="openBilling">{{ $t('superAdmin.tenantShow.manage') }}</Button></div>
-                        <div class="flex flex-wrap gap-2 p-4"><span v-for="module in enabledModules" :key="module.code" class="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[10px] font-semibold text-neutral-600">{{ module.name }}</span></div>
-                    </section>
-                </div>
-
-                <aside class="space-y-3">
-                    <section class="sa-card">
-                        <div class="bg-gradient-to-br from-emerald-50 to-white p-4"><p class="text-[9px] font-bold uppercase tracking-[.12em] text-neutral-500">{{ $t('superAdmin.tenantShow.monthlySubscription') }}</p><p class="mt-1 text-3xl font-bold tracking-tight text-neutral-950">{{ money(tenant.mrr_cents) }} <small class="text-[11px] font-medium text-neutral-500">{{ $t('superAdmin.tenantShow.perMonthSuffix') }}</small></p></div>
-                        <div class="divide-y divide-neutral-100 px-4 text-[11px]"><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">{{ $t('superAdmin.auto.copy059') }}</span><strong class="text-emerald-700">{{ statusLabel(tenant.billing.status) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">{{ $t('superAdmin.tenantShow.nextBilling') }}</span><strong>{{ date(tenant.billing.next_billing_at) }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">{{ $t('superAdmin.tenantShow.modules') }}</span><strong>{{ $t('superAdmin.tenantShow.activeCountShort', { count: enabledModules.length }) }}</strong></div></div>
-                        <div class="space-y-2 border-t border-neutral-100 p-3"><Button variant="outline" class="w-full" @click="openBilling"><CreditCard class="h-4 w-4" /> {{ $t('superAdmin.auto.copy029') }}</Button><div class="grid grid-cols-3 gap-1.5"><Link :href="`/super-admin/billing/invoices?tenant_id=${tenant.id}`" class="rounded-lg bg-neutral-50 px-2 py-2 text-center text-[9px] font-bold text-neutral-600 no-underline hover:bg-emerald-50 hover:text-emerald-800">{{ $t('superAdmin.compact.invoices') }}</Link><Link :href="`/super-admin/billing/payments?tenant_id=${tenant.id}`" class="rounded-lg bg-neutral-50 px-2 py-2 text-center text-[9px] font-bold text-neutral-600 no-underline hover:bg-emerald-50 hover:text-emerald-800">{{ $t('superAdmin.compact.payments') }}</Link><Link :href="`/super-admin/billing/payment-attempts?tenant_id=${tenant.id}`" class="rounded-lg bg-neutral-50 px-2 py-2 text-center text-[9px] font-bold text-neutral-600 no-underline hover:bg-emerald-50 hover:text-emerald-800">{{ $t('superAdmin.compact.paymentAttempts') }}</Link></div></div>
-                    </section>
-
-                    <section class="sa-card">
-                        <div class="sa-card-header"><div><h2 class="sa-card-title">{{ $t('superAdmin.tenantShow.technicalDetails') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.tenantShow.technicalSubtitle') }}</p></div><Button size="sm" variant="outline" @click="openTenantForm">{{ $t('superAdmin.auto.copy089') }}</Button></div>
-                        <div class="divide-y divide-neutral-100 px-4 text-[11px]"><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Tenant ID</span><strong>#{{ tenant.id }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Slug</span><strong class="max-w-[180px] truncate">{{ tenant.slug }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">Timezone</span><strong>{{ tenant.timezone }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">{{ $t('superAdmin.tenantShow.currency') }}</span><strong>{{ tenant.currency }}</strong></div><div class="flex justify-between gap-3 py-3"><span class="text-neutral-500">{{ $t('superAdmin.tenantShow.createdAt') }}</span><strong>{{ date(tenant.created_at) }}</strong></div></div>
-                    </section>
-
-                    <section class="sa-card">
-                        <div class="sa-card-header"><div><h2 class="sa-card-title">{{ $t('superAdmin.auto.copy079') }}</h2><p class="sa-card-subtitle">{{ $t('superAdmin.tenantShow.recentActivitySubtitle') }}</p></div><Link :href="route('super-admin.activity', { tenant: tenant.id, range: 30 })" class="text-[11px] font-bold text-emerald-700 no-underline">{{ $t('superAdmin.tenantShow.viewAllArrow') }}</Link></div>
-                        <ul class="divide-y divide-neutral-100 px-4"><li v-for="log in activity.slice(0, 4)" :key="log.id" class="grid grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2.5 py-3"><span class="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 text-emerald-700"><LogIn v-if="log.action === 'tenant.switch'" class="h-4 w-4" /><CreditCard v-else-if="log.action === 'tenant.subscription.update'" class="h-4 w-4" /><Check v-else class="h-4 w-4" /></span><div class="min-w-0"><strong class="block truncate text-[11px] text-neutral-800">{{ ACTION_LABELS[log.action] || log.action }}</strong><span class="mt-0.5 block truncate text-[9px] text-neutral-500">{{ log.actor }}</span></div><time class="text-[9px] text-neutral-400">{{ when(log.created_at) }}</time></li></ul>
-                    </section>
+        <div class="mx-auto max-w-[1200px] px-4 py-5 sm:px-6">
+            <div class="grid items-start gap-3 lg:grid-cols-[264px_minmax(0,1fr)]">
+                <aside class="sa-card self-start p-2 lg:sticky lg:top-[118px]">
+                    <button v-for="section in sections" :key="section.id" class="grid w-full grid-cols-[1fr_auto] items-center gap-x-2.5 rounded-xl border p-3 text-left transition-all duration-200" :class="activeSection === section.id ? 'border-emerald-200 bg-emerald-50 shadow-sm shadow-emerald-900/5' : 'border-transparent hover:bg-neutral-50'" @click="activeSection = section.id">
+                        <strong class="text-xs">{{ section.label }}</strong>
+                        <span class="row-span-2 h-1.5 w-1.5 rounded-full" :class="section.dot === 'green' ? 'bg-emerald-500' : section.dot === 'amber' ? 'bg-amber-500' : 'bg-neutral-300'" />
+                        <small class="col-start-1 mt-0.5 block text-[9.5px]" :class="section.warn ? 'font-bold text-amber-600' : 'text-neutral-400'">{{ section.meta }}</small>
+                    </button>
                 </aside>
+
+                <!-- PËRMBLEDHJA: gatishmëria + kontrollet — gjendja me një shikim, veprimi te seksioni -->
+                <section v-if="activeSection === 'overview'" class="sa-card overflow-hidden">
+                    <div class="flex items-center gap-3.5 border-b border-neutral-200 p-4 sm:p-5">
+                        <span class="relative grid h-[52px] w-[52px] shrink-0 place-items-center rounded-full" :style="readinessRing"><span class="absolute inset-[5px] rounded-full bg-white" /><strong class="relative text-[11px]">{{ readinessScore }}%</strong></span>
+                        <div><strong class="text-[13px] text-neutral-900">{{ attentionCount ? $t('superAdmin.tenantShow.configNeedsAttention') : $t('superAdmin.tenantShow.hotelReady') }}</strong><p class="mt-0.5 text-[11px] text-neutral-500">{{ $t('superAdmin.tenantShow.checksSummary', { ok: readinessChecks.filter(Boolean).length, total: readinessChecks.length }) }}</p></div>
+                    </div>
+                    <div class="divide-y divide-neutral-100">
+                        <!-- Në mobile veprimet zbresin nën tekst — prindi ka overflow-hidden
+                             dhe një rresht i vetëm do t'i priste (gjetje Codex PR #583). -->
+                        <div v-for="check in overviewChecks" :key="check.key" class="grid grid-cols-[34px_minmax(0,1fr)] items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 sm:grid-cols-[34px_minmax(0,1fr)_auto] sm:px-5">
+                            <span class="grid h-8 w-8 place-items-center rounded-[10px] ring-1 ring-inset" :class="check.ok ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-amber-50 text-amber-700 ring-amber-100'"><component :is="check.icon" class="h-4 w-4" /></span>
+                            <div class="min-w-0"><strong class="block text-[11.5px]">{{ check.title }}</strong><span class="mt-0.5 block truncate text-[10px] text-neutral-500">{{ check.meta }}</span></div>
+                            <div class="col-span-2 flex flex-wrap items-center gap-2 pl-[46px] sm:col-span-1 sm:pl-0"><span class="text-[10px] font-bold" :class="check.ok ? 'text-emerald-700' : 'text-amber-700'">{{ check.state }}</span><button v-if="check.goto" class="rounded-full border border-neutral-200 px-3 py-1.5 text-[10px] font-bold text-neutral-600 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" @click="activeSection = check.goto">{{ check.ok ? $t('superAdmin.tenantShow.manage') : $t('superAdmin.tenantShow.configure') }} →</button></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ABONIMI & MODULET: MRR-ja dhe modulet NJË herë; NJË hyrje te drawer-i -->
+                <section v-else-if="activeSection === 'billing'" class="sa-card overflow-hidden">
+                    <div class="border-b border-neutral-200 bg-gradient-to-r from-emerald-50/70 to-white p-4 sm:p-5">
+                        <button class="sa-button sa-button-primary float-right" @click="openBilling"><CreditCard class="h-4 w-4" />{{ $t('superAdmin.auto.copy029') }}</button>
+                        <p class="text-[9.5px] font-bold uppercase tracking-[.1em] text-neutral-500">{{ $t('superAdmin.tenantShow.monthlySubscription') }}</p>
+                        <p class="mt-1 text-[28px] font-bold tracking-tight text-neutral-950">{{ money(tenant.mrr_cents) }} <small class="text-[11px] font-medium text-neutral-500">{{ $t('superAdmin.tenantShow.perMonthSuffix') }}</small></p>
+                        <div class="mt-2.5 flex flex-wrap gap-1.5">
+                            <span class="chrome-chip">{{ $t('superAdmin.auto.copy059') }} <b :class="billingIsHealthy ? 'text-emerald-700' : 'text-amber-700'">{{ statusLabel(tenant.billing.status) }}</b></span>
+                            <span class="chrome-chip"><b>{{ tenant.billing.billing_cycle === 'annual' ? $t('superAdmin.dynamic.annual') : $t('superAdmin.dynamic.monthly') }}</b></span>
+                            <span class="chrome-chip">{{ $t('superAdmin.tenantShow.nextBilling') }} <b>{{ date(tenant.billing.next_billing_at) }}</b></span>
+                            <span class="chrome-chip">{{ $t('superAdmin.tenantShow.contractLength') }} <b>{{ $t('superAdmin.tenantShow.contractYears', { years: tenant.billing.contract_years || 1 }) }}</b></span>
+                        </div>
+                    </div>
+                    <div class="divide-y divide-neutral-100">
+                        <div v-for="module in enabledModules" :key="module.code" class="grid grid-cols-[34px_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:grid-cols-[34px_minmax(0,1fr)_auto] sm:px-5">
+                            <span class="grid h-8 w-8 place-items-center rounded-[10px] bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100"><Settings2 class="h-4 w-4" /></span>
+                            <div class="min-w-0"><strong class="block text-[11.5px]">{{ module.name }}</strong><span class="mt-0.5 block truncate text-[10px] text-neutral-500">{{ module.description }}</span></div>
+                            <span class="col-span-2 pl-[46px] text-left text-[10.5px] font-bold tabular-nums sm:col-span-1 sm:pl-0 sm:text-right">{{ modulePriceLabel(module) }}</span>
+                        </div>
+                        <p v-if="!enabledModules.length" class="px-4 py-6 text-center text-[10.5px] text-neutral-400 sm:px-5">{{ $t('superAdmin.tenantShow.noModulesEnabled') }}</p>
+                    </div>
+                    <div class="flex gap-2 border-t border-neutral-200 p-3 sm:px-5">
+                        <Link :href="`/super-admin/billing/invoices?tenant_id=${tenant.id}`" class="flex-1 rounded-full border border-neutral-200 py-2 text-center text-[10px] font-bold text-neutral-600 no-underline transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700">{{ $t('superAdmin.compact.invoices') }}</Link>
+                        <Link :href="`/super-admin/billing/payments?tenant_id=${tenant.id}`" class="flex-1 rounded-full border border-neutral-200 py-2 text-center text-[10px] font-bold text-neutral-600 no-underline transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700">{{ $t('superAdmin.compact.payments') }}</Link>
+                        <Link :href="`/super-admin/billing/payment-attempts?tenant_id=${tenant.id}`" class="flex-1 rounded-full border border-neutral-200 py-2 text-center text-[10px] font-bold text-neutral-600 no-underline transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700">{{ $t('superAdmin.compact.paymentAttempts') }}</Link>
+                    </div>
+                </section>
+
+                <!-- INTEGRIMET & DOMAIN-ET: 4 rreshta → drawer-i ekzistues te tab-i përkatës -->
+                <section v-else-if="activeSection === 'integrations'" class="sa-card overflow-hidden">
+                    <div class="border-b border-neutral-200 p-4 sm:p-5"><h2 class="text-base font-semibold">{{ $t('superAdmin.tenantShow.railIntegrations') }}</h2><p class="mt-0.5 text-[11px] text-neutral-500">{{ $t('superAdmin.tenantShow.integrationsSubtitle') }}</p></div>
+                    <div class="divide-y divide-neutral-100">
+                        <div v-for="row in integrationRows" :key="row.key" class="grid grid-cols-[34px_minmax(0,1fr)] items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 sm:grid-cols-[34px_minmax(0,1fr)_auto] sm:px-5">
+                            <span class="grid h-8 w-8 place-items-center rounded-[10px] ring-1 ring-inset" :class="row.ok ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-amber-50 text-amber-700 ring-amber-100'"><component :is="row.icon" class="h-4 w-4" /></span>
+                            <div class="min-w-0"><strong class="block text-[11.5px]">{{ row.title }}</strong><span class="mt-0.5 block truncate text-[10px] text-neutral-500">{{ row.meta }}</span></div>
+                            <div class="col-span-2 flex flex-wrap items-center gap-2 pl-[46px] sm:col-span-1 sm:pl-0"><span class="text-[10px] font-bold" :class="row.ok ? 'text-emerald-700' : 'text-amber-700'">{{ row.state }}</span><button class="rounded-full border border-neutral-200 px-3 py-1.5 text-[10px] font-bold text-neutral-600 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" @click="openConfig(row.tab)">{{ row.action }} →</button></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- PËRDORUESIT -->
+                <section v-else-if="activeSection === 'members'" class="sa-card overflow-hidden">
+                    <div class="flex items-center justify-between border-b border-neutral-200 p-4 sm:p-5">
+                        <div><h2 class="text-base font-semibold">{{ $t('superAdmin.auto.copy093') }}</h2><p class="mt-0.5 text-[11px] text-neutral-500">{{ $t('superAdmin.tenantShow.membersSubtitle') }}</p></div>
+                        <Button size="sm" variant="outline" @click="openMember()"><Plus class="h-4 w-4" /> {{ $t('superAdmin.tenantShow.addMember') }}</Button>
+                    </div>
+                    <div class="divide-y divide-neutral-100">
+                        <div v-for="member in members" :key="member.id" class="grid grid-cols-[34px_minmax(0,1fr)] items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 sm:grid-cols-[34px_minmax(0,1fr)_auto] sm:px-5">
+                            <span class="grid h-8 w-8 place-items-center rounded-full bg-blue-50 text-[10px] font-bold text-blue-700">{{ initials(member.name) }}</span>
+                            <div class="min-w-0"><strong class="block text-[11.5px]">{{ member.name }}</strong><span class="mt-0.5 block truncate text-[10px] text-neutral-500">{{ member.email }}{{ member.is_owner ? $t('superAdmin.tenantShow.ownerSuffix') : '' }}</span></div>
+                            <div class="col-span-2 flex flex-wrap items-center gap-2 pl-[46px] sm:col-span-1 sm:pl-0">
+                                <span class="rounded-full bg-neutral-100 px-2.5 py-1 text-[9.5px] font-semibold text-neutral-600">{{ roleLabel(member.role) }}</span>
+                                <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[9.5px] font-bold" :class="member.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'"><span class="h-1.5 w-1.5 rounded-full bg-current" />{{ member.is_active ? $t('superAdmin.auto.copy005') : $t('superAdmin.dynamic.inactive') }}</span>
+                                <button class="rounded-full border border-neutral-200 px-3 py-1.5 text-[10px] font-bold text-neutral-600 transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700" @click="openMember(member)">{{ $t('superAdmin.auto.copy089') }}</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- AKTIVITETI -->
+                <section v-else class="sa-card overflow-hidden">
+                    <div class="flex items-center justify-between border-b border-neutral-200 p-4 sm:p-5">
+                        <div><h2 class="text-base font-semibold">{{ $t('superAdmin.auto.copy079') }}</h2><p class="mt-0.5 text-[11px] text-neutral-500">{{ $t('superAdmin.tenantShow.recentActivitySubtitle') }}</p></div>
+                        <Link :href="route('super-admin.activity', { tenant: tenant.id, range: 30 })" class="rounded-full border border-neutral-200 px-3 py-1.5 text-[10px] font-bold text-neutral-600 no-underline transition-all hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700">{{ $t('superAdmin.tenantShow.viewAllArrow') }}</Link>
+                    </div>
+                    <ul class="divide-y divide-neutral-100">
+                        <li v-for="log in activity" :key="log.id" class="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:px-5">
+                            <span class="grid h-8 w-8 place-items-center rounded-[10px] bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-100"><LogIn v-if="log.action === 'tenant.switch'" class="h-4 w-4" /><CreditCard v-else-if="log.action === 'tenant.subscription.update'" class="h-4 w-4" /><Check v-else class="h-4 w-4" /></span>
+                            <div class="min-w-0"><strong class="block truncate text-[11.5px] text-neutral-800">{{ ACTION_LABELS[log.action] || log.action }}</strong><span class="mt-0.5 block truncate text-[10px] text-neutral-500">{{ log.actor }}</span></div>
+                            <time class="text-[9.5px] text-neutral-400">{{ when(log.created_at) }}</time>
+                        </li>
+                    </ul>
+                </section>
             </div>
-        </main>
+        </div>
 
         <Teleport to="body">
             <div v-if="activeDrawer" class="super-admin-shell fixed inset-0 z-50 bg-neutral-950/45 backdrop-blur-[2px]" @click.self="closeDrawer">
@@ -664,3 +729,22 @@ function toggleStatus() {
         </Teleport>
     </SuperAdminLayout>
 </template>
+
+<style scoped>
+.chrome-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid #e4eae7;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #fbfdfc, #f4f8f6);
+    padding: 4px 11px;
+    font-size: 10.5px;
+    color: #68766f;
+    box-shadow: 0 1px 1.5px rgba(23, 33, 29, 0.03);
+}
+.chrome-chip b {
+    color: #17211d;
+    font-weight: 650;
+}
+</style>

@@ -1,4 +1,18 @@
 {
+  "auth": {
+    "forgot": {
+      "title": "Rivendos fjalëkalimin",
+      "intro": "Shkruaj emailin e llogarisë dhe të dërgojmë një link për të vendosur një fjalëkalim të ri.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "emri{'@'}hoteli.com",
+      "submit": "Dërgo linkun",
+      "submitting": "Po dërgohet…",
+      "sent": "Nëse ka llogari me këtë adresë, linku sapo u nis.",
+      "sentHint": "Kontrollo edhe dosjen e spam-it. Linku vlen 60 minuta dhe përdoret një herë.",
+      "noEmailHelp": "Nuk e mban mend emailin? Kontakto administratorin e hotelit tënd — llogaritë i hap ai.",
+      "backToLogin": "← Kthehu te hyrja"
+    }
+  },
   "nav": {
     "home": "Home",
     "rooms": "Dhomat",
@@ -4642,11 +4656,32 @@
       "saveChanges": "Ruaj ndryshimet",
       "contractLength": "Gjatësia e kontratës",
       "contractOption": "{years} vjet — {percent}% zbritje",
-      "contractOverride": "Ky tenant ka zbritje të negociuar veç: {percent}% (fiton mbi shkallën)"
+      "contractOverride": "Ky tenant ka zbritje të negociuar veç: {percent}% (fiton mbi shkallën)",
+      "billingCurrency": "Monedha e faturimit",
+      "billingCurrencyHint": "Me çfarë monedhe ta paguajë hoteli abonimin. S'ka lidhje me monedhën me të cilën ai shet dhomat.",
+      "catalogNote": "Çmimet më poshtë janë të katalogut, gjithmonë në euro.",
+      "invoicedIn": "Faturat lëshohen në {currency}, me kursin e çastit të lëshimit.",
+      "fxOverride": "Kurs fiks kontrate",
+      "fxOverrideHint": "Lëre bosh për kursin ditor të platformës. Shumat rrumbullakosen në 10 njësi.",
+      "railIntegrations": "Integrimet & domain-et",
+      "issuesAttention": "{count} çështje për vëmendje",
+      "allGood": "Gjithçka në rregull",
+      "checksSummary": "{ok} nga {total} kontrolle në rregull",
+      "hotelActiveCheck": "Hoteli aktiv",
+      "hotelActiveNote": "Statusi i platformës — hoteli punon normalisht",
+      "hotelSuspendedNote": "Hoteli është i pezulluar — hyrjet janë të bllokuara",
+      "membersActiveShort": "{count} aktivë",
+      "clientSince": "Klient që nga",
+      "domainsPending": "{count} në pritje",
+      "integrationsSubtitle": "Statusi i lidhjeve — çdo rresht hap editorin përkatës.",
+      "contractYears": "{years} vjet",
+      "integrationsAllActive": "Të gjitha aktive",
+      "noModulesEnabled": "Asnjë modul i aktivizuar ende."
     },
     "billing": {
       "unitMonth": "muaj",
       "unitYear": "vit",
+      "exchangeRate": "Kursi i këmbimit",
       "statusDraft": "Draft",
       "statusOpen": "Për pagesë",
       "statusPaid": "Paguar",
@@ -5623,7 +5658,7 @@
       "next90": "90 ditët e ardhshme",
       "expectedArrivals": "Pritet të mbërrijnë",
       "materialization": "Materializimi",
-      "materializationDetail": "{pct}% materializim @ {days}d",
+      "materializationDetail": "{pct}% materializim {'@'} {days}d",
       "sampleDays": "{count} ditë mësimi"
     },
     "distribution": {
@@ -6474,10 +6509,6 @@
     "room": "Dhoma",
     "linkToThis": "Lidh me këtë rezervim",
     "openInPms": "Hap rezervimin në PMS",
-    "extendedOnDesk": "Zgjatur në recepsion",
-    "extendedOnDeskConfirm": "Mysafiri i #{ref} e zgjati/ndryshoi qëndrimin në recepsion? Diferencat e këtij rezervimi mbyllen dhe asgjë nuk i dërgohet kanalit.",
-    "extendedOnDeskFailed": "Mbyllja e diferencës dështoi.",
-    "resolvedExtendedOnDesk": "Zgjatur në recepsion",
     "noManualFound": "Nuk u gjet rezervim manual i mundshëm.",
     "emptyOpen": "Nuk ka diferenca të hapura",
     "emptyResolved": "Nuk ka diferenca të zgjidhura",

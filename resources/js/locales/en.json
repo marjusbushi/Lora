@@ -1,4 +1,18 @@
 {
+  "auth": {
+    "forgot": {
+      "title": "Reset your password",
+      "intro": "Enter your account email and we'll send you a link to set a new password.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "name{'@'}hotel.com",
+      "submit": "Send the link",
+      "submitting": "Sending…",
+      "sent": "If an account exists for this address, the link is on its way.",
+      "sentHint": "Check your spam folder too. The link is valid for 60 minutes and can be used once.",
+      "noEmailHelp": "Don't remember your email? Contact your hotel administrator — they create the accounts.",
+      "backToLogin": "← Back to sign in"
+    }
+  },
   "nav": {
     "home": "Home",
     "rooms": "Rooms",
@@ -4642,11 +4656,32 @@
       "saveChanges": "Save changes",
       "contractLength": "Contract length",
       "contractOption": "{years} yr — {percent}% off",
-      "contractOverride": "This tenant has an individually negotiated discount: {percent}% (overrides the ladder)"
+      "contractOverride": "This tenant has an individually negotiated discount: {percent}% (overrides the ladder)",
+      "billingCurrency": "Billing currency",
+      "billingCurrencyHint": "The currency the hotel pays its subscription in. Unrelated to the currency it sells rooms in.",
+      "catalogNote": "The prices below are catalog prices, always in euro.",
+      "invoicedIn": "Invoices are issued in {currency}, at the rate frozen when they are issued.",
+      "fxOverride": "Fixed contract rate",
+      "fxOverrideHint": "Leave empty for the platform's daily rate. Amounts are rounded to 10 units.",
+      "railIntegrations": "Integrations & domains",
+      "issuesAttention": "Attention needed: {count}",
+      "allGood": "All good",
+      "checksSummary": "{ok} of {total} checks passing",
+      "hotelActiveCheck": "Hotel active",
+      "hotelActiveNote": "Platform status — the hotel runs normally",
+      "hotelSuspendedNote": "The hotel is suspended — logins are blocked",
+      "membersActiveShort": "{count} active",
+      "clientSince": "Client since",
+      "domainsPending": "{count} pending",
+      "integrationsSubtitle": "Connection status — each row opens its editor.",
+      "contractYears": "{years} yr",
+      "integrationsAllActive": "All active",
+      "noModulesEnabled": "No modules enabled yet."
     },
     "billing": {
       "unitMonth": "month",
       "unitYear": "year",
+      "exchangeRate": "Exchange rate",
       "statusDraft": "Draft",
       "statusOpen": "Open",
       "statusPaid": "Paid",
@@ -5623,7 +5658,7 @@
       "next90": "Next 90 days",
       "expectedArrivals": "Expected to arrive",
       "materialization": "Materialization",
-      "materializationDetail": "{pct}% materialization @ {days}d",
+      "materializationDetail": "{pct}% materialization {'@'} {days}d",
       "sampleDays": "{count} learning days"
     },
     "distribution": {
@@ -6474,10 +6509,6 @@
     "room": "Room",
     "linkToThis": "Link to this reservation",
     "openInPms": "Open the reservation in the PMS",
-    "extendedOnDesk": "Extended on desk",
-    "extendedOnDeskConfirm": "Did the guest of #{ref} extend/change the stay at the desk? This booking's differences will be closed and nothing is sent to the channel.",
-    "extendedOnDeskFailed": "Closing the difference failed.",
-    "resolvedExtendedOnDesk": "Extended on desk",
     "noManualFound": "No possible manual reservation found.",
     "emptyOpen": "No open discrepancies",
     "emptyResolved": "No resolved discrepancies",
