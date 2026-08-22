@@ -16,7 +16,7 @@ use RuntimeException;
  * as fallback. Tenant Settings are deliberately IGNORED — hotels no longer
  * configure any AI key.
  */
-class GeminiClient
+class GeminiClient implements \App\Contracts\AiChatProvider
 {
     /** Cap on the flash models' "thinking" tokens so the forced function call is never starved (verified accepted by gemini-flash-latest and the pinned gemini-3.7-flash via the real-API tests). */
     private const THINKING_BUDGET = 512;
@@ -110,7 +110,7 @@ class GeminiClient
      *
      * @param  array<int,array{name:string,description?:string,input_schema?:array}>  $tools
      * @param  array<string,callable(array):array>  $executors  tool name → server-side runner
-     * @return array{args:array<string,mixed>,toolsUsed:array<int,string>}
+     * @return array{args:array<string,mixed>,toolsUsed:array<int,string>,usage:array{input:int,output:int,thinking:int,provider:string,model:string}}
      */
     public function converse(string $system, string $userMessage, array $tools, array $executors, string $finalToolName, int $maxTokens = 2048, int $timeoutSeconds = 60, int $maxToolRounds = 3): array
     {
@@ -123,6 +123,9 @@ class GeminiClient
 
         $contents = [['role' => 'user', 'parts' => [['text' => $userMessage]]]];
         $toolsUsed = [];
+        // Tokenat e GJITHË bisedës (të gjitha raundet) — i duhen matjes
+        // per-tenant të task #409; provideri raporton, matja faturon.
+        $usage = ['input' => 0, 'output' => 0, 'thinking' => 0];
 
         // Modeli AKTIV i kësaj bisede: nis me primarin; nëse një raund shpëtohet
         // nga rezerva, biseda NGJIT te rezerva deri në fund — ping-pong-u mes
@@ -144,6 +147,9 @@ class GeminiClient
             $allowed = $round === $maxToolRounds ? [$finalToolName] : $allNames;
             $turn = $this->generate($activeModel, $system, $contents, $functions, $allowed, $maxTokens, $deadline);
             $activeModel = $turn['model'];
+            foreach ($usage as $k => $v) {
+                $usage[$k] = $v + $turn['usage'][$k];
+            }
 
             // Finalja pranohet VETËM si thirrje e vetme e radhës (ose kur raundi
             // lejon vetëm finalen). Në një radhë të përzier — guest_reply paralel
@@ -153,7 +159,11 @@ class GeminiClient
             if (count($turn['calls']) === 1 || $allowed === [$finalToolName]) {
                 foreach ($turn['calls'] as $call) {
                     if ($call['name'] === $finalToolName) {
-                        return ['args' => $call['args'], 'toolsUsed' => $toolsUsed];
+                        return [
+                            'args' => $call['args'],
+                            'toolsUsed' => $toolsUsed,
+                            'usage' => $usage + ['provider' => 'gemini', 'model' => $activeModel],
+                        ];
                     }
                 }
             }
@@ -202,7 +212,7 @@ class GeminiClient
      *
      * @param  float  $deadline  microtime(true) kur mbaron buxheti i GJITHË bisedës —
      *                           edhe primari edhe rezerva rrinë brenda tij (gjetje Codex #550).
-     * @return array{content:\stdClass,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>,model:string}
+     * @return array{content:\stdClass,calls:array<int,array{name:string,args:array<string,mixed>,id?:string}>,model:string,usage:array{input:int,output:int,thinking:int}}
      */
     private function generate(string $model, string $system, array $contents, array $functions, array $allowedNames, int $maxTokens, float $deadline): array
     {
@@ -288,7 +298,16 @@ class GeminiClient
             // objekt JSON, ndryshe raundi i jehonës kthen 400 (gjetje Codex).
             $content = json_decode((string) $res->body())->candidates[0]->content;
 
-            return ['content' => $content, 'calls' => $calls, 'model' => $servedBy];
+            return [
+                'content' => $content,
+                'calls' => $calls,
+                'model' => $servedBy,
+                'usage' => [
+                    'input' => (int) $res->json('usageMetadata.promptTokenCount', 0),
+                    'output' => (int) $res->json('usageMetadata.candidatesTokenCount', 0),
+                    'thinking' => (int) $res->json('usageMetadata.thoughtsTokenCount', 0),
+                ],
+            ];
         }
 
         // No function call came back. The usual cause is the thinking budget eating the

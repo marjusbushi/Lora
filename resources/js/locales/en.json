@@ -5352,7 +5352,22 @@
       "healthNone": "No check recorded yet — use \"Check now\".",
       "checkedAt": "Checked: {date}",
       "modelsLine": "Primary model: {model} · Reserve: {fallback}",
-      "removeSavedKeyEnv": "Remove the saved key (the platform falls back to the server key — the AI brain stays on)"
+      "removeSavedKeyEnv": "Remove the saved key (the platform falls back to the server key — the AI brain stays on)",
+      "openaiTitle": "Central OpenAI key (Luna pilot)",
+      "openaiSubtitle": "The second driver of the shared door — for the pilot and cross-provider fallback.",
+      "openaiActiveFor": "OpenAI ACTIVE — model {model}.",
+      "openaiNotConfigured": "No OpenAI key — the openai provider is unavailable (Gemini works normally).",
+      "openaiApiKey": "OpenAI API key",
+      "openaiRemoveSavedKey": "Remove the OpenAI key (the openai provider turns off)",
+      "providerTitle": "Conversation provider per hotel",
+      "providerSubtitle": "Which brain answers guests — a platform decision; hotels never see provider names.",
+      "providerDefault": "Default provider:",
+      "crossFallback": "Cross-provider fallback (5xx/hang → try the other provider)",
+      "crossFallbackHint": "When a hotel's provider fails transiently even after its internal reserve, the request is tried once on the other configured provider. Google and OpenAI are never sick on the same day.",
+      "tenantColumn": "Hotel",
+      "overrideColumn": "Override",
+      "effectiveColumn": "Effective",
+      "followDefault": "— follow default —"
     }
   },
   "reports360": {

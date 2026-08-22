@@ -4,6 +4,15 @@ return [
 
     'openai' => [
         'chatgpt_connect_url' => env('CHATGPT_CONNECT_URL', 'https://chatgpt.com/'),
+        // Shoferi OpenAI i derës së përbashkët AI (task #408). Çelësi është
+        // QENDROR si i Gemini-t (#407): PlatformSetting 'ai.openai_key' me
+        // env si rezervë. Modeli i FIKSUAR (kurrë alias) — piloti gpt-5.6-luna
+        // ($0.20/$1.20 per 1M, verifikuar 2026-08-21); ndërrimi = vendim yni.
+        'key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL', 'gpt-5.6-luna'),
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        // low: llogaritë i bën motori ynë — modelit i duhet vetëm të flasë.
+        'reasoning_effort' => env('OPENAI_REASONING_EFFORT', 'low'),
     ],
 
     /*
