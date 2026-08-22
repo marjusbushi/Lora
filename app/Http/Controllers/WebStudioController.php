@@ -26,6 +26,13 @@ class WebStudioController extends Controller
         $hotel = Setting::getGroup('hotel');
         $about = Setting::getGroup('about');
 
+        // Domain-i publik vjen nga DOMAIN-ET E REGJISTRUARA të tenant-it — jo
+        // duke i hequr 'admin.' host-it aktual (aliaset mund t'i përkasin një
+        // tenant-i tjetër ose të mos ekzistojnë fare — gjetje Codex PR #564).
+        $tenant = app(\App\Tenancy\TenantContext::class)->tenant();
+        $domains = $tenant?->domains()->orderByDesc('is_primary')->orderBy('id')->pluck('domain') ?? collect();
+        $publicDomain = $domains->first(fn ($domain) => ! str_starts_with($domain, 'admin.')) ?? $domains->first();
+
         // Karta e dhomave tregon çmimin që sheh VËRTET vizitori — e njëjta
         // rrugë si Home publike (from_price sipas disponueshmërisë + zbritjes
         // direkte), jo base_price i brendshëm (gjetje Codex, PR #562).
@@ -54,6 +61,7 @@ class WebStudioController extends Controller
         ];
 
         return Inertia::render('WebStudio/Index', [
+            'publicUrl' => $publicDomain ? 'https://'.$publicDomain : null,
             'home' => $home,
             'brand' => ['logo' => $hotel['logo'] ?? null],
             'contact' => $contact,

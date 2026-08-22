@@ -99,6 +99,27 @@ class WebStudioTest extends TestCase
         $this->assertSame('Sarande - Albania', Setting::get('hotel.hero_eyebrow_sq'));
     }
 
+    public function test_saving_hotel_data_no_longer_touches_contact_fields(): void
+    {
+        // Gjetje Codex PR #564: dy editorë mbi të njëjtët çelësa — një formë
+        // Hoteli e vjetruar mbishkruante në heshtje kontaktin e Web Studio-s.
+        Setting::set('hotel.address', 'Rruga e Plazhit, Sarandë');
+        Setting::set('hotel.phone', '+355 69 111 2222');
+        Setting::set('hotel.whatsapp_number', '+355691112222');
+
+        $this->actingAs($this->admin())->put(route('settings.hotel'), [
+            'name' => 'Villa Mucho',
+            'timezone' => 'Europe/Tirane',
+            'currency' => $this->tenant->currency ?: 'EUR',
+            'check_in_time' => '14:00',
+            'check_out_time' => '11:00',
+        ])->assertRedirect();
+
+        $this->assertSame('Rruga e Plazhit, Sarandë', Setting::get('hotel.address'));
+        $this->assertSame('+355 69 111 2222', Setting::get('hotel.phone'));
+        $this->assertSame('+355691112222', Setting::get('hotel.whatsapp_number'));
+    }
+
     public function test_update_contact_normalizes_whatsapp_and_saves_socials(): void
     {
         $this->actingAs($this->admin())->put(route('web-studio.contact'), [
